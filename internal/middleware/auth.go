@@ -13,7 +13,7 @@ import (
 func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rawToken, ok := bearerToken(r)
+			rawToken, ok := BearerToken(r)
 			if !ok {
 				http.Error(w, "missing or malformed authorization header", http.StatusUnauthorized)
 				return
@@ -31,7 +31,10 @@ func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	}
 }
 
-func bearerToken(r *http.Request) (string, bool) {
+// BearerToken extracts the raw bearer token from r's Authorization header.
+// Shared by the REST auth middleware and the MCP server's HTTP context
+// function, since both need to pull the same token out of the same header.
+func BearerToken(r *http.Request) (string, bool) {
 	const prefix = "Bearer "
 	h := r.Header.Get("Authorization")
 	if !strings.HasPrefix(h, prefix) {

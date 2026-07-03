@@ -29,7 +29,7 @@ func main() {
 		log.Fatalf("initializing token verifier: %v", err)
 	}
 
-	handler := router.New(verifier)
+	handler := router.New(verifier, cfg.OIDCIssuerURL)
 
 	slog.Info("starting server", "port", cfg.Port)
 	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
