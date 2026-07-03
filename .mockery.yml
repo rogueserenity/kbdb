@@ -1,0 +1,10 @@
+template: testify
+packages:
+  github.com/rogueserenity/kbdb/internal/auth:
+    config:
+      dir: '{{.InterfaceDir}}/mocks'
+      filename: 'mock_{{.InterfaceName}}.go'
+      pkgname: 'mocks'
+      structname: 'MockTokenVerifier'
+    interfaces:
+      tokenVerifier:

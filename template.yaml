@@ -3,8 +3,8 @@ Transform: AWS::Serverless-2016-10-31
 Description: >
   kbdb - keyboard database. Phase 0 skeleton: single Lambda function fronted
   by an HTTP API with a Cognito JWT authorizer, plus a budget cost tripwire.
-  No DynamoDB tables yet (Phase 1). Lambda code is a placeholder stub,
-  replaced by real handler logic in a follow-up issue.
+  No DynamoDB tables yet (Phase 1). ApiFunction runs a plain net/http server
+  behind the aws-lambda-web-adapter extension, packaged as a container image.
 
 Globals:
   Function:
@@ -12,18 +12,50 @@ Globals:
     MemorySize: 128
 
 Resources:
+  # Dedicated ECR repo for ApiFunction's container image, declared in-template
+  # (rather than SAM's implicit auto-managed repo) so a lifecycle policy can
+  # be attached and version-controlled. Point `sam build`/`sam deploy` at it
+  # via `--image-repositories ApiFunction=<this repo's URI>` (CLI flag or
+  # samconfig.toml) - there is no in-template property linking a function to
+  # a specific ECR repo for the build/push step.
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: kbdb-api
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire per-PR CI images 2 days after push",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["pr-"],
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 2
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
   # Single Lambda function for all routes (REST entities + MCP), not split
   # by protocol or by entity - see plan rationale. Only /v1/ping is wired up
   # here; MCP and per-entity routes are added as additional Events on this
-  # same function later.
+  # same function later. Packaged as a container image (aws-lambda-web-adapter
+  # sidecar) rather than a zip - see functions/api/Dockerfile.
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: functions/api/
-      Handler: bootstrap
-      Runtime: provided.al2023
+      PackageType: Image
       Architectures:
         - arm64
+      Environment:
+        Variables:
+          OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+          OIDC_AUDIENCE: !Ref UserPoolClient
       Events:
         PingEvent:
           Type: HttpApi
@@ -32,7 +64,12 @@ Resources:
             Path: /v1/ping
             Method: get
     Metadata:
-      BuildMethod: go1.x
+      # DockerContext is the repo root, not functions/api/, so the build has
+      # access to the whole Go module (internal/ packages, go.mod/go.sum) -
+      # the Dockerfile itself still lives in functions/api/.
+      Dockerfile: functions/api/Dockerfile
+      DockerContext: .
+      DockerTag: latest
 
   HttpApi:
     Type: AWS::Serverless::HttpApi
