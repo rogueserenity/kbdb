@@ -17,6 +17,11 @@ import (
 	"github.com/rogueserenity/kbdb/internal/router"
 )
 
+// Version is set at build time via -ldflags "-X main.Version=...", derived
+// from `git describe --tags --always --dirty` (see functions/api/Dockerfile).
+// Defaults to "dev" when built without that flag (e.g. `go build` directly).
+var Version = "dev"
+
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
 
@@ -29,9 +34,9 @@ func main() {
 		log.Fatalf("initializing token verifier: %v", err)
 	}
 
-	handler := router.New(verifier, cfg.OIDCIssuerURL)
+	handler := router.New(verifier, cfg.OIDCIssuerURL, Version)
 
-	slog.Info("starting server", "port", cfg.Port)
+	slog.Info("starting server", "port", cfg.Port, "version", Version)
 	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
 		log.Fatalf("server error: %v", err)
 	}

@@ -45,8 +45,9 @@ type Handlers struct {
 
 // New builds the MCP server. issuerURL is the OIDC issuer MCP clients should
 // authenticate against, advertised via RFC 9728 Protected Resource Metadata.
-func New(verifier *auth.Verifier, issuerURL string) Handlers {
-	mcpServer := server.NewMCPServer("kbdb", "0.1.0",
+// version is advertised to MCP clients in the initialize handshake.
+func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
+	mcpServer := server.NewMCPServer("kbdb", version,
 		server.WithToolCapabilities(true),
 		server.WithToolHandlerMiddleware(authMiddleware(verifier)),
 	)
