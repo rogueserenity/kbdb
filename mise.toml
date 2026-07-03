@@ -2,3 +2,4 @@
 go = "1.26.4"
 aws-cli = "2"
 aws-sam-cli = "1.163.0"
+mockery = "3.7.1"
