@@ -40,7 +40,52 @@ Deploys use the `kbdb-admin` AWS IAM Identity Center (SSO) profile, not default 
 
 `sam build` requires Docker running locally — `ApiFunction` is packaged as a container image, not a zip (see Architecture below). On macOS with Docker Desktop, `docker-credential-desktop` must be on `PATH` or `sam build`/`docker push` fail with a credential-store error; add `/Applications/Docker.app/Contents/Resources/bin` to `PATH` if so.
 
-**First deploy to a new AWS account/stack**: the ECR repo (`ApiRepository`) must exist before `sam deploy` can push an image to it, but the same template also declares that repo as a CloudFormation resource — a chicken-and-egg problem with no first-party SAM fix. Bootstrap once via `aws ecr create-repository --repository-name kbdb-api`, push an initial image, then import the repo into the stack via a CloudFormation `IMPORT` changeset (`aws cloudformation create-change-set --change-set-type IMPORT --resources-to-import ...`) before running a normal `sam deploy`. After that one-time bootstrap, ordinary `sam deploy` calls work.
+**First deploy to a new AWS account/stack**: three one-time bootstrap steps, none of which `sam deploy` can do for itself. All three `bootstrap/*.yaml` templates are deployed via plain `aws cloudformation deploy`, not `sam deploy` (they're bootstrapping the things `sam deploy` itself depends on).
+
+1. **The S3 artifact bucket**:
+   ```sh
+   aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml --stack-name kbdb-bootstrap --profile <account-profile>
+   ```
+   An explicit, version-controlled bucket (with a 7-day noncurrent-version-expiration lifecycle policy) rather than SAM's own `--resolve-s3`/auto-managed bucket, specifically so that lifecycle policy can exist at all — SAM's auto-managed bucket has no template to attach one to, and its default versioning-enabled-with-no-lifecycle-rule setup otherwise accumulates old object versions/delete markers forever. Update `samconfig.toml`'s `s3_bucket` with the new account's bucket name (`kbdb-sam-artifacts-<account-id>`, from this template's `ArtifactBucketName` output).
+
+2. **The ECR repo** — the repo must exist and hold an image before `sam deploy` can resolve `ApiFunction`'s `ImageUri`, but `template.yaml` also declares that same repo as a CloudFormation resource in the same stack. Genuine chicken-and-egg, no first-party SAM fix:
+   ```sh
+   # a. Create the repo standalone (bootstrap/ecr-repo.yaml has DeletionPolicy: Retain
+   #    baked in from the start - required before it can later be imported).
+   aws cloudformation deploy --template-file bootstrap/ecr-repo.yaml --stack-name kbdb-ecr-bootstrap --profile <account-profile>
+
+   # b. Push an initial image to it. sam build/sam package must be pointed at a
+   #    Metadata.DockerContext-resolvable template - if using a temporary
+   #    template copy with ApiRepository removed (step c), that copy MUST live
+   #    inside the repo root (not /tmp or elsewhere), since DockerContext: .
+   #    resolves relative to the template file's own location, not the repo.
+   sam build --template-file template.yaml
+   sam package --s3-bucket kbdb-sam-artifacts-<account-id> \
+     --image-repository <account-id>.dkr.ecr.<region>.amazonaws.com/kbdb-api \
+     --output-template-file /tmp/packaged.yaml
+
+   # c. Create the REST of the stack (everything except ApiRepository, since it
+   #    already exists standalone and CloudFormation can't create a second,
+   #    colliding repo of the same name). Temporarily deploy a copy of
+   #    template.yaml with the ApiRepository resource block removed:
+   sam deploy --template-file <template-copy-without-ApiRepository>.yaml \
+     --stack-name kbdb-dev --s3-bucket kbdb-sam-artifacts-<account-id> \
+     --image-repositories ApiFunction=<account-id>.dkr.ecr.<region>.amazonaws.com/kbdb-api \
+     --capabilities CAPABILITY_IAM --no-confirm-changeset
+
+   # d. Import the standalone repo into the now-existing stack. Add
+   #    DeletionPolicy: Retain to ApiRepository in the PACKAGED template first
+   #    (a hard CloudFormation import prerequisite - it refuses to import any
+   #    resource without one already present in the template being submitted):
+   aws cloudformation create-change-set --stack-name kbdb-dev \
+     --change-set-name import-ecr-repo --change-set-type IMPORT \
+     --template-body file:///tmp/packaged.yaml --capabilities CAPABILITY_IAM \
+     --resources-to-import '[{"ResourceType":"AWS::ECR::Repository","LogicalResourceId":"ApiRepository","ResourceIdentifier":{"RepositoryName":"kbdb-api"}}]'
+   aws cloudformation execute-change-set --stack-name kbdb-dev --change-set-name import-ecr-repo
+   ```
+   A CloudFormation `IMPORT`-type changeset can **only** import resources into a stack that already exists (or where every resource in the template is either being imported or already unchanged) — it cannot simultaneously create N new resources and import one in a single operation, which is why step (c) has to happen before (d), not combined with it.
+
+After all three bootstraps, ordinary `sam deploy` calls work.
 
 **`samconfig.toml` is committed**, not gitignored — nothing in it is a secret (AWS account IDs, stack names, and ECR repo URIs are not sensitive; only IAM credentials would be, and none are stored here). The `[default.*]` sections are today's real `kbdb-dev` values, used automatically by `sam build`/`sam deploy`/`mise run build`/`mise run deploy` with no flags needed. **A second environment (a real prod stack, when one exists) should be added as a new named section** (e.g. `[prod.deploy.parameters]`) selected via `sam deploy --config-env prod` — SAM's actual supported mechanism for multiple environments in one file. Note: SAM does **not** support `${VAR}`-style interpolation inside `samconfig.toml` values (confirmed by testing) — don't reach for that; use `--config-env` and real literal values per named section instead.
 

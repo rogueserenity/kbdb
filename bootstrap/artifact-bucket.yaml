@@ -1,0 +1,39 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap: the S3 bucket sam build/deploy stages
+  CloudFormation templates/artifacts through. Deployed manually, once, via
+  `aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml
+  --stack-name kbdb-bootstrap` before any `sam deploy` in a fresh account -
+  not something sam deploy can create for itself, since it needs this bucket
+  to exist before it can stage the very template that would declare it.
+  Exists as an explicit, version-controlled alternative to SAM's own
+  --resolve-s3/auto-managed bucket specifically so a lifecycle policy can be
+  attached (SAM's auto-managed bucket has no template we can add one to).
+
+Resources:
+  ArtifactBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub kbdb-sam-artifacts-${AWS::AccountId}
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireNoncurrentVersions
+            Status: Enabled
+            NoncurrentVersionExpiration:
+              NoncurrentDays: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+Outputs:
+  ArtifactBucketName:
+    Description: Pass this to sam deploy via --s3-bucket
+    Value: !Ref ArtifactBucket

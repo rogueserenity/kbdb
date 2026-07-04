@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap: creates the ECR repo standalone, so an
+  initial image can be pushed to it before the first sam deploy (sam deploy
+  needs to push ApiFunction's image to resolve its ImageUri parameter before
+  creating/updating the stack, but template.yaml's own ApiRepository
+  resource can't exist yet on a fresh account - a chicken-and-egg problem
+  with no first-party SAM fix). After this bootstrap and an initial image
+  push, import this repo into the app stack via an IMPORT-type changeset so
+  template.yaml "owns" it from then on - see the procedure in CLAUDE.md.
+
+  DeletionPolicy: Retain is required here even before the import: it's a
+  hard CloudFormation prerequisite that any resource targeted for import
+  into another stack already carry an explicit DeletionPolicy at import
+  time - carrying it from creation avoids needing a separate update step
+  later just to add it.
+
+Resources:
+  ApiRepository:
+    Type: AWS::ECR::Repository
+    DeletionPolicy: Retain
+    Properties:
+      RepositoryName: kbdb-api
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire per-PR CI images 2 days after push",
+                "selection": {
+                  "tagStatus": "tagged",
+                  "tagPrefixList": ["pr-"],
+                  "countType": "sinceImagePushed",
+                  "countUnit": "days",
+                  "countNumber": 2
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+Outputs:
+  ApiRepositoryUri:
+    Description: Pass this to sam build/deploy via --image-repositories ApiFunction=<value>
+    Value: !GetAtt ApiRepository.RepositoryUri

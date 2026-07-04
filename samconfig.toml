@@ -3,12 +3,16 @@ version = 0.1
 
 [default.deploy.parameters]
 stack_name = "kbdb-dev"
-resolve_s3 = true
+# Explicit, version-controlled bucket (see bootstrap/artifact-bucket.yaml)
+# instead of resolve_s3's auto-managed one, so a lifecycle policy (expire
+# noncurrent versions after 7 days) can be attached - deploy the bootstrap
+# template once per account before the first sam deploy there.
+s3_bucket = "kbdb-sam-artifacts-992234857260"
 s3_prefix = "kbdb-dev"
 region = "us-east-2"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-image_repositories = ["ApiFunction=957814222990.dkr.ecr.us-east-2.amazonaws.com/kbdb-api"]
+image_repositories = ["ApiFunction=992234857260.dkr.ecr.us-east-2.amazonaws.com/kbdb-api"]
 
 [default.global.parameters]
 region = "us-east-2"
