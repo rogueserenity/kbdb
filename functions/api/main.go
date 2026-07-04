@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -21,6 +22,11 @@ import (
 // from `git describe --tags --always --dirty` (see functions/api/Dockerfile).
 // Defaults to "dev" when built without that flag (e.g. `go build` directly).
 var Version = "dev"
+
+// port must match AWS_LWA_PORT in template.yaml; not 8080 since sam local
+// start-api's Runtime Interface Emulator already binds that port in-container
+// (github.com/aws/aws-lambda-web-adapter#125).
+const port = "8000"
 
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, nil)))
@@ -36,8 +42,16 @@ func main() {
 
 	handler := router.New(verifier, cfg.OIDCIssuerURL, Version)
 
-	slog.Info("starting server", "port", cfg.Port, "version", Version)
-	if err := http.ListenAndServe(":"+cfg.Port, handler); err != nil {
+	// ReadHeaderTimeout bounds a slow/malicious client independently of
+	// Lambda's own per-invocation timeout.
+	srv := &http.Server{
+		Addr:              ":" + port,
+		Handler:           handler,
+		ReadHeaderTimeout: 5 * time.Second,
+	}
+
+	slog.Info("starting server", "port", port, "version", Version)
+	if err := srv.ListenAndServe(); err != nil {
 		log.Fatalf("server error: %v", err)
 	}
 }

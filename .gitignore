@@ -208,7 +208,10 @@ mise/*.local.toml
 
 # AWS SAM build artifacts
 .aws-sam/
-samconfig.toml
 
 # Compiled Lambda binaries
 bin/
+
+# Local functional-test environment (mise run func-setup/func-teardown)
+.sam-local-api.pid
+.sam-local-api.log

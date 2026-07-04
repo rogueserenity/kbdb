@@ -7,5 +7,4 @@ package main
 type Config struct {
 	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
 	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
-	Port          string `env:"PORT" default:"8080"` // matches aws-lambda-web-adapter's default AWS_LWA_PORT
 }

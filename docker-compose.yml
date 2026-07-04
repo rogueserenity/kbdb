@@ -1,0 +1,34 @@
+services:
+  mockoidc:
+    build:
+      context: .
+      dockerfile: test/functional/support/mockoidc/Dockerfile
+    environment:
+      # Baked into every signed JWT's iss claim and the discovery document -
+      # must match whatever OIDC_ISSUER_URL the app under test (running
+      # inside sam local start-api's Lambda container, on this same compose
+      # network) is configured with, since that's the side that actually
+      # performs OIDC issuer validation (go-oidc's oidc.NewProvider). The
+      # Ginkgo functional specs, by contrast, never verify a token
+      # themselves - they only mint one via mockoidc's authorize/token
+      # endpoints and relay it in a header - so they don't need this value
+      # to match anything; they reach mockoidc via the published host port
+      # instead (see test/functional/support/env.go's MockOIDCTokenURL).
+      - MOCKOIDC_ADVERTISE_ADDR=mockoidc:9999
+    ports:
+      - "9999:9999"
+
+  # Not yet wired to anything Go-side calls (no DynamoDB tables exist until
+  # Phase 1) - set up now anyway per project decision (see plan): LocalStack's
+  # free tier requires a signup + auth token regardless of when it's adopted,
+  # so there's no benefit to deferring, and this validates the compose
+  # service/auth-token flow works before Phase 1 adds real usage.
+  localstack:
+    image: localstack/localstack:latest
+    environment:
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:?set LOCALSTACK_AUTH_TOKEN - sign up free at localstack.cloud}
+      - SERVICES=lambda,dynamodb
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock

@@ -56,6 +56,10 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
           OIDC_AUDIENCE: !Ref UserPoolClient
+          # Not 8080: sam local start-api's Runtime Interface Emulator already
+          # binds that port in-container. Must match functions/api/main.go's
+          # port const.
+          AWS_LWA_PORT: "8000"
       Events:
         PingEvent:
           Type: HttpApi
