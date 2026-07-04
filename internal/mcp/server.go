@@ -1,10 +1,12 @@
 // Package mcp wires the mcp-go MCP server into the application, reusing the
 // same auth.Verifier (and auth.BearerToken) as REST rather than a second
 // verification implementation. internal/auth holds all protocol-agnostic
-// logic shared by this package and internal/middleware (the REST-side
-// adapter); neither adapter depends on the other. This package additionally
-// uses internal/middleware.WithUserID so MCP tool logs get the same
-// user_id/request_id correlation fields as REST.
+// verification logic shared by this package and internal/middleware (the
+// REST-side adapter); neither adapter depends on the other. Request-scoped
+// identity (internal/ctx) and logging (internal/log) are likewise
+// independent, transport-agnostic packages this one depends on directly,
+// so MCP tool logs get the same user_id/request_id correlation fields as
+// REST without depending on the middleware package at all.
 package mcp
 
 import (
@@ -16,7 +18,8 @@ import (
 	"github.com/mark3labs/mcp-go/server"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
-	"github.com/rogueserenity/kbdb/internal/middleware"
+	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
+	logpkg "github.com/rogueserenity/kbdb/internal/log"
 )
 
 type contextKey int
@@ -116,7 +119,10 @@ func authMiddleware(verifier *auth.Verifier) server.ToolHandlerMiddleware {
 				return gomcp.NewToolResultError("invalid token"), nil
 			}
 
-			ctx = middleware.WithUserID(ctx, claims.Subject)
+			ctx = ctxpkg.WithUserID(ctx, claims.Subject)
+			l := logpkg.WithUserID(logpkg.FromContext(ctx), claims.Subject)
+			ctx = logpkg.WithLogger(ctx, l)
+
 			return next(ctx, req)
 		}
 	}
