@@ -4,11 +4,18 @@ aws-cli = "2"
 aws-sam-cli = "1.163.0"
 mockery = "3.7.1"
 golangci-lint = "2.12.2"
+actionlint = "1.7.12"
+shellcheck = "0.11.0"
 
 [tasks.lint]
 alias = "l"
-description = "Lint Go code"
-run = "golangci-lint run ./..."
+description = "Lint Go code and GitHub Actions workflows"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+golangci-lint run ./...
+actionlint
+"""
 
 [tasks.test]
 alias = "t"
@@ -22,7 +29,7 @@ run = "sam build"
 
 [tasks.deploy]
 alias = "d"
-description = "Deploy to kbdb-dev (requires AWS_PROFILE=kbdb-admin)"
+description = "Deploy to kbdb-dev (requires AWS_PROFILE=kbdb-dev-admin)"
 run = "sam deploy"
 
 [tasks.func-setup]

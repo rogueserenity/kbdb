@@ -1,0 +1,26 @@
+name: kbdb PR stack setup
+description: >
+  Computes the per-PR CloudFormation stack name and assumes the kbdb-ci
+  OIDC-federated deploy role. Shared by deploy-and-test.yml and (issue #9's)
+  teardown.yml so both workflows compute the same stack name and authenticate
+  the same way.
+
+outputs:
+  stack-name:
+    description: The per-PR CloudFormation stack name (kbdb-pr-<PR number>).
+    value: ${{ steps.compute.outputs.stack-name }}
+
+runs:
+  using: composite
+  steps:
+    - name: Compute stack name
+      id: compute
+      shell: bash
+      run: echo "stack-name=kbdb-pr-${{ github.event.pull_request.number }}" >> "$GITHUB_OUTPUT"
+
+    - name: Configure AWS credentials (kbdb-ci, OIDC)
+      uses: aws-actions/configure-aws-credentials@v6
+      with:
+        role-to-assume: arn:aws:iam::475976462467:role/kbdb-github-actions-deploy
+        aws-region: us-east-2
+        role-session-name: kbdb-pr-${{ github.event.pull_request.number }}

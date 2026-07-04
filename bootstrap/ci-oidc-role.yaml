@@ -1,0 +1,130 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap (kbdb-ci only): the GitHub Actions OIDC
+  identity provider and the IAM role deploy-and-test.yml assumes via
+  aws-actions/configure-aws-credentials - no long-lived AWS keys stored as
+  GitHub secrets. Neither resource can be created by CI itself (CI has no
+  credentials until this trust relationship exists), so this is deployed
+  once via `aws cloudformation deploy`, by a human operator with the
+  kbdb-ci-admin profile, same as the other bootstrap/*.yaml templates.
+
+Resources:
+  GitHubOidcProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+
+  GitHubActionsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: kbdb-github-actions-deploy
+      Description: >
+        Assumed by GitHub Actions (rogueserenity/kbdb pull_request
+        workflows) via OIDC federation, no long-lived keys
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOidcProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                # A pull_request-triggered workflow's sub claim is this exact
+                # literal (not a branch-name/wildcard pattern) - verified
+                # against a real GitHub Actions run before this template was
+                # written, per the design plan's explicit requirement not to
+                # trust the documented value blind.
+                token.actions.githubusercontent.com:sub: repo:rogueserenity/kbdb:pull_request
+      Policies:
+        - PolicyName: kbdb-ci-deploy-permissions
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Sid: CloudFormationDeploy
+                Effect: Allow
+                Action:
+                  - cloudformation:CreateStack
+                  - cloudformation:UpdateStack
+                  - cloudformation:DeleteStack
+                  - cloudformation:DescribeStacks
+                  - cloudformation:DescribeStackEvents
+                  - cloudformation:DescribeStackResources
+                  - cloudformation:CreateChangeSet
+                  - cloudformation:DescribeChangeSet
+                  - cloudformation:ExecuteChangeSet
+                  - cloudformation:DeleteChangeSet
+                  - cloudformation:ListStackResources
+                  - cloudformation:GetTemplate
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-pr-*/*
+              - Sid: LambdaScoped
+                Effect: Allow
+                Action: lambda:*
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:kbdb-pr-*
+              - Sid: ApiGatewayManagement
+                Effect: Allow
+                Action: apigateway:*
+                # API Gateway v2 management-plane ARNs are keyed by an opaque,
+                # randomly-generated API ID (arn:...:apigateway:region::/apis/api-id/*),
+                # not a name derived from the stack - unlike Lambda/CloudFormation,
+                # there is no kbdb-pr-*-based pattern to scope to. Same structural
+                # constraint as Cognito below, not an oversight.
+                Resource: !Sub arn:aws:apigateway:${AWS::Region}::/apis*
+              - Sid: CognitoAdminAndManagement
+                Effect: Allow
+                Action: cognito-idp:*
+                # Per-PR UserPool ARNs don't exist until after that PR's own
+                # deploy, so this can't be scoped ahead of time - the accepted
+                # tradeoff of the per-PR-throwaway-Cognito-user design.
+                Resource: '*'
+              - Sid: IamPassRoleForSam
+                Effect: Allow
+                Action:
+                  - iam:CreateRole
+                  - iam:DeleteRole
+                  - iam:GetRole
+                  - iam:PassRole
+                  - iam:AttachRolePolicy
+                  - iam:DetachRolePolicy
+                  - iam:PutRolePolicy
+                  - iam:DeleteRolePolicy
+                  - iam:GetRolePolicy
+                  - iam:TagRole
+                  - iam:UntagRole
+                Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/kbdb-pr-*
+              - Sid: ArtifactBucket
+                Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}
+                  - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}/*
+              - Sid: EcrAuth
+                Effect: Allow
+                Action: ecr:GetAuthorizationToken
+                # AWS hard requirement - GetAuthorizationToken must be
+                # Resource: "*", cannot be scoped to a specific repo.
+                Resource: '*'
+              - Sid: EcrRepoAccess
+                Effect: Allow
+                Action:
+                  - ecr:BatchCheckLayerAvailability
+                  - ecr:PutImage
+                  - ecr:InitiateLayerUpload
+                  - ecr:UploadLayerPart
+                  - ecr:CompleteLayerUpload
+                  - ecr:BatchGetImage
+                  - ecr:DescribeRepositories
+                  - ecr:ListImages
+                  - ecr:BatchDeleteImage
+                Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/kbdb-api
+
+Outputs:
+  GitHubActionsDeployRoleArn:
+    Description: Referenced by .github/actions/kbdb-pr-stack/action.yml's role-to-assume
+    Value: !GetAtt GitHubActionsDeployRole.Arn

@@ -1,0 +1,46 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap: a cost-budget tripwire for accounts that
+  don't otherwise get one from the app's own template.yaml (kbdb-dev's
+  CostBudget comes from its app stack; rogueserenity-management and kbdb-ci
+  have no app stack, so they need this instead). Mirrors template.yaml's
+  CostBudget resource - this whole project is designed to run at effectively
+  $0 on AWS free-tier usage, so a real bill appearing in any account,
+  including ones with no persistent app stack, is itself a signal something
+  is wrong.
+
+Parameters:
+  BudgetLimitUsd:
+    Type: Number
+    Default: 10
+    Description: Monthly budget limit in USD.
+  AlertEmail:
+    Type: String
+    Default: aws-budget@rogueserenity.dev
+    Description: Email address notified at 80% and 100% of the budget.
+
+Resources:
+  CostBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount: !Ref BudgetLimitUsd
+          Unit: USD
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref AlertEmail
