@@ -22,9 +22,7 @@ import (
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
 )
 
-type contextKey int
-
-const bearerTokenContextKey contextKey = iota
+type bearerTokenKey struct{}
 
 // Handlers holds the two HTTP handlers the router needs to mount: the MCP
 // Streamable HTTP endpoint itself, and the RFC 9728 Protected Resource
@@ -63,7 +61,7 @@ func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
 	streamable := server.NewStreamableHTTPServer(mcpServer,
 		server.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
 			token, _ := auth.BearerToken(r)
-			return context.WithValue(ctx, bearerTokenContextKey, token)
+			return context.WithValue(ctx, bearerTokenKey{}, token)
 		}),
 	)
 
@@ -109,7 +107,7 @@ func metadataHandler(issuerURL string) http.Handler {
 func authMiddleware(verifier *auth.Verifier) server.ToolHandlerMiddleware {
 	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
 		return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-			token, _ := ctx.Value(bearerTokenContextKey).(string)
+			token, _ := ctx.Value(bearerTokenKey{}).(string)
 			if token == "" {
 				return gomcp.NewToolResultError("missing or malformed authorization header"), nil
 			}
