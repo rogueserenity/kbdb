@@ -63,6 +63,26 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/ping
             Method: get
+        # MCP auth is handled inside the MCP server itself (see internal/mcp),
+        # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
+        # bypass API Gateway's Cognito authorizer for this route so a missing/
+        # invalid token still reaches the app and gets an MCP-shaped response.
+        McpEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /mcp
+            Method: any
+            Auth:
+              Authorizer: NONE
+        McpMetadataEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /.well-known/oauth-protected-resource
+            Method: get
+            Auth:
+              Authorizer: NONE
     Metadata:
       # DockerContext is the repo root, not functions/api/, so the build has
       # access to the whole Go module (internal/ packages, go.mod/go.sum) -

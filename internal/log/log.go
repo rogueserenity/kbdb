@@ -1,0 +1,42 @@
+// Package log holds the request-scoped *slog.Logger-in-context plumbing and
+// logger field transformations, independent of any particular transport
+// (REST, MCP) and independent of internal/ctx — this package has no
+// knowledge of where field values (request ID, user ID) come from; callers
+// pass them in explicitly.
+package log
+
+import (
+	"context"
+	"log/slog"
+)
+
+type loggerKey struct{}
+
+// New returns a base logger with no request-specific fields yet.
+func New() *slog.Logger {
+	return slog.Default()
+}
+
+// WithRequestID returns l with a request_id field added.
+func WithRequestID(l *slog.Logger, requestID string) *slog.Logger {
+	return l.With("request_id", requestID)
+}
+
+// WithUserID returns l with a user_id field added.
+func WithUserID(l *slog.Logger, userID string) *slog.Logger {
+	return l.With("user_id", userID)
+}
+
+// WithLogger returns a context carrying l as the request-scoped logger.
+func WithLogger(c context.Context, l *slog.Logger) context.Context {
+	return context.WithValue(c, loggerKey{}, l)
+}
+
+// FromContext returns the request-scoped logger stored by WithLogger, or the
+// default logger if none is present (e.g. outside a request, in tests).
+func FromContext(c context.Context) *slog.Logger {
+	if l, ok := c.Value(loggerKey{}).(*slog.Logger); ok {
+		return l
+	}
+	return slog.Default()
+}
