@@ -1,0 +1,17 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "kbdb-dev"
+resolve_s3 = true
+s3_prefix = "kbdb-dev"
+region = "us-east-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = ["ApiFunction=957814222990.dkr.ecr.us-east-2.amazonaws.com/kbdb-api"]
+
+[default.global.parameters]
+region = "us-east-2"
+
+[default.local_start_api.parameters]
+env_vars = "test/functional/support/env.local.json"
+docker_network = "kbdb_default"

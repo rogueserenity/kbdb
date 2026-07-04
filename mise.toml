@@ -3,3 +3,55 @@ go = "1.26.4"
 aws-cli = "2"
 aws-sam-cli = "1.163.0"
 mockery = "3.7.1"
+golangci-lint = "2.12.2"
+
+[tasks.lint]
+alias = "l"
+description = "Lint Go code"
+run = "golangci-lint run ./..."
+
+[tasks.test]
+alias = "t"
+description = "Run unit tests (excludes test/functional)"
+run = "go test $(go list ./... | grep -v /test/functional)"
+
+[tasks.build]
+alias = "b"
+description = "sam build"
+run = "sam build"
+
+[tasks.deploy]
+alias = "d"
+description = "Deploy to kbdb-dev (requires AWS_PROFILE=kbdb-admin)"
+run = "sam deploy"
+
+[tasks.func-setup]
+alias = "fs"
+description = "Bring up LocalStack + mockoidc + sam local start-api for functional testing"
+run = """
+#!/usr/bin/env bash
+set -euo pipefail
+docker compose up -d --build
+sam build
+nohup sam local start-api > .sam-local-api.log 2>&1 &
+echo $! > .sam-local-api.pid
+echo "sam local start-api started (pid $(cat .sam-local-api.pid)); logs: .sam-local-api.log"
+"""
+
+[tasks.func-teardown]
+alias = "ft"
+description = "Tear down whatever func-setup started"
+run = """
+#!/usr/bin/env bash
+set -uo pipefail
+if [ -f .sam-local-api.pid ]; then
+  kill "$(cat .sam-local-api.pid)" 2>/dev/null || true
+  rm -f .sam-local-api.pid .sam-local-api.log
+fi
+docker compose down
+"""
+
+[tasks.func-test]
+alias = "fx"
+description = "Run functional tests (Ginkgo) against whatever func-setup brought up"
+run = "go tool ginkgo run ./test/functional/..."

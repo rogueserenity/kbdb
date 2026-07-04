@@ -10,21 +10,26 @@ The project is being built issue-by-issue against a fixed architecture (see belo
 
 ## Commands
 
+Common dev actions run through `mise run <task>` (aliases in parentheses) rather than raw tool invocations directly — one consistent entrypoint regardless of what's underneath:
+
 ```sh
-# Build / test / vet (mise-managed Go toolchain — run `mise install` once per machine)
-go build ./...
-go vet ./...
-go test ./...
+mise run lint          # (l)  golangci-lint run ./...
+mise run test          # (t)  go test on unit tests only (excludes test/functional)
+mise run build         # (b)  sam build
+mise run deploy        # (d)  sam deploy to kbdb-dev (requires AWS_PROFILE=kbdb-admin)
+mise run func-setup    # (fs) bring up LocalStack + mockoidc (docker compose) + sam local start-api
+mise run func-test     # (fx) run functional tests (Ginkgo) against whatever func-setup brought up
+mise run func-teardown # (ft) tear down whatever func-setup started
+```
+
+`func-setup`/`func-teardown` are separate from `func-test` because they have different lifecycles: setup is long-running local infra you leave running, func-test is a one-shot command repeatedly run against it (also the command issue #8's CI wiring invokes, just against a different `KBDB_API_BASE_URL`).
+
+Single-test/package invocations still use the underlying tools directly, not a mise task:
+```sh
 go test ./... -run TestVerifyTokenSuite -v   # single suite
 go test ./internal/auth/... -v               # single package
-
-# Regenerate mocks after changing an interface in internal/auth (or adding new ones to .mockery.yml)
-mockery
-
-# SAM (validate / build / deploy the Lambda + API Gateway + Cognito + Budget stack)
+mockery                                       # regenerate mocks after changing an interface in internal/auth (or adding new ones to .mockery.yml)
 sam validate --lint
-sam build
-AWS_PROFILE=kbdb-admin sam deploy --image-repositories ApiFunction=<account>.dkr.ecr.<region>.amazonaws.com/kbdb-api
 ```
 
 Deploys use the `kbdb-admin` AWS IAM Identity Center (SSO) profile, not default credentials — set up once via `aws configure sso`, refreshed via `aws sso login --profile kbdb-admin` when the session expires. There is no default/implicit profile wired up; commands against real AWS will fail with `NoCredentials` without `AWS_PROFILE=kbdb-admin` (or `--profile kbdb-admin`).
@@ -33,9 +38,11 @@ Deploys use the `kbdb-admin` AWS IAM Identity Center (SSO) profile, not default 
 
 **First deploy to a new AWS account/stack**: the ECR repo (`ApiRepository`) must exist before `sam deploy` can push an image to it, but the same template also declares that repo as a CloudFormation resource — a chicken-and-egg problem with no first-party SAM fix. Bootstrap once via `aws ecr create-repository --repository-name kbdb-api`, push an initial image, then import the repo into the stack via a CloudFormation `IMPORT` changeset (`aws cloudformation create-change-set --change-set-type IMPORT --resources-to-import ...`) before running a normal `sam deploy`. After that one-time bootstrap, ordinary `sam deploy` calls work.
 
+**`samconfig.toml` is committed**, not gitignored — nothing in it is a secret (AWS account IDs, stack names, and ECR repo URIs are not sensitive; only IAM credentials would be, and none are stored here). The `[default.*]` sections are today's real `kbdb-dev` values, used automatically by `sam build`/`sam deploy`/`mise run build`/`mise run deploy` with no flags needed. **A second environment (a real prod stack, when one exists) should be added as a new named section** (e.g. `[prod.deploy.parameters]`) selected via `sam deploy --config-env prod` — SAM's actual supported mechanism for multiple environments in one file. Note: SAM does **not** support `${VAR}`-style interpolation inside `samconfig.toml` values (confirmed by testing) — don't reach for that; use `--config-env` and real literal values per named section instead.
+
 ## Architecture
 
-**Stack**: Go, AWS Lambda (container image), API Gateway (HTTP API), Cognito, DynamoDB (Phase 1, not yet added), AWS SAM for IaC. mcp-go for the MCP layer (Phase 0.5, not yet added — issue #6).
+**Stack**: Go, AWS Lambda (container image), API Gateway (HTTP API), Cognito, DynamoDB (Phase 1, not yet added), AWS SAM for IaC. `mark3labs/mcp-go` for the MCP layer (`internal/mcp`, a Streamable HTTP MCP server mounted on the same mux as REST).
 
 **`template.yaml` also declares an `AWS::Budgets::Budget`** (`CostBudget`) as a cost tripwire — this whole stack is designed to run at effectively $0 on AWS free-tier usage, so a real bill appearing is itself a signal something is wrong (e.g. runaway Lambda invocations, an accidental non-free resource). It emails `aws-budget@rogueserenity.dev` at 80% and 100% of a small monthly threshold. Don't remove it when touching the template, and raise the threshold deliberately if the project's real usage/cost profile changes rather than deleting it.
 
@@ -74,10 +81,13 @@ Follow this same split when adding Phase 1 entities: a handler per route in `han
 
 Two frameworks, split by test type — not interchangeable, don't mix them:
 - **Unit tests**: `testify/suite` + `mockery`-generated mocks, colocated with the code (`foo_test.go` next to `foo.go`). For function-level logic with dependencies injected via interfaces — no real infra, no network calls.
-- **Functional/black-box tests** (not yet added — issue #7/#8): Ginkgo v2 + Gomega, living under a centralized `test/functional/features/{api,mcp}/` tree (not colocated), driving real HTTP/MCP clients against a real deployed stack (locally via `sam local start-api` + LocalStack + `mockoidc`, or a real ephemeral per-PR AWS stack in CI). Gomega's `ghttp` (HTTP mocking) is explicitly not used here — the point of this layer is exercising the real deployed thing, not mocks.
+- **Functional/black-box tests**: Ginkgo v2 + Gomega, living under a centralized `test/functional/features/{api,mcp}/` tree (not colocated), driving real HTTP/MCP clients against a real running stack — locally via `mise run func-setup` (LocalStack + `mockoidc` via `docker-compose.yml`, plus `sam local start-api`), or a real deployed stack (set `KBDB_API_BASE_URL`; issue #8 will point CI at either a real ephemeral per-PR AWS stack or this same local setup). Gomega's `ghttp` (HTTP mocking) is explicitly not used here — the point of this layer is exercising the real deployed thing, not mocks. The Ginkgo CLI is pinned via `go.mod`'s `tool` directive (`go tool ginkgo run ./test/functional/...`, or `mise run func-test`), not a mise-managed plugin.
+- **`mockoidc`** (`github.com/oauth2-proxy/mockoidc`) stands in for Cognito for functional tests — required, not optional, because `auth.NewVerifier` calls `oidc.NewProvider`, which does a real HTTP OIDC discovery round-trip; the functional-test layer has no injection seam (unlike unit tests, which mock the `tokenVerifier` interface directly), so whatever plays the issuer role must be a real, spec-compliant OIDC server. Runs as its own docker-compose service (`test/functional/support/mockoidc/`, built from its own `Dockerfile`) rather than a bare local process, so `sam local start-api`'s Lambda container can reach it via a stable Docker-network service name instead of host-networking workarounds. **`mockoidc.NewServer`'s default `Server.Addr` (derived from the listener's bind address) is not a usable issuer hostname for any client outside that process's network namespace** — it must be overwritten (`m.Server.Addr = ...`) with the address other containers actually use to reach it *before* anything calls `Issuer()`/serves discovery, or every signed JWT's `iss` claim and the discovery document will carry an unreachable address (see `test/functional/support/mockoidc/main.go`'s `MOCKOIDC_ADVERTISE_ADDR`). Test client ID/secret/user subject are fixed constants (`test/functional/support/mockoidc/fixtures/`), not `mockoidc.NewServer`'s randomly-generated defaults, so specs and the local `sam local start-api` env-vars file can reference known values without an out-of-band discovery step.
 
 Test data isolation (once functional tests exist): a fresh synthetic `user_id` (UUID) generated per spec, not table truncation — every table is partitioned by `user_id`, so parallel specs can never collide even sharing the same DynamoDB table.
 
 ## Toolchain
 
-Go, `aws-cli`, `aws-sam-cli`, and `mockery` versions are pinned in `mise.toml` — run `mise install` once, then `mise activate` (already wired into most shells via `.zshrc`/`.bashrc`) makes `go`/`sam`/`aws`/`mockery` resolve directly without a `mise exec --` prefix. If a Bash tool session doesn't have `mise activate` in effect (e.g. non-interactive subshells), fall back to `mise exec -- <command>`.
+Go, `aws-cli`, `aws-sam-cli`, `mockery`, and `golangci-lint` versions are pinned in `mise.toml` — run `mise install` once, then `mise activate` (already wired into most shells via `.zshrc`/`.bashrc`) makes `go`/`sam`/`aws`/`mockery`/`golangci-lint` resolve directly without a `mise exec --` prefix. If a Bash tool session doesn't have `mise activate` in effect (e.g. non-interactive subshells), fall back to `mise exec -- <command>`. The Ginkgo CLI is the one exception — pinned via `go.mod`'s `tool` directive instead of `mise.toml`, invoked as `go tool ginkgo ...` (see Testing strategy above).
+
+**Local dev environment** (`docker-compose.yml`, `mise run func-setup`/`func-teardown`): brings up LocalStack and `mockoidc` as docker-compose services. LocalStack requires a free account + `LOCALSTACK_AUTH_TOKEN` env var (sign up at localstack.cloud) — its no-signup "Community edition" was deprecated, so this is required even though LocalStack isn't yet exercised by any application code (no DynamoDB tables exist until Phase 1). It was set up ahead of that need anyway: deferring wouldn't reduce the eventual cost of the signup/token requirement, and standing it up now means it's a known-working part of the dev loop before Phase 1 adds real pressure.
