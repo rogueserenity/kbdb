@@ -1,7 +1,10 @@
 // Package mcp wires the mcp-go MCP server into the application, reusing the
-// same auth.Verifier as REST rather than a second verification
-// implementation — see internal/auth for the shared verification logic and
-// internal/middleware for the REST-side adapter.
+// same auth.Verifier (and auth.BearerToken) as REST rather than a second
+// verification implementation. internal/auth holds all protocol-agnostic
+// logic shared by this package and internal/middleware (the REST-side
+// adapter); neither adapter depends on the other. This package additionally
+// uses internal/middleware.WithUserID so MCP tool logs get the same
+// user_id/request_id correlation fields as REST.
 package mcp
 
 import (
@@ -56,7 +59,7 @@ func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
 
 	streamable := server.NewStreamableHTTPServer(mcpServer,
 		server.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
-			token, _ := middleware.BearerToken(r)
+			token, _ := auth.BearerToken(r)
 			return context.WithValue(ctx, bearerTokenContextKey, token)
 		}),
 	)
