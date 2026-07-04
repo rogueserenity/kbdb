@@ -6,6 +6,7 @@
 package support
 
 import (
+	"context"
 	"os"
 
 	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
@@ -47,9 +48,9 @@ func MockOIDCTokenURL() string {
 // used instead - this is the one piece of "same client, different base
 // URL" that can't be derived from BaseURL alone, since a local mockoidc
 // instance and real Cognito aren't interchangeable token issuers.
-func AuthToken() (string, error) {
+func AuthToken(ctx context.Context) (string, error) {
 	if v := os.Getenv("KBDB_AUTH_TOKEN"); v != "" {
 		return v, nil
 	}
-	return MintToken(MockOIDCTokenURL(), MockOIDCClientID, MockOIDCClientSecret)
+	return MintToken(ctx, MockOIDCTokenURL(), MockOIDCClientID, MockOIDCClientSecret)
 }

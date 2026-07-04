@@ -2,10 +2,37 @@ version: "2"
 
 linters:
   default: standard
+  settings:
+    revive:
+      rules:
+        - name: dot-imports
+          arguments:
+            - allowedPackages:
+                - github.com/onsi/ginkgo/v2
+                - github.com/onsi/gomega
   enable:
     - bodyclose
+    - contextcheck
     - copyloopvar
+    - errorlint
+    - ginkgolinter
     - gocritic
+    - gosec
     - misspell
+    - nilerr
+    - nilnil
+    - noctx
+    - predeclared
+    - revive
+    - sloglint
+    - testifylint
     - unconvert
     - unparam
+  exclusions:
+    rules:
+      # MCP errors are deliberately returned as CallToolResult{IsError: true},
+      # not a propagated Go error (which mcp-go turns into a worse JSON-RPC
+      # INTERNAL_ERROR) - nilerr doesn't know that distinction.
+      - path: internal/mcp/
+        linters:
+          - nilerr

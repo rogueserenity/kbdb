@@ -6,6 +6,8 @@
 package main
 
 import (
+	"context"
+	"fmt"
 	"log"
 	"net"
 	"os"
@@ -18,20 +20,32 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+
 	m, err := mockoidc.NewServer(nil)
 	if err != nil {
-		log.Fatalf("creating mockoidc server: %v", err)
+		return fmt.Errorf("creating mockoidc server: %w", err)
 	}
 	m.ClientID = fixtures.TestClientID
 	m.ClientSecret = fixtures.TestClientSecret
 
-	ln, err := net.Listen("tcp", ":9999")
+	// Must bind all interfaces to be reachable from other containers on the
+	// compose network; local-only test fixture, not a real security risk.
+	var lc net.ListenConfig
+	ln, err := lc.Listen(ctx, "tcp", ":9999") //nolint:gosec
 	if err != nil {
-		log.Fatalf("binding listener: %v", err)
+		return fmt.Errorf("binding listener: %w", err)
 	}
 
 	if err := m.Start(ln, nil); err != nil {
-		log.Fatalf("starting mockoidc server: %v", err)
+		return fmt.Errorf("starting mockoidc server: %w", err)
 	}
 	defer func() { _ = m.Shutdown() }()
 
@@ -58,7 +72,6 @@ func main() {
 	log.Printf("mockoidc listening on %s", m.Addr())
 	log.Printf("issuer=%s client_id=%s client_secret=%s", cfg.Issuer, cfg.ClientID, cfg.ClientSecret)
 
-	sigCh := make(chan os.Signal, 1)
-	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-	<-sigCh
+	<-ctx.Done()
+	return nil
 }

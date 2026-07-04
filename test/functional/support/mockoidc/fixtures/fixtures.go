@@ -8,11 +8,10 @@ package fixtures
 // auth.Claims.Subject will resolve to for tokens minted by mockoidc.
 const TestUserSubject = "test-user-0001"
 
-// TestClientID/TestClientSecret are fixed (not randomly generated) so
-// functional specs and sam local start-api's env-vars file can reference
-// known values, rather than needing to discover mockoidc.NewServer's
-// randomly-generated ones out of band at runtime.
+// TestClientID/TestClientSecret are fixed so specs and the local env-vars
+// file can reference known values; deliberately low-entropy/fake-looking so
+// a real credential pasted in here later would stand out.
 const (
-	TestClientID     = "kbdb-func-test-client"
-	TestClientSecret = "kbdb-func-test-secret"
+	TestClientID     = "no-client-id-here-ok"
+	TestClientSecret = "no-secret-here-ok"
 )

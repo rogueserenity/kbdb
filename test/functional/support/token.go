@@ -1,6 +1,7 @@
 package support
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,7 +16,7 @@ import (
 // from mockoidc's logged Config() at startup (see
 // test/functional/support/mockoidc/main.go) and must match whatever
 // OIDC_AUDIENCE the app under test was configured with.
-func MintToken(issuerURL, clientID, clientSecret string) (string, error) {
+func MintToken(ctx context.Context, issuerURL, clientID, clientSecret string) (string, error) {
 	httpClient := &http.Client{
 		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
 			return http.ErrUseLastResponse
@@ -32,7 +33,7 @@ func MintToken(issuerURL, clientID, clientSecret string) (string, error) {
 
 	authorizeURL := issuerURL + "/authorize?" + authorizeQuery.Encode()
 
-	authorizeReq, err := http.NewRequest(http.MethodGet, authorizeURL, nil)
+	authorizeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, authorizeURL, nil)
 	if err != nil {
 		return "", fmt.Errorf("building authorize request: %w", err)
 	}
@@ -58,7 +59,7 @@ func MintToken(issuerURL, clientID, clientSecret string) (string, error) {
 	tokenForm.Set("grant_type", "authorization_code")
 	tokenForm.Set("code", code)
 
-	tokenReq, err := http.NewRequest(http.MethodPost, issuerURL+"/token", strings.NewReader(tokenForm.Encode()))
+	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodPost, issuerURL+"/token", strings.NewReader(tokenForm.Encode()))
 	if err != nil {
 		return "", fmt.Errorf("building token request: %w", err)
 	}

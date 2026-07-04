@@ -2,6 +2,7 @@ package support
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -44,8 +45,8 @@ type RPCResponse struct {
 
 // Initialize performs the MCP initialize handshake and captures the
 // resulting session ID for use on subsequent calls.
-func (c *MCPClient) Initialize() (*RPCResponse, error) {
-	return c.call(1, "initialize", map[string]any{
+func (c *MCPClient) Initialize(ctx context.Context) (*RPCResponse, error) {
+	return c.call(ctx, 1, "initialize", map[string]any{
 		"protocolVersion": "2025-06-18",
 		"capabilities":    map[string]any{},
 		"clientInfo":      map[string]any{"name": "kbdb-functional-test", "version": "1.0"},
@@ -53,20 +54,20 @@ func (c *MCPClient) Initialize() (*RPCResponse, error) {
 }
 
 // CallTool performs a tools/call request for the named tool.
-func (c *MCPClient) CallTool(name string, arguments map[string]any) (*RPCResponse, error) {
-	return c.call(2, "tools/call", map[string]any{
+func (c *MCPClient) CallTool(ctx context.Context, name string, arguments map[string]any) (*RPCResponse, error) {
+	return c.call(ctx, 2, "tools/call", map[string]any{
 		"name":      name,
 		"arguments": arguments,
 	})
 }
 
-func (c *MCPClient) call(id int, method string, params any) (*RPCResponse, error) {
+func (c *MCPClient) call(ctx context.Context, id int, method string, params any) (*RPCResponse, error) {
 	body, err := json.Marshal(rpcRequest{JSONRPC: "2.0", ID: id, Method: method, Params: params})
 	if err != nil {
 		return nil, fmt.Errorf("encoding request: %w", err)
 	}
 
-	req, err := http.NewRequest(http.MethodPost, c.baseURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("building request: %w", err)
 	}

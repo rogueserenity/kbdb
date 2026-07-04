@@ -9,27 +9,61 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
 
-var _ = Describe("GET /v1/ping", func() {
-	It("returns 401 without a bearer token", func() {
-		resp, err := http.Get(support.BaseURL() + "/v1/ping")
-		Expect(err).NotTo(HaveOccurred())
-		defer func() { _ = resp.Body.Close() }()
+var _ = Describe("Ping", func() {
+	var (
+		authHeader string
+		resp       *http.Response
+	)
 
-		Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+	BeforeEach(func() {
+		authHeader = ""
+		resp = nil
 	})
 
-	It("returns 200 with a valid bearer token", func() {
-		token, err := support.AuthToken()
-		Expect(err).NotTo(HaveOccurred())
+	AfterEach(func() {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+	})
 
-		req, err := http.NewRequest(http.MethodGet, support.BaseURL()+"/v1/ping", nil)
-		Expect(err).NotTo(HaveOccurred())
-		req.Header.Set("Authorization", "Bearer "+token)
+	Context("given no bearer token", func() {
+		When("the request is made", func() {
+			BeforeEach(func(ctx SpecContext) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/ping", nil)
+				Expect(err).NotTo(HaveOccurred())
 
-		resp, err := http.DefaultClient.Do(req)
-		Expect(err).NotTo(HaveOccurred())
-		defer func() { _ = resp.Body.Close() }()
+				resp, err = http.DefaultClient.Do(req)
+				Expect(err).NotTo(HaveOccurred())
+			})
 
-		Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			It("rejects the request", func() {
+				By("returning 401 Unauthorized")
+				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			})
+		})
+	})
+
+	Context("given a valid bearer token", func() {
+		BeforeEach(func(ctx SpecContext) {
+			token, err := support.AuthToken(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			authHeader = "Bearer " + token
+		})
+
+		When("the request is made", func() {
+			BeforeEach(func(ctx SpecContext) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/ping", nil)
+				Expect(err).NotTo(HaveOccurred())
+				req.Header.Set("Authorization", authHeader)
+
+				resp, err = http.DefaultClient.Do(req)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("succeeds", func() {
+				By("returning 200 OK")
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			})
+		})
 	})
 })

@@ -46,6 +46,6 @@ func (s *VerifyTokenSuite) TestInvalidToken_Rejected() {
 
 	claims, err := s.verifier.VerifyToken(context.Background(), "bad-token")
 
-	s.Error(err)
+	s.Require().Error(err)
 	s.Nil(claims)
 }
