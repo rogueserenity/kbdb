@@ -1,0 +1,25 @@
+name: Teardown
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  teardown:
+    name: Teardown
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up kbdb PR stack (OIDC auth + stack name)
+        id: pr-stack
+        uses: ./.github/actions/kbdb-pr-stack
+
+      - name: Delete stack
+        run: |
+          aws cloudformation delete-stack --stack-name "${{ steps.pr-stack.outputs.stack-name }}"
+          aws cloudformation wait stack-delete-complete --stack-name "${{ steps.pr-stack.outputs.stack-name }}"
