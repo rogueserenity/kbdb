@@ -56,7 +56,7 @@ jobs:
         uses: jdx/mise-action@e6a8b3978addb5a52f2b4cd9d91eafa7f0ab959d # v4.2.0
 
       - name: Log in to Amazon ECR
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
 
       # functions/api/Dockerfile pulls its base images from public.ecr.aws
       # (Lambda provided runtime, aws-lambda-adapter) - anonymous pulls from
@@ -65,7 +65,7 @@ jobs:
       # ecr-public:GetAuthorizationToken) raises the effective rate limit
       # since it's tied to the calling identity, not just source IP.
       - name: Log in to Amazon ECR Public
-        uses: aws-actions/amazon-ecr-login@v2
+        uses: aws-actions/amazon-ecr-login@d539f0932e70871a027e9d5a9d8fc38589180a64 # v2.1.6
         with:
           registry-type: public
 
