@@ -12,6 +12,28 @@ env:
   ECR_REPOSITORY_URI: 475976462467.dkr.ecr.us-east-2.amazonaws.com/kbdb-api
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up mise
+        uses: jdx/mise-action@v2
+
+      - name: Lint
+        run: mise run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up mise
+        uses: jdx/mise-action@v2
+
+      - name: Unit tests
+        run: mise run test
+
   deploy-and-test:
     # Native arm64, matching ApiFunction's real deployed architecture
     # (template.yaml's Architectures: [arm64]) - avoids QEMU-emulated
