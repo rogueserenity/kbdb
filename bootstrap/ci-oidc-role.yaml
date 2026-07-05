@@ -112,8 +112,12 @@ Resources:
                 # randomly-generated API ID (arn:...:apigateway:region::/apis/api-id/*),
                 # not a name derived from the stack - unlike Lambda/CloudFormation,
                 # there is no kbdb-pr-*-based pattern to scope to. Same structural
-                # constraint as Cognito below, not an oversight.
-                Resource: !Sub arn:aws:apigateway:${AWS::Region}::/apis*
+                # constraint as Cognito below, not an oversight. Tagging calls
+                # go through a separate /tags/<url-encoded-resource-arn> path,
+                # not /apis/* - both need covering.
+                Resource:
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/apis*
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
               - Sid: CognitoAdminAndManagement
                 Effect: Allow
                 Action: cognito-idp:*
