@@ -119,10 +119,16 @@ Resources:
                 # randomly-generated API ID (arn:...:apigateway:region::/apis/api-id/*),
                 # not a name derived from the stack - unlike Lambda/CloudFormation,
                 # there is no kbdb-pr-*-based pattern to scope to. Same structural
-                # constraint as Cognito below, not an oversight. Tagging calls
-                # go through a separate /tags/<url-encoded-resource-arn> path,
-                # not /apis/* - both need covering.
+                # constraint as Cognito below, not an oversight. Creating a
+                # new API is a PUT against the bare /apis collection endpoint
+                # (no trailing slash/ID - the ID doesn't exist yet), distinct
+                # from /apis/<id>/* used for an already-existing API's
+                # sub-resources; tagging calls go through a further separate
+                # /tags/<url-encoded-resource-arn> path. All three needed
+                # covering, confirmed by three separate real AccessDenied
+                # errors in CI rather than assumed upfront.
                 Resource:
+                  - !Sub arn:aws:apigateway:${AWS::Region}::/apis
                   - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
                   - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
               - Sid: CognitoCreateUserPool
