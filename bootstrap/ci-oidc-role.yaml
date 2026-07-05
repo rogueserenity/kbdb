@@ -183,9 +183,17 @@ Resources:
                   - ecr:UploadLayerPart
                   - ecr:CompleteLayerUpload
                   - ecr:BatchGetImage
+                  - ecr:GetDownloadUrlForLayer
                   - ecr:DescribeRepositories
                   - ecr:ListImages
                   - ecr:BatchDeleteImage
+                  # Per AWS's own Lambda-container-image docs: for a
+                  # same-account function+repo, Lambda auto-configures the
+                  # repository policy granting itself pull access as part of
+                  # CreateFunction - but only if the principal calling
+                  # CreateFunction (this role) also has these two.
+                  - ecr:GetRepositoryPolicy
+                  - ecr:SetRepositoryPolicy
                 Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/kbdb-api
 
 Outputs:
