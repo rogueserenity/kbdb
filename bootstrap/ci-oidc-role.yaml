@@ -110,6 +110,23 @@ Resources:
                 # AWS hard requirement - GetAuthorizationToken must be
                 # Resource: "*", cannot be scoped to a specific repo.
                 Resource: '*'
+              - Sid: EcrPublicAuth
+                Effect: Allow
+                Action: ecr-public:GetAuthorizationToken
+                # Authenticating to public.ecr.aws (functions/api/Dockerfile's
+                # base images) raises the effective anonymous-pull rate limit,
+                # which shared GitHub-hosted runner IPs otherwise hit
+                # ("toomanyrequests: Rate exceeded"). Separate IAM action
+                # namespace from private ECR's ecr:GetAuthorizationToken above;
+                # also a hard Resource: "*" requirement.
+                Resource: '*'
+              - Sid: EcrPublicStsToken
+                Effect: Allow
+                Action: sts:GetServiceBearerToken
+                Resource: '*'
+                Condition:
+                  StringEquals:
+                    sts:AWSServiceName: ecr-public.amazonaws.com
               - Sid: EcrRepoAccess
                 Effect: Allow
                 Action:

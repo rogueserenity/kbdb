@@ -33,6 +33,17 @@ jobs:
       - name: Log in to Amazon ECR
         uses: aws-actions/amazon-ecr-login@v2
 
+      # functions/api/Dockerfile pulls its base images from public.ecr.aws
+      # (Lambda provided runtime, aws-lambda-adapter) - anonymous pulls from
+      # shared GitHub-hosted runner IPs hit "toomanyrequests: Rate exceeded"
+      # in practice; authenticating (even with no special permissions beyond
+      # ecr-public:GetAuthorizationToken) raises the effective rate limit
+      # since it's tied to the calling identity, not just source IP.
+      - name: Log in to Amazon ECR Public
+        uses: aws-actions/amazon-ecr-login@v2
+        with:
+          registry-type: public
+
       - name: sam build
         run: sam build --config-env ci
 
