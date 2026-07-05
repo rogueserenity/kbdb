@@ -65,6 +65,11 @@ Resources:
                 Action:
                   - budgets:ViewBudget
                   - budgets:ModifyBudget
+                  # CloudFormation tags every resource it creates (SAM/stack
+                  # metadata tags), including CostBudget - required alongside
+                  # ModifyBudget whenever a budget is created/updated with
+                  # tags, per AWS's own action reference.
+                  - budgets:TagResource
                 # Budgets ARNs have no region segment (a global/account-level
                 # service). CloudFormation auto-generates the budget name as
                 # <LogicalResourceId>-<region>-<timestamp>-<random> - scoped
