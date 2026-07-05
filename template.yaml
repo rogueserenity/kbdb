@@ -165,6 +165,15 @@ Resources:
         - https://example.com/callback
       SupportedIdentityProviders:
         - COGNITO
+      # Required for ci.yml's functional-test job to mint a test token via
+      # admin-initiate-auth (ADMIN_USER_PASSWORD_AUTH) against a throwaway
+      # Cognito user. Declared here rather than left to CI's own
+      # update-user-pool-client call so this is real, version-controlled
+      # stack configuration - every deployed stack (kbdb-dev included) gets
+      # it, not just ones that happen to go through that exact CI step.
+      ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain

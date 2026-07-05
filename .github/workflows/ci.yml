@@ -141,11 +141,6 @@ jobs:
             --password "$PASSWORD" \
             --permanent
 
-          aws cognito-idp update-user-pool-client \
-            --user-pool-id "$USER_POOL_ID" \
-            --client-id "$USER_POOL_CLIENT_ID" \
-            --explicit-auth-flows ALLOW_ADMIN_USER_PASSWORD_AUTH ALLOW_REFRESH_TOKEN_AUTH
-
           TOKEN=$(aws cognito-idp admin-initiate-auth \
             --user-pool-id "$USER_POOL_ID" \
             --client-id "$USER_POOL_CLIENT_ID" \
