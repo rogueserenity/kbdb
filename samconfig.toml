@@ -2,8 +2,8 @@
 version = 0.1
 
 # kbdb-dev hosts multiple concurrent per-developer stacks (kbdb-dev-<name>,
-# see mise.toml's dev-setup/dev-deploy/dev-teardown tasks and CLAUDE.md), not
-# one shared stack - stack_name and image_repositories are deliberately NOT
+# see mise.toml's dev-setup/dev-deploy/dev-teardown tasks and CONTRIBUTING.md),
+# not one shared stack - stack_name and image_repositories are deliberately NOT
 # set here, same reasoning as [ci.deploy.parameters] below: both are supplied
 # per-run by those tasks, so no single hardcoded value here could accidentally
 # be reused across developers.
