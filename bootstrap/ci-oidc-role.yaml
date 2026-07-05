@@ -60,6 +60,29 @@ Resources:
                   - cloudformation:ListStackResources
                   - cloudformation:GetTemplate
                 Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-pr-*/*
+              - Sid: BudgetsScoped
+                Effect: Allow
+                Action:
+                  - budgets:ViewBudget
+                  - budgets:ModifyBudget
+                # Budgets ARNs have no region segment (a global/account-level
+                # service). CloudFormation auto-generates the budget name as
+                # <LogicalResourceId>-<region>-<timestamp>-<random> - scoped
+                # to the CostBudget-* prefix template.yaml's logical resource
+                # id (CostBudget) always produces, not a literal name (which
+                # isn't known ahead of any given stack's creation).
+                Resource: !Sub arn:aws:budgets::${AWS::AccountId}:budget/CostBudget-*
+              - Sid: BudgetsDependentActions
+                Effect: Allow
+                # AWS's own action-reference docs list these as dependent
+                # actions required alongside budgets:ModifyBudget/ViewBudget
+                # (iam:CreateServiceLinkedRole for ModifyBudget,
+                # billing:GetBillingViewData for ViewBudget) - neither is
+                # ARN-scopable to a specific budget/stack.
+                Action:
+                  - iam:CreateServiceLinkedRole
+                  - billing:GetBillingViewData
+                Resource: '*'
               - Sid: CloudFormationServerlessTransform
                 Effect: Allow
                 Action: cloudformation:CreateChangeSet
