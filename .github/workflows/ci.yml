@@ -112,6 +112,14 @@ jobs:
           USERNAME="ci-test-user@rogueserenity.dev"
           PASSWORD="$(openssl rand -base64 24)Aa1!"
 
+          # synchronize (a later push to the same PR) redeploys the same
+          # stack/UserPool rather than a fresh one, so this fixed username
+          # already exists from the prior run - delete first, ignoring
+          # UserNotFoundException on a genuinely first run.
+          aws cognito-idp admin-delete-user \
+            --user-pool-id "$USER_POOL_ID" \
+            --username "$USERNAME" 2>/dev/null || true
+
           aws cognito-idp admin-create-user \
             --user-pool-id "$USER_POOL_ID" \
             --username "$USERNAME" \
