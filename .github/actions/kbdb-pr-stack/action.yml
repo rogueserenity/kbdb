@@ -1,9 +1,9 @@
 name: kbdb PR stack setup
 description: >
   Computes the per-PR CloudFormation stack name and assumes the kbdb-ci
-  OIDC-federated deploy role. Shared by deploy-and-test.yml and (issue #9's)
-  teardown.yml so both workflows compute the same stack name and authenticate
-  the same way.
+  OIDC-federated deploy role. Shared by ci.yml's functional-test job and
+  (issue #9's) teardown.yml so both workflows compute the same stack name
+  and authenticate the same way.
 
 outputs:
   stack-name:

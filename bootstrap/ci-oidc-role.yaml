@@ -1,7 +1,7 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   One-time-per-account bootstrap (kbdb-ci only): the GitHub Actions OIDC
-  identity provider and the IAM role deploy-and-test.yml assumes via
+  identity provider and the IAM role ci.yml's functional-test job assumes via
   aws-actions/configure-aws-credentials - no long-lived AWS keys stored as
   GitHub secrets. Neither resource can be created by CI itself (CI has no
   credentials until this trust relationship exists), so this is deployed
