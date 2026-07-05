@@ -125,14 +125,27 @@ Resources:
                 Resource:
                   - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
                   - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
+              - Sid: CognitoCreateUserPool
+                Effect: Allow
+                # CreateUserPool genuinely can't be scoped to a resource ARN -
+                # the pool doesn't exist (and its ID isn't known) until after
+                # this call succeeds. AWS hard requirement, confirmed via a
+                # real CREATE_FAILED AccessDenied on this exact action when
+                # first scoped to the pattern below.
+                Action: cognito-idp:CreateUserPool
+                Resource: '*'
               - Sid: CognitoAdminAndManagement
                 Effect: Allow
                 Action: cognito-idp:*
-                # Per-PR UserPool ARNs don't exist until after that PR's own
-                # deploy, so this can't be scoped ahead of time - but pool IDs
-                # are always region-prefixed (e.g. us-east-2_XXXXXXXXX), so
-                # scope to this account+region's pools rather than every
-                # account's every pool everywhere.
+                # Every other Cognito action (UpdateUserPool, the UserPoolClient/
+                # UserPoolDomain sub-resources, and every Admin* action used to
+                # create/auth the throwaway CI test user) operates on an
+                # already-existing pool. Per-PR UserPool ARNs don't exist until
+                # after that PR's own CreateUserPool call above, so the exact ID
+                # can't be scoped ahead of time - but pool IDs are always
+                # region-prefixed (e.g. us-east-2_XXXXXXXXX), so scope to this
+                # account+region's pools rather than every account's every pool
+                # everywhere.
                 Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${AWS::Region}_*
               - Sid: IamPassRoleForSam
                 Effect: Allow
