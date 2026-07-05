@@ -127,12 +127,18 @@ Resources:
                   - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
               - Sid: CognitoCreateUserPool
                 Effect: Allow
-                # CreateUserPool genuinely can't be scoped to a resource ARN -
-                # the pool doesn't exist (and its ID isn't known) until after
-                # this call succeeds. AWS hard requirement, confirmed via a
-                # real CREATE_FAILED AccessDenied on this exact action when
-                # first scoped to the pattern below.
-                Action: cognito-idp:CreateUserPool
+                # CreateUserPool and the TagResource call CloudFormation makes
+                # immediately after (to apply the stack's tags to the new
+                # pool) both genuinely can't be scoped to a resource ARN - at
+                # the moment CreateUserPool runs the pool doesn't exist (and
+                # its ID isn't known) yet, and empirically the immediately-
+                # following TagResource call is denied under the same
+                # scoped-ARN pattern too (confirmed via two separate real
+                # CREATE_FAILED AccessDenied errors in CI, one per action,
+                # after which each was moved here rather than assumed).
+                Action:
+                  - cognito-idp:CreateUserPool
+                  - cognito-idp:TagResource
                 Resource: '*'
               - Sid: CognitoAdminAndManagement
                 Effect: Allow
