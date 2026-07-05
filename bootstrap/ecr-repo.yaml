@@ -15,6 +15,16 @@ Description: >
   time - carrying it from creation avoids needing a separate update step
   later just to add it.
 
+Parameters:
+  RepositoryName:
+    Type: String
+    Default: kbdb-api
+    Description: >
+      Defaults to kbdb-api (kbdb-ci's shared per-PR-CI-image repo, this
+      template's original use case, unaffected). mise run dev-setup
+      overrides this to kbdb-api-<per-developer stack name> when
+      bootstrapping a new developer's own fully-owned repo in kbdb-dev.
+
 Resources:
   # LifecyclePolicy expires by age alone (tagStatus: "any"), not a tag
   # pattern: kbdb-ci only ever holds transient per-PR CI build artifacts,
@@ -32,7 +42,7 @@ Resources:
     Type: AWS::ECR::Repository
     DeletionPolicy: Retain
     Properties:
-      RepositoryName: kbdb-api
+      RepositoryName: !Ref RepositoryName
       LifecyclePolicy:
         LifecyclePolicyText: |
           {

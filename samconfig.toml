@@ -1,18 +1,16 @@
 #:tombi schema.strict = false
 version = 0.1
 
+# kbdb-dev hosts multiple concurrent per-developer stacks (kbdb-dev-<name>,
+# see mise.toml's dev-setup/dev-deploy/dev-teardown tasks and CLAUDE.md), not
+# one shared stack - stack_name and image_repositories are deliberately NOT
+# set here, same reasoning as [ci.deploy.parameters] below: both are supplied
+# per-run by those tasks, so no single hardcoded value here could accidentally
+# be reused across developers.
 [default.deploy.parameters]
-stack_name = "kbdb-dev"
-# Explicit, version-controlled bucket (see bootstrap/artifact-bucket.yaml)
-# instead of resolve_s3's auto-managed one, so a lifecycle policy (expire
-# noncurrent versions after 7 days) can be attached - deploy the bootstrap
-# template once per account before the first sam deploy there.
-s3_bucket = "kbdb-sam-artifacts-992234857260"
-s3_prefix = "kbdb-dev"
 region = "us-east-2"
 confirm_changeset = true
 capabilities = "CAPABILITY_IAM"
-image_repositories = ["ApiFunction=992234857260.dkr.ecr.us-east-2.amazonaws.com/kbdb-api"]
 
 [default.global.parameters]
 region = "us-east-2"

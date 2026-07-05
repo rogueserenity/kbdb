@@ -16,11 +16,15 @@ Common dev actions run through `mise run <task>` (aliases in parentheses) rather
 mise run lint          # (l)  golangci-lint run ./... && actionlint
 mise run test          # (t)  go test on unit tests only (excludes test/functional)
 mise run build         # (b)  sam build
-mise run deploy        # (d)  sam deploy to kbdb-dev (requires AWS_PROFILE=kbdb-dev-admin)
+mise run dev-setup     # (ds) one-time per-developer kbdb-dev-<name> stack bootstrap (requires AWS_PROFILE=kbdb-dev-admin)
+mise run dev-deploy    # (dd) deploy to your personal kbdb-dev-<name> stack (requires AWS_PROFILE=kbdb-dev-admin; run dev-setup first)
+mise run dev-teardown  # (dt) delete your personal kbdb-dev-<name> stack, including its owned ECR repo
 mise run func-setup    # (fs) bring up LocalStack + mockoidc (docker compose) + sam local start-api
 mise run func-test     # (fx) run functional tests (Ginkgo) against whatever func-setup brought up
 mise run func-teardown # (ft) tear down whatever func-setup started
 ```
+
+**`kbdb-dev` supports multiple concurrent per-developer stacks**, not one shared stack: each developer gets their own `kbdb-dev-<name>` CloudFormation stack, with `<name>` derived from `whoami` by default (override via the `KBDB_DEV_NAME` env var — useful for testing multiple concurrent stacks as one person, or disambiguating two developers who'd otherwise collide under the same `whoami` result). Each stack fully owns its own resources, including its own ECR repo (`kbdb-api-kbdb-dev-<name>`, not shared) — this was a deliberate choice over one repo shared across developers specifically so `dev-teardown` can delete a developer's entire stack, including their image history, as a single unit with nothing left to separately clean up. `dev-setup` automates the ECR chicken-and-egg bootstrap dance (see below) end-to-end for a new developer; it refuses to run if the target stack already exists (points at `dev-teardown` instead of attempting to detect/resume partial state).
 
 `func-setup`/`func-teardown` are separate from `func-test` because they have different lifecycles: setup is long-running local infra you leave running, func-test is a one-shot command repeatedly run against it (also the command issue #8's CI wiring invokes, just against a different `KBDB_API_BASE_URL`).
 
@@ -36,7 +40,7 @@ mockery                                       # regenerate mocks after changing 
 sam validate --lint
 ```
 
-**The AWS Organization is three accounts**, each with its own SSO profile (`~/.aws/config`, same `kbdb` SSO session): `mgmt-admin` (`rogueserenity-management`, 957814222990 — administrative-only, no workloads), `kbdb-dev-admin` (`kbdb-dev`, 992234857260 — the real dev stack), `kbdb-ci-admin` (`kbdb-ci`, 475976462467 — CI's per-PR stacks, issue #8). Deploys use IAM Identity Center (SSO) profiles, not default credentials or long-lived keys — set up once via `aws configure sso`, refreshed via `aws sso login --profile <profile>` when the session expires. There is no default/implicit profile wired up; commands against real AWS will fail with `NoCredentials` without `AWS_PROFILE=<profile>` (or `--profile <profile>`). Centralized root access management (`RootCredentialsManagement`/`RootSessions`) is enabled at the Org level — `kbdb-dev`/`kbdb-ci` have no standalone root password; privileged root-only actions go through the management account's IAM > Root access management console instead.
+**The AWS Organization is three accounts**, each with its own SSO profile (`~/.aws/config`, same `kbdb` SSO session): `mgmt-admin` (`rogueserenity-management`, 957814222990 — administrative-only, no workloads), `kbdb-dev-admin` (`kbdb-dev`, 992234857260 — hosts each developer's own `kbdb-dev-<name>` stack, no bare `kbdb-dev` stack), `kbdb-ci-admin` (`kbdb-ci`, 475976462467 — CI's per-PR stacks, issue #8). Deploys use IAM Identity Center (SSO) profiles, not default credentials or long-lived keys — set up once via `aws configure sso`, refreshed via `aws sso login --profile <profile>` when the session expires. There is no default/implicit profile wired up; commands against real AWS will fail with `NoCredentials` without `AWS_PROFILE=<profile>` (or `--profile <profile>`). Centralized root access management (`RootCredentialsManagement`/`RootSessions`) is enabled at the Org level — `kbdb-dev`/`kbdb-ci` have no standalone root password; privileged root-only actions go through the management account's IAM > Root access management console instead.
 
 `sam build` requires Docker running locally — `ApiFunction` is packaged as a container image, not a zip (see Architecture below). On macOS with Docker Desktop, `docker-credential-desktop` must be on `PATH` or `sam build`/`docker push` fail with a credential-store error; add `/Applications/Docker.app/Contents/Resources/bin` to `PATH` if so.
 
@@ -48,7 +52,7 @@ sam validate --lint
    ```
    An explicit, version-controlled bucket (with a 7-day noncurrent-version-expiration lifecycle policy) rather than SAM's own `--resolve-s3`/auto-managed bucket, specifically so that lifecycle policy can exist at all — SAM's auto-managed bucket has no template to attach one to, and its default versioning-enabled-with-no-lifecycle-rule setup otherwise accumulates old object versions/delete markers forever. Update `samconfig.toml`'s `s3_bucket` with the new account's bucket name (`kbdb-sam-artifacts-<account-id>`, from this template's `ArtifactBucketName` output).
 
-2. **The ECR repo** — the repo must exist and hold an image before `sam deploy` can resolve `ApiFunction`'s `ImageUri`, but `template.yaml` also declares that same repo as a CloudFormation resource in the same stack. Genuine chicken-and-egg, no first-party SAM fix:
+2. **The ECR repo** — the repo must exist and hold an image before `sam deploy` can resolve `ApiFunction`'s `ImageUri`, but `template.yaml` also declares that same repo as a CloudFormation resource in the same stack. Genuine chicken-and-egg, no first-party SAM fix. **For `kbdb-dev` specifically, this is automated end-to-end by `mise run dev-setup`** (each developer owns their own repo, per the per-developer-stack design above) — read `[tasks.dev-setup]` in `mise.toml` for the exact scripted steps if modifying that automation. The manual procedure below is still how `kbdb-ci`'s one shared, account-level bootstrap repo (used by CI's per-PR stacks, which don't own their own repo) is set up — a one-time-per-account operation, not per-developer:
    ```sh
    # a. Create the repo standalone (bootstrap/ecr-repo.yaml has DeletionPolicy: Retain
    #    baked in from the start - required before it can later be imported).

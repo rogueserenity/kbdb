@@ -47,7 +47,10 @@ Resources:
     Type: AWS::ECR::Repository
     Condition: ShouldCreateApiRepository
     Properties:
-      RepositoryName: kbdb-api
+      # Stack-name-derived, not a literal - each per-developer kbdb-dev-<name>
+      # stack owns its own repo (same class of collision the UserPoolDomain
+      # fix addressed for the Cognito hosted-UI domain; here for ECR).
+      RepositoryName: !Sub kbdb-api-${AWS::StackName}
       LifecyclePolicy:
         LifecyclePolicyText: |
           {
