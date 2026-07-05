@@ -114,11 +114,20 @@ jobs:
 
           # synchronize (a later push to the same PR) redeploys the same
           # stack/UserPool rather than a fresh one, so this fixed username
-          # already exists from the prior run - delete first, ignoring
-          # UserNotFoundException on a genuinely first run.
-          aws cognito-idp admin-delete-user \
+          # already exists from the prior run - delete first. Only swallow
+          # the specific "didn't exist yet" case (a genuinely first run
+          # against a fresh stack); any other failure (throttling, a real
+          # permissions regression, etc.) should fail loudly here rather
+          # than surface later as a confusing UsernameExistsException from
+          # admin-create-user below.
+          if ! DELETE_ERROR=$(aws cognito-idp admin-delete-user \
             --user-pool-id "$USER_POOL_ID" \
-            --username "$USERNAME" 2>/dev/null || true
+            --username "$USERNAME" 2>&1); then
+            if ! grep -q "UserNotFoundException" <<< "$DELETE_ERROR"; then
+              echo "$DELETE_ERROR" >&2
+              exit 1
+            fi
+          fi
 
           aws cognito-idp admin-create-user \
             --user-pool-id "$USER_POOL_ID" \
