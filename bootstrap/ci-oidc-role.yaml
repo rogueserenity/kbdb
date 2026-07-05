@@ -59,6 +59,13 @@ Resources:
                   - cloudformation:DeleteChangeSet
                   - cloudformation:ListStackResources
                   - cloudformation:GetTemplate
+                  # Only surfaces on a stack *update* (sam deploy against an
+                  # already-existing stack from a prior successful run, e.g.
+                  # a second push to the same PR) - SAM calls this to
+                  # validate/summarize the template's parameters before
+                  # creating the changeset, which the first-ever create
+                  # doesn't seem to exercise the same way.
+                  - cloudformation:GetTemplateSummary
                 Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-pr-*/*
               - Sid: BudgetsScoped
                 Effect: Allow
