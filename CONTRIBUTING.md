@@ -110,6 +110,23 @@ aws cloudformation execute-change-set --stack-name kbdb-dev --change-set-name im
 
 A CloudFormation `IMPORT` changeset can only import into a stack that already exists, which is why step 3 runs before step 4 rather than combined with it.
 
+### Giving a developer scoped access (no admin needed)
+
+Once the account is bootstrapped, day-to-day `dev-setup`/`dev-deploy`/`dev-teardown` don't need admin access — a much narrower policy covers exactly what those three scripts do. This is the setup for a fork you're deploying to your own AWS account, or for adding a teammate without handing them broad permissions:
+
+1. **Account admin, once**: deploy the scoped policy.
+   ```sh
+   aws cloudformation deploy --template-file bootstrap/dev-user-policy.yaml \
+     --stack-name kbdb-dev-user-policy --capabilities CAPABILITY_NAMED_IAM --profile <admin-profile>
+   ```
+   Attach the resulting policy (output as `DevPolicyArn`) to each developer's IAM user, group, or role:
+   ```sh
+   aws iam attach-user-policy --user-name <dev> --policy-arn <DevPolicyArn>
+   ```
+2. **Each developer**: with that policy attached (and no other permissions needed), run `mise run dev-setup`, `dev-deploy`, `dev-teardown` as usual.
+
+This policy is scoped to `kbdb-dev-*`-named stacks/resources only — it can't touch anything outside a developer's own stack, and can't grant itself broader access. It was verified by running the full `dev-setup` → `dev-deploy` → `dev-teardown` cycle as a real IAM user with only this policy attached and nothing else.
+
 ## Testing strategy
 
 Two test layers, kept separate — don't mix them:
