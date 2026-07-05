@@ -16,6 +16,18 @@ Description: >
   later just to add it.
 
 Resources:
+  # LifecyclePolicy expires by age alone (tagStatus: "any"), not a tag
+  # pattern: kbdb-ci only ever holds transient per-PR CI build artifacts,
+  # nothing long-lived, so age is the right and only signal - and there's no
+  # "live" image here to accidentally protect, unlike kbdb-dev's copy of this
+  # resource (template.yaml), which uses imageCountMoreThan instead since it
+  # does have one. A prior version of this rule matched on
+  # tagPrefixList: ["pr-"], but sam build/deploy actually tags images as
+  # apifunction-<content-hash>-latest, not pr-<N> - that pattern never
+  # matched anything, so images accumulated unbounded until this was caught
+  # and fixed. (ECR's own "description" field has a 255-char limit, hence
+  # this reasoning living here instead - confirmed via a real UPDATE_FAILED
+  # error rather than assumed.)
   ApiRepository:
     Type: AWS::ECR::Repository
     DeletionPolicy: Retain
@@ -27,10 +39,9 @@ Resources:
             "rules": [
               {
                 "rulePriority": 1,
-                "description": "Expire per-PR CI images 2 days after push",
+                "description": "Expire any image 2 days after push",
                 "selection": {
-                  "tagStatus": "tagged",
-                  "tagPrefixList": ["pr-"],
+                  "tagStatus": "any",
                   "countType": "sinceImagePushed",
                   "countUnit": "days",
                   "countNumber": 2

@@ -35,6 +35,14 @@ Resources:
   # via `--image-repositories ApiFunction=<this repo's URI>` (CLI flag or
   # samconfig.toml) - there is no in-template property linking a function to
   # a specific ECR repo for the build/push step.
+  #
+  # LifecyclePolicy uses imageCountMoreThan rather than sinceImagePushed: a
+  # pure age-based rule (the original version of this policy) has no floor -
+  # it would expire the currently-deployed image out from under the running
+  # Lambda function if development goes quiet for longer than the age
+  # threshold. imageCountMoreThan always keeps at least the N newest images
+  # regardless of age (confirmed via AWS's own lifecycle-policy examples),
+  # so it can never delete the live image while still bounding total count.
   ApiRepository:
     Type: AWS::ECR::Repository
     Condition: ShouldCreateApiRepository
@@ -46,13 +54,11 @@ Resources:
             "rules": [
               {
                 "rulePriority": 1,
-                "description": "Expire per-PR CI images 2 days after push",
+                "description": "Keep the 5 most recent images, expire the rest",
                 "selection": {
-                  "tagStatus": "tagged",
-                  "tagPrefixList": ["pr-"],
-                  "countType": "sinceImagePushed",
-                  "countUnit": "days",
-                  "countNumber": 2
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
                 },
                 "action": { "type": "expire" }
               }
