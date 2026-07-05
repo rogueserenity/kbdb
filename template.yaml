@@ -11,6 +11,23 @@ Globals:
     Timeout: 10
     MemorySize: 128
 
+Parameters:
+  SkipApiRepository:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Set to 'true' for per-PR CI stacks (kbdb-pr-<N>) sharing the kbdb-ci
+      account's single bootstrap-created ECR repo (bootstrap/ecr-repo.yaml) -
+      every PR's image is pushed to that one shared, already-existing repo,
+      so a per-PR stack must not also try to create its own repo of the same
+      name (CloudFormation's early validation correctly refuses to create a
+      duplicate). Left at the default 'false' for the real kbdb-dev stack,
+      which does own and manage its repo via this template.
+
+Conditions:
+  ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
+
 Resources:
   # Dedicated ECR repo for ApiFunction's container image, declared in-template
   # (rather than SAM's implicit auto-managed repo) so a lifecycle policy can
@@ -20,6 +37,7 @@ Resources:
   # a specific ECR repo for the build/push step.
   ApiRepository:
     Type: AWS::ECR::Repository
+    Condition: ShouldCreateApiRepository
     Properties:
       RepositoryName: kbdb-api
       LifecyclePolicy:

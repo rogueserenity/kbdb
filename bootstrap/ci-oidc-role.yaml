@@ -60,6 +60,19 @@ Resources:
                   - cloudformation:ListStackResources
                   - cloudformation:GetTemplate
                 Resource: !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-pr-*/*
+              - Sid: CloudFormationServerlessTransform
+                Effect: Allow
+                Action: cloudformation:CreateChangeSet
+                # template.yaml's Transform: AWS::Serverless-2016-10-31 means
+                # CloudFormation must itself invoke this macro/transform
+                # resource to expand SAM shorthand into raw CloudFormation as
+                # part of CreateChangeSet - a separate ARN (a transform, not a
+                # stack) that the CloudFormationDeploy statement's
+                # stack-scoped Resource above doesn't cover. This is an AWS
+                # account-owned, always-the-same-ARN resource, not
+                # kbdb-pr-*-scoped, since the transform itself isn't
+                # per-stack.
+                Resource: !Sub arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
               - Sid: LambdaScoped
                 Effect: Allow
                 Action: lambda:*
@@ -123,10 +136,16 @@ Resources:
               - Sid: EcrPublicStsToken
                 Effect: Allow
                 Action: sts:GetServiceBearerToken
+                # No Condition: the sts:GetServiceBearerToken call for ECR
+                # Public happens server-side inside ECR Public's own backend
+                # (aws-actions/amazon-ecr-login never calls STS directly),
+                # so there's no documented/verifiable sts:AWSServiceName
+                # value to condition on. AWS's own canonical example policy
+                # for this permission has no Condition at all - matching it
+                # exactly rather than guessing a value by analogy (which is
+                # what caused this to fail: ecr-public.amazonaws.com is not
+                # a confirmed real value).
                 Resource: '*'
-                Condition:
-                  StringEquals:
-                    sts:AWSServiceName: ecr-public.amazonaws.com
               - Sid: EcrRepoAccess
                 Effect: Allow
                 Action:
