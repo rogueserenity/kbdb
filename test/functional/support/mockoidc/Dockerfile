@@ -1,4 +1,4 @@
-FROM golang:1.26 AS build
+FROM golang:1.26.4 AS build
 WORKDIR /src
 # Build context is the repo root (see docker-compose.yml), so the whole
 # module is available here, same as functions/api/Dockerfile.
