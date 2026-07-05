@@ -13,7 +13,13 @@ env:
 
 jobs:
   deploy-and-test:
-    runs-on: ubuntu-latest
+    # Native arm64, matching ApiFunction's real deployed architecture
+    # (template.yaml's Architectures: [arm64]) - avoids QEMU-emulated
+    # cross-compilation, which failed outright under sam build's Docker
+    # build ("exec format error") and would in any case be slower/burn
+    # more billed minutes per run than a native arm64 runner for the same
+    # per-minute rate (Linux runners aren't multiplier-penalized by arch).
+    runs-on: ubuntu-24.04-arm
     steps:
       - uses: actions/checkout@v4
 
