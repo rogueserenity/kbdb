@@ -11,6 +11,23 @@ Globals:
     Timeout: 10
     MemorySize: 128
 
+Parameters:
+  SkipApiRepository:
+    Type: String
+    Default: 'false'
+    AllowedValues: ['true', 'false']
+    Description: >
+      Set to 'true' for per-PR CI stacks (kbdb-pr-<N>) sharing the kbdb-ci
+      account's single bootstrap-created ECR repo (bootstrap/ecr-repo.yaml) -
+      every PR's image is pushed to that one shared, already-existing repo,
+      so a per-PR stack must not also try to create its own repo of the same
+      name (CloudFormation's early validation correctly refuses to create a
+      duplicate). Left at the default 'false' for the real kbdb-dev stack,
+      which does own and manage its repo via this template.
+
+Conditions:
+  ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
+
 Resources:
   # Dedicated ECR repo for ApiFunction's container image, declared in-template
   # (rather than SAM's implicit auto-managed repo) so a lifecycle policy can
@@ -18,8 +35,17 @@ Resources:
   # via `--image-repositories ApiFunction=<this repo's URI>` (CLI flag or
   # samconfig.toml) - there is no in-template property linking a function to
   # a specific ECR repo for the build/push step.
+  #
+  # LifecyclePolicy uses imageCountMoreThan rather than sinceImagePushed: a
+  # pure age-based rule (the original version of this policy) has no floor -
+  # it would expire the currently-deployed image out from under the running
+  # Lambda function if development goes quiet for longer than the age
+  # threshold. imageCountMoreThan always keeps at least the N newest images
+  # regardless of age (confirmed via AWS's own lifecycle-policy examples),
+  # so it can never delete the live image while still bounding total count.
   ApiRepository:
     Type: AWS::ECR::Repository
+    Condition: ShouldCreateApiRepository
     Properties:
       RepositoryName: kbdb-api
       LifecyclePolicy:
@@ -28,13 +54,11 @@ Resources:
             "rules": [
               {
                 "rulePriority": 1,
-                "description": "Expire per-PR CI images 2 days after push",
+                "description": "Keep the 5 most recent images, expire the rest",
                 "selection": {
-                  "tagStatus": "tagged",
-                  "tagPrefixList": ["pr-"],
-                  "countType": "sinceImagePushed",
-                  "countUnit": "days",
-                  "countNumber": 2
+                  "tagStatus": "any",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
                 },
                 "action": { "type": "expire" }
               }
@@ -147,6 +171,15 @@ Resources:
         - https://example.com/callback
       SupportedIdentityProviders:
         - COGNITO
+      # Required for ci.yml's functional-test job to mint a test token via
+      # admin-initiate-auth (ADMIN_USER_PASSWORD_AUTH) against a throwaway
+      # Cognito user. Declared here rather than left to CI's own
+      # update-user-pool-client call so this is real, version-controlled
+      # stack configuration - every deployed stack (kbdb-dev included) gets
+      # it, not just ones that happen to go through that exact CI step.
+      ExplicitAuthFlows:
+        - ALLOW_ADMIN_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
 
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain

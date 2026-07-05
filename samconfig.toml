@@ -20,3 +20,15 @@ region = "us-east-2"
 [default.local_start_api.parameters]
 env_vars = "test/functional/support/env.local.json"
 docker_network = "kbdb_default"
+
+# CI deploys per-PR stacks into the separate kbdb-ci account (475976462467),
+# selected via `sam build/deploy --config-env ci`. stack_name and
+# image_repositories are deliberately NOT set here - both are supplied
+# per-run via CLI flags (--stack-name kbdb-pr-<N>, computed by
+# .github/actions/kbdb-pr-stack), so a CI run can never accidentally
+# collide with or reuse kbdb-dev's [default.*] values above.
+[ci.deploy.parameters]
+s3_bucket = "kbdb-sam-artifacts-475976462467"
+region = "us-east-2"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false

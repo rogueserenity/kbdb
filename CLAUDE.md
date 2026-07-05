@@ -13,10 +13,10 @@ The project is being built issue-by-issue against a fixed architecture (see belo
 Common dev actions run through `mise run <task>` (aliases in parentheses) rather than raw tool invocations directly — one consistent entrypoint regardless of what's underneath:
 
 ```sh
-mise run lint          # (l)  golangci-lint run ./...
+mise run lint          # (l)  golangci-lint run ./... && actionlint
 mise run test          # (t)  go test on unit tests only (excludes test/functional)
 mise run build         # (b)  sam build
-mise run deploy        # (d)  sam deploy to kbdb-dev (requires AWS_PROFILE=kbdb-admin)
+mise run deploy        # (d)  sam deploy to kbdb-dev (requires AWS_PROFILE=kbdb-dev-admin)
 mise run func-setup    # (fs) bring up LocalStack + mockoidc (docker compose) + sam local start-api
 mise run func-test     # (fx) run functional tests (Ginkgo) against whatever func-setup brought up
 mise run func-teardown # (ft) tear down whatever func-setup started
@@ -36,11 +36,11 @@ mockery                                       # regenerate mocks after changing 
 sam validate --lint
 ```
 
-Deploys use the `kbdb-admin` AWS IAM Identity Center (SSO) profile, not default credentials — set up once via `aws configure sso`, refreshed via `aws sso login --profile kbdb-admin` when the session expires. There is no default/implicit profile wired up; commands against real AWS will fail with `NoCredentials` without `AWS_PROFILE=kbdb-admin` (or `--profile kbdb-admin`).
+**The AWS Organization is three accounts**, each with its own SSO profile (`~/.aws/config`, same `kbdb` SSO session): `mgmt-admin` (`rogueserenity-management`, 957814222990 — administrative-only, no workloads), `kbdb-dev-admin` (`kbdb-dev`, 992234857260 — the real dev stack), `kbdb-ci-admin` (`kbdb-ci`, 475976462467 — CI's per-PR stacks, issue #8). Deploys use IAM Identity Center (SSO) profiles, not default credentials or long-lived keys — set up once via `aws configure sso`, refreshed via `aws sso login --profile <profile>` when the session expires. There is no default/implicit profile wired up; commands against real AWS will fail with `NoCredentials` without `AWS_PROFILE=<profile>` (or `--profile <profile>`). Centralized root access management (`RootCredentialsManagement`/`RootSessions`) is enabled at the Org level — `kbdb-dev`/`kbdb-ci` have no standalone root password; privileged root-only actions go through the management account's IAM > Root access management console instead.
 
 `sam build` requires Docker running locally — `ApiFunction` is packaged as a container image, not a zip (see Architecture below). On macOS with Docker Desktop, `docker-credential-desktop` must be on `PATH` or `sam build`/`docker push` fail with a credential-store error; add `/Applications/Docker.app/Contents/Resources/bin` to `PATH` if so.
 
-**First deploy to a new AWS account/stack**: three one-time bootstrap steps, none of which `sam deploy` can do for itself. All three `bootstrap/*.yaml` templates are deployed via plain `aws cloudformation deploy`, not `sam deploy` (they're bootstrapping the things `sam deploy` itself depends on).
+**First deploy to a new AWS account/stack**: three one-time bootstrap steps (plus a fourth, `kbdb-ci`-only step below), none of which `sam deploy` can do for itself. All `bootstrap/*.yaml` templates are deployed via plain `aws cloudformation deploy`, not `sam deploy` (they're bootstrapping the things `sam deploy` itself depends on).
 
 1. **The S3 artifact bucket**:
    ```sh
@@ -85,7 +85,15 @@ Deploys use the `kbdb-admin` AWS IAM Identity Center (SSO) profile, not default 
    ```
    A CloudFormation `IMPORT`-type changeset can **only** import resources into a stack that already exists (or where every resource in the template is either being imported or already unchanged) — it cannot simultaneously create N new resources and import one in a single operation, which is why step (c) has to happen before (d), not combined with it.
 
-After all three bootstraps, ordinary `sam deploy` calls work.
+3. **The cost budget** (only for accounts with no app stack of their own, e.g. `kbdb-ci`, `rogueserenity-management` — `kbdb-dev` already gets one from `template.yaml`'s own `CostBudget` resource):
+   ```sh
+   aws cloudformation deploy --template-file bootstrap/cost-budget.yaml --stack-name kbdb-cost-budget --profile <account-profile>
+   ```
+   Mirrors `template.yaml`'s `CostBudget` resource so every account has this tripwire regardless of whether it hosts a real app stack — parameterized by `BudgetLimitUsd`/`AlertEmail` if an account's threshold should differ from the defaults.
+
+4. **(`kbdb-ci` only) The GitHub Actions OIDC provider + deploy role** — `bootstrap/ci-oidc-role.yaml` declares the `AWS::IAM::OIDCProvider` (trusting `token.actions.githubusercontent.com`) and the `kbdb-github-actions-deploy` role `.github/actions/kbdb-pr-stack` assumes, with its trust policy scoped to the exact `sub` claim `repo:rogueserenity/kbdb:pull_request` (verified against a real token, not just documentation, before committing to it) and a permissions policy scoped to `kbdb-pr-*` resource patterns everywhere that's possible (CloudFormation, Lambda, IAM roles, the ECR repo, Cognito — pool IDs are always region-prefixed, e.g. `us-east-2_XXXXXXXXX`, so Cognito is scoped to this account+region's pools even though a specific PR's pool ID isn't known ahead of time) — API Gateway v2's management-plane actions are the one exception that must stay scoped only to `/apis/*` and `/tags/*` path prefixes rather than a specific API ID, since those IDs are opaque and don't exist until after a PR's own stack is created, not a scoping oversight. Neither the OIDC provider nor the role can be created by CI itself (CI has no credentials until this trust relationship exists), so — like the other three — it's deployed once via `aws cloudformation deploy --template-file bootstrap/ci-oidc-role.yaml --stack-name kbdb-ci-oidc --capabilities CAPABILITY_NAMED_IAM --profile kbdb-ci-admin` by a human operator.
+
+After all bootstraps, ordinary `sam deploy` calls (and, for `kbdb-ci`, the `ci.yml` CI workflow) work.
 
 **`samconfig.toml` is committed**, not gitignored — nothing in it is a secret (AWS account IDs, stack names, and ECR repo URIs are not sensitive; only IAM credentials would be, and none are stored here). The `[default.*]` sections are today's real `kbdb-dev` values, used automatically by `sam build`/`sam deploy`/`mise run build`/`mise run deploy` with no flags needed. **A second environment (a real prod stack, when one exists) should be added as a new named section** (e.g. `[prod.deploy.parameters]`) selected via `sam deploy --config-env prod` — SAM's actual supported mechanism for multiple environments in one file. Note: SAM does **not** support `${VAR}`-style interpolation inside `samconfig.toml` values (confirmed by testing) — don't reach for that; use `--config-env` and real literal values per named section instead.
 
@@ -141,3 +149,7 @@ Test data isolation (once functional tests exist): a fresh synthetic `user_id` (
 Go, `aws-cli`, `aws-sam-cli`, `mockery`, and `golangci-lint` versions are pinned in `mise.toml` — run `mise install` once, then `mise activate` (already wired into most shells via `.zshrc`/`.bashrc`) makes `go`/`sam`/`aws`/`mockery`/`golangci-lint` resolve directly without a `mise exec --` prefix. If a Bash tool session doesn't have `mise activate` in effect (e.g. non-interactive subshells), fall back to `mise exec -- <command>`. The Ginkgo CLI is the one exception — pinned via `go.mod`'s `tool` directive instead of `mise.toml`, invoked as `go tool ginkgo ...` (see Testing strategy above).
 
 **Local dev environment** (`docker-compose.yml`, `mise run func-setup`/`func-teardown`): brings up LocalStack and `mockoidc` as docker-compose services. LocalStack requires a free account + `LOCALSTACK_AUTH_TOKEN` env var (sign up at localstack.cloud) — its no-signup "Community edition" was deprecated, so this is required even though LocalStack isn't yet exercised by any application code (no DynamoDB tables exist until Phase 1). It was set up ahead of that need anyway: deferring wouldn't reduce the eventual cost of the signup/token requirement, and standing it up now means it's a known-working part of the dev loop before Phase 1 adds real pressure.
+
+## Commit messages
+
+Commit messages and PR titles follow [Conventional Commits](https://www.conventionalcommits.org/) (`type(scope): subject`, e.g. `fix(ci): scope Cognito IAM permissions to account/region`). Common types: `feat`, `fix`, `chore`, `docs`, `test`, `ci`, `refactor`. Scope is the affected area (e.g. `ci`, `auth`, `mcp`) and can be omitted when a change is broad or scope isn't meaningful. This applies going forward from when it was adopted — existing commit history predating it was not retroactively rewritten.
