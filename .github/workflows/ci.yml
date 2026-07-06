@@ -2,7 +2,7 @@ name: CI
 
 on:
   pull_request:
-    types: [opened, synchronize, reopened]
+    types: [opened, edited, synchronize, reopened]
 
 permissions:
   id-token: write
@@ -12,8 +12,19 @@ env:
   ECR_REPOSITORY_URI: 475976462467.dkr.ecr.us-east-2.amazonaws.com/kbdb-api
 
 jobs:
+  pr-title:
+    name: PR Title
+    runs-on: ubuntu-latest
+    permissions:
+      pull-requests: read
+    steps:
+      - uses: amannn/action-semantic-pull-request@48f256284bd46cdaab1048c3721360e808335d50 # v6.1.1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
   lint:
     name: Lint
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -26,6 +37,7 @@ jobs:
 
   unit-test:
     name: Unit Test
+    if: github.event.action != 'edited'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7
@@ -38,6 +50,7 @@ jobs:
 
   functional-test:
     name: Functional Test
+    if: github.event.action != 'edited'
     # Native arm64, matching ApiFunction's real deployed architecture
     # (template.yaml's Architectures: [arm64]) - avoids QEMU-emulated
     # cross-compilation, which failed outright under sam build's Docker
