@@ -1,0 +1,183 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap: a managed IAM policy granting exactly the
+  permissions mise run dev-setup/dev-deploy/dev-teardown need, scoped to
+  kbdb-dev-* stacks/resources - not AdministratorAccess. Deployed once by
+  an account admin (see AWS_SETUP.md), then attached to whichever IAM
+  identity (user, group, or role) each developer authenticates as. Mirrors
+  bootstrap/ci-oidc-role.yaml's permissions policy - same resource surface,
+  since dev-deploy and CI's functional-test job both deploy the same
+  template.yaml - but scoped to kbdb-dev-* instead of kbdb-pr-*, and with
+  the extra actions dev-setup/dev-teardown need that CI's job never does
+  (CI's ECR repo is a permanent, admin-managed bootstrap resource shared
+  across every PR; each developer creates and destroys their own).
+
+Resources:
+  DevPolicy:
+    Type: AWS::IAM::ManagedPolicy
+    Properties:
+      ManagedPolicyName: kbdb-dev-deploy
+      Description: "Everything mise run dev-setup/dev-deploy/dev-teardown need, scoped to kbdb-dev-* stacks and their owned resources."
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: CloudFormationDeploy
+            Effect: Allow
+            Action:
+              - cloudformation:CreateStack
+              - cloudformation:UpdateStack
+              - cloudformation:DeleteStack
+              - cloudformation:DescribeStacks
+              - cloudformation:DescribeStackEvents
+              - cloudformation:DescribeStackResources
+              - cloudformation:CreateChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:ExecuteChangeSet
+              - cloudformation:DeleteChangeSet
+              - cloudformation:ListStackResources
+              - cloudformation:GetTemplate
+              - cloudformation:GetTemplateSummary
+            Resource:
+              # The dev's own app stack (kbdb-dev-<name>) ...
+              - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-dev-*/*
+              # ... and dev-setup's temporary standalone-repo bootstrap
+              # stack (kbdb-ecr-bootstrap-kbdb-dev-<name>), deleted again
+              # partway through dev-setup once the repo is imported - see
+              # CONTRIBUTING.md's ECR bootstrap procedure.
+              - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-ecr-bootstrap-kbdb-dev-*/*
+          - Sid: CloudFormationServerlessTransform
+            Effect: Allow
+            Action: cloudformation:CreateChangeSet
+            # template.yaml's Transform: AWS::Serverless-2016-10-31 requires
+            # this separate, account-owned (not stack-scoped) ARN.
+            Resource: !Sub arn:aws:cloudformation:${AWS::Region}:aws:transform/Serverless-2016-10-31
+          - Sid: BudgetsScoped
+            Effect: Allow
+            Action:
+              - budgets:ViewBudget
+              - budgets:ModifyBudget
+              - budgets:TagResource
+              - budgets:DeleteBudget
+            # Budgets ARNs have no region segment. CloudFormation names the
+            # budget <LogicalResourceId>-<region>-<timestamp>-<random>;
+            # CostBudget is template.yaml's logical id for this resource.
+            Resource: !Sub arn:aws:budgets::${AWS::AccountId}:budget/CostBudget-*
+          - Sid: BudgetsDependentActions
+            Effect: Allow
+            # Dependent actions AWS documents alongside ModifyBudget/
+            # ViewBudget; neither is scopable to a specific budget.
+            Action:
+              - iam:CreateServiceLinkedRole
+              - billing:GetBillingViewData
+            Resource: '*'
+          - Sid: LambdaScoped
+            Effect: Allow
+            Action: lambda:*
+            Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:kbdb-dev-*
+          - Sid: ApiGatewayManagement
+            Effect: Allow
+            Action: apigateway:*
+            # API Gateway v2 IDs are opaque and don't exist until after
+            # creation, so there's no kbdb-dev-*-based ARN pattern to use -
+            # same constraint as Cognito below.
+            Resource:
+              - !Sub arn:aws:apigateway:${AWS::Region}::/apis
+              - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
+              - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
+          - Sid: CognitoCreateUserPool
+            Effect: Allow
+            # CreateUserPool and the TagResource call CloudFormation makes
+            # right after can't be scoped to a resource ARN - the pool
+            # doesn't exist (and its ID isn't known) until CreateUserPool
+            # itself returns.
+            Action:
+              - cognito-idp:CreateUserPool
+              - cognito-idp:TagResource
+            Resource: '*'
+          - Sid: CognitoAdminAndManagement
+            Effect: Allow
+            Action: cognito-idp:*
+            # Pool IDs are always region-prefixed (e.g. us-east-2_XXXXXXXXX)
+            # but not otherwise predictable ahead of creation - scope to
+            # this account+region's pools rather than Resource: '*'.
+            Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${AWS::Region}_*
+          - Sid: IamPassRoleForSam
+            Effect: Allow
+            Action:
+              - iam:CreateRole
+              - iam:DeleteRole
+              - iam:GetRole
+              - iam:PassRole
+              - iam:AttachRolePolicy
+              - iam:DetachRolePolicy
+              - iam:PutRolePolicy
+              - iam:DeleteRolePolicy
+              - iam:GetRolePolicy
+              - iam:TagRole
+              - iam:UntagRole
+            # SAM names ApiFunction's execution role
+            # <StackName>-ApiFunctionRole-<random> - kbdb-dev-* (a prefix
+            # match) covers it without needing the exact suffix.
+            Resource: !Sub arn:aws:iam::${AWS::AccountId}:role/kbdb-dev-*
+          - Sid: ArtifactBucket
+            Effect: Allow
+            Action:
+              - s3:GetObject
+              - s3:PutObject
+              - s3:ListBucket
+            Resource:
+              - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}
+              - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}/*
+          - Sid: EcrAuth
+            Effect: Allow
+            Action: ecr:GetAuthorizationToken
+            # AWS hard requirement - cannot be scoped to a specific repo.
+            Resource: '*'
+          - Sid: EcrRepoManagement
+            Effect: Allow
+            Action:
+              # Unlike kbdb-ci's one shared, admin-managed repo, each
+              # developer's repo (kbdb-api-kbdb-dev-<name>) is created by
+              # dev-setup and destroyed by dev-teardown - so, unlike
+              # bootstrap/ci-oidc-role.yaml's equivalent statement, this
+              # needs to fully manage the repo's lifecycle, not just push/
+              # pull images to an already-existing one.
+              - ecr:CreateRepository
+              - ecr:DeleteRepository
+              - ecr:PutLifecyclePolicy
+              - ecr:BatchCheckLayerAvailability
+              - ecr:PutImage
+              - ecr:InitiateLayerUpload
+              - ecr:UploadLayerPart
+              - ecr:CompleteLayerUpload
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+              - ecr:DescribeRepositories
+              - ecr:ListImages
+              - ecr:BatchDeleteImage
+              # Per AWS's Lambda-container-image docs: for a same-account
+              # function+repo, Lambda auto-configures the repository policy
+              # granting itself pull access as part of CreateFunction - but
+              # only if the principal calling CreateFunction also has these.
+              - ecr:GetRepositoryPolicy
+              - ecr:SetRepositoryPolicy
+              # Both needed by dev-setup's post-import reconcile deploy:
+              # DeleteRepositoryPolicy clears the repository policy the
+              # standalone bootstrap stack never set; TagResource applies
+              # the stack's own tags to the now-imported repo. Both
+              # confirmed via real AccessDenied errors (UPDATE_FAILED on
+              # ApiRepository, one per action, in two separate end-to-end
+              # test runs) during verification of this exact policy, not
+              # assumed from docs - same pattern as
+              # bootstrap/ci-oidc-role.yaml's CognitoCreateUserPool
+              # statement needing an empirically-discovered TagResource.
+              - ecr:DeleteRepositoryPolicy
+              - ecr:TagResource
+            Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/kbdb-api-kbdb-dev-*
+
+Outputs:
+  DevPolicyArn:
+    Description: >
+      Attach to a developer's IAM user/group/role, e.g.:
+      aws iam attach-user-policy --user-name <dev> --policy-arn <value>
+    Value: !Ref DevPolicy

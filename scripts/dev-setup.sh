@@ -1,16 +1,11 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "${AWS_PROFILE:-}" != "kbdb-dev-admin" ]; then
-  echo "AWS_PROFILE must be set to kbdb-dev-admin (got: '${AWS_PROFILE:-<unset>}')" >&2
-  exit 1
-fi
-
 DEV_NAME="${KBDB_DEV_NAME:-$(whoami)}"
 STACK_NAME="kbdb-dev-${DEV_NAME}"
 REPO_NAME="kbdb-api-${STACK_NAME}"
-ACCOUNT_ID="992234857260"
-REGION="us-east-2"
+ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
+REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
 REPO_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}"
 S3_BUCKET="kbdb-sam-artifacts-${ACCOUNT_ID}"
 
@@ -28,11 +23,14 @@ aws cloudformation deploy --template-file bootstrap/ecr-repo.yaml \
   --parameter-overrides "RepositoryName=${REPO_NAME}"
 
 # b. Build and push an initial image - sam deploy can't resolve ApiFunction's
-# ImageUri from a repo that doesn't hold an image yet.
-sam build --template-file template.yaml
+# ImageUri from a repo that doesn't hold an image yet. --region is passed
+# explicitly on both calls so a KBDB_DEV_REGION override can't be silently
+# shadowed by samconfig.toml's own hardcoded region.
+sam build --template-file template.yaml --region "$REGION"
 PACKAGED_TEMPLATE="packaged-${STACK_NAME}.yaml"
 sam package --s3-bucket "$S3_BUCKET" \
   --image-repository "$REPO_URI" \
+  --region "$REGION" \
   --output-template-file "$PACKAGED_TEMPLATE"
 
 # c. Deploy everything except ApiRepository (it already exists standalone -
