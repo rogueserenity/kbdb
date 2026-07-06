@@ -50,7 +50,7 @@ mise run dev-teardown  # tear it down completely, including its ECR images
 
 `<name>` defaults to your `whoami`. Set `KBDB_DEV_NAME` to override it (e.g. if you want more than one stack, or your `whoami` collides with a teammate's).
 
-You'll need `AWS_PROFILE=kbdb-dev-admin` set (see [AWS accounts](#aws-accounts) below) and to have run `aws sso login --profile kbdb-dev-admin` recently.
+These scripts derive your AWS account ID and region automatically from your active credentials (`aws sts get-caller-identity`, `aws configure get region`) — nothing to hardcode. Set `KBDB_DEV_REGION` to override the region if your CLI config doesn't set one. You'll need an active AWS session for whichever account you're deploying to (this project's own maintainer setup uses `AWS_PROFILE=kbdb-dev-admin` — see [AWS accounts](#aws-accounts) below — but a fork deploying to its own account just needs any authenticated profile with the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached, or admin access).
 
 ### AWS accounts
 

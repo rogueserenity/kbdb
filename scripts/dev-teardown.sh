@@ -1,15 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [ "${AWS_PROFILE:-}" != "kbdb-dev-admin" ]; then
-  echo "AWS_PROFILE must be set to kbdb-dev-admin (got: '${AWS_PROFILE:-<unset>}')" >&2
-  exit 1
-fi
-
 DEV_NAME="${KBDB_DEV_NAME:-$(whoami)}"
 STACK_NAME="kbdb-dev-${DEV_NAME}"
 REPO_NAME="kbdb-api-${STACK_NAME}"
-REGION="us-east-2"
+REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
 
 # ECR refuses to delete a repository that still contains images (a real
 # AWS safety guard, confirmed via a live DELETE_FAILED error) - the stack
