@@ -24,17 +24,17 @@ file = "scripts/build.sh"
 
 [tasks.dev-setup]
 alias = "ds"
-description = "One-time per-developer kbdb-dev stack bootstrap (requires AWS_PROFILE=kbdb-dev-admin)"
+description = "One-time per-developer kbdb-dev stack bootstrap (requires an authenticated AWS profile)"
 file = "scripts/dev-setup.sh"
 
 [tasks.dev-deploy]
 alias = "dd"
-description = "Deploy to your personal kbdb-dev-<name> stack (requires AWS_PROFILE=kbdb-dev-admin; run dev-setup first)"
+description = "Deploy to your personal kbdb-dev-<name> stack (requires an authenticated AWS profile; run dev-setup first)"
 file = "scripts/dev-deploy.sh"
 
 [tasks.dev-teardown]
 alias = "dt"
-description = "Delete your personal kbdb-dev-<name> stack, including its owned ECR repo (requires AWS_PROFILE=kbdb-dev-admin)"
+description = "Delete your personal kbdb-dev-<name> stack, including its owned ECR repo (requires an authenticated AWS profile)"
 file = "scripts/dev-teardown.sh"
 
 [tasks.func-setup]

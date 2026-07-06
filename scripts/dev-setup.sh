@@ -23,11 +23,14 @@ aws cloudformation deploy --template-file bootstrap/ecr-repo.yaml \
   --parameter-overrides "RepositoryName=${REPO_NAME}"
 
 # b. Build and push an initial image - sam deploy can't resolve ApiFunction's
-# ImageUri from a repo that doesn't hold an image yet.
-sam build --template-file template.yaml
+# ImageUri from a repo that doesn't hold an image yet. --region is passed
+# explicitly on both calls so a KBDB_DEV_REGION override can't be silently
+# shadowed by samconfig.toml's own hardcoded region.
+sam build --template-file template.yaml --region "$REGION"
 PACKAGED_TEMPLATE="packaged-${STACK_NAME}.yaml"
 sam package --s3-bucket "$S3_BUCKET" \
   --image-repository "$REPO_URI" \
+  --region "$REGION" \
   --output-template-file "$PACKAGED_TEMPLATE"
 
 # c. Deploy everything except ApiRepository (it already exists standalone -

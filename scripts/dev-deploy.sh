@@ -7,7 +7,7 @@ REPO_NAME="kbdb-api-${STACK_NAME}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
 
-sam build --template-file template.yaml
+sam build --template-file template.yaml --region "$REGION"
 sam deploy --stack-name "$STACK_NAME" \
   --s3-bucket "kbdb-sam-artifacts-${ACCOUNT_ID}" \
   --region "$REGION" \

@@ -50,7 +50,9 @@ mise run dev-teardown  # tear it down completely, including its ECR images
 
 `<name>` defaults to your `whoami`. Set `KBDB_DEV_NAME` to override it (e.g. if you want more than one stack, or your `whoami` collides with a teammate's).
 
-These scripts derive your AWS account ID and region automatically from your active credentials (`aws sts get-caller-identity`, `aws configure get region`) — nothing to hardcode. Set `KBDB_DEV_REGION` to override the region if your CLI config doesn't set one. You'll need an active AWS session for whichever account you're deploying to (this project's own maintainer setup uses `AWS_PROFILE=kbdb-dev-admin` — see [AWS accounts](#aws-accounts) below — but a fork deploying to its own account just needs any authenticated profile with the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached, or admin access).
+These scripts derive your AWS account ID and region automatically from your active credentials (`aws sts get-caller-identity`, `aws configure get region`) — nothing to hardcode. Set `KBDB_DEV_REGION` to override the region if your CLI config doesn't set one.
+
+You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
 ### AWS accounts
 
@@ -66,14 +68,14 @@ There's no default AWS profile — commands will fail with `NoCredentials` unles
 
 ### First-time account bootstrap
 
-New AWS account, never deployed to before? Three one-time steps, done once per account by whoever's setting it up (not needed for everyday `dev-deploy`):
+New AWS account, never deployed to before? One-time steps, done once per account by whoever's setting it up (not needed for everyday `dev-deploy`). **If you're forking this repo to deploy to your own account, you only need step 1** — steps 3 and 4 exist for this project's own separate CI account and don't apply to a single-account personal deploy; `.github/workflows/` is entirely specific to this project's own CI and isn't something you need to set up or replicate.
 
-1. **Artifact bucket**: `aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml --stack-name kbdb-bootstrap --profile <profile>`, then update `samconfig.toml`'s `s3_bucket` with the new bucket name from the stack output.
-2. **ECR repo**: for `kbdb-dev`, `mise run dev-setup` handles this automatically — nothing manual to do. For `kbdb-ci`'s shared bootstrap repo, see [ECR bootstrap procedure](#ecr-bootstrap-procedure) below.
+1. **Artifact bucket** (needed by everyone): `aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml --stack-name kbdb-bootstrap --profile <profile>`. The scripts compute its name automatically (`kbdb-sam-artifacts-<your-account-id>`, matching this template's output) — nothing to copy into `samconfig.toml` by hand.
+2. **ECR repo**: for a personal/`kbdb-dev`-style account, `mise run dev-setup` handles this automatically — nothing manual to do. For `kbdb-ci`'s shared bootstrap repo, see [ECR bootstrap procedure](#ecr-bootstrap-procedure) below.
 3. **Cost budget** (only needed for accounts without their own app stack, e.g. `kbdb-ci`): `aws cloudformation deploy --template-file bootstrap/cost-budget.yaml --stack-name kbdb-cost-budget --profile <profile>`.
 4. **(`kbdb-ci` only) GitHub Actions OIDC role**, so CI can authenticate to AWS: `aws cloudformation deploy --template-file bootstrap/ci-oidc-role.yaml --stack-name kbdb-ci-oidc --capabilities CAPABILITY_NAMED_IAM --profile kbdb-ci-admin`.
 
-After all bootstraps, ordinary `sam deploy` calls (and CI's own workflow) work.
+After all bootstraps, ordinary `sam deploy` calls (and, for `kbdb-ci`, CI's own workflow) work.
 
 #### ECR bootstrap procedure
 
