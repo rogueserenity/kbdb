@@ -15,6 +15,6 @@ RUN VERSION=$(git describe --tags --always --dirty 2>/dev/null || echo dev) \
     && CGO_ENABLED=0 GOOS=linux go build -ldflags "-X main.Version=${VERSION}" -o /bootstrap ./functions/api
 
 FROM public.ecr.aws/lambda/provided:al2023
-COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.0.1 /lambda-adapter /opt/extensions/lambda-adapter
+COPY --from=public.ecr.aws/awsguru/aws-lambda-adapter:1.1.0 /lambda-adapter /opt/extensions/lambda-adapter
 COPY --from=build /bootstrap /var/task/bootstrap
 ENTRYPOINT ["/var/task/bootstrap"]
