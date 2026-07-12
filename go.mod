@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/alecthomas/kong v1.15.0
-	github.com/coreos/go-oidc/v3 v3.19.0
+	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.55.1
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
