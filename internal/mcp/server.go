@@ -63,6 +63,15 @@ func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
 			token, _ := auth.BearerToken(r)
 			return context.WithValue(ctx, bearerTokenKey{}, token)
 		}),
+		// mcp-go's DNS rebinding protection rejects any request arriving
+		// over a loopback connection whose Host header isn't itself a
+		// localhost value. aws-lambda-web-adapter always proxies to this
+		// process over 127.0.0.1 while preserving the real client's Host
+		// header (the API Gateway domain), so every request would otherwise
+		// be rejected. The attack this protects against (a browser rebound
+		// to attack a locally-listening server) can't occur in this Lambda
+		// deployment, so disabling it is safe here.
+		server.WithDisableLocalhostProtection(true),
 	)
 
 	return Handlers{
