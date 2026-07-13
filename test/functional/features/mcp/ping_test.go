@@ -9,7 +9,7 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
 
-var _ = Describe("Echo", func() {
+var _ = Describe("Ping", func() {
 	var (
 		client *support.MCPClient
 		resp   *support.RPCResponse
@@ -38,12 +38,12 @@ var _ = Describe("Echo", func() {
 			})
 		})
 
-		When("the echo tool is called", func() {
+		When("the ping tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
 				_, err := client.Initialize(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
-				resp, err = client.CallTool(ctx, "echo", map[string]any{"message": "hello"})
+				resp, err = client.CallTool(ctx, "ping", map[string]any{})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -64,16 +64,16 @@ var _ = Describe("Echo", func() {
 			client = support.NewMCPClient(support.BaseURL()+"/mcp", token)
 		})
 
-		When("the echo tool is called", func() {
+		When("the ping tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
 				_, err := client.Initialize(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
-				resp, err = client.CallTool(ctx, "echo", map[string]any{"message": "hello from func test"})
+				resp, err = client.CallTool(ctx, "ping", map[string]any{})
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("echoes the message back", func() {
+			It("succeeds", func() {
 				var result gomcp.CallToolResult
 				Expect(result.UnmarshalJSON(resp.Result)).To(Succeed())
 
@@ -83,10 +83,10 @@ var _ = Describe("Echo", func() {
 				By("returning exactly one content item")
 				Expect(result.Content).To(HaveLen(1))
 
-				By("echoing back the original message text")
+				By("returning the trivial OK text")
 				textContent, ok := result.Content[0].(gomcp.TextContent)
 				Expect(ok).To(BeTrue())
-				Expect(textContent.Text).To(Equal("hello from func test"))
+				Expect(textContent.Text).To(Equal("ok"))
 			})
 		})
 	})
