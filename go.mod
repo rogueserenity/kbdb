@@ -3,7 +3,7 @@ module github.com/rogueserenity/kbdb
 go 1.26.4
 
 require (
-	github.com/alecthomas/kong v1.15.0
+	github.com/alecthomas/kong v1.16.0
 	github.com/coreos/go-oidc/v3 v3.20.0
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.56.0
