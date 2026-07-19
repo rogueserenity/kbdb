@@ -4,19 +4,19 @@
     "values": ["public", "authenticated", "private"]
   },
   {
-    "PK": "pcb_assembly",
+    "PK": "keyboard_pcb_assembly_type",
     "values": ["Hotswap", "Solder"]
   },
   {
-    "PK": "pcb_connectivity",
+    "PK": "keyboard_pcb_connectivity_type",
     "values": ["Wired", "Dual Mode", "Tri-Mode"]
   },
   {
-    "PK": "size",
+    "PK": "keyboard_size",
     "values": ["40%", "50%", "60%", "65%", "70%", "75%", "80%", "98%", "100%"]
   },
   {
-    "PK": "layout",
+    "PK": "keyboard_layout",
     "values": [
       { "name": "WK", "sizes": ["60%", "65%", "70%", "75%", "80%", "98%", "100%"] },
       { "name": "WKL", "sizes": ["60%", "65%", "70%", "75%", "80%", "98%", "100%"] },
@@ -30,19 +30,19 @@
     ]
   },
   {
-    "PK": "case_material",
+    "PK": "keyboard_case_material",
     "values": ["Aluminum", "Polycarbonate", "Stainless Steel"]
   },
   {
-    "PK": "plate_material",
+    "PK": "keyboard_plate_material",
     "values": ["AL", "PC", "PP", "FR4", "POM", "SS", "CF", "PEI", "ABS"]
   },
   {
-    "PK": "weight_material",
+    "PK": "keyboard_weight_material",
     "values": ["Aluminum", "Brass", "Copper", "Stainless Steel", "Silicone", "None"]
   },
   {
-    "PK": "firmware",
+    "PK": "keyboard_pcb_firmware",
     "values": ["QMK/VIA", "QMK/VIAL", "ZMK", "Custom"]
   },
   {
@@ -110,7 +110,7 @@
     ]
   },
   {
-    "PK": "spring_material",
+    "PK": "switch_spring_material",
     "values": ["Stainless Steel", "Gold-Plated", "Phosphor Bronze"]
   },
   {
@@ -154,7 +154,7 @@
     "values": ["Planned", "Ordered", "Shipped", "Delivered", "Cancelled"]
   },
   {
-    "PK": "stabs",
+    "PK": "build_stabilizer",
     "values": [
       "AEBoards Staebies V2.2",
       "C3 Equalz V3",
@@ -175,11 +175,11 @@
     ]
   },
   {
-    "PK": "stab_mount_type",
+    "PK": "build_stabilizer_mount_type",
     "values": ["Plate", "Screw-in", "Clip-in"]
   },
   {
-    "PK": "case_mount_type",
+    "PK": "build_case_mount_type",
     "values": [
       { "name": "Top Mount", "supports_durometer": false },
       { "name": "Bottom Mount", "supports_durometer": false },
@@ -193,7 +193,7 @@
     ]
   },
   {
-    "PK": "durometer",
+    "PK": "build_durometer",
     "values": ["30A", "40A", "50A", "60A", "70A", "80A", "90A"]
   }
 ]

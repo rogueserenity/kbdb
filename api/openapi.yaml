@@ -753,18 +753,22 @@ paths:
   /lookups:
     get:
       tags: [lookups]
-      summary: List all lookup categories
+      summary: List all lookup category names
       operationId: listLookups
       security: []
+      description: >
+        Returns category names only, not their values - fetch
+        GET /lookups/{category} for a specific category's approved values.
       responses:
         "200":
-          description: All lookup categories and their approved values.
+          description: All lookup category names.
           content:
             application/json:
               schema:
                 type: array
                 items:
-                  $ref: "#/components/schemas/Lookup"
+                  type: string
+                example: [vendor, switch_material, keyboard_size, keyboard_layout]
         "400":
           $ref: "#/components/responses/ProblemResponse"
         default:
