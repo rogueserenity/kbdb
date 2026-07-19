@@ -1,0 +1,1524 @@
+openapi: 3.1.0
+info:
+  title: kbdb API
+  description: >
+    API for tracking a personal mechanical keyboard collection: keyboards,
+    switches, keycap sets, and the builds that combine them. Routes are
+    nested under /users/{userId}/... to support both a caller's own
+    collection and items other users have explicitly shared with them —
+    see the userId path parameter's description for the exact rules.
+  version: "1.0.0"
+  contact:
+    url: https://mykeebs.info
+  license:
+    name: MIT
+    url: https://github.com/rogueserenity/kbdb/blob/main/LICENSE
+servers:
+  - url: https://api.mykeebs.info/v1
+security:
+  - CognitoAuth: []
+
+tags:
+  - name: keyboards
+    description: Keyboards in a user's collection, or shared with the caller.
+  - name: switches
+    description: Switches in a user's collection, or shared with the caller.
+  - name: keycap-sets
+    description: Keycap sets (and their individual kits) in a user's collection, or shared with the caller.
+  - name: builds
+    description: Builds combining a keyboard, switches, and keycap kits, in a user's collection or shared with the caller.
+  - name: lookups
+    description: Approved value lists for enum-like fields (vendors, materials, profiles, etc.) — non-sensitive global reference data, not owned by any user. Reads require no authentication at all; writes require admin access.
+
+paths:
+  /users/{userId}/keyboards:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [keyboards]
+      summary: List keyboards
+      operationId: listKeyboards
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        If userId is the caller's own subject, lists all of the caller's keyboards. Otherwise, lists only that user's keyboards explicitly shared with the caller (possibly empty).
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of keyboards.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyboardListPage"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags: [keyboards]
+      summary: Create a keyboard
+      operationId: createKeyboard
+      description: >
+        userId must be the caller's own subject; creating in another user's collection always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyboardInput"
+      responses:
+        "201":
+          description: The created keyboard.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyboard"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/keyboards/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [keyboards]
+      summary: Get a keyboard
+      operationId: getKeyboard
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the keyboard if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the keyboard does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+      responses:
+        "200":
+          description: The requested keyboard.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyboard"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [keyboards]
+      summary: Update a keyboard
+      operationId: updateKeyboard
+      description: >
+        userId must be the caller's own subject; updating another user's keyboard always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyboardInput"
+      responses:
+        "200":
+          description: The updated keyboard.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Keyboard"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [keyboards]
+      summary: Delete a keyboard
+      operationId: deleteKeyboard
+      description: >
+        userId must be the caller's own subject; deleting another user's keyboard always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/switches:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [switches]
+      summary: List switches
+      operationId: listSwitches
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        If userId is the caller's own subject, lists all of the caller's switches. Otherwise, lists only that user's switches explicitly shared with the caller (possibly empty).
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of switches.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwitchListPage"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags: [switches]
+      summary: Create a switch
+      operationId: createSwitch
+      description: >
+        userId must be the caller's own subject; creating in another user's collection always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwitchInput"
+      responses:
+        "201":
+          description: The created switch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Switch"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/switches/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [switches]
+      summary: Get a switch
+      operationId: getSwitch
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the switch if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the switch does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+      responses:
+        "200":
+          description: The requested switch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Switch"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [switches]
+      summary: Update a switch
+      operationId: updateSwitch
+      description: >
+        userId must be the caller's own subject; updating another user's switch always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SwitchInput"
+      responses:
+        "200":
+          description: The updated switch.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Switch"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [switches]
+      summary: Delete a switch
+      operationId: deleteSwitch
+      description: >
+        userId must be the caller's own subject; deleting another user's switch always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/keycap-sets:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [keycap-sets]
+      summary: List keycap sets
+      operationId: listKeycapSets
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        If userId is the caller's own subject, lists all of the caller's keycap sets. Otherwise, lists only that user's keycap sets explicitly shared with the caller (possibly empty).
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of keycap sets.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapSetListPage"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags: [keycap-sets]
+      summary: Create a keycap set
+      operationId: createKeycapSet
+      description: >
+        userId must be the caller's own subject; creating in another user's collection always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeycapSetInput"
+      responses:
+        "201":
+          description: The created keycap set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapSet"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/keycap-sets/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [keycap-sets]
+      summary: Get a keycap set
+      operationId: getKeycapSet
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the keycap set if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the keycap set does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+      responses:
+        "200":
+          description: The requested keycap set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapSet"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [keycap-sets]
+      summary: Update a keycap set
+      operationId: updateKeycapSet
+      description: >
+        userId must be the caller's own subject; updating another user's keycap set always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeycapSetInput"
+      responses:
+        "200":
+          description: The updated keycap set.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapSet"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [keycap-sets]
+      summary: Delete a keycap set
+      operationId: deleteKeycapSet
+      description: >
+        userId must be the caller's own subject; deleting another user's keycap set always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/keycap-sets/{id}/kits:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [keycap-sets]
+      summary: List a keycap set's kits
+      operationId: listKeycapKits
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the set's kits under the same access rules as getKeycapSet
+        (own, or shared with the caller — 404 otherwise). Not paginated;
+        see KeycapKitListPage.
+      responses:
+        "200":
+          description: The set's kits.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapKitListPage"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags: [keycap-sets]
+      summary: Add a kit to a keycap set
+      operationId: createKeycapKit
+      description: >
+        userId must be the caller's own subject; adding a kit to another
+        user's keycap set always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeycapKitInput"
+      responses:
+        "201":
+          description: The created kit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapKit"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/keycap-sets/{id}/kits/{kitId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+      - name: kitId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The kit_id returned when the kit was created.
+    get:
+      tags: [keycap-sets]
+      summary: Get a kit
+      operationId: getKeycapKit
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the kit under the same access rules as getKeycapSet (own,
+        or shared with the caller — 404 otherwise).
+      responses:
+        "200":
+          description: The requested kit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapKit"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [keycap-sets]
+      summary: Update a kit
+      operationId: updateKeycapKit
+      description: >
+        userId must be the caller's own subject; updating a kit on another
+        user's keycap set always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeycapKitInput"
+      responses:
+        "200":
+          description: The updated kit.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeycapKit"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [keycap-sets]
+      summary: Delete a kit
+      operationId: deleteKeycapKit
+      description: >
+        userId must be the caller's own subject; deleting a kit from
+        another user's keycap set always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/keycap-sets/{id}/kits/{kitId}/image:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+      - name: kitId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The kit_id returned when the kit was created.
+    post:
+      tags: [keycap-sets]
+      summary: Set (or replace) a kit's image
+      operationId: setKeycapKitImage
+      description: >
+        userId must be the caller's own subject; setting a kit's image on
+        another user's keycap set always returns 404. A kit has at most one
+        image — calling this again replaces it, no need to delete first.
+        Does not upload the image itself: the response is a presigned S3
+        PUT URL the client uploads the actual image bytes to directly. The
+        presigned URL requires the exact content_type given here on the
+        upload — this lets the API reject an unsupported content_type up
+        front, before ever issuing a presigned URL, and lets S3 reject an
+        upload that doesn't match what was requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp]
+      responses:
+        "201":
+          description: >
+            An image slot has been allocated; upload the image bytes to
+            upload_url (HTTP PUT, with a Content-Type header matching the
+            content_type given in the request) to complete it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [upload_url]
+                properties:
+                  upload_url:
+                    type: string
+                    format: uri
+                    description: Presigned S3 PUT URL. Short-lived — upload promptly.
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [keycap-sets]
+      summary: Remove a kit's image
+      operationId: deleteKeycapKitImage
+      description: >
+        userId must be the caller's own subject; removing a kit's image on
+        another user's keycap set always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/builds:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+    get:
+      tags: [builds]
+      summary: List builds
+      operationId: listBuilds
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        If userId is the caller's own subject, lists all of the caller's builds. Otherwise, lists only that user's builds explicitly shared with the caller (possibly empty).
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+      responses:
+        "200":
+          description: A page of builds.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BuildListPage"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags: [builds]
+      summary: Create a build
+      operationId: createBuild
+      description: >
+        userId must be the caller's own subject; creating in another user's collection always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildInput"
+      responses:
+        "201":
+          description: The created build.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Build"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/builds/{id}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+    get:
+      tags: [builds]
+      summary: Get a build
+      operationId: getBuild
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the build if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the build does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+      responses:
+        "200":
+          description: The requested build.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Build"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [builds]
+      summary: Update a build
+      operationId: updateBuild
+      description: >
+        userId must be the caller's own subject; updating another user's build always returns 404.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BuildInput"
+      responses:
+        "200":
+          description: The updated build.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Build"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [builds]
+      summary: Delete a build
+      operationId: deleteBuild
+      description: >
+        userId must be the caller's own subject; deleting another user's build always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/builds/{id}/images:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+    post:
+      tags: [builds]
+      summary: Add an image to a build
+      operationId: createBuildImage
+      description: >
+        userId must be the caller's own subject; adding an image to another
+        user's build always returns 404. Images are not settable via
+        POST/PUT on the build itself (see BuildInput) — this is the only
+        way to attach one. Does not upload the image itself: the response
+        is a presigned S3 PUT URL the client uploads the actual image
+        bytes to directly. The presigned URL requires the exact
+        content_type given here on the upload — this lets the API reject
+        an unsupported content_type up front, before ever issuing a
+        presigned URL, and lets S3 reject an upload that doesn't match
+        what was requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type:
+                  type: string
+                  enum: [image/jpeg, image/png, image/webp]
+      responses:
+        "201":
+          description: >
+            An image slot has been allocated; upload the image bytes to
+            upload_url (HTTP PUT, with a Content-Type header matching the
+            content_type given in the request) to complete it.
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [image_id, upload_url]
+                properties:
+                  image_id:
+                    type: string
+                  upload_url:
+                    type: string
+                    format: uri
+                    description: Presigned S3 PUT URL. Short-lived — upload promptly.
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /users/{userId}/builds/{id}/images/{imageId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/Id"
+      - name: imageId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The image_id returned when the image was added.
+    delete:
+      tags: [builds]
+      summary: Remove an image from a build
+      operationId: deleteBuildImage
+      description: >
+        userId must be the caller's own subject; removing an image from
+        another user's build always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /lookups:
+    get:
+      tags: [lookups]
+      summary: List all lookup categories
+      operationId: listLookups
+      security: []
+      responses:
+        "200":
+          description: All lookup categories and their approved values.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Lookup"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /lookups/{category}:
+    parameters:
+      - name: category
+        in: path
+        required: true
+        schema:
+          type: string
+        example: vendor
+    get:
+      tags: [lookups]
+      summary: Get one lookup category's approved values
+      operationId: getLookup
+      security: []
+      responses:
+        "200":
+          description: The requested lookup category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lookup"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [lookups]
+      summary: Replace a lookup category's approved values (admin only)
+      operationId: replaceLookup
+      security:
+        - CognitoAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupInput"
+      responses:
+        "200":
+          description: The updated lookup category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lookup"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    post:
+      tags: [lookups]
+      summary: Create a new lookup category (admin only)
+      operationId: createLookup
+      security:
+        - CognitoAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LookupInput"
+      responses:
+        "201":
+          description: The created lookup category.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Lookup"
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [lookups]
+      summary: Delete a lookup category (admin only)
+      operationId: deleteLookup
+      security:
+        - CognitoAuth: []
+      responses:
+        "204":
+          description: Deleted.
+        "403":
+          $ref: "#/components/responses/ForbiddenResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+components:
+  securitySchemes:
+    CognitoAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: >
+        Cognito-issued JWT (Authorization: Bearer <token>), enforced by API
+        Gateway's Cognito JWT authorizer (see template.yaml's HttpApi/
+        CognitoAuthorizer resource). Not modeled as type: openIdConnect
+        here because each deployed stack (kbdb-dev, per-PR CI stacks, a
+        future prod) has its own separate Cognito User Pool and therefore
+        its own discovery URL — there is no single fixed
+        openIdConnectUrl this checked-in, environment-agnostic spec file
+        could correctly declare. Per-stack values (UserPoolId, issuer
+        URL) are template.yaml Outputs, not spec-level constants. The
+        "admin" scope corresponds to membership in the Cognito User
+        Pool's "admins" group (surfaced as the cognito:groups claim),
+        required for lookup write operations.
+
+  parameters:
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+      description: >
+        Cognito subject (UUID) of the item's owner. If this matches the
+        authenticated caller's own subject, the request is against their own
+        collection. If it names a different user, the request is against
+        that user's collection: reads return only items that user has
+        explicitly shared with the caller (or, for a specific item, only if
+        that item is shared with the caller — otherwise a 404, not a 403,
+        to avoid revealing that an item exists but isn't shared); writes
+        (create/update/delete) always fail with a 404 in this case, since a
+        caller can never modify another user's items. Not a PII/security
+        concern to expose in a URL — Cognito subjects are opaque UUIDs, not
+        derived from email or any other identifying attribute.
+    Id:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Server-generated identifier for the resource.
+    Limit:
+      name: limit
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+        default: 20
+      description: Maximum number of items to return.
+    Cursor:
+      name: cursor
+      in: query
+      schema:
+        type: string
+      description: Opaque pagination cursor from a previous response's next_cursor.
+
+  responses:
+    ProblemResponse:
+      description: An error, formatted per RFC 9457 (Problem Details for HTTP APIs).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    NotFoundResponse:
+      description: The requested resource does not exist, or does not belong to the authenticated user.
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ForbiddenResponse:
+      description: The authenticated user lacks permission to perform this operation (e.g. admin access required).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+
+  schemas:
+    Problem:
+      type: object
+      description: RFC 9457 Problem Details.
+      properties:
+        type:
+          type: string
+          format: uri
+          example: https://mykeebs.info/errors/validation-error
+        title:
+          type: string
+          example: Validation Error
+        status:
+          type: integer
+        detail:
+          type: string
+        instance:
+          type: string
+        invalid_params:
+          type: array
+          items:
+            type: object
+            properties:
+              name:
+                type: string
+              reason:
+                type: string
+              allowed_values:
+                type: array
+                items:
+                  type: string
+      required: [type, title, status]
+
+    Money:
+      type: number
+      format: double
+      description: A price in the collection's tracking currency.
+      example: 123.45
+
+    Visibility:
+      type: string
+      enum: [public, authenticated, private]
+      default: private
+      description: >
+        Who can read this item via its GET routes (create/update/delete
+        always require the caller to be the item's owner, regardless of
+        visibility). "public": readable with no authentication at all.
+        "authenticated": readable by any signed-in user, but not
+        anonymous callers. "private": readable only by the owner. There
+        is no per-user allowlist/sharing mechanism beyond these three
+        tiers — visibility is not scoped to specific other users.
+
+    Purchase:
+      type: object
+      description: >
+        Full purchase-lifecycle tracking, used by keyboards and keycap set
+        kits (which get separate order/delivery dates and status).
+      properties:
+        vendor:
+          type: string
+          description: Open vocabulary — validated against the "vendor" lookup at request time.
+        price:
+          $ref: "#/components/schemas/Money"
+        order_date:
+          type: string
+          format: date
+        delivery_date:
+          type: string
+          format: date
+        order_status:
+          type: string
+          enum: [Planned, Ordered, Shipped, Delivered, Cancelled]
+
+    MaterialColor:
+      type: object
+      description: A physical part described by material and color.
+      properties:
+        material:
+          type: string
+          description: Open vocabulary — validated against the relevant *_material lookup at request time.
+        color:
+          type: string
+          description: Free text.
+
+    KeyboardDesign:
+      type: object
+      properties:
+        top_case:
+          $ref: "#/components/schemas/MaterialColor"
+        bottom_case:
+          $ref: "#/components/schemas/MaterialColor"
+        weight:
+          $ref: "#/components/schemas/MaterialColor"
+        plates:
+          type: array
+          items:
+            type: string
+            description: Open vocabulary — validated against the "plate_material" lookup at request time.
+
+    KeyboardPcb:
+      type: object
+      properties:
+        thickness:
+          type: number
+          format: double
+          example: 1.6
+        firmware:
+          type: string
+          description: Open vocabulary — validated against the "firmware" lookup at request time.
+        assembly:
+          type: string
+          enum: [Hotswap, Solder]
+        connectivity:
+          type: string
+          enum: [Wired, Dual Mode, Tri-Mode]
+
+    KeyboardInput:
+      type: object
+      required: [brand, name]
+      properties:
+        brand:
+          type: string
+        name:
+          type: string
+        size:
+          type: string
+          description: Open vocabulary — validated against the "size" lookup at request time.
+        layout:
+          type: string
+          description: >
+            Open vocabulary — validated against the "layout" lookup at
+            request time, including that the chosen layout is valid for
+            the keyboard's size.
+        design:
+          $ref: "#/components/schemas/KeyboardDesign"
+        pcb:
+          $ref: "#/components/schemas/KeyboardPcb"
+        purchase:
+          $ref: "#/components/schemas/Purchase"
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+
+    Keyboard:
+      allOf:
+        - $ref: "#/components/schemas/KeyboardInput"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+
+    KeyboardSummary:
+      type: object
+      description: Reduced shape returned in list responses.
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        size:
+          type: string
+        layout:
+          type: string
+        order_status:
+          type: string
+          enum: [Planned, Ordered, Shipped, Delivered, Cancelled]
+
+    KeyboardListPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyboardSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    SwitchMaterial:
+      type: object
+      properties:
+        top_housing:
+          type: string
+          description: Open vocabulary — validated against the "switch_material" lookup at request time.
+        bottom_housing:
+          type: string
+          description: Open vocabulary — validated against the "switch_material" lookup at request time.
+        stem:
+          type: string
+          description: Open vocabulary — validated against the "switch_material" lookup at request time.
+
+    SwitchForce:
+      type: object
+      properties:
+        actuation:
+          type: number
+          format: double
+          description: Actuation force in grams (nominal value).
+        bottom_out:
+          type: number
+          format: double
+          description: Bottom-out force in grams (nominal value).
+
+    SwitchSpring:
+      type: object
+      properties:
+        material:
+          type: string
+          description: Open vocabulary — validated against the "spring_material" lookup at request time.
+        pre_travel:
+          type: number
+          format: double
+          description: Pre-travel distance in mm.
+        total_travel:
+          type: number
+          format: double
+          description: Total travel distance in mm.
+
+    SwitchPurchase:
+      type: object
+      description: Simpler purchase shape than Purchase — switches aren't tracked with order/delivery dates.
+      properties:
+        vendor:
+          type: string
+          description: Open vocabulary — validated against the "vendor" lookup at request time.
+        price:
+          $ref: "#/components/schemas/Money"
+        quantity:
+          type: integer
+
+    SwitchInput:
+      type: object
+      required: [brand, name, type]
+      properties:
+        brand:
+          type: string
+        manufacturer:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [Linear, Tactile, Clicky]
+        pins:
+          type: integer
+          example: 5
+          description: PCB mount pin count.
+        factory_lubed:
+          type: boolean
+        material:
+          $ref: "#/components/schemas/SwitchMaterial"
+        force:
+          $ref: "#/components/schemas/SwitchForce"
+        spring:
+          $ref: "#/components/schemas/SwitchSpring"
+        purchase:
+          $ref: "#/components/schemas/SwitchPurchase"
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+
+    Switch:
+      allOf:
+        - $ref: "#/components/schemas/SwitchInput"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+
+    SwitchSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+          enum: [Linear, Tactile, Clicky]
+
+    SwitchListPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/SwitchSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    KeycapKitInput:
+      type: object
+      required: [name]
+      properties:
+        name:
+          type: string
+          description: e.g. "Base", "Extension", "Accents".
+        purchase:
+          $ref: "#/components/schemas/Purchase"
+
+    KeycapKitImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: >
+            A freshly-minted, short-lived presigned S3 GET URL. Generated
+            new on every fetch — do not cache or persist this value, it
+            expires. A kit has at most one image (its vendor render/product
+            shot) — see POST/DELETE .../kits/{kitId}/image.
+
+    KeycapKit:
+      allOf:
+        - $ref: "#/components/schemas/KeycapKitInput"
+        - type: object
+          required: [kit_id]
+          properties:
+            kit_id:
+              type: string
+              description: Server-generated identifier for this kit, unique within the keycap set.
+            image:
+              oneOf:
+                - $ref: "#/components/schemas/KeycapKitImage"
+                - type: "null"
+              description: >
+                Managed via the dedicated image endpoint, not via PUT on
+                the kit itself — see POST/DELETE
+                .../keycap-sets/{id}/kits/{kitId}/image.
+
+    KeycapSetInput:
+      type: object
+      required: [brand, name]
+      properties:
+        brand:
+          type: string
+        name:
+          type: string
+        profile:
+          type: string
+          description: Open vocabulary — validated against the "keycap_profile" lookup at request time.
+        material:
+          type: string
+          description: Open vocabulary — validated against the "keycap_material" lookup at request time.
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+
+    KeycapSet:
+      allOf:
+        - $ref: "#/components/schemas/KeycapSetInput"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+            kits:
+              type: array
+              items:
+                $ref: "#/components/schemas/KeycapKit"
+              description: >
+                Managed via the dedicated kit endpoints below, not via PUT
+                on the set itself — see POST/GET/PUT/DELETE
+                .../keycap-sets/{id}/kits[/{kitId}].
+
+    KeycapSetSummary:
+      type: object
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        profile:
+          type: string
+
+    KeycapSetListPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeycapSetSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    KeycapKitListPage:
+      type: object
+      description: >
+        Not paginated (limit/cursor) like the top-level entity list
+        endpoints — a keycap set's kits are few enough in practice that
+        the full list is always returned in one response.
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeycapKit"
+
+    BuildSwitchEntry:
+      type: object
+      required: [switch, count]
+      properties:
+        switch:
+          type: string
+          description: ID of a Switch resource.
+        count:
+          type: integer
+
+    BuildKeycapKitEntry:
+      type: object
+      required: [keycap_set, kit]
+      properties:
+        keycap_set:
+          type: string
+          description: ID of a KeycapSet resource.
+        kit:
+          type: string
+          description: kit_id of one of that keycap set's kits (see KeycapKit.kit_id).
+
+    BuildStabs:
+      type: object
+      properties:
+        name:
+          type: string
+          description: Open vocabulary — validated against the "stabs" lookup at request time.
+        mount_type:
+          type: string
+          enum: [Plate, Screw-in, Clip-in]
+        price:
+          $ref: "#/components/schemas/Money"
+
+    BuildCaseMountType:
+      type: object
+      properties:
+        type:
+          type: string
+          enum:
+            - Top Mount
+            - Bottom Mount
+            - Tray Mount
+            - Gasket Mount
+            - Sandwich Mount
+            - Integrated Plate Mount
+            - Plateless
+            - O-Ring
+            - Tadpole
+        durometer:
+          type: string
+          enum: ["30A", "40A", "50A", "60A", "70A", "80A", "90A"]
+          description: Only meaningful when the chosen mount type supports it (see the case_mount_type lookup's supports_durometer flag).
+
+    BuildInput:
+      type: object
+      required: [keyboard]
+      properties:
+        keyboard:
+          type: string
+          description: ID of a Keyboard resource.
+        plate:
+          type: string
+          description: Which of the keyboard's design.plates options is installed.
+        case_mount_type:
+          $ref: "#/components/schemas/BuildCaseMountType"
+        stabs:
+          $ref: "#/components/schemas/BuildStabs"
+        foam:
+          type: boolean
+        switches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildSwitchEntry"
+        keycap_kits:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildKeycapKitEntry"
+        build_date:
+          type: string
+          format: date
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+
+    BuildImage:
+      type: object
+      required: [image_id, url]
+      properties:
+        image_id:
+          type: string
+          description: Server-generated identifier for this image, unique within the build.
+        url:
+          type: string
+          format: uri
+          description: >
+            A freshly-minted, short-lived presigned S3 GET URL. Generated
+            new on every fetch of the build — do not cache or persist this
+            value, it expires.
+
+    Build:
+      allOf:
+        - $ref: "#/components/schemas/BuildInput"
+        - type: object
+          required: [id]
+          properties:
+            id:
+              type: string
+            images:
+              type: array
+              items:
+                $ref: "#/components/schemas/BuildImage"
+              description: >
+                Managed via the dedicated image endpoints below, not via
+                PUT on the build itself — see POST/DELETE
+                .../builds/{id}/images[/{imageId}].
+
+    BuildSummary:
+      type: object
+      description: >
+        Includes a denormalized keyboard brand/name so a build is
+        recognizable in a list view without a follow-up request.
+      properties:
+        id:
+          type: string
+        build_date:
+          type: string
+          format: date
+        image:
+          oneOf:
+            - $ref: "#/components/schemas/BuildImage"
+            - type: "null"
+          description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Build resource).
+        keyboard:
+          type: object
+          properties:
+            brand:
+              type: string
+            name:
+              type: string
+
+    BuildListPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    Lookup:
+      type: object
+      description: >
+        A lookup category's approved values. "values" is usually an array
+        of plain strings, but some categories (layout, case_mount_type) use
+        objects to attach per-value constraints/flags — see model/lookup_seed.json.
+      required: [PK, values]
+      properties:
+        PK:
+          type: string
+          example: vendor
+        values:
+          type: array
+          items: {}
+
+    LookupInput:
+      type: object
+      required: [values]
+      properties:
+        values:
+          type: array
+          items: {}

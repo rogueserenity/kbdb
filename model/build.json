@@ -1,0 +1,26 @@
+{
+  "keyboard": "<ref>",
+  "plate": "",
+  "case_mount_type": {
+    "type": "",
+    "durometer": ""
+  },
+  "stabs": {
+    "name": "",
+    "mount_type": "",
+    "price": 12.0
+  },
+  "foam": false,
+  "switches": [
+    { "switch": "<ref>", "count": 67 }
+  ],
+  "keycap_kits": [
+    { "keycap_set": "<ref>", "kit": "" }
+  ],
+  "build_date": "2026-07-07",
+  "images": [
+    { "image_id": "", "path": "" }
+  ],
+  "notes": "",
+  "visibility": "private"
+}

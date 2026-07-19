@@ -68,6 +68,26 @@ Resources:
             ]
           }
 
+  # Holds user-uploaded images (build photos, keycap kit renders). Private -
+  # access only via presigned URLs minted by ApiFunction after an ownership/
+  # sharing check. Stack-scoped like ApiRepository/UserPoolDomain (no
+  # per-bucket cost, keeps environments isolated).
+  ImagesBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      # AccountId+StackName suffix: S3 bucket names are globally unique, and
+      # multiple kbdb-pr-<N> stacks share the kbdb-ci account.
+      BucketName: !Sub kbdb-images-${AWS::AccountId}-${AWS::StackName}
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
   # Single Lambda function for all routes (REST entities + MCP), not split
   # by protocol or by entity - see plan rationale. Only /v1/ping is wired up
   # here; MCP and per-entity routes are added as additional Events on this
@@ -83,10 +103,24 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
           OIDC_AUDIENCE: !Ref UserPoolClient
+          IMAGES_BUCKET_NAME: !Ref ImagesBucket
           # Not 8080: sam local start-api's Runtime Interface Emulator already
           # binds that port in-container. Must match functions/api/main.go's
           # port const.
           AWS_LWA_PORT: "8000"
+      # Hand-written, not SAM's S3CrudPolicy (grants extra actions we don't
+      # need, e.g. ListBucket, PutObjectAcl). Presigned URLs inherit this
+      # role's permissions, so Put/Get cover upload/download; Delete is for
+      # the DELETE-image endpoints.
+      Policies:
+        - Version: "2012-10-17"
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+                - s3:GetObject
+                - s3:DeleteObject
+              Resource: !Sub "${ImagesBucket.Arn}/*"
       Events:
         PingEvent:
           Type: HttpApi
@@ -184,6 +218,16 @@ Resources:
         - ALLOW_ADMIN_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
 
+  # Grants admin access for lookup-category writes (see
+  # internal/auth.Claims.Groups). Add members via Cognito console/CLI -
+  # no self-service admin-grant endpoint.
+  AdminsGroup:
+    Type: AWS::Cognito::UserPoolGroup
+    Properties:
+      GroupName: admins
+      UserPoolId: !Ref UserPool
+      Description: Members can create/update/delete lookup categories (PUT/POST/DELETE /v1/lookups/{category}).
+
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
@@ -235,3 +279,6 @@ Outputs:
   UserPoolHostedUiDomain:
     Description: Cognito Hosted UI domain
     Value: !Sub https://kbdb-auth-${AWS::AccountId}-${AWS::StackName}.auth.${AWS::Region}.amazoncognito.com
+  ImagesBucketName:
+    Description: S3 bucket holding user-uploaded images (build photos, keycap kit renders)
+    Value: !Ref ImagesBucket

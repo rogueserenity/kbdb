@@ -15,6 +15,14 @@ import (
 // fields can be added later without changing VerifyToken's signature.
 type Claims struct {
 	Subject string
+	// Groups is the token's cognito:groups claim. Empty if absent.
+	Groups []string
+}
+
+// cognitoGroupsClaims reads cognito:groups via IDToken.Claims - it's
+// Cognito-specific, not exposed as an oidc.IDToken field.
+type cognitoGroupsClaims struct {
+	Groups []string `json:"cognito:groups"`
 }
 
 // tokenVerifier is the single method of *oidc.IDTokenVerifier that Verifier
@@ -51,5 +59,9 @@ func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, e
 		return nil, fmt.Errorf("auth: verifying token: %w", err)
 	}
 
-	return &Claims{Subject: idToken.Subject}, nil
+	// Missing claim isn't an error - just leaves Groups nil.
+	var groups cognitoGroupsClaims
+	_ = idToken.Claims(&groups)
+
+	return &Claims{Subject: idToken.Subject, Groups: groups.Groups}, nil
 }

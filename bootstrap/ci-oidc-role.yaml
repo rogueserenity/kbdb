@@ -191,6 +191,20 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}
                   - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}/*
+              # template.yaml's ImagesBucket - bucket-level config only, no
+              # object actions since nothing writes objects yet.
+              - Sid: ImagesBucketManagement
+                Effect: Allow
+                Action:
+                  - s3:CreateBucket
+                  - s3:DeleteBucket
+                  - s3:PutBucketPublicAccessBlock
+                  - s3:GetBucketPublicAccessBlock
+                  - s3:PutEncryptionConfiguration
+                  - s3:GetEncryptionConfiguration
+                  - s3:PutBucketTagging
+                  - s3:GetBucketTagging
+                Resource: !Sub arn:aws:s3:::kbdb-images-${AWS::AccountId}-kbdb-pr-*
               - Sid: EcrAuth
                 Effect: Allow
                 Action: ecr:GetAuthorizationToken
