@@ -5,6 +5,7 @@ package main
 // Kong's struct-tag env binding, defaults, and required-field validation are
 // useful regardless of whether flag parsing is ever exercised.
 type Config struct {
-	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
-	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
+	OIDCIssuerURL    string `env:"OIDC_ISSUER_URL" required:""`
+	OIDCAudience     string `env:"OIDC_AUDIENCE" required:""`
+	ImagesBucketName string `env:"IMAGES_BUCKET_NAME" required:""`
 }

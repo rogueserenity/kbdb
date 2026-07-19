@@ -1,0 +1,27 @@
+{
+  "brand": "",
+  "name": "",
+  "size": "",
+  "layout": "",
+  "design": {
+    "top_case": { "material": "", "color": "" },
+    "bottom_case": { "material": "", "color": "" },
+    "weight": { "material": "", "color": "" },
+    "plates": ["", ""]
+  },
+  "pcb": {
+    "thickness": 1.6,
+    "firmware": "",
+    "assembly": "",
+    "connectivity": ""
+  },
+  "purchase": {
+    "vendor": "",
+    "price": 123.45,
+    "order_date": "2026-01-24",
+    "delivery_date": "2026-03-24",
+    "order_status": ""
+  },
+  "notes": "",
+  "visibility": "private"
+}

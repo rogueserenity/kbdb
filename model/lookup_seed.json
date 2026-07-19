@@ -1,0 +1,199 @@
+[
+  {
+    "PK": "visibility",
+    "values": ["public", "authenticated", "private"]
+  },
+  {
+    "PK": "pcb_assembly",
+    "values": ["Hotswap", "Solder"]
+  },
+  {
+    "PK": "pcb_connectivity",
+    "values": ["Wired", "Dual Mode", "Tri-Mode"]
+  },
+  {
+    "PK": "size",
+    "values": ["40%", "50%", "60%", "65%", "70%", "75%", "80%", "98%", "100%"]
+  },
+  {
+    "PK": "layout",
+    "values": [
+      { "name": "WK", "sizes": ["60%", "65%", "70%", "75%", "80%", "98%", "100%"] },
+      { "name": "WKL", "sizes": ["60%", "65%", "70%", "75%", "80%", "98%", "100%"] },
+      { "name": "HHKB", "sizes": ["60%"] },
+      { "name": "Alice", "sizes": ["60%", "65%", "75%"] },
+      { "name": "MIT", "sizes": ["40%"] },
+      { "name": "Grid", "sizes": ["40%"] },
+      { "name": "Ortho", "sizes": ["40%"] },
+      { "name": "Minivan", "sizes": ["40%"] },
+      { "name": "Staggered", "sizes": ["40%"] }
+    ]
+  },
+  {
+    "PK": "case_material",
+    "values": ["Aluminum", "Polycarbonate", "Stainless Steel"]
+  },
+  {
+    "PK": "plate_material",
+    "values": ["AL", "PC", "PP", "FR4", "POM", "SS", "CF", "PEI", "ABS"]
+  },
+  {
+    "PK": "weight_material",
+    "values": ["Aluminum", "Brass", "Copper", "Stainless Steel", "Silicone", "None"]
+  },
+  {
+    "PK": "firmware",
+    "values": ["QMK/VIA", "QMK/VIAL", "ZMK", "Custom"]
+  },
+  {
+    "PK": "switch_type",
+    "values": ["Linear", "Tactile", "Clicky"]
+  },
+  {
+    "PK": "switch_material",
+    "values": [
+      "Acrylic",
+      "ABS",
+      "HPE",
+      "Ink V2",
+      "LCP",
+      "MF",
+      "Other",
+      "Torlon",
+      "Polycarbonate",
+      "PC + Fiberglass",
+
+      "Nylon",
+      "Modified Nylon",
+      "Nylon PA66",
+      "NA2 Nylon",
+      "PA2.0",
+      "PA3.0",
+      "PA4",
+      "PA12",
+      "Modified PA6",
+      "Modified PA12",
+      "N1",
+      "N3",
+      "NPI",
+
+      "P1",
+      "P2",
+      "P3",
+      "P3+",
+      "P4",
+      "P6",
+      "P7",
+
+      "POM",
+      "L4",
+      "M4",
+      "M5",
+      "POM+PTFE",
+      "POM+TPE",
+
+      "UHMWPE",
+      "UPE",
+      "Modified UPE",
+      "U4+",
+      "POK",
+
+      "G1",
+      "LY",
+      "M2",
+      "M3",
+      "T2",
+      "T3",
+      "T4",
+      "T5",
+      "Y3"
+    ]
+  },
+  {
+    "PK": "spring_material",
+    "values": ["Stainless Steel", "Gold-Plated", "Phosphor Bronze"]
+  },
+  {
+    "PK": "keycap_profile",
+    "values": ["Cherry/CYL", "MTNU", "DCS", "DCX", "DSA", "DSS", "KAM", "KAT", "MDA", "MT3", "Marshmallow", "OEM", "OSA", "PBS", "PFF", "SA", "XDA"]
+  },
+  {
+    "PK": "keycap_material",
+    "values": ["DyeSub PBT", "DualShot ABS", "DualShot PBT", "UV Print ABS", "Pad Print ABS", "Pad Print PBT", "Laser Etched"]
+  },
+  {
+    "PK": "vendor",
+    "values": [
+      "AliExpress",
+      "Amazon",
+      "Bowl Keyboards",
+      "CannonKeys",
+      "DiviniKey",
+      "Drop",
+      "Etsy",
+      "KBDfans",
+      "Key Machine",
+      "Keyspensory",
+      "Kinetic Labs",
+      "Mechanical Keyboards",
+      "Mekibo",
+      "NovelKeys",
+      "NyxKeys",
+      "Omnitype",
+      "Private Sale",
+      "SwagKeys",
+      "Thekapco",
+      "Toro",
+      "Unikeys",
+      "Yuzu",
+      "Other"
+    ]
+  },
+  {
+    "PK": "order_status",
+    "values": ["Planned", "Ordered", "Shipped", "Delivered", "Cancelled"]
+  },
+  {
+    "PK": "stabs",
+    "values": [
+      "AEBoards Staebies V2.2",
+      "C3 Equalz V3",
+      "Cherry",
+      "Designer Studio DS Adaptive",
+      "Designer Studio DS Adaptive V2",
+      "Durock v3",
+      "Everglide v2",
+      "Fourwraps v2",
+      "Gateron Ink V2 Pro",
+      "Stock",
+      "SwagKeys Knight v4",
+      "TX AP Long Pole v4",
+      "TX AP v4",
+      "Typeplus x YIKB",
+      "Wuque WS Stupid",
+      "Zeal v2"
+    ]
+  },
+  {
+    "PK": "stab_mount_type",
+    "values": ["Plate", "Screw-in", "Clip-in"]
+  },
+  {
+    "PK": "case_mount_type",
+    "values": [
+      { "name": "Top Mount", "supports_durometer": false },
+      { "name": "Bottom Mount", "supports_durometer": false },
+      { "name": "Tray Mount", "supports_durometer": false },
+      { "name": "Gasket Mount", "supports_durometer": true },
+      { "name": "Sandwich Mount", "supports_durometer": false },
+      { "name": "Integrated Plate Mount", "supports_durometer": false },
+      { "name": "Plateless", "supports_durometer": false },
+      { "name": "O-Ring", "supports_durometer": true },
+      { "name": "Tadpole", "supports_durometer": true }
+    ]
+  },
+  {
+    "PK": "durometer",
+    "values": ["30A", "40A", "50A", "60A", "70A", "80A", "90A"]
+  }
+]

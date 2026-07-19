@@ -1,0 +1,29 @@
+{
+  "brand": "",
+  "manufacturer": "",
+  "name": "",
+  "type": "",
+  "pins": 5,
+  "factory_lubed": false,
+  "material": {
+    "top_housing": "",
+    "bottom_housing": "",
+    "stem": ""
+  },
+  "force": {
+    "actuation": 45,
+    "bottom_out": 55
+  },
+  "spring": {
+    "material": "",
+    "pre_travel": 2.0,
+    "total_travel": 4.0
+  },
+  "purchase": {
+    "vendor": "",
+    "price": 123.45,
+    "quantity": 90
+  },
+  "notes": "",
+  "visibility": "private"
+}

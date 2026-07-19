@@ -15,6 +15,20 @@ import (
 // fields can be added later without changing VerifyToken's signature.
 type Claims struct {
 	Subject string
+	// Groups is the token's cognito:groups claim: the Cognito User Pool
+	// Groups the subject belongs to (e.g. "admins"). Empty for tokens with
+	// no group memberships, or for non-Cognito OIDC issuers that don't set
+	// this claim.
+	Groups []string
+}
+
+// cognitoGroupsClaims is the shape of the subset of an ID token's raw JSON
+// payload this package reads beyond the fields go-oidc already exposes on
+// oidc.IDToken (Subject, etc.). cognito:groups is Cognito-specific, not part
+// of the OIDC core spec, so it has to be read via IDToken.Claims rather than
+// a dedicated field.
+type cognitoGroupsClaims struct {
+	Groups []string `json:"cognito:groups"`
 }
 
 // tokenVerifier is the single method of *oidc.IDTokenVerifier that Verifier
@@ -51,5 +65,12 @@ func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, e
 		return nil, fmt.Errorf("auth: verifying token: %w", err)
 	}
 
-	return &Claims{Subject: idToken.Subject}, nil
+	// cognito:groups is absent for tokens from non-Cognito issuers and for
+	// Cognito users with no group memberships - not an error condition, so
+	// a failure to unmarshal it (including simply not being present) just
+	// leaves groups nil rather than rejecting an otherwise-valid token.
+	var groups cognitoGroupsClaims
+	_ = idToken.Claims(&groups)
+
+	return &Claims{Subject: idToken.Subject, Groups: groups.Groups}, nil
 }
