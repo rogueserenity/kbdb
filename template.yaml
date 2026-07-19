@@ -68,23 +68,15 @@ Resources:
             ]
           }
 
-  # Holds user-uploaded images (build photos, keycap kit renders) - see
-  # api/openapi.yaml's image endpoints and internal/... image handling.
-  # Private by design: no public access, no bucket policy granting anonymous
-  # reads. All access goes through presigned PUT/GET URLs minted by
-  # ApiFunction after it verifies the caller owns (or has been shared) the
-  # referencing item - the bucket itself must never be reachable by a bare,
-  # unsigned request. Stack-scoped (not shared across stacks) - S3 has no
-  # per-bucket cost, so this costs nothing extra while keeping kbdb-dev,
-  # every kbdb-pr-<N> CI stack, and a future prod cleanly isolated, same
-  # reasoning as ApiRepository/UserPoolDomain's per-stack naming above.
+  # Holds user-uploaded images (build photos, keycap kit renders). Private -
+  # access only via presigned URLs minted by ApiFunction after an ownership/
+  # sharing check. Stack-scoped like ApiRepository/UserPoolDomain (no
+  # per-bucket cost, keeps environments isolated).
   ImagesBucket:
     Type: AWS::S3::Bucket
     Properties:
-      # S3 bucket names are globally unique across ALL AWS accounts, not
-      # just within this one - AccountId AND StackName suffix needed for
-      # the same collision reasons as UserPoolDomain (multiple kbdb-pr-<N>
-      # CI stacks share the kbdb-ci account).
+      # AccountId+StackName suffix: S3 bucket names are globally unique, and
+      # multiple kbdb-pr-<N> stacks share the kbdb-ci account.
       BucketName: !Sub kbdb-images-${AWS::AccountId}-${AWS::StackName}
       PublicAccessBlockConfiguration:
         BlockPublicAcls: true
@@ -116,17 +108,10 @@ Resources:
           # binds that port in-container. Must match functions/api/main.go's
           # port const.
           AWS_LWA_PORT: "8000"
-      # Hand-written rather than SAM's S3CrudPolicy template: that template
-      # grants 9 actions (including s3:ListBucket, s3:PutObjectAcl,
-      # s3:GetBucketLocation, s3:{Get,Put}LifecycleConfiguration) that this
-      # function doesn't need - it only ever addresses specific, already-known
-      # object keys (never enumerates bucket contents) and never touches ACLs
-      # or lifecycle config at runtime. Scoped to exactly the 3 actions the
-      # image endpoints need: PutObject/GetObject to mint presigned
-      # upload/download URLs (a presigned URL inherits the generating role's
-      # own permissions - there is no separate "presign" IAM action), and
-      # DeleteObject for the DELETE-image endpoints, which remove the object
-      # directly rather than through a presigned URL.
+      # Hand-written, not SAM's S3CrudPolicy (grants extra actions we don't
+      # need, e.g. ListBucket, PutObjectAcl). Presigned URLs inherit this
+      # role's permissions, so Put/Get cover upload/download; Delete is for
+      # the DELETE-image endpoints.
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -233,13 +218,9 @@ Resources:
         - ALLOW_ADMIN_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
 
-  # Grants admin access for lookup-category write operations (see
-  # internal/auth.Claims.Groups, populated from this group's membership via
-  # the ID token's cognito:groups claim - no OAuth scope changes needed,
-  # Cognito includes group membership in both ID and access tokens for any
-  # user pool member automatically). Add users to this group via the
-  # Cognito console/CLI, not application code - there is no self-service
-  # admin-grant endpoint by design.
+  # Grants admin access for lookup-category writes (see
+  # internal/auth.Claims.Groups). Add members via Cognito console/CLI -
+  # no self-service admin-grant endpoint.
   AdminsGroup:
     Type: AWS::Cognito::UserPoolGroup
     Properties:
