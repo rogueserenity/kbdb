@@ -8,3 +8,20 @@ packages:
       structname: 'MockTokenVerifier'
     interfaces:
       tokenVerifier:
+  github.com/rogueserenity/kbdb/internal/repository:
+    config:
+      dir: '{{.InterfaceDir}}/mocks'
+      filename: 'mock_{{.InterfaceName}}.go'
+      pkgname: 'mocks'
+    interfaces:
+      LookupRepository:
+        config:
+          structname: 'MockLookupRepository'
+  github.com/rogueserenity/kbdb/internal/repository/dynamo:
+    config:
+      dir: '{{.InterfaceDir}}/mocks'
+      filename: 'mock_{{.InterfaceName}}.go'
+      pkgname: 'mocks'
+      structname: 'MockDynamoAPI'
+    interfaces:
+      dynamoAPI:

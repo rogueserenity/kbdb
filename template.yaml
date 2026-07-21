@@ -1,10 +1,9 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
-  kbdb - keyboard database. Phase 0 skeleton: single Lambda function fronted
-  by an HTTP API with a Cognito JWT authorizer, plus a budget cost tripwire.
-  No DynamoDB tables yet (Phase 1). ApiFunction runs a plain net/http server
-  behind the aws-lambda-web-adapter extension, packaged as a container image.
+  kbdb - keyboard database. Infrastructure for the kbdb API: a single
+  Lambda function fronted by an HTTP API with a Cognito JWT authorizer,
+  DynamoDB tables, an S3 bucket for images, and a budget cost tripwire.
 
 Globals:
   Function:
@@ -88,11 +87,26 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
+  # Global, non-user-owned reference data (approved values for enum-like
+  # fields). PK is the category name, no sort key - see model/lookup.json.
+  # scripts/func-setup.sh hand-creates an equivalent table against
+  # LocalStack (sam local start-api doesn't run a real CloudFormation
+  # deploy) - keep that script's schema in sync with this resource.
+  LookupTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: PK
+          AttributeType: S
+      KeySchema:
+        - AttributeName: PK
+          KeyType: HASH
+
   # Single Lambda function for all routes (REST entities + MCP), not split
-  # by protocol or by entity - see plan rationale. Only /v1/ping is wired up
-  # here; MCP and per-entity routes are added as additional Events on this
-  # same function later. Packaged as a container image (aws-lambda-web-adapter
-  # sidecar) rather than a zip - see functions/api/Dockerfile.
+  # by protocol or by entity - see plan rationale. Packaged as a container
+  # image (aws-lambda-web-adapter sidecar) rather than a zip - see
+  # functions/api/Dockerfile.
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -104,14 +118,18 @@ Resources:
           OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
           OIDC_AUDIENCE: !Ref UserPoolClient
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
+          LOOKUP_TABLE_NAME: !Ref LookupTable
+          # Empty in real deployments; sam local's --env-vars override
+          # (env.local.json) can only override a var declared here.
+          DYNAMODB_ENDPOINT_URL: ""
           # Not 8080: sam local start-api's Runtime Interface Emulator already
           # binds that port in-container. Must match functions/api/main.go's
           # port const.
           AWS_LWA_PORT: "8000"
-      # Hand-written, not SAM's S3CrudPolicy (grants extra actions we don't
-      # need, e.g. ListBucket, PutObjectAcl). Presigned URLs inherit this
-      # role's permissions, so Put/Get cover upload/download; Delete is for
-      # the DELETE-image endpoints.
+      # Hand-written, not SAM's S3CrudPolicy/DynamoDBReadPolicy (those grant
+      # extra actions we don't need). Presigned URLs inherit this role's
+      # permissions, so Put/Get cover upload/download; Delete is for the
+      # DELETE-image endpoints.
       Policies:
         - Version: "2012-10-17"
           Statement:
@@ -121,6 +139,10 @@ Resources:
                 - s3:GetObject
                 - s3:DeleteObject
               Resource: !Sub "${ImagesBucket.Arn}/*"
+            - Effect: Allow
+              Action:
+                - dynamodb:Scan
+              Resource: !GetAtt LookupTable.Arn
       Events:
         PingEvent:
           Type: HttpApi
@@ -128,6 +150,15 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/ping
             Method: get
+        # No auth: security: [] in api/openapi.yaml.
+        LookupsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/lookups
+            Method: get
+            Auth:
+              Authorizer: NONE
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/
