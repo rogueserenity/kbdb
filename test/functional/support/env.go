@@ -54,3 +54,15 @@ func AuthToken(ctx context.Context) (string, error) {
 	}
 	return MintToken(ctx, MockOIDCTokenURL(), MockOIDCClientID, MockOIDCClientSecret)
 }
+
+// LookupTableName returns the DynamoDB table name backing GET /v1/lookups,
+// so specs can seed fixture rows directly.
+func LookupTableName() string {
+	return os.Getenv("KBDB_LOOKUP_TABLE_NAME")
+}
+
+// DynamoDBEndpointURL returns the DynamoDB endpoint specs should talk to.
+// Empty uses default AWS endpoint resolution.
+func DynamoDBEndpointURL() string {
+	return os.Getenv("KBDB_DYNAMODB_ENDPOINT_URL")
+}

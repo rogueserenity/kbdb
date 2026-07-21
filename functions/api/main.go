@@ -13,8 +13,11 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
+	"github.com/rogueserenity/kbdb/internal/repository/dynamo"
 	"github.com/rogueserenity/kbdb/internal/router"
 )
 
@@ -40,7 +43,19 @@ func main() {
 		log.Fatalf("initializing token verifier: %v", err)
 	}
 
-	handler := router.New(verifier, cfg.OIDCIssuerURL, Version)
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
+	if err != nil {
+		log.Fatalf("loading AWS config: %v", err)
+	}
+
+	dynamoClient := dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) {
+		if cfg.DynamoDBEndpointURL != "" {
+			o.BaseEndpoint = &cfg.DynamoDBEndpointURL
+		}
+	})
+	lookupRepo := dynamo.NewLookupRepository(dynamoClient, cfg.LookupTableName)
+
+	handler := router.New(verifier, lookupRepo, cfg.OIDCIssuerURL, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

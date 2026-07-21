@@ -8,6 +8,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/handlers"
 	"github.com/rogueserenity/kbdb/internal/mcp"
 	"github.com/rogueserenity/kbdb/internal/middleware"
+	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 // New builds the application's http.Handler. verifier authenticates every
@@ -19,11 +20,14 @@ import (
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see internal/mcp.Handlers doc comment for why. version is
 // advertised to MCP clients in the server's initialize handshake.
-func New(verifier *auth.Verifier, issuerURL, version string) http.Handler {
+func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuerURL, version string) http.Handler {
 	mux := http.NewServeMux()
 
 	// REST: auth failures are HTTP-level (401) — appropriate for REST.
 	mux.Handle("GET /v1/ping", middleware.Auth(verifier)(http.HandlerFunc(handlers.Ping)))
+
+	// No middleware.Auth: security: [] in api/openapi.yaml.
+	mux.Handle("GET /v1/lookups", handlers.ListLookups(lookupRepo))
 
 	// MCP: auth happens inside the MCP server itself (context func + tool
 	// handler middleware), returning MCP-shaped errors rather than a bare
