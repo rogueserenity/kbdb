@@ -234,6 +234,22 @@ Resources:
                 # what caused this to fail: ecr-public.amazonaws.com is not
                 # a confirmed real value).
                 Resource: '*'
+              # template.yaml's LookupTable - CloudFormation itself needs
+              # these to create/track/tear down the table (DescribeTable is
+              # required even just to create it, confirmed via a real
+              # CREATE_FAILED AccessDenied error before this was added).
+              # DynamoDB table ARNs aren't stack-scoped like Lambda/IAM
+              # above (CloudFormation auto-names them
+              # <stack-name>-<LogicalId>-<random>), so scope to this
+              # account+region's kbdb-pr-*-prefixed tables instead.
+              - Sid: DynamoDbScoped
+                Effect: Allow
+                Action:
+                  - dynamodb:CreateTable
+                  - dynamodb:DeleteTable
+                  - dynamodb:DescribeTable
+                  - dynamodb:TagResource
+                Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/kbdb-pr-*
               - Sid: EcrRepoAccess
                 Effect: Allow
                 Action:
