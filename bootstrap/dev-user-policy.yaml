@@ -135,12 +135,9 @@ Resources:
               - dynamodb:DeleteTable
               - dynamodb:DescribeTable
               - dynamodb:TagResource
-            # template.yaml's LookupTable - CloudFormation needs these to
-            # create/track/tear down the table (DescribeTable is required
-            # even just to create it). Table ARNs aren't stack-scoped like
-            # Lambda/IAM above (CloudFormation auto-names them
-            # <stack-name>-<LogicalId>-<random>), so scope to this
-            # account+region's kbdb-dev-*-prefixed tables instead. Mirrors
+              - dynamodb:PutItem
+              - dynamodb:DeleteItem
+            # template.yaml's LookupTable. Mirrors
             # bootstrap/ci-oidc-role.yaml's equivalent statement.
             Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/kbdb-dev-*
           - Sid: EcrAuth

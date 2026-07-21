@@ -111,10 +111,15 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
             --output text)
+          LOOKUP_TABLE_NAME=$(aws cloudformation describe-stacks \
+            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='LookupTableName'].OutputValue" \
+            --output text)
           {
             echo "api-url=$API_URL"
             echo "user-pool-id=$USER_POOL_ID"
             echo "user-pool-client-id=$USER_POOL_CLIENT_ID"
+            echo "lookup-table-name=$LOOKUP_TABLE_NAME"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create throwaway Cognito test user and mint a token
@@ -169,4 +174,5 @@ jobs:
         env:
           KBDB_API_BASE_URL: ${{ steps.stack-outputs.outputs.api-url }}
           KBDB_AUTH_TOKEN: ${{ steps.auth-token.outputs.token }}
+          KBDB_LOOKUP_TABLE_NAME: ${{ steps.stack-outputs.outputs.lookup-table-name }}
         run: mise run func-test

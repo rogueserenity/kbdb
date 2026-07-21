@@ -313,3 +313,6 @@ Outputs:
   ImagesBucketName:
     Description: S3 bucket holding user-uploaded images (build photos, keycap kit renders)
     Value: !Ref ImagesBucket
+  LookupTableName:
+    Description: DynamoDB table backing GET /v1/lookups
+    Value: !Ref LookupTable
