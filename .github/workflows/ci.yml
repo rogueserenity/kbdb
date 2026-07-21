@@ -175,4 +175,7 @@ jobs:
           KBDB_API_BASE_URL: ${{ steps.stack-outputs.outputs.api-url }}
           KBDB_AUTH_TOKEN: ${{ steps.auth-token.outputs.token }}
           KBDB_LOOKUP_TABLE_NAME: ${{ steps.stack-outputs.outputs.lookup-table-name }}
+          # Explicitly empty (not omitted) - func-test.sh only falls back to
+          # its LocalStack default for a genuinely unset variable.
+          KBDB_DYNAMODB_ENDPOINT_URL: ""
         run: mise run func-test
