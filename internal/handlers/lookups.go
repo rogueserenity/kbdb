@@ -30,3 +30,26 @@ func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(categories)
 	}
 }
+
+// GetLookup returns a handler for GET /v1/lookups/{category}: one lookup
+// category's approved values.
+func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		category := r.PathValue("category")
+
+		lookup, err := repo.GetCategory(r.Context(), category)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting lookup category", "error", err)
+			problem.Internal(w, "failed to get lookup category")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(lookup)
+	}
+}

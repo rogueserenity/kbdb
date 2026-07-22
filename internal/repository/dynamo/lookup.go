@@ -31,7 +31,7 @@ func (r *LookupRepository) ListCategories(ctx context.Context) ([]string, error)
 	for {
 		out, err := r.client.Scan(ctx, &dynamodb.ScanInput{
 			TableName:            &r.tableName,
-			ProjectionExpression: aws.String("PK"),
+			ProjectionExpression: aws.String("category"),
 			ExclusiveStartKey:    lastKey,
 		})
 		if err != nil {
@@ -39,13 +39,13 @@ func (r *LookupRepository) ListCategories(ctx context.Context) ([]string, error)
 		}
 
 		var rows []struct {
-			PK string `dynamodbav:"PK"`
+			Category string `dynamodbav:"category"`
 		}
 		if err := attributevalue.UnmarshalListOfMaps(out.Items, &rows); err != nil {
 			return nil, fmt.Errorf("unmarshalling lookup categories: %w", err)
 		}
 		for _, row := range rows {
-			categories = append(categories, row.PK)
+			categories = append(categories, row.Category)
 		}
 
 		lastKey = out.LastEvaluatedKey
@@ -57,4 +57,27 @@ func (r *LookupRepository) ListCategories(ctx context.Context) ([]string, error)
 	sort.Strings(categories)
 
 	return categories, nil
+}
+
+func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*repository.Lookup, error) {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"category": &types.AttributeValueMemberS{Value: category},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting lookup category %q: %w", category, err)
+	}
+
+	if len(out.Item) == 0 {
+		return nil, repository.ErrNotFound
+	}
+
+	var lookup repository.Lookup
+	if err := attributevalue.UnmarshalMap(out.Item, &lookup); err != nil {
+		return nil, fmt.Errorf("unmarshalling lookup category %q: %w", category, err)
+	}
+
+	return &lookup, nil
 }

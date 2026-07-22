@@ -37,7 +37,7 @@ var _ = Describe("Lookups", func() {
 		_, err := client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 			TableName: aws.String(support.LookupTableName()),
 			Key: map[string]dynamotypes.AttributeValue{
-				"PK": &dynamotypes.AttributeValueMemberS{Value: category},
+				"category": &dynamotypes.AttributeValueMemberS{Value: category},
 			},
 		})
 		Expect(err).NotTo(HaveOccurred())
@@ -47,8 +47,8 @@ var _ = Describe("Lookups", func() {
 		BeforeEach(func(ctx SpecContext) {
 			client := lookupDynamoClient(ctx)
 			item, err := attributevalue.MarshalMap(map[string]any{
-				"PK":     category,
-				"values": []string{"a", "b"},
+				"category": category,
+				"values":   []string{"a", "b"},
 			})
 			Expect(err).NotTo(HaveOccurred())
 
@@ -77,6 +77,45 @@ var _ = Describe("Lookups", func() {
 				Expect(json.NewDecoder(resp.Body).Decode(&categories)).To(Succeed())
 				Expect(categories).To(ContainElement(category))
 			})
+		})
+
+		When("the request is for the seeded category, with no bearer token", func() {
+			BeforeEach(func(ctx SpecContext) {
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/lookups/"+category, nil)
+				Expect(err).NotTo(HaveOccurred())
+
+				resp, err = http.DefaultClient.Do(req)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("succeeds and returns the category's values", func() {
+				By("returning 200 OK")
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				By("returning the category's name and values")
+				var got struct {
+					Category string   `json:"category"`
+					Values   []string `json:"values"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Category).To(Equal(category))
+				Expect(got.Values).To(Equal([]string{"a", "b"}))
+			})
+		})
+	})
+
+	When("the request is for a category that does not exist", func() {
+		BeforeEach(func(ctx SpecContext) {
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/lookups/functional-test-category-missing", nil)
+			Expect(err).NotTo(HaveOccurred())
+
+			resp, err = http.DefaultClient.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+		})
+
+		It("returns 404 with a problem+json body", func() {
+			Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 		})
 	})
 })

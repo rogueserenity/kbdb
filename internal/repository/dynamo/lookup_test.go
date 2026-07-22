@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/dynamo/mocks"
 )
 
@@ -34,8 +35,8 @@ func (s *LookupRepositorySuite) TestListCategories_Succeeds() {
 		Scan(mock.Anything, mock.Anything).
 		Return(&dynamodb.ScanOutput{
 			Items: []map[string]types.AttributeValue{
-				{"PK": &types.AttributeValueMemberS{Value: "vendor"}},
-				{"PK": &types.AttributeValueMemberS{Value: "keyboard_size"}},
+				{"category": &types.AttributeValueMemberS{Value: "vendor"}},
+				{"category": &types.AttributeValueMemberS{Value: "keyboard_size"}},
 			},
 		}, nil)
 
@@ -46,7 +47,7 @@ func (s *LookupRepositorySuite) TestListCategories_Succeeds() {
 }
 
 func (s *LookupRepositorySuite) TestListCategories_Paginates() {
-	lastKey := map[string]types.AttributeValue{"PK": &types.AttributeValueMemberS{Value: "keyboard_size"}}
+	lastKey := map[string]types.AttributeValue{"category": &types.AttributeValueMemberS{Value: "keyboard_size"}}
 
 	s.mockClient.EXPECT().
 		Scan(mock.Anything, mock.MatchedBy(func(in *dynamodb.ScanInput) bool {
@@ -54,7 +55,7 @@ func (s *LookupRepositorySuite) TestListCategories_Paginates() {
 		})).
 		Return(&dynamodb.ScanOutput{
 			Items: []map[string]types.AttributeValue{
-				{"PK": &types.AttributeValueMemberS{Value: "vendor"}},
+				{"category": &types.AttributeValueMemberS{Value: "vendor"}},
 			},
 			LastEvaluatedKey: lastKey,
 		}, nil).Once()
@@ -65,7 +66,7 @@ func (s *LookupRepositorySuite) TestListCategories_Paginates() {
 		})).
 		Return(&dynamodb.ScanOutput{
 			Items: []map[string]types.AttributeValue{
-				{"PK": &types.AttributeValueMemberS{Value: "keyboard_size"}},
+				{"category": &types.AttributeValueMemberS{Value: "keyboard_size"}},
 			},
 		}, nil).Once()
 
@@ -96,4 +97,45 @@ func (s *LookupRepositorySuite) TestListCategories_ScanError_Propagates() {
 
 	s.Require().Error(err)
 	s.Nil(categories)
+}
+
+func (s *LookupRepositorySuite) TestGetCategory_Succeeds() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"category": &types.AttributeValueMemberS{Value: "vendor"},
+				"values": &types.AttributeValueMemberL{Value: []types.AttributeValue{
+					&types.AttributeValueMemberS{Value: "a"},
+					&types.AttributeValueMemberS{Value: "b"},
+				}},
+			},
+		}, nil)
+
+	lookup, err := s.repo.GetCategory(context.Background(), "vendor")
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, lookup)
+}
+
+func (s *LookupRepositorySuite) TestGetCategory_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	lookup, err := s.repo.GetCategory(context.Background(), "missing")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(lookup)
+}
+
+func (s *LookupRepositorySuite) TestGetCategory_GetItemError_Propagates() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	lookup, err := s.repo.GetCategory(context.Background(), "vendor")
+
+	s.Require().Error(err)
+	s.Nil(lookup)
 }
