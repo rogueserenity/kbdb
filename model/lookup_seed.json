@@ -1,22 +1,22 @@
 [
   {
-    "PK": "visibility",
+    "category": "visibility",
     "values": ["public", "authenticated", "private"]
   },
   {
-    "PK": "keyboard_pcb_assembly_type",
+    "category": "keyboard_pcb_assembly_type",
     "values": ["Hotswap", "Solder"]
   },
   {
-    "PK": "keyboard_pcb_connectivity_type",
+    "category": "keyboard_pcb_connectivity_type",
     "values": ["Wired", "Dual Mode", "Tri-Mode"]
   },
   {
-    "PK": "keyboard_size",
+    "category": "keyboard_size",
     "values": ["40%", "50%", "60%", "65%", "70%", "75%", "80%", "98%", "100%"]
   },
   {
-    "PK": "keyboard_layout",
+    "category": "keyboard_layout",
     "values": [
       { "name": "WK", "sizes": ["60%", "65%", "70%", "75%", "80%", "98%", "100%"] },
       { "name": "WKL", "sizes": ["60%", "65%", "70%", "75%", "80%", "98%", "100%"] },
@@ -30,27 +30,27 @@
     ]
   },
   {
-    "PK": "keyboard_case_material",
+    "category": "keyboard_case_material",
     "values": ["Aluminum", "Polycarbonate", "Stainless Steel"]
   },
   {
-    "PK": "keyboard_plate_material",
+    "category": "keyboard_plate_material",
     "values": ["AL", "PC", "PP", "FR4", "POM", "SS", "CF", "PEI", "ABS"]
   },
   {
-    "PK": "keyboard_weight_material",
+    "category": "keyboard_weight_material",
     "values": ["Aluminum", "Brass", "Copper", "Stainless Steel", "Silicone", "None"]
   },
   {
-    "PK": "keyboard_pcb_firmware",
+    "category": "keyboard_pcb_firmware",
     "values": ["QMK/VIA", "QMK/VIAL", "ZMK", "Custom"]
   },
   {
-    "PK": "switch_type",
+    "category": "switch_type",
     "values": ["Linear", "Tactile", "Clicky"]
   },
   {
-    "PK": "switch_material",
+    "category": "switch_material",
     "values": [
       "Acrylic",
       "ABS",
@@ -110,19 +110,19 @@
     ]
   },
   {
-    "PK": "switch_spring_material",
+    "category": "switch_spring_material",
     "values": ["Stainless Steel", "Gold-Plated", "Phosphor Bronze"]
   },
   {
-    "PK": "keycap_profile",
+    "category": "keycap_profile",
     "values": ["Cherry/CYL", "MTNU", "DCS", "DCX", "DSA", "DSS", "KAM", "KAT", "MDA", "MT3", "Marshmallow", "OEM", "OSA", "PBS", "PFF", "SA", "XDA"]
   },
   {
-    "PK": "keycap_material",
+    "category": "keycap_material",
     "values": ["DyeSub PBT", "DualShot ABS", "DualShot PBT", "UV Print ABS", "Pad Print ABS", "Pad Print PBT", "Laser Etched"]
   },
   {
-    "PK": "vendor",
+    "category": "vendor",
     "values": [
       "AliExpress",
       "Amazon",
@@ -150,11 +150,11 @@
     ]
   },
   {
-    "PK": "order_status",
+    "category": "order_status",
     "values": ["Planned", "Ordered", "Shipped", "Delivered", "Cancelled"]
   },
   {
-    "PK": "build_stabilizer",
+    "category": "build_stabilizer",
     "values": [
       "AEBoards Staebies V2.2",
       "C3 Equalz V3",
@@ -175,11 +175,11 @@
     ]
   },
   {
-    "PK": "build_stabilizer_mount_type",
+    "category": "build_stabilizer_mount_type",
     "values": ["Plate", "Screw-in", "Clip-in"]
   },
   {
-    "PK": "build_case_mount_type",
+    "category": "build_case_mount_type",
     "values": [
       { "name": "Top Mount", "supports_durometer": false },
       { "name": "Bottom Mount", "supports_durometer": false },
@@ -193,7 +193,7 @@
     ]
   },
   {
-    "PK": "build_durometer",
+    "category": "build_durometer",
     "values": ["30A", "40A", "50A", "60A", "70A", "80A", "90A"]
   }
 ]

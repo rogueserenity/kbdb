@@ -28,6 +28,7 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuer
 
 	// No middleware.Auth: security: [] in api/openapi.yaml.
 	mux.Handle("GET /v1/lookups", handlers.ListLookups(lookupRepo))
+	mux.Handle("GET /v1/lookups/{category}", handlers.GetLookup(lookupRepo))
 
 	// MCP: auth happens inside the MCP server itself (context func + tool
 	// handler middleware), returning MCP-shaped errors rather than a bare

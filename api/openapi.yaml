@@ -1510,9 +1510,9 @@ components:
         A lookup category's approved values. "values" is usually an array
         of plain strings, but some categories (layout, case_mount_type) use
         objects to attach per-value constraints/flags — see model/lookup_seed.json.
-      required: [PK, values]
+      required: [category, values]
       properties:
-        PK:
+        category:
           type: string
           example: vendor
         values:

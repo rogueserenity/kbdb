@@ -38,6 +38,89 @@ func (_m *MockDynamoAPI) EXPECT() *MockDynamoAPI_Expecter {
 	return &MockDynamoAPI_Expecter{mock: &_m.Mock}
 }
 
+// GetItem provides a mock function for the type MockDynamoAPI
+func (_mock *MockDynamoAPI) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
+	var tmpRet mock.Arguments
+	if len(optFns) > 0 {
+		tmpRet = _mock.Called(ctx, params, optFns)
+	} else {
+		tmpRet = _mock.Called(ctx, params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetItem")
+	}
+
+	var r0 *dynamodb.GetItemOutput
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)); ok {
+		return returnFunc(ctx, params, optFns...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) *dynamodb.GetItemOutput); ok {
+		r0 = returnFunc(ctx, params, optFns...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*dynamodb.GetItemOutput)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *dynamodb.GetItemInput, ...func(*dynamodb.Options)) error); ok {
+		r1 = returnFunc(ctx, params, optFns...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDynamoAPI_GetItem_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetItem'
+type MockDynamoAPI_GetItem_Call struct {
+	*mock.Call
+}
+
+// GetItem is a helper method to define mock.On call
+//   - ctx context.Context
+//   - params *dynamodb.GetItemInput
+//   - optFns ...func(*dynamodb.Options)
+func (_e *MockDynamoAPI_Expecter) GetItem(ctx any, params any, optFns ...any) *MockDynamoAPI_GetItem_Call {
+	return &MockDynamoAPI_GetItem_Call{Call: _e.mock.On("GetItem",
+		append([]any{ctx, params}, optFns...)...)}
+}
+
+func (_c *MockDynamoAPI_GetItem_Call) Run(run func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options))) *MockDynamoAPI_GetItem_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *dynamodb.GetItemInput
+		if args[1] != nil {
+			arg1 = args[1].(*dynamodb.GetItemInput)
+		}
+		var arg2 []func(*dynamodb.Options)
+		var variadicArgs []func(*dynamodb.Options)
+		if len(args) > 2 {
+			variadicArgs = args[2].([]func(*dynamodb.Options))
+		}
+		arg2 = variadicArgs
+		run(
+			arg0,
+			arg1,
+			arg2...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDynamoAPI_GetItem_Call) Return(getItemOutput *dynamodb.GetItemOutput, err error) *MockDynamoAPI_GetItem_Call {
+	_c.Call.Return(getItemOutput, err)
+	return _c
+}
+
+func (_c *MockDynamoAPI_GetItem_Call) RunAndReturn(run func(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error)) *MockDynamoAPI_GetItem_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Scan provides a mock function for the type MockDynamoAPI
 func (_mock *MockDynamoAPI) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 	var tmpRet mock.Arguments

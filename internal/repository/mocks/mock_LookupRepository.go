@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/rogueserenity/kbdb/internal/repository"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -35,6 +36,74 @@ type MockLookupRepository_Expecter struct {
 
 func (_m *MockLookupRepository) EXPECT() *MockLookupRepository_Expecter {
 	return &MockLookupRepository_Expecter{mock: &_m.Mock}
+}
+
+// GetCategory provides a mock function for the type MockLookupRepository
+func (_mock *MockLookupRepository) GetCategory(ctx context.Context, category string) (*repository.Lookup, error) {
+	ret := _mock.Called(ctx, category)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetCategory")
+	}
+
+	var r0 *repository.Lookup
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.Lookup, error)); ok {
+		return returnFunc(ctx, category)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.Lookup); ok {
+		r0 = returnFunc(ctx, category)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.Lookup)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, category)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockLookupRepository_GetCategory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetCategory'
+type MockLookupRepository_GetCategory_Call struct {
+	*mock.Call
+}
+
+// GetCategory is a helper method to define mock.On call
+//   - ctx context.Context
+//   - category string
+func (_e *MockLookupRepository_Expecter) GetCategory(ctx any, category any) *MockLookupRepository_GetCategory_Call {
+	return &MockLookupRepository_GetCategory_Call{Call: _e.mock.On("GetCategory", ctx, category)}
+}
+
+func (_c *MockLookupRepository_GetCategory_Call) Run(run func(ctx context.Context, category string)) *MockLookupRepository_GetCategory_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockLookupRepository_GetCategory_Call) Return(lookup *repository.Lookup, err error) *MockLookupRepository_GetCategory_Call {
+	_c.Call.Return(lookup, err)
+	return _c
+}
+
+func (_c *MockLookupRepository_GetCategory_Call) RunAndReturn(run func(ctx context.Context, category string) (*repository.Lookup, error)) *MockLookupRepository_GetCategory_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ListCategories provides a mock function for the type MockLookupRepository

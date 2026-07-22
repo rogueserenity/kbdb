@@ -23,8 +23,8 @@ for _ in $(seq 1 15); do
   aws dynamodb create-table \
     --endpoint-url http://localhost:4566 \
     --table-name kbdb-local-lookup \
-    --attribute-definitions AttributeName=PK,AttributeType=S \
-    --key-schema AttributeName=PK,KeyType=HASH \
+    --attribute-definitions AttributeName=category,AttributeType=S \
+    --key-schema AttributeName=category,KeyType=HASH \
     --billing-mode PAY_PER_REQUEST \
     >/dev/null 2>&1 && break
   sleep 1

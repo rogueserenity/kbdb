@@ -88,19 +88,20 @@ Resources:
               SSEAlgorithm: AES256
 
   # Global, non-user-owned reference data (approved values for enum-like
-  # fields). PK is the category name, no sort key - see model/lookup.json.
-  # scripts/func-setup.sh hand-creates an equivalent table against
-  # LocalStack (sam local start-api doesn't run a real CloudFormation
-  # deploy) - keep that script's schema in sync with this resource.
+  # fields). category is the partition key, no sort key - see
+  # model/lookup.json. scripts/func-setup.sh hand-creates an equivalent
+  # table against LocalStack (sam local start-api doesn't run a real
+  # CloudFormation deploy) - keep that script's schema in sync with this
+  # resource.
   LookupTable:
     Type: AWS::DynamoDB::Table
     Properties:
       BillingMode: PAY_PER_REQUEST
       AttributeDefinitions:
-        - AttributeName: PK
+        - AttributeName: category
           AttributeType: S
       KeySchema:
-        - AttributeName: PK
+        - AttributeName: category
           KeyType: HASH
 
   # Single Lambda function for all routes (REST entities + MCP), not split
@@ -142,6 +143,7 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:Scan
+                - dynamodb:GetItem
               Resource: !GetAtt LookupTable.Arn
       Events:
         PingEvent:
@@ -156,6 +158,15 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Path: /v1/lookups
+            Method: get
+            Auth:
+              Authorizer: NONE
+        # No auth: security: [] in api/openapi.yaml.
+        GetLookupEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/lookups/{category}
             Method: get
             Auth:
               Authorizer: NONE
