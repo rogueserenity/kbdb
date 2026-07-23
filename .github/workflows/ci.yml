@@ -122,58 +122,28 @@ jobs:
             echo "lookup-table-name=$LOOKUP_TABLE_NAME"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create throwaway Cognito test user and mint a token
+      - name: Create throwaway Cognito test users and mint tokens
         id: auth-token
         run: |
           USER_POOL_ID="${{ steps.stack-outputs.outputs.user-pool-id }}"
           USER_POOL_CLIENT_ID="${{ steps.stack-outputs.outputs.user-pool-client-id }}"
-          USERNAME="ci-test-user@rogueserenity.dev"
           PASSWORD="$(openssl rand -base64 24)Aa1!"
 
-          # synchronize (a later push to the same PR) redeploys the same
-          # stack/UserPool rather than a fresh one, so this fixed username
-          # already exists from the prior run - delete first. Only swallow
-          # the specific "didn't exist yet" case (a genuinely first run
-          # against a fresh stack); any other failure (throttling, a real
-          # permissions regression, etc.) should fail loudly here rather
-          # than surface later as a confusing UsernameExistsException from
-          # admin-create-user below.
-          if ! DELETE_ERROR=$(aws cognito-idp admin-delete-user \
-            --user-pool-id "$USER_POOL_ID" \
-            --username "$USERNAME" 2>&1); then
-            if ! grep -q "UserNotFoundException" <<< "$DELETE_ERROR"; then
-              echo "$DELETE_ERROR" >&2
-              exit 1
-            fi
-          fi
-
-          aws cognito-idp admin-create-user \
-            --user-pool-id "$USER_POOL_ID" \
-            --username "$USERNAME" \
-            --user-attributes Name=email,Value="$USERNAME" Name=email_verified,Value=true \
-            --message-action SUPPRESS
-
-          aws cognito-idp admin-set-user-password \
-            --user-pool-id "$USER_POOL_ID" \
-            --username "$USERNAME" \
-            --password "$PASSWORD" \
-            --permanent
-
-          TOKEN=$(aws cognito-idp admin-initiate-auth \
-            --user-pool-id "$USER_POOL_ID" \
-            --client-id "$USER_POOL_CLIENT_ID" \
-            --auth-flow ADMIN_USER_PASSWORD_AUTH \
-            --auth-parameters USERNAME="$USERNAME",PASSWORD="$PASSWORD" \
-            --query "AuthenticationResult.IdToken" \
-            --output text)
+          TOKEN=$(scripts/ci-create-test-user.sh "$USER_POOL_ID" "$USER_POOL_CLIENT_ID" \
+            "ci-test-user@rogueserenity.dev" "$PASSWORD")
+          ADMIN_TOKEN=$(scripts/ci-create-test-user.sh "$USER_POOL_ID" "$USER_POOL_CLIENT_ID" \
+            "ci-test-admin@rogueserenity.dev" "$PASSWORD" "admins")
 
           echo "::add-mask::$TOKEN"
+          echo "::add-mask::$ADMIN_TOKEN"
           echo "token=$TOKEN" >> "$GITHUB_OUTPUT"
+          echo "admin-token=$ADMIN_TOKEN" >> "$GITHUB_OUTPUT"
 
       - name: Run functional tests
         env:
           KBDB_API_BASE_URL: ${{ steps.stack-outputs.outputs.api-url }}
           KBDB_AUTH_TOKEN: ${{ steps.auth-token.outputs.token }}
+          KBDB_ADMIN_AUTH_TOKEN: ${{ steps.auth-token.outputs.admin-token }}
           KBDB_LOOKUP_TABLE_NAME: ${{ steps.stack-outputs.outputs.lookup-table-name }}
           # Explicitly empty (not omitted) - func-test.sh only falls back to
           # its LocalStack default for a genuinely unset variable.

@@ -36,3 +36,18 @@ func NotFound(w http.ResponseWriter, detail string) {
 func Internal(w http.ResponseWriter, detail string) {
 	Write(w, http.StatusInternalServerError, "https://mykeebs.info/errors/internal-error", "Internal Server Error", detail)
 }
+
+// Forbidden writes a 403 Problem response.
+func Forbidden(w http.ResponseWriter, detail string) {
+	Write(w, http.StatusForbidden, "https://mykeebs.info/errors/forbidden", "Forbidden", detail)
+}
+
+// Conflict writes a 409 Problem response.
+func Conflict(w http.ResponseWriter, detail string) {
+	Write(w, http.StatusConflict, "https://mykeebs.info/errors/conflict", "Conflict", detail)
+}
+
+// BadRequest writes a 400 Problem response.
+func BadRequest(w http.ResponseWriter, detail string) {
+	Write(w, http.StatusBadRequest, "https://mykeebs.info/errors/bad-request", "Bad Request", detail)
+}

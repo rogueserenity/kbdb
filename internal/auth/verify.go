@@ -19,6 +19,10 @@ type Claims struct {
 	Groups []string
 }
 
+// AdminsGroup is the cognito:groups value that grants admin access (see
+// template.yaml's AdminsGroup and internal/middleware.RequireAdmin).
+const AdminsGroup = "admins"
+
 // cognitoGroupsClaims reads cognito:groups via IDToken.Claims - it's
 // Cognito-specific, not exposed as an oidc.IDToken field.
 type cognitoGroupsClaims struct {

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -139,5 +140,125 @@ func (s *GetLookupSuite) TestGetCategory_NotFound_Returns404() {
 	s.handler(rec, req)
 
 	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type CreateLookupSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockLookupRepository
+	handler  http.HandlerFunc
+}
+
+func TestCreateLookupSuite(t *testing.T) {
+	suite.Run(t, new(CreateLookupSuite))
+}
+
+func (s *CreateLookupSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockLookupRepository(s.T())
+	s.handler = CreateLookup(s.mockRepo)
+}
+
+func (s *CreateLookupSuite) newRequest(body string) *http.Request {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/vendor", strings.NewReader(body))
+	req.SetPathValue("category", "vendor")
+	return req
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_Succeeds() {
+	s.mockRepo.EXPECT().
+		CreateCategory(mock.Anything, "vendor", []any{"a", "b"}).
+		Return(&repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, nil)
+
+	req := s.newRequest(`{"values":["a","b"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got repository.Lookup
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal(repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, got)
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_AlreadyExists_Returns409() {
+	s.mockRepo.EXPECT().
+		CreateCategory(mock.Anything, "vendor", []any{"a"}).
+		Return(nil, repository.ErrAlreadyExists)
+
+	req := s.newRequest(`{"values":["a"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		CreateCategory(mock.Anything, "vendor", []any{"a"}).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(`{"values":["a"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_InvalidBody_Returns400() {
+	req := s.newRequest("not json")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_EmptyValues_Returns400() {
+	req := s.newRequest(`{"values":[]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_MissingValues_Returns400() {
+	req := s.newRequest(`{}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_WhitespaceCategory_Returns400() {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/%20", strings.NewReader(`{"values":["a"]}`))
+	req.SetPathValue("category", " ")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_EmptyCategory_Returns400() {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/", strings.NewReader(`{"values":["a"]}`))
+	req.SetPathValue("category", "")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }

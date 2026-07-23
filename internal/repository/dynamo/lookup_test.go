@@ -139,3 +139,37 @@ func (s *LookupRepositorySuite) TestGetCategory_GetItemError_Propagates() {
 	s.Require().Error(err)
 	s.Nil(lookup)
 }
+
+func (s *LookupRepositorySuite) TestCreateCategory_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	lookup, err := s.repo.CreateCategory(context.Background(), "vendor", []any{"a", "b"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, lookup)
+}
+
+func (s *LookupRepositorySuite) TestCreateCategory_AlreadyExists_ReturnsErrAlreadyExists() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	lookup, err := s.repo.CreateCategory(context.Background(), "vendor", []any{"a"})
+
+	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(lookup)
+}
+
+func (s *LookupRepositorySuite) TestCreateCategory_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	lookup, err := s.repo.CreateCategory(context.Background(), "vendor", []any{"a"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(lookup)
+}
