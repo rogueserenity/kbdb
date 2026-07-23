@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -116,6 +117,93 @@ var _ = Describe("Lookups", func() {
 		It("returns 404 with a problem+json body", func() {
 			Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
 			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+		})
+	})
+
+	Describe("POST /v1/lookups/{category}", func() {
+		doCreate := func(ctx SpecContext, token string) *http.Response {
+			body := bytes.NewReader([]byte(`{"values":["a","b"]}`))
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, support.BaseURL()+"/v1/lookups/"+category, body)
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+
+			r, err := http.DefaultClient.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			return r
+		}
+
+		When("the caller is an admin and the category does not exist", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doCreate(ctx, token)
+			})
+
+			It("creates the category", func() {
+				By("returning 201 Created")
+				Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+				By("returning the created category's name and values")
+				var got struct {
+					Category string   `json:"category"`
+					Values   []string `json:"values"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Category).To(Equal(category))
+				Expect(got.Values).To(Equal([]string{"a", "b"}))
+			})
+		})
+
+		When("the caller is an admin and the category already exists", func() {
+			BeforeEach(func(ctx SpecContext) {
+				client := lookupDynamoClient(ctx)
+				item, err := attributevalue.MarshalMap(map[string]any{
+					"category": category,
+					"values":   []string{"a", "b"},
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				_, err = client.PutItem(ctx, &dynamodb.PutItemInput{
+					TableName: aws.String(support.LookupTableName()),
+					Item:      item,
+				})
+				Expect(err).NotTo(HaveOccurred())
+
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doCreate(ctx, token)
+			})
+
+			It("returns 409 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusConflict))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("the caller is not an admin", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.AuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doCreate(ctx, token)
+			})
+
+			It("returns 403 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("no bearer token is provided", func() {
+			BeforeEach(func(ctx SpecContext) {
+				resp = doCreate(ctx, "")
+			})
+
+			It("returns 401", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			})
 		})
 	})
 })

@@ -844,6 +844,8 @@ paths:
                 $ref: "#/components/schemas/Lookup"
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -940,6 +942,12 @@ components:
             $ref: "#/components/schemas/Problem"
     ForbiddenResponse:
       description: The authenticated user lacks permission to perform this operation (e.g. admin access required).
+      content:
+        application/problem+json:
+          schema:
+            $ref: "#/components/schemas/Problem"
+    ConflictResponse:
+      description: The request conflicts with the current state of the resource (e.g. creating a category that already exists).
       content:
         application/problem+json:
           schema:

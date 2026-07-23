@@ -2,6 +2,7 @@ package dynamo
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 
@@ -77,6 +78,30 @@ func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*r
 	var lookup repository.Lookup
 	if err := attributevalue.UnmarshalMap(out.Item, &lookup); err != nil {
 		return nil, fmt.Errorf("unmarshalling lookup category %q: %w", category, err)
+	}
+
+	return &lookup, nil
+}
+
+func (r *LookupRepository) CreateCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
+	lookup := repository.Lookup{Category: category, Values: values}
+
+	item, err := attributevalue.MarshalMap(lookup)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling lookup category %q: %w", category, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(category)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrAlreadyExists
+		}
+		return nil, fmt.Errorf("creating lookup category %q: %w", category, err)
 	}
 
 	return &lookup, nil

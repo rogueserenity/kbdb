@@ -144,6 +144,7 @@ Resources:
               Action:
                 - dynamodb:Scan
                 - dynamodb:GetItem
+                - dynamodb:PutItem
               Resource: !GetAtt LookupTable.Arn
       Events:
         PingEvent:
@@ -170,6 +171,15 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
+        # api/openapi.yaml) - admin membership is checked at the app layer
+        # by middleware.RequireAdmin, not by API Gateway.
+        CreateLookupEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/lookups/{category}
+            Method: post
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/

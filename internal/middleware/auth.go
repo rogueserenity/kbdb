@@ -28,6 +28,7 @@ func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 			}
 
 			ctx := ctxpkg.WithUserID(r.Context(), claims.Subject)
+			ctx = ctxpkg.WithGroups(ctx, claims.Groups)
 			l := logpkg.WithUserID(logpkg.FromContext(ctx), claims.Subject)
 			ctx = logpkg.WithLogger(ctx, l)
 

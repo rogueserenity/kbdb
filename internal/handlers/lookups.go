@@ -53,3 +53,34 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 		_ = json.NewEncoder(w).Encode(lookup)
 	}
 }
+
+// CreateLookup returns a handler for POST /v1/lookups/{category}: create a
+// new lookup category (admin only - see middleware.RequireAdmin).
+func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		category := r.PathValue("category")
+
+		var input struct {
+			Values []any `json:"values"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		lookup, err := repo.CreateCategory(r.Context(), category, input.Values)
+		if errors.Is(err, repository.ErrAlreadyExists) {
+			problem.Conflict(w, "category already exists")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("creating lookup category", "error", err)
+			problem.Internal(w, "failed to create lookup category")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(lookup)
+	}
+}
