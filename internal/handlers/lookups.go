@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -83,9 +84,18 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 	}
 }
 
-// CreateLookup returns a handler for POST /v1/lookups/{category}: create a
-// new lookup category (admin only - see middleware.RequireAdmin).
-func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
+// putLookup backs CreateLookup and ReplaceLookup, which differ only in
+// which repo method to call, which sentinel error maps to an expected
+// (non-500) problem response, and the success status code. verb
+// ("creating"/"replacing") keeps the two callers' log messages
+// distinguishable.
+func putLookup(
+	verb string,
+	call func(ctx context.Context, category string, values []any) (*repository.Lookup, error),
+	expectedErr error,
+	writeExpectedErr func(w http.ResponseWriter),
+	successStatus int,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("category")
 		if !requireNonBlankCategory(w, category) {
@@ -97,53 +107,38 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
-		lookup, err := repo.CreateCategory(r.Context(), category, values)
-		if errors.Is(err, repository.ErrAlreadyExists) {
-			problem.Conflict(w, "category already exists")
+		lookup, err := call(r.Context(), category, values)
+		if errors.Is(err, expectedErr) {
+			writeExpectedErr(w)
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("creating lookup category", "error", err)
-			problem.Internal(w, "failed to create lookup category")
+			log.FromContext(r.Context()).Error(verb+" lookup category", "error", err)
+			problem.Internal(w, "failed to "+verb+" lookup category")
 			return
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
+		w.WriteHeader(successStatus)
 		_ = json.NewEncoder(w).Encode(lookup)
 	}
+}
+
+// CreateLookup returns a handler for POST /v1/lookups/{category}: create a
+// new lookup category (admin only - see middleware.RequireAdmin).
+func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
+	return putLookup("create", repo.CreateCategory, repository.ErrAlreadyExists,
+		func(w http.ResponseWriter) { problem.Conflict(w, "category already exists") },
+		http.StatusCreated)
 }
 
 // ReplaceLookup returns a handler for PUT /v1/lookups/{category}: replace
 // an existing lookup category's approved values (admin only - see
 // middleware.RequireAdmin).
 func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		category := r.PathValue("category")
-		if !requireNonBlankCategory(w, category) {
-			return
-		}
-
-		values, ok := decodeValues(w, r)
-		if !ok {
-			return
-		}
-
-		lookup, err := repo.ReplaceCategory(r.Context(), category, values)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("replacing lookup category", "error", err)
-			problem.Internal(w, "failed to replace lookup category")
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(lookup)
-	}
+	return putLookup("replace", repo.ReplaceCategory, repository.ErrNotFound,
+		func(w http.ResponseWriter) { problem.NotFound(w, "resource not found") },
+		http.StatusOK)
 }
 
 // DeleteLookup returns a handler for DELETE /v1/lookups/{category}: delete
