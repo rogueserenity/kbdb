@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.53
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.61.0
 	github.com/coreos/go-oidc/v3 v3.20.0
-	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/golang-jwt/jwt/v5 v5.3.1
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
