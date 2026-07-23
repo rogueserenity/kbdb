@@ -49,15 +49,11 @@ func MockOIDCTokenURL() string {
 	return mockOIDCBaseURL() + "/oidc"
 }
 
-// authToken returns a valid bearer token for the API under test, for the
-// fixture identity named by subject/groups: queues that identity on the
-// local mockoidc instance (see QueueUser) and mints a token from it. If
-// envOverride is set (e.g. a real Cognito-minted token, when BaseURL points
-// at a real deployed stack instead of a local sam local start-api
-// instance), that value is used instead - this is the one piece of "same
-// client, different base URL" that can't be derived from BaseURL alone,
-// since a local mockoidc instance and real Cognito aren't interchangeable
-// token issuers.
+// authToken mints a token for the given fixture identity via mockoidc,
+// unless envOverride is set (a real Cognito-minted token, when BaseURL
+// points at a real deployed stack instead) - a local mockoidc instance and
+// real Cognito aren't interchangeable token issuers, so this can't be
+// derived from BaseURL alone.
 func authToken(ctx context.Context, envOverride, subject string, groups []string) (string, error) {
 	if v := os.Getenv(envOverride); v != "" {
 		return v, nil

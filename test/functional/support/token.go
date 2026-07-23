@@ -11,15 +11,11 @@ import (
 	"strings"
 )
 
-// QueueUser tells the mockoidc instance at issuerBaseURL (its host:port,
-// not including the /oidc path prefix MintToken's issuerURL uses) which
-// fixture identity the next /oidc/authorize call should authenticate as.
-// mockoidc.UserQueue is a strict FIFO with no way to select a specific
-// queued user, and this process can't call mockoidc.MockOIDC.QueueUser
-// directly since the server runs in a separate process/container - this
-// drives the same effect over its /test/queue-user control endpoint (see
-// test/functional/support/mockoidc/main.go). groups may be nil/empty for
-// a plain (non-admin) user.
+// QueueUser sets which identity the next /oidc/authorize call on the
+// mockoidc instance at issuerBaseURL (host:port, no /oidc suffix) should
+// authenticate as, via its /test/queue-user control endpoint (see
+// test/functional/support/mockoidc/main.go). groups may be nil for a
+// non-admin user.
 func QueueUser(ctx context.Context, issuerBaseURL, subject string, groups []string) error {
 	body, err := json.Marshal(map[string]any{"subject": subject, "groups": groups})
 	if err != nil {

@@ -49,16 +49,8 @@ func run() error {
 		return fmt.Errorf("binding listener: %w", err)
 	}
 
-	// Not using m.Start(ln, nil): it builds and binds its own unexported
-	// mux, with no way to add a route alongside mockoidc's own /oidc/*
-	// endpoints on the same port. Authorize/Token/Userinfo/JWKS/Discovery
-	// are all exported methods on *MockOIDC though - Start is just one
-	// convenience way of wiring them into a mux, not the only way - so we
-	// build our own mux with those same handlers plus /test/queue-user,
-	// and serve it on the listener ourselves. This intentionally skips
-	// Start's chainMiddleware wrapping (forceError + any AddMiddleware
-	// registrations) - we use neither ErrorQueue nor AddMiddleware
-	// anywhere, so the raw handlers are equivalent for our purposes.
+	// mockoidc's Authorize/Token/Userinfo/JWKS/Discovery are exported
+	// methods, so we wire them into our own mux alongside /test/queue-user.
 	mux := http.NewServeMux()
 	mux.HandleFunc(mockoidc.AuthorizationEndpoint, m.Authorize)
 	mux.HandleFunc(mockoidc.TokenEndpoint, m.Token)
@@ -101,21 +93,16 @@ func run() error {
 	return nil
 }
 
-// queueUserRequest is the /test/queue-user request body: the caller states
-// exactly which identity it wants the next /oidc/authorize call to
-// authenticate as. subject is mandatory; groups is optional (omitted/empty
-// means no cognito:groups claim, i.e. a non-admin token).
+// groups is optional - omitted/empty means no cognito:groups claim, i.e. a
+// non-admin token.
 type queueUserRequest struct {
 	Subject string   `json:"subject"`
 	Groups  []string `json:"groups"`
 }
 
-// queueUserHandler lets functional-test specs (running in a separate
-// process from this server) pick which fixture identity the next minted
-// token represents - mockoidc.UserQueue is a strict FIFO with no way to
-// select a specific queued user, and specs can't call m.QueueUser directly
-// since they're not in this process. No fixture-name lookup table: the
-// request body fully describes the identity each time.
+// queueUserHandler lets functional-test specs (a separate process from
+// this server) pick the next minted token's identity - mockoidc.UserQueue
+// is a strict FIFO with no selection mechanism otherwise.
 func queueUserHandler(m *mockoidc.MockOIDC) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req queueUserRequest
@@ -144,10 +131,9 @@ func queueUserHandler(m *mockoidc.MockOIDC) http.HandlerFunc {
 	}
 }
 
-// groupedUser wraps mockoidc.MockUser to add the cognito:groups claim,
-// which mockoidc has no configuration/callback hook for - the User
-// interface's Claims method is the only extension point the library
-// exposes.
+// groupedUser wraps mockoidc.MockUser to add the cognito:groups claim by
+// implementing Claims, the only extension point mockoidc's User interface
+// offers for arbitrary claims.
 type groupedUser struct {
 	*mockoidc.MockUser
 	Groups []string
