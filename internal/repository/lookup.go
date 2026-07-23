@@ -18,5 +18,6 @@ type LookupRepository interface {
 	ListCategories(ctx context.Context) ([]string, error)
 	GetCategory(ctx context.Context, category string) (*Lookup, error)
 	CreateCategory(ctx context.Context, category string, values []any) (*Lookup, error)
+	ReplaceCategory(ctx context.Context, category string, values []any) (*Lookup, error)
 	DeleteCategory(ctx context.Context, category string) error
 }

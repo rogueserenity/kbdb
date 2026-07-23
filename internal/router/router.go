@@ -31,6 +31,8 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuer
 	mux.Handle("GET /v1/lookups/{category}", handlers.GetLookup(lookupRepo))
 	mux.Handle("POST /v1/lookups/{category}",
 		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.CreateLookup(lookupRepo))))
+	mux.Handle("PUT /v1/lookups/{category}",
+		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.ReplaceLookup(lookupRepo))))
 	mux.Handle("DELETE /v1/lookups/{category}",
 		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.DeleteLookup(lookupRepo))))
 

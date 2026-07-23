@@ -298,3 +298,77 @@ func (_c *MockLookupRepository_ListCategories_Call) RunAndReturn(run func(ctx co
 	_c.Call.Return(run)
 	return _c
 }
+
+// ReplaceCategory provides a mock function for the type MockLookupRepository
+func (_mock *MockLookupRepository) ReplaceCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
+	ret := _mock.Called(ctx, category, values)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReplaceCategory")
+	}
+
+	var r0 *repository.Lookup
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []any) (*repository.Lookup, error)); ok {
+		return returnFunc(ctx, category, values)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []any) *repository.Lookup); ok {
+		r0 = returnFunc(ctx, category, values)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.Lookup)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []any) error); ok {
+		r1 = returnFunc(ctx, category, values)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockLookupRepository_ReplaceCategory_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReplaceCategory'
+type MockLookupRepository_ReplaceCategory_Call struct {
+	*mock.Call
+}
+
+// ReplaceCategory is a helper method to define mock.On call
+//   - ctx context.Context
+//   - category string
+//   - values []any
+func (_e *MockLookupRepository_Expecter) ReplaceCategory(ctx any, category any, values any) *MockLookupRepository_ReplaceCategory_Call {
+	return &MockLookupRepository_ReplaceCategory_Call{Call: _e.mock.On("ReplaceCategory", ctx, category, values)}
+}
+
+func (_c *MockLookupRepository_ReplaceCategory_Call) Run(run func(ctx context.Context, category string, values []any)) *MockLookupRepository_ReplaceCategory_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 []any
+		if args[2] != nil {
+			arg2 = args[2].([]any)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockLookupRepository_ReplaceCategory_Call) Return(lookup *repository.Lookup, err error) *MockLookupRepository_ReplaceCategory_Call {
+	_c.Call.Return(lookup, err)
+	return _c
+}
+
+func (_c *MockLookupRepository_ReplaceCategory_Call) RunAndReturn(run func(ctx context.Context, category string, values []any) (*repository.Lookup, error)) *MockLookupRepository_ReplaceCategory_Call {
+	_c.Call.Return(run)
+	return _c
+}
