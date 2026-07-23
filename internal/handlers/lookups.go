@@ -87,10 +87,10 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 // putLookup backs CreateLookup and ReplaceLookup, which differ only in
 // which repo method to call, which sentinel error maps to an expected
 // (non-500) problem response, and the success status code. verb
-// ("creating"/"replacing") keeps the two callers' log messages
-// distinguishable.
+// ("creating"/"replacing") and infinitive ("create"/"replace") keep the
+// two callers' log and error messages grammatically correct.
 func putLookup(
-	verb string,
+	verb, infinitive string,
 	call func(ctx context.Context, category string, values []any) (*repository.Lookup, error),
 	expectedErr error,
 	writeExpectedErr func(w http.ResponseWriter),
@@ -114,7 +114,7 @@ func putLookup(
 		}
 		if err != nil {
 			log.FromContext(r.Context()).Error(verb+" lookup category", "error", err)
-			problem.Internal(w, "failed to "+verb+" lookup category")
+			problem.Internal(w, "failed to "+infinitive+" lookup category")
 			return
 		}
 
@@ -127,7 +127,7 @@ func putLookup(
 // CreateLookup returns a handler for POST /v1/lookups/{category}: create a
 // new lookup category (admin only - see middleware.RequireAdmin).
 func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return putLookup("create", repo.CreateCategory, repository.ErrAlreadyExists,
+	return putLookup("creating", "create", repo.CreateCategory, repository.ErrAlreadyExists,
 		func(w http.ResponseWriter) { problem.Conflict(w, "category already exists") },
 		http.StatusCreated)
 }
@@ -136,7 +136,7 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 // an existing lookup category's approved values (admin only - see
 // middleware.RequireAdmin).
 func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return putLookup("replace", repo.ReplaceCategory, repository.ErrNotFound,
+	return putLookup("replacing", "replace", repo.ReplaceCategory, repository.ErrNotFound,
 		func(w http.ResponseWriter) { problem.NotFound(w, "resource not found") },
 		http.StatusOK)
 }
