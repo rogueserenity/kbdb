@@ -1,6 +1,7 @@
 package support
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,44 @@ import (
 	"net/url"
 	"strings"
 )
+
+// QueueUser sets which identity the next /oidc/authorize call on the
+// mockoidc instance at issuerBaseURL (host:port, no /oidc suffix) should
+// authenticate as, via its /test/queue-user control endpoint (see
+// test/functional/support/mockoidc/main.go). groups may be nil for a
+// non-admin user.
+func QueueUser(ctx context.Context, issuerBaseURL, subject string, groups []string) error {
+	body, err := json.Marshal(map[string]any{"subject": subject, "groups": groups})
+	if err != nil {
+		return fmt.Errorf("encoding queue-user request: %w", err)
+	}
+
+	return postJSONExpect(ctx, issuerBaseURL+"/test/queue-user", body, http.StatusNoContent)
+}
+
+// postJSONExpect POSTs body as application/json and returns an error
+// (including the response body) unless the response status is exactly
+// wantStatus.
+func postJSONExpect(ctx context.Context, url string, body []byte, wantStatus int) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("building request to %s: %w", url, err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling %s: %w", url, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != wantStatus {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("%s returned %d: %s", url, resp.StatusCode, respBody)
+	}
+
+	return nil
+}
 
 // MintToken drives mockoidc's real authorization-code + token-exchange HTTP
 // flow (the same one auth.NewVerifier's discovery-based verifier expects to

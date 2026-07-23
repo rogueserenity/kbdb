@@ -10,6 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.20.52
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.60.1
 	github.com/coreos/go-oidc/v3 v3.20.0
+	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/google/uuid v1.6.0
 	github.com/mark3labs/mcp-go v0.56.0
 	github.com/oauth2-proxy/mockoidc v0.0.0-20240214162133-caebfff84d25
@@ -38,7 +39,6 @@ require (
 	github.com/go-jose/go-jose/v4 v4.1.4 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
-	github.com/golang-jwt/jwt/v5 v5.2.2 // indirect
 	github.com/google/go-cmp v0.7.0 // indirect
 	github.com/google/jsonschema-go v0.4.2 // indirect
 	github.com/google/pprof v0.0.0-20260402051712-545e8a4df936 // indirect

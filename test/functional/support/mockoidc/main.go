@@ -7,13 +7,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/oauth2-proxy/mockoidc"
 
 	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
@@ -44,9 +49,27 @@ func run() error {
 		return fmt.Errorf("binding listener: %w", err)
 	}
 
-	if err := m.Start(ln, nil); err != nil {
-		return fmt.Errorf("starting mockoidc server: %w", err)
+	// mockoidc's Authorize/Token/Userinfo/JWKS/Discovery are exported
+	// methods, so we wire them into our own mux alongside /test/queue-user.
+	mux := http.NewServeMux()
+	mux.HandleFunc(mockoidc.AuthorizationEndpoint, m.Authorize)
+	mux.HandleFunc(mockoidc.TokenEndpoint, m.Token)
+	mux.HandleFunc(mockoidc.UserinfoEndpoint, m.Userinfo)
+	mux.HandleFunc(mockoidc.JWKSEndpoint, m.JWKS)
+	mux.HandleFunc(mockoidc.DiscoveryEndpoint, m.Discovery)
+	mux.HandleFunc("POST /test/queue-user", queueUserHandler(m))
+
+	m.Server = &http.Server{
+		Addr:              ln.Addr().String(),
+		Handler:           mux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
+
+	go func() {
+		if err := m.Server.Serve(ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.Fatal(err)
+		}
+	}()
 	defer func() { _ = m.Shutdown() }()
 
 	// m.Server.Addr defaults to the listener's bind address (e.g. "[::]:9999"
@@ -62,16 +85,73 @@ func run() error {
 	}
 	m.Server.Addr = advertiseAddr
 
-	m.QueueUser(&mockoidc.MockUser{
-		Subject:       fixtures.TestUserSubject,
-		Email:         "test-user@rogueserenity.dev",
-		EmailVerified: true,
-	})
-
 	cfg := m.Config()
 	log.Printf("mockoidc listening on %s", m.Addr())
 	log.Printf("issuer=%s client_id=%s client_secret=%s", cfg.Issuer, cfg.ClientID, cfg.ClientSecret)
 
 	<-ctx.Done()
 	return nil
+}
+
+// groups is optional - omitted/empty means no cognito:groups claim, i.e. a
+// non-admin token.
+type queueUserRequest struct {
+	Subject string   `json:"subject"`
+	Groups  []string `json:"groups"`
+}
+
+// queueUserHandler lets functional-test specs (a separate process from
+// this server) pick the next minted token's identity - mockoidc.UserQueue
+// is a strict FIFO with no selection mechanism otherwise.
+func queueUserHandler(m *mockoidc.MockOIDC) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		var req queueUserRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.Subject == "" {
+			http.Error(w, "subject is required", http.StatusBadRequest)
+			return
+		}
+
+		base := &mockoidc.MockUser{
+			Subject:       req.Subject,
+			Email:         req.Subject + "@rogueserenity.dev",
+			EmailVerified: true,
+		}
+
+		if len(req.Groups) == 0 {
+			m.QueueUser(base)
+		} else {
+			m.QueueUser(&groupedUser{MockUser: base, Groups: req.Groups})
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// groupedUser wraps mockoidc.MockUser to add the cognito:groups claim by
+// implementing Claims, the only extension point mockoidc's User interface
+// offers for arbitrary claims.
+type groupedUser struct {
+	*mockoidc.MockUser
+	Groups []string
+}
+
+func (u *groupedUser) Claims(scope []string, base *mockoidc.IDTokenClaims) (jwt.Claims, error) {
+	inner, err := u.MockUser.Claims(scope, base)
+	if err != nil {
+		return nil, err
+	}
+	b, err := json.Marshal(inner)
+	if err != nil {
+		return nil, err
+	}
+	var claims jwt.MapClaims
+	if err := json.Unmarshal(b, &claims); err != nil {
+		return nil, err
+	}
+	claims["cognito:groups"] = u.Groups
+	return claims, nil
 }
