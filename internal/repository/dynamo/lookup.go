@@ -84,7 +84,27 @@ func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*r
 }
 
 func (r *LookupRepository) ReplaceCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
-	return r.putCategory(ctx, "replacing", category, values, "attribute_exists(category)", repository.ErrNotFound)
+	lookup := repository.Lookup{Category: category, Values: values}
+
+	item, err := attributevalue.MarshalMap(lookup)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling lookup category %q: %w", category, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_exists(category)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("replacing lookup category %q: %w", category, err)
+	}
+
+	return &lookup, nil
 }
 
 func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) error {
@@ -102,14 +122,6 @@ func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) 
 }
 
 func (r *LookupRepository) CreateCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
-	return r.putCategory(ctx, "creating", category, values, "attribute_not_exists(category)", repository.ErrAlreadyExists)
-}
-
-// putCategory backs CreateCategory and ReplaceCategory, which differ only
-// in the precondition (category must not/must already exist) and the
-// sentinel error a failed condition maps to. verb ("creating"/"replacing")
-// keeps the two callers' wrapped errors distinguishable.
-func (r *LookupRepository) putCategory(ctx context.Context, verb, category string, values []any, condition string, conditionFailedErr error) (*repository.Lookup, error) {
 	lookup := repository.Lookup{Category: category, Values: values}
 
 	item, err := attributevalue.MarshalMap(lookup)
@@ -120,14 +132,14 @@ func (r *LookupRepository) putCategory(ctx context.Context, verb, category strin
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:           &r.tableName,
 		Item:                item,
-		ConditionExpression: aws.String(condition),
+		ConditionExpression: aws.String("attribute_not_exists(category)"),
 	})
 	if err != nil {
 		var condErr *types.ConditionalCheckFailedException
 		if errors.As(err, &condErr) {
-			return nil, conditionFailedErr
+			return nil, repository.ErrAlreadyExists
 		}
-		return nil, fmt.Errorf("%s lookup category %q: %w", verb, category, err)
+		return nil, fmt.Errorf("creating lookup category %q: %w", category, err)
 	}
 
 	return &lookup, nil
