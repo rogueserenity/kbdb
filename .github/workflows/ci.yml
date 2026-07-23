@@ -150,23 +150,27 @@ jobs:
               fi
             fi
 
+            # Redirect stdout on every call but the last: create_user's own
+            # stdout is captured whole via $(create_user ...) below, so any
+            # of these writing to it (admin-create-user prints the created
+            # user's JSON by default) would corrupt the token value.
             aws cognito-idp admin-create-user \
               --user-pool-id "$USER_POOL_ID" \
               --username "$username" \
               --user-attributes Name=email,Value="$username" Name=email_verified,Value=true \
-              --message-action SUPPRESS
+              --message-action SUPPRESS >/dev/null
 
             aws cognito-idp admin-set-user-password \
               --user-pool-id "$USER_POOL_ID" \
               --username "$username" \
               --password "$PASSWORD" \
-              --permanent
+              --permanent >/dev/null
 
             if [ -n "$group" ]; then
               aws cognito-idp admin-add-user-to-group \
                 --user-pool-id "$USER_POOL_ID" \
                 --username "$username" \
-                --group-name "$group"
+                --group-name "$group" >/dev/null
             fi
 
             aws cognito-idp admin-initiate-auth \
