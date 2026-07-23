@@ -1,6 +1,7 @@
 package support
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,6 +10,41 @@ import (
 	"net/url"
 	"strings"
 )
+
+// QueueUser tells the mockoidc instance at issuerBaseURL (its host:port,
+// not including the /oidc path prefix MintToken's issuerURL uses) which
+// fixture identity the next /oidc/authorize call should authenticate as.
+// mockoidc.UserQueue is a strict FIFO with no way to select a specific
+// queued user, and this process can't call mockoidc.MockOIDC.QueueUser
+// directly since the server runs in a separate process/container - this
+// drives the same effect over its /test/queue-user control endpoint (see
+// test/functional/support/mockoidc/main.go). groups may be nil/empty for
+// a plain (non-admin) user.
+func QueueUser(ctx context.Context, issuerBaseURL, subject string, groups []string) error {
+	body, err := json.Marshal(map[string]any{"subject": subject, "groups": groups})
+	if err != nil {
+		return fmt.Errorf("encoding queue-user request: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, issuerBaseURL+"/test/queue-user", bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("building queue-user request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("calling queue-user endpoint: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNoContent {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("queue-user endpoint returned %d: %s", resp.StatusCode, respBody)
+	}
+
+	return nil
+}
 
 // MintToken drives mockoidc's real authorization-code + token-exchange HTTP
 // flow (the same one auth.NewVerifier's discovery-based verifier expects to

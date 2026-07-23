@@ -8,6 +8,7 @@ package support
 import (
 	"context"
 	"os"
+	"strings"
 
 	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
 )
@@ -41,16 +42,43 @@ func MockOIDCTokenURL() string {
 	return "http://127.0.0.1:9999/oidc"
 }
 
-// AuthToken returns a valid bearer token for the API under test. By default
-// it mints one from the local mockoidc instance. If KBDB_AUTH_TOKEN is set
-// (e.g. a real Cognito-minted token, when BaseURL points at a real deployed
-// stack instead of a local sam local start-api instance), that value is
-// used instead - this is the one piece of "same client, different base
-// URL" that can't be derived from BaseURL alone, since a local mockoidc
-// instance and real Cognito aren't interchangeable token issuers.
+// mockOIDCBaseURL returns the mockoidc instance's base address (no /oidc
+// suffix), for its non-OIDC-spec /test/queue-user control endpoint - same
+// host:port as MockOIDCTokenURL, since it's the same server/port.
+func mockOIDCBaseURL() string {
+	return strings.TrimSuffix(MockOIDCTokenURL(), "/oidc")
+}
+
+// AuthToken returns a valid bearer token for the API under test, for the
+// plain (non-admin) test user. By default it queues that fixture identity
+// on the local mockoidc instance (see QueueUser) and mints a token from it.
+// If KBDB_AUTH_TOKEN is set (e.g. a real Cognito-minted token, when BaseURL
+// points at a real deployed stack instead of a local sam local start-api
+// instance), that value is used instead - this is the one piece of "same
+// client, different base URL" that can't be derived from BaseURL alone,
+// since a local mockoidc instance and real Cognito aren't interchangeable
+// token issuers.
 func AuthToken(ctx context.Context) (string, error) {
 	if v := os.Getenv("KBDB_AUTH_TOKEN"); v != "" {
 		return v, nil
+	}
+	if err := QueueUser(ctx, mockOIDCBaseURL(), fixtures.TestUserSubject, nil); err != nil {
+		return "", err
+	}
+	return MintToken(ctx, MockOIDCTokenURL(), MockOIDCClientID, MockOIDCClientSecret)
+}
+
+// AdminAuthToken returns a valid bearer token for the API under test, for a
+// user in the "admins" Cognito group (see template.yaml's AdminsGroup and
+// internal/auth.Claims.Groups) - for exercising the write-gated lookup
+// routes (PUT/POST/DELETE /v1/lookups/{category}). Same KBDB_ADMIN_AUTH_TOKEN
+// override pattern as AuthToken/KBDB_AUTH_TOKEN.
+func AdminAuthToken(ctx context.Context) (string, error) {
+	if v := os.Getenv("KBDB_ADMIN_AUTH_TOKEN"); v != "" {
+		return v, nil
+	}
+	if err := QueueUser(ctx, mockOIDCBaseURL(), fixtures.AdminUserSubject, fixtures.AdminGroups); err != nil {
+		return "", err
 	}
 	return MintToken(ctx, MockOIDCTokenURL(), MockOIDCClientID, MockOIDCClientSecret)
 }
