@@ -184,6 +184,15 @@ Resources:
         # Default CognitoAuthorizer applies (security: [CognitoAuth] in
         # api/openapi.yaml) - admin membership is checked at the app layer
         # by middleware.RequireAdmin, not by API Gateway.
+        ReplaceLookupEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/lookups/{category}
+            Method: put
+        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
+        # api/openapi.yaml) - admin membership is checked at the app layer
+        # by middleware.RequireAdmin, not by API Gateway.
         DeleteLookupEvent:
           Type: HttpApi
           Properties:

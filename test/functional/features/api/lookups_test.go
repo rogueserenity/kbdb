@@ -201,6 +201,116 @@ var _ = Describe("Lookups", func() {
 		})
 	})
 
+	Describe("PUT /v1/lookups/{category}", func() {
+		doReplaceWithBody := func(ctx SpecContext, token, requestBody string) *http.Response {
+			body := bytes.NewReader([]byte(requestBody))
+			req, err := http.NewRequestWithContext(ctx, http.MethodPut, support.BaseURL()+"/v1/lookups/"+category, body)
+			Expect(err).NotTo(HaveOccurred())
+			req.Header.Set("Content-Type", "application/json")
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+
+			r, err := http.DefaultClient.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			return r
+		}
+		doReplace := func(ctx SpecContext, token string) *http.Response {
+			return doReplaceWithBody(ctx, token, `{"values":["c","d"]}`)
+		}
+
+		When("the caller is an admin and the category exists", func() {
+			BeforeEach(func(ctx SpecContext) {
+				seedCategory(ctx, category, []string{"a", "b"})
+
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doReplace(ctx, token)
+			})
+
+			It("replaces the category's values", func(ctx SpecContext) {
+				By("returning 200 OK")
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				By("returning the new values in the response body")
+				var got struct {
+					Category string   `json:"category"`
+					Values   []string `json:"values"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Category).To(Equal(category))
+				Expect(got.Values).To(Equal([]string{"c", "d"}))
+
+				By("actually persisting the new values, not a no-op")
+				getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/lookups/"+category, nil)
+				Expect(err).NotTo(HaveOccurred())
+				getResp, err := http.DefaultClient.Do(getReq)
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = getResp.Body.Close() }()
+				Expect(getResp.StatusCode).To(Equal(http.StatusOK))
+
+				var reGot struct {
+					Values []string `json:"values"`
+				}
+				Expect(json.NewDecoder(getResp.Body).Decode(&reGot)).To(Succeed())
+				Expect(reGot.Values).To(Equal([]string{"c", "d"}))
+			})
+		})
+
+		When("the caller is an admin and the category does not exist", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doReplace(ctx, token)
+			})
+
+			It("returns 404 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("the caller is an admin but values is empty", func() {
+			BeforeEach(func(ctx SpecContext) {
+				seedCategory(ctx, category, []string{"a", "b"})
+
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doReplaceWithBody(ctx, token, `{"values":[]}`)
+			})
+
+			It("returns 400 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("the caller is not an admin", func() {
+			BeforeEach(func(ctx SpecContext) {
+				seedCategory(ctx, category, []string{"a", "b"})
+
+				token, err := support.AuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doReplace(ctx, token)
+			})
+
+			It("returns 403 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("no bearer token is provided", func() {
+			BeforeEach(func(ctx SpecContext) {
+				resp = doReplace(ctx, "")
+			})
+
+			It("returns 401", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			})
+		})
+	})
+
 	Describe("DELETE /v1/lookups/{category}", func() {
 		doDelete := func(ctx SpecContext, token string) *http.Response {
 			req, err := http.NewRequestWithContext(ctx, http.MethodDelete, support.BaseURL()+"/v1/lookups/"+category, nil)

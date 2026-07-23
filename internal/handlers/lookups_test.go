@@ -263,6 +263,105 @@ func (s *CreateLookupSuite) TestCreateCategory_EmptyCategory_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+type ReplaceLookupSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockLookupRepository
+	handler  http.HandlerFunc
+}
+
+func TestReplaceLookupSuite(t *testing.T) {
+	suite.Run(t, new(ReplaceLookupSuite))
+}
+
+func (s *ReplaceLookupSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockLookupRepository(s.T())
+	s.handler = ReplaceLookup(s.mockRepo)
+}
+
+func (s *ReplaceLookupSuite) newRequest(body string) *http.Request {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/lookups/vendor", strings.NewReader(body))
+	req.SetPathValue("category", "vendor")
+	return req
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_Succeeds() {
+	s.mockRepo.EXPECT().
+		ReplaceCategory(mock.Anything, "vendor", []any{"c", "d"}).
+		Return(&repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}, nil)
+
+	req := s.newRequest(`{"values":["c","d"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got repository.Lookup
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal(repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}, got)
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_NotFound_Returns404() {
+	s.mockRepo.EXPECT().
+		ReplaceCategory(mock.Anything, "vendor", []any{"a"}).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(`{"values":["a"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		ReplaceCategory(mock.Anything, "vendor", []any{"a"}).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(`{"values":["a"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_InvalidBody_Returns400() {
+	req := s.newRequest("not json")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_EmptyValues_Returns400() {
+	req := s.newRequest(`{"values":[]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_BlankCategory_Returns400() {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/lookups/placeholder", strings.NewReader(`{"values":["a"]}`))
+	req.SetPathValue("category", " ")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type DeleteLookupSuite struct {
 	suite.Suite
 

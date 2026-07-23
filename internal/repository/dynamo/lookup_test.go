@@ -174,6 +174,40 @@ func (s *LookupRepositorySuite) TestCreateCategory_PutItemError_Propagates() {
 	s.Nil(lookup)
 }
 
+func (s *LookupRepositorySuite) TestReplaceCategory_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	lookup, err := s.repo.ReplaceCategory(context.Background(), "vendor", []any{"c", "d"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}, lookup)
+}
+
+func (s *LookupRepositorySuite) TestReplaceCategory_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	lookup, err := s.repo.ReplaceCategory(context.Background(), "vendor", []any{"a"})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(lookup)
+}
+
+func (s *LookupRepositorySuite) TestReplaceCategory_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	lookup, err := s.repo.ReplaceCategory(context.Background(), "vendor", []any{"a"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Nil(lookup)
+}
+
 func (s *LookupRepositorySuite) TestDeleteCategory_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).

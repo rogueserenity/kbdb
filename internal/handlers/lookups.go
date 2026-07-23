@@ -21,6 +21,24 @@ func requireNonBlankCategory(w http.ResponseWriter, category string) bool {
 	return true
 }
 
+// decodeValues reads and validates a request body against
+// api/openapi.yaml's LookupInput schema, writing a 400 and returning
+// ok=false if the body is malformed or values is empty.
+func decodeValues(w http.ResponseWriter, r *http.Request) (values []any, ok bool) {
+	var input struct {
+		Values []any `json:"values"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		problem.BadRequest(w, "invalid request body")
+		return nil, false
+	}
+	if len(input.Values) == 0 {
+		problem.BadRequest(w, "values must not be empty")
+		return nil, false
+	}
+	return input.Values, true
+}
+
 // ListLookups returns a handler for GET /v1/lookups: all lookup category
 // names, not their values (see GET /v1/lookups/{category} for that).
 func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
@@ -74,19 +92,12 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
-		var input struct {
-			Values []any `json:"values"`
-		}
-		if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-			problem.BadRequest(w, "invalid request body")
-			return
-		}
-		if len(input.Values) == 0 {
-			problem.BadRequest(w, "values must not be empty")
+		values, ok := decodeValues(w, r)
+		if !ok {
 			return
 		}
 
-		lookup, err := repo.CreateCategory(r.Context(), category, input.Values)
+		lookup, err := repo.CreateCategory(r.Context(), category, values)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			problem.Conflict(w, "category already exists")
 			return
@@ -99,6 +110,38 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(lookup)
+	}
+}
+
+// ReplaceLookup returns a handler for PUT /v1/lookups/{category}: replace
+// an existing lookup category's approved values (admin only - see
+// middleware.RequireAdmin).
+func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		category := r.PathValue("category")
+		if !requireNonBlankCategory(w, category) {
+			return
+		}
+
+		values, ok := decodeValues(w, r)
+		if !ok {
+			return
+		}
+
+		lookup, err := repo.ReplaceCategory(r.Context(), category, values)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("replacing lookup category", "error", err)
+			problem.Internal(w, "failed to replace lookup category")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(lookup)
 	}
 }

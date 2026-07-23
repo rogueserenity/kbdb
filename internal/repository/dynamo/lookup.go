@@ -83,6 +83,30 @@ func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*r
 	return &lookup, nil
 }
 
+func (r *LookupRepository) ReplaceCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
+	lookup := repository.Lookup{Category: category, Values: values}
+
+	item, err := attributevalue.MarshalMap(lookup)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling lookup category %q: %w", category, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_exists(category)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("replacing lookup category %q: %w", category, err)
+	}
+
+	return &lookup, nil
+}
+
 func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) error {
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
