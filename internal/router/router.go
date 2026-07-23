@@ -31,6 +31,8 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuer
 	mux.Handle("GET /v1/lookups/{category}", handlers.GetLookup(lookupRepo))
 	mux.Handle("POST /v1/lookups/{category}",
 		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.CreateLookup(lookupRepo))))
+	mux.Handle("DELETE /v1/lookups/{category}",
+		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.DeleteLookup(lookupRepo))))
 
 	// MCP: auth happens inside the MCP server itself (context func + tool
 	// handler middleware), returning MCP-shaped errors rather than a bare

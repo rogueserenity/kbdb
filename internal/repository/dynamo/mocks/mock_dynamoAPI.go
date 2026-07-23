@@ -38,6 +38,89 @@ func (_m *MockDynamoAPI) EXPECT() *MockDynamoAPI_Expecter {
 	return &MockDynamoAPI_Expecter{mock: &_m.Mock}
 }
 
+// DeleteItem provides a mock function for the type MockDynamoAPI
+func (_mock *MockDynamoAPI) DeleteItem(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error) {
+	var tmpRet mock.Arguments
+	if len(optFns) > 0 {
+		tmpRet = _mock.Called(ctx, params, optFns)
+	} else {
+		tmpRet = _mock.Called(ctx, params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteItem")
+	}
+
+	var r0 *dynamodb.DeleteItemOutput
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *dynamodb.DeleteItemInput, ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)); ok {
+		return returnFunc(ctx, params, optFns...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *dynamodb.DeleteItemInput, ...func(*dynamodb.Options)) *dynamodb.DeleteItemOutput); ok {
+		r0 = returnFunc(ctx, params, optFns...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*dynamodb.DeleteItemOutput)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *dynamodb.DeleteItemInput, ...func(*dynamodb.Options)) error); ok {
+		r1 = returnFunc(ctx, params, optFns...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDynamoAPI_DeleteItem_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteItem'
+type MockDynamoAPI_DeleteItem_Call struct {
+	*mock.Call
+}
+
+// DeleteItem is a helper method to define mock.On call
+//   - ctx context.Context
+//   - params *dynamodb.DeleteItemInput
+//   - optFns ...func(*dynamodb.Options)
+func (_e *MockDynamoAPI_Expecter) DeleteItem(ctx any, params any, optFns ...any) *MockDynamoAPI_DeleteItem_Call {
+	return &MockDynamoAPI_DeleteItem_Call{Call: _e.mock.On("DeleteItem",
+		append([]any{ctx, params}, optFns...)...)}
+}
+
+func (_c *MockDynamoAPI_DeleteItem_Call) Run(run func(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options))) *MockDynamoAPI_DeleteItem_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *dynamodb.DeleteItemInput
+		if args[1] != nil {
+			arg1 = args[1].(*dynamodb.DeleteItemInput)
+		}
+		var arg2 []func(*dynamodb.Options)
+		var variadicArgs []func(*dynamodb.Options)
+		if len(args) > 2 {
+			variadicArgs = args[2].([]func(*dynamodb.Options))
+		}
+		arg2 = variadicArgs
+		run(
+			arg0,
+			arg1,
+			arg2...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDynamoAPI_DeleteItem_Call) Return(deleteItemOutput *dynamodb.DeleteItemOutput, err error) *MockDynamoAPI_DeleteItem_Call {
+	_c.Call.Return(deleteItemOutput, err)
+	return _c
+}
+
+func (_c *MockDynamoAPI_DeleteItem_Call) RunAndReturn(run func(ctx context.Context, params *dynamodb.DeleteItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.DeleteItemOutput, error)) *MockDynamoAPI_DeleteItem_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetItem provides a mock function for the type MockDynamoAPI
 func (_mock *MockDynamoAPI) GetItem(ctx context.Context, params *dynamodb.GetItemInput, optFns ...func(*dynamodb.Options)) (*dynamodb.GetItemOutput, error) {
 	var tmpRet mock.Arguments

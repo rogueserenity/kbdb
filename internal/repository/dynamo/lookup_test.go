@@ -173,3 +173,35 @@ func (s *LookupRepositorySuite) TestCreateCategory_PutItemError_Propagates() {
 	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
 	s.Nil(lookup)
 }
+
+func (s *LookupRepositorySuite) TestDeleteCategory_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	err := s.repo.DeleteCategory(context.Background(), "vendor")
+
+	s.Require().NoError(err)
+}
+
+func (s *LookupRepositorySuite) TestDeleteCategory_NonExistentCategory_StillSucceeds() {
+	// Real DynamoDB DeleteItem returns no error for a missing key - this
+	// confirms DeleteCategory doesn't invent a not-found translation.
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	err := s.repo.DeleteCategory(context.Background(), "does-not-exist")
+
+	s.Require().NoError(err)
+}
+
+func (s *LookupRepositorySuite) TestDeleteCategory_DeleteItemError_Propagates() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	err := s.repo.DeleteCategory(context.Background(), "vendor")
+
+	s.Require().Error(err)
+}

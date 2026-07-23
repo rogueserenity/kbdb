@@ -46,18 +46,7 @@ var _ = Describe("Lookups", func() {
 
 	Context("given the lookup table has a category", func() {
 		BeforeEach(func(ctx SpecContext) {
-			client := lookupDynamoClient(ctx)
-			item, err := attributevalue.MarshalMap(map[string]any{
-				"category": category,
-				"values":   []string{"a", "b"},
-			})
-			Expect(err).NotTo(HaveOccurred())
-
-			_, err = client.PutItem(ctx, &dynamodb.PutItemInput{
-				TableName: aws.String(support.LookupTableName()),
-				Item:      item,
-			})
-			Expect(err).NotTo(HaveOccurred())
+			seedCategory(ctx, category, []string{"a", "b"})
 		})
 
 		When("the request is made with no bearer token", func() {
@@ -162,18 +151,7 @@ var _ = Describe("Lookups", func() {
 
 		When("the caller is an admin and the category already exists", func() {
 			BeforeEach(func(ctx SpecContext) {
-				client := lookupDynamoClient(ctx)
-				item, err := attributevalue.MarshalMap(map[string]any{
-					"category": category,
-					"values":   []string{"a", "b"},
-				})
-				Expect(err).NotTo(HaveOccurred())
-
-				_, err = client.PutItem(ctx, &dynamodb.PutItemInput{
-					TableName: aws.String(support.LookupTableName()),
-					Item:      item,
-				})
-				Expect(err).NotTo(HaveOccurred())
+				seedCategory(ctx, category, []string{"a", "b"})
 
 				token, err := support.AdminAuthToken(ctx)
 				Expect(err).NotTo(HaveOccurred())
@@ -222,6 +200,78 @@ var _ = Describe("Lookups", func() {
 			})
 		})
 	})
+
+	Describe("DELETE /v1/lookups/{category}", func() {
+		doDelete := func(ctx SpecContext, token string) *http.Response {
+			req, err := http.NewRequestWithContext(ctx, http.MethodDelete, support.BaseURL()+"/v1/lookups/"+category, nil)
+			Expect(err).NotTo(HaveOccurred())
+			if token != "" {
+				req.Header.Set("Authorization", "Bearer "+token)
+			}
+
+			r, err := http.DefaultClient.Do(req)
+			Expect(err).NotTo(HaveOccurred())
+			return r
+		}
+
+		When("the caller is an admin and the category exists", func() {
+			BeforeEach(func(ctx SpecContext) {
+				seedCategory(ctx, category, []string{"a", "b"})
+
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doDelete(ctx, token)
+			})
+
+			It("deletes the category", func(ctx SpecContext) {
+				By("returning 204 No Content")
+				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+				By("actually removing the category, not a no-op")
+				getReq, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/lookups/"+category, nil)
+				Expect(err).NotTo(HaveOccurred())
+				getResp, err := http.DefaultClient.Do(getReq)
+				Expect(err).NotTo(HaveOccurred())
+				defer func() { _ = getResp.Body.Close() }()
+				Expect(getResp.StatusCode).To(Equal(http.StatusNotFound))
+			})
+		})
+
+		When("the caller is an admin and the category never existed", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doDelete(ctx, token)
+			})
+
+			It("returns 204 (idempotent, not 404)", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+			})
+		})
+
+		When("the caller is not an admin", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.AuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doDelete(ctx, token)
+			})
+
+			It("returns 403 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("no bearer token is provided", func() {
+			BeforeEach(func(ctx SpecContext) {
+				resp = doDelete(ctx, "")
+			})
+
+			It("returns 401", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			})
+		})
+	})
 })
 
 func lookupDynamoClient(ctx context.Context) *dynamodb.Client {
@@ -244,4 +294,21 @@ func lookupDynamoClient(ctx context.Context) *dynamodb.Client {
 			o.BaseEndpoint = aws.String(endpoint)
 		}
 	})
+}
+
+// seedCategory PutItems a lookup category directly into DynamoDB, bypassing
+// the API - used to set up state for specs that exercise a different route.
+func seedCategory(ctx SpecContext, category string, values []string) {
+	client := lookupDynamoClient(ctx)
+	item, err := attributevalue.MarshalMap(map[string]any{
+		"category": category,
+		"values":   values,
+	})
+	Expect(err).NotTo(HaveOccurred())
+
+	_, err = client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: aws.String(support.LookupTableName()),
+		Item:      item,
+	})
+	Expect(err).NotTo(HaveOccurred())
 }
