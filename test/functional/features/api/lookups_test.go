@@ -121,8 +121,8 @@ var _ = Describe("Lookups", func() {
 	})
 
 	Describe("POST /v1/lookups/{category}", func() {
-		doCreate := func(ctx SpecContext, token string) *http.Response {
-			body := bytes.NewReader([]byte(`{"values":["a","b"]}`))
+		doCreateWithBody := func(ctx SpecContext, token, requestBody string) *http.Response {
+			body := bytes.NewReader([]byte(requestBody))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, support.BaseURL()+"/v1/lookups/"+category, body)
 			Expect(err).NotTo(HaveOccurred())
 			req.Header.Set("Content-Type", "application/json")
@@ -133,6 +133,9 @@ var _ = Describe("Lookups", func() {
 			r, err := http.DefaultClient.Do(req)
 			Expect(err).NotTo(HaveOccurred())
 			return r
+		}
+		doCreate := func(ctx SpecContext, token string) *http.Response {
+			return doCreateWithBody(ctx, token, `{"values":["a","b"]}`)
 		}
 
 		When("the caller is an admin and the category does not exist", func() {
@@ -203,6 +206,19 @@ var _ = Describe("Lookups", func() {
 
 			It("returns 401", func() {
 				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			})
+		})
+
+		When("the caller is an admin but values is empty", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.AdminAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doCreateWithBody(ctx, token, `{"values":[]}`)
+			})
+
+			It("returns 400 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 			})
 		})
 	})
