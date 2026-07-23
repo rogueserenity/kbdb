@@ -26,21 +26,28 @@ func QueueUser(ctx context.Context, issuerBaseURL, subject string, groups []stri
 		return fmt.Errorf("encoding queue-user request: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, issuerBaseURL+"/test/queue-user", bytes.NewReader(body))
+	return postJSONExpect(ctx, issuerBaseURL+"/test/queue-user", body, http.StatusNoContent)
+}
+
+// postJSONExpect POSTs body as application/json and returns an error
+// (including the response body) unless the response status is exactly
+// wantStatus.
+func postJSONExpect(ctx context.Context, url string, body []byte, wantStatus int) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("building queue-user request: %w", err)
+		return fmt.Errorf("building request to %s: %w", url, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("calling queue-user endpoint: %w", err)
+		return fmt.Errorf("calling %s: %w", url, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusNoContent {
+	if resp.StatusCode != wantStatus {
 		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("queue-user endpoint returned %d: %s", resp.StatusCode, respBody)
+		return fmt.Errorf("%s returned %d: %s", url, resp.StatusCode, respBody)
 	}
 
 	return nil

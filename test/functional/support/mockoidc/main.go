@@ -119,7 +119,11 @@ type queueUserRequest struct {
 func queueUserHandler(m *mockoidc.MockOIDC) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var req queueUserRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Subject == "" {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			http.Error(w, "invalid request body: "+err.Error(), http.StatusBadRequest)
+			return
+		}
+		if req.Subject == "" {
 			http.Error(w, "subject is required", http.StatusBadRequest)
 			return
 		}
