@@ -83,6 +83,20 @@ func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*r
 	return &lookup, nil
 }
 
+func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) error {
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"category": &types.AttributeValueMemberS{Value: category},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("deleting lookup category %q: %w", category, err)
+	}
+
+	return nil
+}
+
 func (r *LookupRepository) CreateCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
 	lookup := repository.Lookup{Category: category, Values: values}
 

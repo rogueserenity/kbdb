@@ -262,3 +262,63 @@ func (s *CreateLookupSuite) TestCreateCategory_EmptyCategory_Returns400() {
 	s.Equal(http.StatusBadRequest, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteLookupSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockLookupRepository
+	handler  http.HandlerFunc
+}
+
+func TestDeleteLookupSuite(t *testing.T) {
+	suite.Run(t, new(DeleteLookupSuite))
+}
+
+func (s *DeleteLookupSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockLookupRepository(s.T())
+	s.handler = DeleteLookup(s.mockRepo)
+}
+
+func (s *DeleteLookupSuite) newRequest(category string) *http.Request {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/v1/lookups/placeholder", nil)
+	req.SetPathValue("category", category)
+	return req
+}
+
+func (s *DeleteLookupSuite) TestDeleteCategory_Succeeds() {
+	s.mockRepo.EXPECT().
+		DeleteCategory(mock.Anything, "vendor").
+		Return(nil)
+
+	req := s.newRequest("vendor")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+	s.Empty(rec.Body.Bytes())
+}
+
+func (s *DeleteLookupSuite) TestDeleteCategory_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		DeleteCategory(mock.Anything, "vendor").
+		Return(errors.New("delete item failed"))
+
+	req := s.newRequest("vendor")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteLookupSuite) TestDeleteCategory_BlankCategory_Returns400() {
+	req := s.newRequest(" ")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

@@ -11,6 +11,16 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+// requireNonBlankCategory writes a 400 and returns false if category is
+// empty or whitespace-only.
+func requireNonBlankCategory(w http.ResponseWriter, category string) bool {
+	if strings.TrimSpace(category) == "" {
+		problem.BadRequest(w, "category must not be blank")
+		return false
+	}
+	return true
+}
+
 // ListLookups returns a handler for GET /v1/lookups: all lookup category
 // names, not their values (see GET /v1/lookups/{category} for that).
 func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
@@ -60,8 +70,7 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("category")
-		if strings.TrimSpace(category) == "" {
-			problem.BadRequest(w, "category must not be blank")
+		if !requireNonBlankCategory(w, category) {
 			return
 		}
 
@@ -91,5 +100,25 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(lookup)
+	}
+}
+
+// DeleteLookup returns a handler for DELETE /v1/lookups/{category}: delete
+// a lookup category (admin only - see middleware.RequireAdmin). Idempotent:
+// returns 204 whether or not the category existed.
+func DeleteLookup(repo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		category := r.PathValue("category")
+		if !requireNonBlankCategory(w, category) {
+			return
+		}
+
+		if err := repo.DeleteCategory(r.Context(), category); err != nil {
+			log.FromContext(r.Context()).Error("deleting lookup category", "error", err)
+			problem.Internal(w, "failed to delete lookup category")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

@@ -852,15 +852,15 @@ paths:
       tags: [lookups]
       summary: Delete a lookup category (admin only)
       operationId: deleteLookup
+      description: >
+        Idempotent - returns 204 whether or not the category existed.
       security:
         - CognitoAuth: []
       responses:
         "204":
-          description: Deleted.
+          description: Deleted (or already absent).
         "403":
           $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
