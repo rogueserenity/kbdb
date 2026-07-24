@@ -8,6 +8,8 @@ See [`README.md`](README.md) for what this project is and its architecture decis
 
 The project is being built issue-by-issue against a fixed architecture (see `README.md`); GitHub issues in this repo are the authoritative source of what's scoped/in-progress/deferred. Check open issues before assuming something is unimplemented or undecided.
 
+**Run `mise tasks` (or read `mise.toml`) before reaching for a raw `go`/`docker`/`sam` command.** This repo has task aliases for the operations agents redo constantly — `mise run lint`/`l` (lint Go + workflows), `mise run test`/`t` (unit tests only, excludes `test/functional`), `mise run build`/`b` (`sam build`), `mise run func-setup`/`fs` (bring up LocalStack + mockoidc + `sam local start-api`) and `func-test`/`fx` (run the Ginkgo functional suite against it) + `func-teardown`/`ft`, and `dev-setup`/`dev-deploy`/`dev-teardown` for a personal AWS stack. Don't invent an equivalent by hand (e.g. `go build ./... && go test ./...`) — it'll do the wrong thing (`go test ./...` alone hangs/fails on functional tests with no live infra) and skip whatever the script actually does around it.
+
 ## Architecture notes for agents
 
 **`internal/auth` is intentionally not `net/http`-aware.** `Verifier`/`VerifyToken` take and return a raw token string and claims; they know nothing about HTTP, Lambda, or MCP. This is what lets the same verifier be reused by both the REST middleware (`internal/middleware.Auth`) and the MCP tool middleware without duplicating verification logic per protocol.

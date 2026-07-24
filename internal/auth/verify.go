@@ -1,6 +1,6 @@
-// Package auth verifies OAuth2/OIDC JWTs against a discovery URL, independent
-// of any particular issuer (Cognito in production, any OIDC-compliant mock
-// issuer in tests) and independent of net/http, Lambda, or mcp-go.
+// Package auth handles authentication: verifying a token and establishing
+// who the caller is. It does not decide what that caller is allowed to do —
+// see internal/authz for that.
 package auth
 
 import (
