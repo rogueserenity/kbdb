@@ -15,18 +15,28 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
-	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
 )
 
 var _ = Describe("List switches", func() {
 	var (
-		resp    *http.Response
-		ownerID string
+		resp       *http.Response
+		ownerID    string
+		ownerToken string
 	)
 
-	BeforeEach(func() {
+	BeforeEach(func(ctx SpecContext) {
 		resp = nil
-		ownerID = fixtures.TestUserSubject
+
+		// Derived from a freshly minted token, not a fixed fixture subject:
+		// in CI, AuthToken mints a real Cognito-generated subject rather
+		// than mockoidc's fixtures.TestUserSubject string, so the owner
+		// used to seed fixture data below must match whatever subject this
+		// environment's token actually carries.
+		var err error
+		ownerToken, err = support.AuthToken(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		ownerID, err = support.TokenSubject(ownerToken)
+		Expect(err).NotTo(HaveOccurred())
 	})
 
 	AfterEach(func(ctx SpecContext) {
@@ -83,9 +93,7 @@ var _ = Describe("List switches", func() {
 
 		When("the request is made by the owner", func() {
 			BeforeEach(func(ctx SpecContext) {
-				token, err := support.AuthToken(ctx)
-				Expect(err).NotTo(HaveOccurred())
-				resp = doList(ctx, token)
+				resp = doList(ctx, ownerToken)
 			})
 
 			It("returns switches at every visibility tier", func() {

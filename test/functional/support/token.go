@@ -3,6 +3,7 @@ package support
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -126,4 +127,37 @@ func MintToken(ctx context.Context, issuerURL, clientID, clientSecret string) (s
 	}
 
 	return tokens.IDToken, nil
+}
+
+// TokenSubject returns the "sub" claim of an ID token, decoded without
+// signature verification. Fine for functional tests: the caller already
+// obtained this token from a trusted issuer (mockoidc or, in CI, real
+// Cognito) via AuthToken/AdminAuthToken/SecondUserAuthToken - this just
+// reads its subject back out. Needed because CI's real-Cognito-token path
+// mints a real Cognito-generated subject, not the fixed
+// fixtures.TestUserSubject-style constants mockoidc uses - specs that need
+// to know "my own subject" (e.g. to seed owned fixture data) can't assume a
+// fixed value across both environments.
+func TokenSubject(idToken string) (string, error) {
+	parts := strings.Split(idToken, ".")
+	if len(parts) != 3 {
+		return "", fmt.Errorf("malformed ID token: expected 3 dot-separated parts, got %d", len(parts))
+	}
+
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("decoding token payload: %w", err)
+	}
+
+	var claims struct {
+		Subject string `json:"sub"`
+	}
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return "", fmt.Errorf("decoding token claims: %w", err)
+	}
+	if claims.Subject == "" {
+		return "", fmt.Errorf("token missing sub claim")
+	}
+
+	return claims.Subject, nil
 }
