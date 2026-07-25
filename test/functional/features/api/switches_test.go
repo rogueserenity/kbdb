@@ -1,6 +1,7 @@
 package api_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -232,6 +233,158 @@ var _ = Describe("Get switch", func() {
 
 		It("returns 404", func() {
 			Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+		})
+	})
+})
+
+var _ = Describe("Create switch", func() {
+	var (
+		resp       *http.Response
+		ownerID    string
+		ownerToken string
+		createdID  string
+		category   string
+	)
+
+	BeforeEach(func(ctx SpecContext) {
+		resp = nil
+		createdID = ""
+		category = "switch_material"
+
+		var err error
+		ownerToken, err = support.AuthToken(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		ownerID, err = support.TokenSubject(ownerToken)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func(ctx SpecContext) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+
+		client := switchDynamoClient(ctx)
+
+		if createdID != "" {
+			_, err := client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+				TableName: aws.String(support.SwitchTableName()),
+				Key: map[string]dynamotypes.AttributeValue{
+					"user_id": &dynamotypes.AttributeValueMemberS{Value: ownerID},
+					"id":      &dynamotypes.AttributeValueMemberS{Value: createdID},
+				},
+			})
+			Expect(err).NotTo(HaveOccurred())
+		}
+
+		lookupClient := lookupDynamoClient(ctx)
+		_, err := lookupClient.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: aws.String(support.LookupTableName()),
+			Key: map[string]dynamotypes.AttributeValue{
+				"category": &dynamotypes.AttributeValueMemberS{Value: category},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	doCreate := func(ctx SpecContext, token, body string) *http.Response {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+			support.BaseURL()+"/users/"+ownerID+"/switches", bytes.NewBufferString(body))
+		Expect(err).NotTo(HaveOccurred())
+		req.Header.Set("Content-Type", "application/json")
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		r, err := http.DefaultClient.Do(req)
+		Expect(err).NotTo(HaveOccurred())
+		return r
+	}
+
+	When("the request is made by the owner with a valid body", func() {
+		BeforeEach(func(ctx SpecContext) {
+			resp = doCreate(ctx, ownerToken, `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+		})
+
+		It("creates the switch", func() {
+			By("returning 201 Created")
+			Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+			By("returning a server-generated id and the default visibility")
+			var got struct {
+				ID         string `json:"id"`
+				Visibility string `json:"visibility"`
+			}
+			Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+			Expect(got.ID).NotTo(BeEmpty())
+			Expect(got.Visibility).To(Equal("private"))
+			createdID = got.ID
+		})
+	})
+
+	When("the request includes an open-vocabulary field validated against a lookup", func() {
+		Context("and the value is approved", func() {
+			BeforeEach(func(ctx SpecContext) {
+				seedCategory(ctx, category, []string{"POM"})
+			})
+
+			It("creates the switch", func(ctx SpecContext) {
+				resp = doCreate(ctx, ownerToken,
+					`{"brand":"Gateron","name":"Yellow","type":"Linear","material":{"stem":"POM"}}`)
+				Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+				var got struct {
+					ID string `json:"id"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				createdID = got.ID
+			})
+		})
+	})
+
+	When("the request is made with no bearer token", func() {
+		BeforeEach(func(ctx SpecContext) {
+			resp = doCreate(ctx, "", `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+		})
+
+		It("returns 401", func() {
+			Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+		})
+	})
+
+	When("userId is not the caller's own subject", func() {
+		BeforeEach(func(ctx SpecContext) {
+			token, err := support.SecondUserAuthToken(ctx)
+			Expect(err).NotTo(HaveOccurred())
+			resp = doCreate(ctx, token, `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+		})
+
+		It("returns 404, not 403, to avoid revealing whose collection this is", func() {
+			Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+		})
+	})
+
+	When("required fields are missing", func() {
+		BeforeEach(func(ctx SpecContext) {
+			resp = doCreate(ctx, ownerToken, `{"brand":"Gateron"}`)
+		})
+
+		It("returns 400 with a problem+json body", func() {
+			Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+		})
+	})
+
+	When("an open-vocabulary field isn't an approved lookup value", func() {
+		BeforeEach(func(ctx SpecContext) {
+			seedCategory(ctx, category, []string{"POM"})
+			resp = doCreate(ctx, ownerToken,
+				`{"brand":"Gateron","name":"Yellow","type":"Linear","material":{"stem":"NotApproved"}}`)
+		})
+
+		It("returns 400 with a problem+json body", func() {
+			Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
 			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 		})
 	})
