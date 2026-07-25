@@ -42,6 +42,8 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, switch
 		middleware.OptionalAuth(verifier)(handlers.ListSwitches(switchRepo)))
 	mux.Handle("GET /users/{userId}/switches/{id}",
 		middleware.OptionalAuth(verifier)(handlers.GetSwitch(switchRepo)))
+	mux.Handle("POST /users/{userId}/switches",
+		middleware.Auth(verifier)(handlers.CreateSwitch(switchRepo, lookupRepo)))
 
 	// MCP: auth happens inside the MCP server itself (context func + tool
 	// handler middleware), returning MCP-shaped errors rather than a bare

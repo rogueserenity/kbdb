@@ -1,4 +1,4 @@
-package support
+package api
 
 import (
 	"bytes"
@@ -9,7 +9,11 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
+
+	"github.com/rogueserenity/kbdb/test/functional/support"
+	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
 )
 
 // QueueUser sets which identity the next /oidc/authorize call on the
@@ -160,4 +164,42 @@ func TokenSubject(idToken string) (string, error) {
 	}
 
 	return claims.Subject, nil
+}
+
+// authToken mints a token for the given fixture identity via mockoidc,
+// unless envOverride is set (a real Cognito-minted token, when
+// support.BaseURL() points at a real deployed stack instead) - a local
+// mockoidc instance and real Cognito aren't interchangeable token issuers,
+// so this can't be derived from support.BaseURL() alone.
+func authToken(ctx context.Context, envOverride, subject string, groups []string) (string, error) {
+	if v := os.Getenv(envOverride); v != "" {
+		return v, nil
+	}
+	if err := QueueUser(ctx, support.MockOIDCBaseURL(), subject, groups); err != nil {
+		return "", err
+	}
+	return MintToken(ctx, support.MockOIDCTokenURL(), support.MockOIDCClientID, support.MockOIDCClientSecret)
+}
+
+// AuthToken returns a valid bearer token for the plain (non-admin) test
+// user. See authToken for the KBDB_AUTH_TOKEN override behavior.
+func AuthToken(ctx context.Context) (string, error) {
+	return authToken(ctx, "KBDB_AUTH_TOKEN", fixtures.TestUserSubject, nil)
+}
+
+// AdminAuthToken returns a valid bearer token for a user in the "admins"
+// Cognito group (see template.yaml's AdminsGroup and
+// internal/auth.Claims.Groups) - for exercising the write-gated lookup
+// routes (PUT/POST/DELETE /v1/lookups/{category}). See authToken for the
+// KBDB_ADMIN_AUTH_TOKEN override behavior.
+func AdminAuthToken(ctx context.Context) (string, error) {
+	return authToken(ctx, "KBDB_ADMIN_AUTH_TOKEN", fixtures.AdminUserSubject, fixtures.AdminGroups)
+}
+
+// SecondUserAuthToken returns a valid bearer token for a second, unrelated
+// plain (non-admin) test user - distinct from AuthToken's identity, for
+// exercising ownership/visibility-scoped reads of another user's items. See
+// authToken for the KBDB_SECOND_USER_AUTH_TOKEN override behavior.
+func SecondUserAuthToken(ctx context.Context) (string, error) {
+	return authToken(ctx, "KBDB_SECOND_USER_AUTH_TOKEN", fixtures.SecondUserSubject, nil)
 }

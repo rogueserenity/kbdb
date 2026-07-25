@@ -38,6 +38,74 @@ func (_m *MockSwitchRepository) EXPECT() *MockSwitchRepository_Expecter {
 	return &MockSwitchRepository_Expecter{mock: &_m.Mock}
 }
 
+// Create provides a mock function for the type MockSwitchRepository
+func (_mock *MockSwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
+	ret := _mock.Called(ctx, sw)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Create")
+	}
+
+	var r0 *repository.Switch
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.Switch) (*repository.Switch, error)); ok {
+		return returnFunc(ctx, sw)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.Switch) *repository.Switch); ok {
+		r0 = returnFunc(ctx, sw)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.Switch)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.Switch) error); ok {
+		r1 = returnFunc(ctx, sw)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockSwitchRepository_Create_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Create'
+type MockSwitchRepository_Create_Call struct {
+	*mock.Call
+}
+
+// Create is a helper method to define mock.On call
+//   - ctx context.Context
+//   - sw repository.Switch
+func (_e *MockSwitchRepository_Expecter) Create(ctx any, sw any) *MockSwitchRepository_Create_Call {
+	return &MockSwitchRepository_Create_Call{Call: _e.mock.On("Create", ctx, sw)}
+}
+
+func (_c *MockSwitchRepository_Create_Call) Run(run func(ctx context.Context, sw repository.Switch)) *MockSwitchRepository_Create_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.Switch
+		if args[1] != nil {
+			arg1 = args[1].(repository.Switch)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSwitchRepository_Create_Call) Return(switchParam *repository.Switch, err error) *MockSwitchRepository_Create_Call {
+	_c.Call.Return(switchParam, err)
+	return _c
+}
+
+func (_c *MockSwitchRepository_Create_Call) RunAndReturn(run func(ctx context.Context, sw repository.Switch) (*repository.Switch, error)) *MockSwitchRepository_Create_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function for the type MockSwitchRepository
 func (_mock *MockSwitchRepository) Get(ctx context.Context, ownerID string, id string) (*repository.Switch, error) {
 	ret := _mock.Called(ctx, ownerID, id)

@@ -1,4 +1,4 @@
-package api_test
+package ping_test
 
 import (
 	"net/http"
@@ -6,33 +6,26 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/rogueserenity/kbdb/test/functional/support"
+	"github.com/rogueserenity/kbdb/test/functional/support/api"
 )
 
 var _ = Describe("Ping", func() {
 	var (
-		authHeader string
-		resp       *http.Response
+		client *api.Client
+		token  string
+		resp   *http.Response
 	)
 
 	BeforeEach(func() {
-		authHeader = ""
-		resp = nil
-	})
-
-	AfterEach(func() {
-		if resp != nil {
-			_ = resp.Body.Close()
-		}
+		client = api.NewClient()
+		token = ""
 	})
 
 	Context("given no bearer token", func() {
 		When("the request is made", func() {
 			BeforeEach(func(ctx SpecContext) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/ping", nil)
-				Expect(err).NotTo(HaveOccurred())
-
-				resp, err = http.DefaultClient.Do(req)
+				var err error
+				resp, err = client.Do(ctx, http.MethodGet, "/v1/ping", token, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -45,18 +38,15 @@ var _ = Describe("Ping", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, err := support.AuthToken(ctx)
+			var err error
+			token, err = api.AuthToken(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			authHeader = "Bearer " + token
 		})
 
 		When("the request is made", func() {
 			BeforeEach(func(ctx SpecContext) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodGet, support.BaseURL()+"/v1/ping", nil)
-				Expect(err).NotTo(HaveOccurred())
-				req.Header.Set("Authorization", authHeader)
-
-				resp, err = http.DefaultClient.Do(req)
+				var err error
+				resp, err = client.Do(ctx, http.MethodGet, "/v1/ping", token, nil)
 				Expect(err).NotTo(HaveOccurred())
 			})
 

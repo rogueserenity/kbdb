@@ -1,12 +1,10 @@
-// Package support holds shared functional-test helpers: base URL
-// configuration and mockoidc token minting. Used by every feature spec so
-// the same client/assertions can point at a local sam local start-api
-// instance now, or a real deployed stack later (issue #8), by changing only
-// environment variables - no code changes.
+// Package support holds env-var-derived configuration shared by every
+// functional test suite (base URL, table names, mockoidc credentials) - the
+// common ground support/api's HTTP clients and support/db's DynamoDB
+// seed/cleanup helpers both build on, so neither has to import the other.
 package support
 
 import (
-	"context"
 	"os"
 
 	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
@@ -31,11 +29,9 @@ func BaseURL() string {
 	return "http://127.0.0.1:3000"
 }
 
-// mockOIDCBaseURL returns the mockoidc instance's base address (no /oidc
-// suffix). Configurable via KBDB_MOCKOIDC_BASE_URL; MockOIDCTokenURL and
-// QueueUser's control endpoint both derive from this one value, since
-// they're the same server/port.
-func mockOIDCBaseURL() string {
+// MockOIDCBaseURL returns the mockoidc instance's base address (no /oidc
+// suffix). Configurable via KBDB_MOCKOIDC_BASE_URL.
+func MockOIDCBaseURL() string {
 	if v := os.Getenv("KBDB_MOCKOIDC_BASE_URL"); v != "" {
 		return v
 	}
@@ -46,45 +42,7 @@ func mockOIDCBaseURL() string {
 // mint test tokens. Not used when pointed at a real deployed stack (issue
 // #8's real-Cognito-token path is separate).
 func MockOIDCTokenURL() string {
-	return mockOIDCBaseURL() + "/oidc"
-}
-
-// authToken mints a token for the given fixture identity via mockoidc,
-// unless envOverride is set (a real Cognito-minted token, when BaseURL
-// points at a real deployed stack instead) - a local mockoidc instance and
-// real Cognito aren't interchangeable token issuers, so this can't be
-// derived from BaseURL alone.
-func authToken(ctx context.Context, envOverride, subject string, groups []string) (string, error) {
-	if v := os.Getenv(envOverride); v != "" {
-		return v, nil
-	}
-	if err := QueueUser(ctx, mockOIDCBaseURL(), subject, groups); err != nil {
-		return "", err
-	}
-	return MintToken(ctx, MockOIDCTokenURL(), MockOIDCClientID, MockOIDCClientSecret)
-}
-
-// AuthToken returns a valid bearer token for the plain (non-admin) test
-// user. See authToken for the KBDB_AUTH_TOKEN override behavior.
-func AuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_AUTH_TOKEN", fixtures.TestUserSubject, nil)
-}
-
-// AdminAuthToken returns a valid bearer token for a user in the "admins"
-// Cognito group (see template.yaml's AdminsGroup and
-// internal/auth.Claims.Groups) - for exercising the write-gated lookup
-// routes (PUT/POST/DELETE /v1/lookups/{category}). See authToken for the
-// KBDB_ADMIN_AUTH_TOKEN override behavior.
-func AdminAuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_ADMIN_AUTH_TOKEN", fixtures.AdminUserSubject, fixtures.AdminGroups)
-}
-
-// SecondUserAuthToken returns a valid bearer token for a second, unrelated
-// plain (non-admin) test user - distinct from AuthToken's identity, for
-// exercising ownership/visibility-scoped reads of another user's items. See
-// authToken for the KBDB_SECOND_USER_AUTH_TOKEN override behavior.
-func SecondUserAuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_SECOND_USER_AUTH_TOKEN", fixtures.SecondUserSubject, nil)
+	return MockOIDCBaseURL() + "/oidc"
 }
 
 // LookupTableName returns the DynamoDB table name backing GET /v1/lookups,

@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
+
+	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/log"
@@ -15,6 +19,16 @@ import (
 const (
 	defaultSwitchListLimit = 20
 	maxSwitchListLimit     = 100
+)
+
+// Lookup categories SwitchInput's open-vocabulary fields validate against,
+// per their api/openapi.yaml descriptions ("validated against the ...
+// lookup at request time"). Names match model/lookup_seed.json.
+const (
+	switchTypeCategory           = "switch_type"
+	switchMaterialCategory       = "switch_material"
+	switchSpringMaterialCategory = "switch_spring_material"
+	vendorCategory               = "vendor"
 )
 
 // switchSummary is the SwitchSummary schema in api/openapi.yaml: a subset
@@ -118,5 +132,149 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(sw)
+	}
+}
+
+// decodeSwitchInput reads and shape-validates a request body against
+// api/openapi.yaml's SwitchInput schema (required fields), writing a 400
+// and returning ok=false if the body is malformed or fails shape
+// validation. Open-vocabulary fields (type, material.*, spring.material,
+// purchase.vendor) aren't checked here - see validateSwitchLookups, which
+// needs a repository.LookupRepository this function doesn't have.
+func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Switch, ok bool) {
+	if err := json.NewDecoder(r.Body).Decode(&sw); err != nil {
+		problem.BadRequest(w, "invalid request body")
+		return repository.Switch{}, false
+	}
+
+	if sw.Brand == "" || sw.Name == "" || sw.Type == "" {
+		problem.BadRequest(w, "brand, name, and type are required")
+		return repository.Switch{}, false
+	}
+
+	if sw.Visibility == "" {
+		sw.Visibility = repository.VisibilityPrivate
+	} else if !sw.Visibility.Valid() {
+		problem.BadRequest(w, "visibility must be one of public, authenticated, private")
+		return repository.Switch{}, false
+	}
+
+	return sw, true
+}
+
+// validateSwitchLookups writes a 400 naming the first invalid field and
+// returns ok=false if any check fails. A blank field is skipped, not
+// treated as invalid - SwitchInput doesn't require these.
+func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, sw repository.Switch) (ok bool) {
+	checks := []struct {
+		field    string
+		value    string
+		category string
+	}{
+		{"type", sw.Type, switchTypeCategory},
+		{"material.top_housing", sw.Material.TopHousing, switchMaterialCategory},
+		{"material.bottom_housing", sw.Material.BottomHousing, switchMaterialCategory},
+		{"material.stem", sw.Material.Stem, switchMaterialCategory},
+		{"spring.material", sw.Spring.Material, switchSpringMaterialCategory},
+		{"purchase.vendor", sw.Purchase.Vendor, vendorCategory},
+	}
+
+	for _, c := range checks {
+		if c.value == "" {
+			continue
+		}
+
+		valid, err := lookupContains(ctx, lookupRepo, c.category, c.value)
+		if err != nil {
+			log.FromContext(ctx).Error("validating switch lookup field", "field", c.field, "error", err)
+			problem.Internal(w, "failed to validate "+c.field)
+			return false
+		}
+		if !valid {
+			problem.BadRequest(w, fmt.Sprintf("%s: %q is not an approved %s value", c.field, c.value, c.category))
+			return false
+		}
+	}
+
+	return true
+}
+
+// lookupContains reports whether value is one of category's approved
+// values. category not existing is not itself an error here (it just means
+// nothing validates) - CreateSwitch treats that the same as "not found" via
+// the false return, since either way value can't be approved.
+func lookupContains(ctx context.Context, lookupRepo repository.LookupRepository, category, value string) (bool, error) {
+	lookup, err := lookupRepo.GetCategory(ctx, category)
+	if errors.Is(err, repository.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+
+	for _, v := range lookup.Values {
+		s, ok := v.(string)
+		if !ok {
+			// repository.Lookup.Values is []any because some categories
+			// (e.g. build_case_mount_type) store objects, not strings - a
+			// non-string entry here means this category's data isn't
+			// shaped the way switches validation expects, not that value
+			// is unapproved. Log it so that's discoverable rather than
+			// looking like an ordinary rejection.
+			log.FromContext(ctx).Warn("lookup category has non-string value", "category", category)
+			continue
+		}
+		if s == value {
+			return true, nil
+		}
+	}
+
+	return false, nil
+}
+
+// CreateSwitch returns a handler for POST /users/{userId}/switches. Per
+// api/openapi.yaml, userId must be the caller's own subject - creating in
+// another user's collection returns 404 (not 403, matching the read
+// routes' anti-enumeration behavior), enforced via authz.IsOwner.
+// middleware.Auth (not OptionalAuth) must run first: writes always require
+// an authenticated caller.
+func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		sw, ok := decodeSwitchInput(w, r)
+		if !ok {
+			return
+		}
+
+		if !validateSwitchLookups(r.Context(), w, lookupRepo, sw) {
+			return
+		}
+
+		sw.UserID = ownerID
+		sw.ID = uuid.NewString()
+
+		created, err := switchRepo.Create(r.Context(), sw)
+		if errors.Is(err, repository.ErrAlreadyExists) {
+			// Practically unreachable - ID is a fresh UUID, not caller
+			// input - but Create's ConditionExpression guards a collision
+			// regardless, so surface it the same way CreateLookup does.
+			problem.Conflict(w, "switch already exists")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("creating switch", "error", err)
+			problem.Internal(w, "failed to create switch")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(created)
 	}
 }

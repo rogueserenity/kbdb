@@ -194,3 +194,37 @@ func (s *SwitchRepositorySuite) TestGet_GetItemError_Propagates() {
 	s.Require().Error(err)
 	s.Nil(sw)
 }
+
+func (s *SwitchRepositorySuite) TestCreate_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	sw, err := s.repo.Create(context.Background(), repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron"}, sw)
+}
+
+func (s *SwitchRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	sw, err := s.repo.Create(context.Background(), repository.Switch{UserID: "alice", ID: "sw1"})
+
+	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(sw)
+}
+
+func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	sw, err := s.repo.Create(context.Background(), repository.Switch{UserID: "alice", ID: "sw1"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(sw)
+}

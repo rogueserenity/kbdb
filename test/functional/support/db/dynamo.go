@@ -1,0 +1,90 @@
+// Package db seeds and cleans up DynamoDB fixture state directly for the
+// functional test suites, bypassing the API. See ../api for the HTTP client
+// counterpart used to exercise the routes under test.
+package db
+
+import (
+	"context"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+
+	"github.com/rogueserenity/kbdb/test/functional/support"
+)
+
+// DynamoTable seeds and deletes items directly in one DynamoDB table,
+// bypassing the API - used by specs to set up/tear down fixture state for
+// routes other than the one under test, so those specs don't depend on the
+// API's own create/delete routes working correctly first.
+type DynamoTable struct {
+	client    *dynamodb.Client
+	tableName string
+}
+
+// NewDynamoTable returns a DynamoTable for tableName, using
+// support.DynamoDBEndpointURL() (LocalStack locally, real AWS endpoint
+// resolution against a real deployed stack in CI - see that function's doc
+// comment).
+func NewDynamoTable(ctx context.Context, tableName string) *DynamoTable {
+	endpoint := support.DynamoDBEndpointURL()
+
+	opts := []func(*awsconfig.LoadOptions) error{}
+	if endpoint != "" {
+		opts = append(opts, awsconfig.WithRegion("us-east-2"))
+	}
+
+	awsCfg, err := awsconfig.LoadDefaultConfig(ctx, opts...)
+	if err != nil {
+		panic(err) // config loading failing is an environment problem, not a per-spec one
+	}
+
+	if endpoint != "" {
+		awsCfg.Credentials = credentials.NewStaticCredentialsProvider("test", "test", "")
+	}
+
+	client := dynamodb.NewFromConfig(awsCfg, func(o *dynamodb.Options) {
+		if endpoint != "" {
+			o.BaseEndpoint = aws.String(endpoint)
+		}
+	})
+
+	return &DynamoTable{client: client, tableName: tableName}
+}
+
+// PutItem marshals item (a plain struct or map, per
+// github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue's rules) and
+// writes it to the table, overwriting any existing item at the same key.
+func (t *DynamoTable) PutItem(ctx context.Context, item any) error {
+	av, err := attributevalue.MarshalMap(item)
+	if err != nil {
+		return err
+	}
+
+	_, err = t.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName: &t.tableName,
+		Item:      av,
+	})
+	return err
+}
+
+// DeleteItem deletes the item at key (attribute name -> plain string value
+// - every table this package seeds has an all-string key). Idempotent: a
+// key that doesn't exist is not an error, matching real DynamoDB DeleteItem
+// semantics - so cleanup can call this unconditionally without tracking
+// whether the item was actually created.
+func (t *DynamoTable) DeleteItem(ctx context.Context, key map[string]string) error {
+	avKey := make(map[string]types.AttributeValue, len(key))
+	for k, v := range key {
+		avKey[k] = &types.AttributeValueMemberS{Value: v}
+	}
+
+	_, err := t.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &t.tableName,
+		Key:       avKey,
+	})
+	return err
+}

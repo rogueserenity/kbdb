@@ -1,4 +1,4 @@
-package mcp_test
+package lookups_test
 
 import (
 	"testing"
@@ -7,7 +7,7 @@ import (
 	. "github.com/onsi/gomega"
 )
 
-func TestMcp(t *testing.T) {
+func TestLookups(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Mcp Suite")
+	RunSpecs(t, "Lookups Suite")
 }

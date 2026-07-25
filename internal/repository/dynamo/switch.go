@@ -4,13 +4,14 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -114,6 +115,28 @@ func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*reposi
 	var sw repository.Switch
 	if err := attributevalue.UnmarshalMap(out.Item, &sw); err != nil {
 		return nil, fmt.Errorf("unmarshalling switch %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return &sw, nil
+}
+
+func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
+	item, err := attributevalue.MarshalMap(sw)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling switch %q for owner %q: %w", sw.ID, sw.UserID, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_not_exists(id)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrAlreadyExists
+		}
+		return nil, fmt.Errorf("creating switch %q for owner %q: %w", sw.ID, sw.UserID, err)
 	}
 
 	return &sw, nil

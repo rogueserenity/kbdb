@@ -69,4 +69,12 @@ type SwitchRepository interface {
 	// visibility - the caller (a handler) checks the returned item's
 	// Visibility via internal/authz.CanReadVisibility.
 	Get(ctx context.Context, ownerID, id string) (*Switch, error)
+
+	// Create stores sw, which must already have UserID and ID set (the
+	// caller assigns ID - see handlers.CreateSwitch), and returns the
+	// stored value. Returns ErrAlreadyExists if an item with the same
+	// UserID+ID already exists, which should not happen in practice since
+	// callers generate ID fresh per create, but guards against a UUID
+	// collision rather than silently overwriting.
+	Create(ctx context.Context, sw Switch) (*Switch, error)
 }
