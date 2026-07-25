@@ -146,8 +146,7 @@ func switchDynamoClient(ctx context.Context) *dynamodb.Client {
 }
 
 // seedSwitch PutItems a switch directly into DynamoDB, bypassing the API -
-// used to set up state for specs that exercise the (read-only, for now)
-// list route.
+// used to set up state for specs that exercise a different route.
 func seedSwitch(ctx SpecContext, ownerID, id, visibility string) {
 	client := switchDynamoClient(ctx)
 	item, err := attributevalue.MarshalMap(map[string]any{
