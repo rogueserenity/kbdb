@@ -22,20 +22,12 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-// Do sends method to path (relative to support.BaseURL(), e.g.
-// "/users/alice/switches") with the given bearer token (omit auth entirely
-// if token is empty - not every route requires one) and body (nil for no
-// body). The returned response's Body is fully buffered in memory and
-// already closed - not a live network read - so it's safe to decode from a
-// Ginkgo node other than the one that called Do. That's necessary, not
-// just convenient: Ginkgo cancels each node's SpecContext the instant that
-// node's own body function returns (see internal/suite.go's
-// `defer sc.cancel(...)` in Ginkgo's runNode), and a BeforeEach's ctx is
-// exactly the ctx wired into the *http.Request here via
-// http.NewRequestWithContext - so a live resp.Body read from a later It
-// node intermittently failed with "spec has finished" once the BeforeEach
-// that issued the request had already returned and its context was
-// cancelled, even though the It itself has its own, still-live context.
+// Do's returned Body is pre-buffered in memory, not a live network read -
+// Ginkgo cancels each node's context when that node's function returns
+// (see the github.com/onsi/ginkgo/v2 module's internal/suite.go, runNode),
+// and a request built with a BeforeEach's ctx used to fail decoding its
+// still-live Body from a later It node once that BeforeEach had already
+// returned.
 func (c *Client) Do(ctx context.Context, method, path, token string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, support.BaseURL()+path, body)
 	if err != nil {

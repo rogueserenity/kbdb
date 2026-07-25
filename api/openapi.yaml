@@ -1024,7 +1024,7 @@ components:
           format: date
         order_status:
           type: string
-          enum: [Planned, Ordered, Shipped, Delivered, Cancelled]
+          description: Open vocabulary — validated against the "order_status" lookup at request time.
 
     MaterialColor:
       type: object
@@ -1064,10 +1064,10 @@ components:
           description: Open vocabulary — validated against the "firmware" lookup at request time.
         assembly:
           type: string
-          enum: [Hotswap, Solder]
+          description: Open vocabulary — validated against the "keyboard_pcb_assembly_type" lookup at request time.
         connectivity:
           type: string
-          enum: [Wired, Dual Mode, Tri-Mode]
+          description: Open vocabulary — validated against the "keyboard_pcb_connectivity_type" lookup at request time.
 
     KeyboardInput:
       type: object
@@ -1122,7 +1122,6 @@ components:
           type: string
         order_status:
           type: string
-          enum: [Planned, Ordered, Shipped, Delivered, Cancelled]
 
     KeyboardListPage:
       type: object
@@ -1164,7 +1163,7 @@ components:
       properties:
         material:
           type: string
-          description: Open vocabulary — validated against the "spring_material" lookup at request time.
+          description: Open vocabulary — validated against the "switch_spring_material" lookup at request time.
         pre_travel:
           type: number
           format: double
@@ -1198,7 +1197,7 @@ components:
           type: string
         type:
           type: string
-          enum: [Linear, Tactile, Clicky]
+          description: Open vocabulary — validated against the "switch_type" lookup at request time.
         pins:
           type: integer
           example: 5
@@ -1238,7 +1237,7 @@ components:
           type: string
         type:
           type: string
-          enum: [Linear, Tactile, Clicky]
+          description: Open vocabulary — validated against the "switch_type" lookup at request time.
 
     SwitchListPage:
       type: object
@@ -1390,7 +1389,7 @@ components:
           description: Open vocabulary — validated against the "stabs" lookup at request time.
         mount_type:
           type: string
-          enum: [Plate, Screw-in, Clip-in]
+          description: Open vocabulary — validated against the "build_stabilizer_mount_type" lookup at request time.
         price:
           $ref: "#/components/schemas/Money"
 
@@ -1399,20 +1398,14 @@ components:
       properties:
         type:
           type: string
-          enum:
-            - Top Mount
-            - Bottom Mount
-            - Tray Mount
-            - Gasket Mount
-            - Sandwich Mount
-            - Integrated Plate Mount
-            - Plateless
-            - O-Ring
-            - Tadpole
+          description: Open vocabulary — validated against the "build_case_mount_type" lookup at request time.
         durometer:
           type: string
-          enum: ["30A", "40A", "50A", "60A", "70A", "80A", "90A"]
-          description: Only meaningful when the chosen mount type supports it (see the case_mount_type lookup's supports_durometer flag).
+          description: >
+            Open vocabulary — validated against the "build_durometer" lookup
+            at request time. Only meaningful when the chosen mount type
+            supports it (see the build_case_mount_type lookup's
+            supports_durometer flag).
 
     BuildInput:
       type: object

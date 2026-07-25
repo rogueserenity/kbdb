@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"strconv"
 
 	"github.com/google/uuid"
@@ -24,12 +23,9 @@ const (
 
 // Lookup categories SwitchInput's open-vocabulary fields validate against,
 // per their api/openapi.yaml descriptions ("validated against the ...
-// lookup at request time"). Names match model/lookup_seed.json. type is not
-// included: it's a closed enum in the openapi schema (Linear/Tactile/
-// Clicky), checked directly rather than via a lookup - there's also a
-// switch_type lookup category with the same three values, but the schema
-// enum is what api/openapi.yaml actually declares as the contract.
+// lookup at request time"). Names match model/lookup_seed.json.
 const (
+	switchTypeCategory           = "switch_type"
 	switchMaterialCategory       = "switch_material"
 	switchSpringMaterialCategory = "switch_spring_material"
 	vendorCategory               = "vendor"
@@ -140,9 +136,9 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 }
 
 // decodeSwitchInput reads and shape-validates a request body against
-// api/openapi.yaml's SwitchInput schema (required fields, type enum),
-// writing a 400 and returning ok=false if the body is malformed or fails
-// shape validation. Open-vocabulary fields (material.*, spring.material,
+// api/openapi.yaml's SwitchInput schema (required fields), writing a 400
+// and returning ok=false if the body is malformed or fails shape
+// validation. Open-vocabulary fields (type, material.*, spring.material,
 // purchase.vendor) aren't checked here - see validateSwitchLookups, which
 // needs a repository.LookupRepository this function doesn't have.
 func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Switch, ok bool) {
@@ -156,11 +152,6 @@ func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Sw
 		return repository.Switch{}, false
 	}
 
-	if !slices.Contains([]string{"Linear", "Tactile", "Clicky"}, sw.Type) {
-		problem.BadRequest(w, "type must be one of Linear, Tactile, Clicky")
-		return repository.Switch{}, false
-	}
-
 	if sw.Visibility == "" {
 		sw.Visibility = repository.VisibilityPrivate
 	} else if !sw.Visibility.Valid() {
@@ -171,17 +162,16 @@ func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Sw
 	return sw, true
 }
 
-// validateSwitchLookups checks sw's open-vocabulary fields against their
-// lookup categories (see the switch*Category/vendorCategory consts),
-// writing a 400 naming the first invalid field and returning ok=false if
-// any fails. A blank field is skipped (SwitchInput doesn't require these),
-// not treated as invalid.
+// validateSwitchLookups writes a 400 naming the first invalid field and
+// returns ok=false if any check fails. A blank field is skipped, not
+// treated as invalid - SwitchInput doesn't require these.
 func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, sw repository.Switch) (ok bool) {
 	checks := []struct {
 		field    string
 		value    string
 		category string
 	}{
+		{"type", sw.Type, switchTypeCategory},
 		{"material.top_housing", sw.Material.TopHousing, switchMaterialCategory},
 		{"material.bottom_housing", sw.Material.BottomHousing, switchMaterialCategory},
 		{"material.stem", sw.Material.Stem, switchMaterialCategory},
@@ -223,7 +213,18 @@ func lookupContains(ctx context.Context, lookupRepo repository.LookupRepository,
 	}
 
 	for _, v := range lookup.Values {
-		if s, ok := v.(string); ok && s == value {
+		s, ok := v.(string)
+		if !ok {
+			// repository.Lookup.Values is []any because some categories
+			// (e.g. build_case_mount_type) store objects, not strings - a
+			// non-string entry here means this category's data isn't
+			// shaped the way switches validation expects, not that value
+			// is unapproved. Log it so that's discoverable rather than
+			// looking like an ordinary rejection.
+			log.FromContext(ctx).Warn("lookup category has non-string value", "category", category)
+			continue
+		}
+		if s == value {
 			return true, nil
 		}
 	}
