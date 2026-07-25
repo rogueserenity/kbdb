@@ -47,6 +47,34 @@ func TestReadableVisibilities(t *testing.T) {
 	}
 }
 
+func TestCanReadVisibility(t *testing.T) {
+	tests := []struct {
+		name       string
+		ownerID    string
+		visibility repository.Visibility
+		caller     string
+		want       bool
+	}{
+		{"owner reading own private item", "alice", repository.VisibilityPrivate, "alice", true},
+		{"anonymous reading public item", "alice", repository.VisibilityPublic, "", true},
+		{"anonymous reading authenticated item", "alice", repository.VisibilityAuthenticated, "", false},
+		{"anonymous reading private item", "alice", repository.VisibilityPrivate, "", false},
+		{"other user reading authenticated item", "alice", repository.VisibilityAuthenticated, "bob", true},
+		{"other user reading private item", "alice", repository.VisibilityPrivate, "bob", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ctx := context.Background()
+			if tt.caller != "" {
+				ctx = kbdbctx.WithUserID(ctx, tt.caller)
+			}
+
+			assert.Equal(t, tt.want, authz.CanReadVisibility(ctx, tt.ownerID, tt.visibility))
+		})
+	}
+}
+
 func TestIsOwner(t *testing.T) {
 	tests := []struct {
 		name    string

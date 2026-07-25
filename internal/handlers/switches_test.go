@@ -145,3 +145,119 @@ func (s *ListSwitchesSuite) TestListSwitches_RepositoryError_Returns500() {
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type GetSwitchSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockSwitchRepository
+	handler  http.HandlerFunc
+}
+
+func TestGetSwitchSuite(t *testing.T) {
+	suite.Run(t, new(GetSwitchSuite))
+}
+
+func (s *GetSwitchSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
+	s.handler = GetSwitch(s.mockRepo)
+}
+
+func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/switches/sw1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "sw1")
+	return req
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_Owner_Succeeds() {
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", Brand: "Gateron", Visibility: repository.VisibilityPrivate}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusOK, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got repository.Switch
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("sw1", got.ID)
+	s.Equal("Gateron", got.Brand)
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_AnonymousReadingPublicSwitch_Succeeds() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", Visibility: repository.VisibilityPublic}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_AnonymousReadingPrivateSwitch_Returns404() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", Visibility: repository.VisibilityPrivate}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_OtherUserReadingAuthenticatedSwitch_Succeeds() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", Visibility: repository.VisibilityAuthenticated}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_OtherUserReadingPrivateSwitch_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", Visibility: repository.VisibilityPrivate}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_NotFound_Returns404() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *GetSwitchSuite) TestGetSwitch_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(nil, errors.New("get item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

@@ -173,6 +173,7 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:Query
+                - dynamodb:GetItem
               Resource: !GetAtt SwitchTable.Arn
       Events:
         PingEvent:
@@ -235,6 +236,15 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Path: /users/{userId}/switches
+            Method: get
+            Auth:
+              Authorizer: NONE
+        # Auth: NONE at the gateway - same rationale as ListSwitchesEvent.
+        GetSwitchEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /users/{userId}/switches/{id}
             Method: get
             Auth:
               Authorizer: NONE

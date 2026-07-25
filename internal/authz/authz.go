@@ -5,6 +5,7 @@ package authz
 
 import (
 	"context"
+	"slices"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -46,4 +47,13 @@ func ReadableVisibilities(ctx context.Context, ownerID string) []repository.Visi
 func IsOwner(ctx context.Context, ownerID string) bool {
 	subject, _ := kbdbctx.UserID(ctx)
 	return subject != "" && subject == ownerID
+}
+
+// CanReadVisibility reports whether visibility is in the caller's readable
+// set for ownerID's collection (see ReadableVisibilities). Unlike List,
+// which can scope its query to the whole readable set up front, a
+// single-item fetch by exact key doesn't know the item's visibility until
+// after it's fetched - this is the post-fetch check for that case.
+func CanReadVisibility(ctx context.Context, ownerID string, visibility repository.Visibility) bool {
+	return slices.Contains(ReadableVisibilities(ctx, ownerID), visibility)
 }
