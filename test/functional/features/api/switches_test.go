@@ -131,6 +131,112 @@ var _ = Describe("List switches", func() {
 	})
 })
 
+var _ = Describe("Get switch", func() {
+	var (
+		resp       *http.Response
+		ownerID    string
+		ownerToken string
+	)
+
+	BeforeEach(func(ctx SpecContext) {
+		resp = nil
+
+		var err error
+		ownerToken, err = support.AuthToken(ctx)
+		Expect(err).NotTo(HaveOccurred())
+		ownerID, err = support.TokenSubject(ownerToken)
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	AfterEach(func(ctx SpecContext) {
+		if resp != nil {
+			_ = resp.Body.Close()
+		}
+
+		client := switchDynamoClient(ctx)
+		_, err := client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+			TableName: aws.String(support.SwitchTableName()),
+			Key: map[string]dynamotypes.AttributeValue{
+				"user_id": &dynamotypes.AttributeValueMemberS{Value: ownerID},
+				"id":      &dynamotypes.AttributeValueMemberS{Value: "get-switch"},
+			},
+		})
+		Expect(err).NotTo(HaveOccurred())
+	})
+
+	doGet := func(ctx SpecContext, token string) *http.Response {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+			support.BaseURL()+"/users/"+ownerID+"/switches/get-switch", nil)
+		Expect(err).NotTo(HaveOccurred())
+		if token != "" {
+			req.Header.Set("Authorization", "Bearer "+token)
+		}
+
+		r, err := http.DefaultClient.Do(req)
+		Expect(err).NotTo(HaveOccurred())
+		return r
+	}
+
+	Context("given a private switch owned by the caller", func() {
+		BeforeEach(func(ctx SpecContext) {
+			seedSwitch(ctx, ownerID, "get-switch", "private")
+		})
+
+		When("the request is made by the owner", func() {
+			BeforeEach(func(ctx SpecContext) {
+				resp = doGet(ctx, ownerToken)
+			})
+
+			It("returns the switch", func() {
+				By("returning 200 OK")
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				By("returning the switch's id")
+				var got struct {
+					ID string `json:"id"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.ID).To(Equal("get-switch"))
+			})
+		})
+
+		When("the request is made by a different authenticated user", func() {
+			BeforeEach(func(ctx SpecContext) {
+				token, err := support.SecondUserAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				resp = doGet(ctx, token)
+			})
+
+			It("returns 404, not 403, to avoid revealing the item exists", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+
+		When("the request is made with no bearer token", func() {
+			BeforeEach(func(ctx SpecContext) {
+				resp = doGet(ctx, "")
+			})
+
+			It("returns 404", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+			})
+		})
+	})
+
+	When("the switch does not exist", func() {
+		BeforeEach(func(ctx SpecContext) {
+			resp = doGet(ctx, ownerToken)
+		})
+
+		It("returns 404", func() {
+			Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+		})
+	})
+})
+
 func switchDynamoClient(ctx context.Context) *dynamodb.Client {
 	endpoint := support.DynamoDBEndpointURL()
 

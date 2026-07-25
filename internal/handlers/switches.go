@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -85,5 +86,37 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(page)
+	}
+}
+
+// GetSwitch returns a handler for GET /users/{userId}/switches/{id}. Per
+// api/openapi.yaml, a switch that exists but isn't owned by or shared with
+// the caller returns 404, not 403 - this avoids revealing that an unshared
+// item exists. middleware.OptionalAuth must run first, same as
+// ListSwitches.
+func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		sw, err := repo.Get(r.Context(), ownerID, id)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting switch", "error", err)
+			problem.Internal(w, "failed to get switch")
+			return
+		}
+
+		if !authz.CanReadVisibility(r.Context(), ownerID, sw.Visibility) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(sw)
 	}
 }

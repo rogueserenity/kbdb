@@ -150,3 +150,47 @@ func (s *SwitchRepositorySuite) TestList_QueryError_Propagates() {
 	s.Nil(switches)
 	s.Empty(next)
 }
+
+func (s *SwitchRepositorySuite) TestGet_Succeeds() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
+			userID, ok := in.Key["user_id"].(*types.AttributeValueMemberS)
+			id, ok2 := in.Key["id"].(*types.AttributeValueMemberS)
+			return ok && ok2 && userID.Value == "alice" && id.Value == "sw1"
+		})).
+		Return(&dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"user_id": &types.AttributeValueMemberS{Value: "alice"},
+				"id":      &types.AttributeValueMemberS{Value: "sw1"},
+				"brand":   &types.AttributeValueMemberS{Value: "Gateron"},
+			},
+		}, nil)
+
+	sw, err := s.repo.Get(context.Background(), "alice", "sw1")
+
+	s.Require().NoError(err)
+	s.Equal("sw1", sw.ID)
+	s.Equal("Gateron", sw.Brand)
+}
+
+func (s *SwitchRepositorySuite) TestGet_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	sw, err := s.repo.Get(context.Background(), "alice", "missing")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(sw)
+}
+
+func (s *SwitchRepositorySuite) TestGet_GetItemError_Propagates() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	sw, err := s.repo.Get(context.Background(), "alice", "sw1")
+
+	s.Require().Error(err)
+	s.Nil(sw)
+}

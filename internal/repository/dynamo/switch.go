@@ -95,6 +95,30 @@ func (r *SwitchRepository) List(
 	return switches, nextCursor, nil
 }
 
+func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*repository.Switch, error) {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
+			"id":      &types.AttributeValueMemberS{Value: id},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting switch %q for owner %q: %w", id, ownerID, err)
+	}
+
+	if len(out.Item) == 0 {
+		return nil, repository.ErrNotFound
+	}
+
+	var sw repository.Switch
+	if err := attributevalue.UnmarshalMap(out.Item, &sw); err != nil {
+		return nil, fmt.Errorf("unmarshalling switch %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return &sw, nil
+}
+
 // decodeCursor reverses encodeCursor, returning nil (no key) for an empty
 // cursor.
 func decodeCursor(cursor string) (map[string]types.AttributeValue, error) {
