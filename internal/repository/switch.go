@@ -1,5 +1,7 @@
 package repository
 
+import "context"
+
 // SwitchMaterial is the housing/stem material makeup of a switch.
 type SwitchMaterial struct {
 	TopHousing    string `dynamodbav:"top_housing" json:"top_housing"`
@@ -47,4 +49,17 @@ type Switch struct {
 	Purchase     SwitchPurchase `dynamodbav:"purchase" json:"purchase"`
 	Notes        string         `dynamodbav:"notes" json:"notes"`
 	Visibility   Visibility     `dynamodbav:"visibility" json:"visibility"`
+}
+
+// SwitchRepository provides access to switches. ownerID is always the
+// {userId} path segment (the collection's owner, per api/openapi.yaml), not
+// necessarily the caller — List returns only items whose Visibility is in
+// visibilities, which the caller (a handler) derives from
+// internal/authz.ReadableVisibilities before calling in.
+type SwitchRepository interface {
+	// List returns up to limit switches owned by ownerID whose Visibility is
+	// in visibilities, ordered by ID. cursor, if non-empty, resumes from a
+	// previous call's returned cursor; the returned cursor is empty when
+	// there are no more pages.
+	List(ctx context.Context, ownerID string, visibilities []Visibility, limit int, cursor string) (switches []Switch, nextCursor string, err error)
 }

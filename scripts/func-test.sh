@@ -3,6 +3,7 @@ set -euo pipefail
 # Defaults for local runs against LocalStack; ci.yml sets these itself for
 # a real deployed stack, so don't override an already-set value.
 export KBDB_LOOKUP_TABLE_NAME="${KBDB_LOOKUP_TABLE_NAME:-kbdb-local-lookup}"
+export KBDB_SWITCH_TABLE_NAME="${KBDB_SWITCH_TABLE_NAME:-kbdb-local-switch}"
 export KBDB_DYNAMODB_ENDPOINT_URL="${KBDB_DYNAMODB_ENDPOINT_URL-http://localhost:4566}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"

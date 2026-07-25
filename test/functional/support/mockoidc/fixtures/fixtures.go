@@ -13,6 +13,13 @@ const TestUserSubject = "test-user-0001"
 // support.AdminAuthToken.
 const AdminUserSubject = "test-admin-0001"
 
+// SecondUserSubject is the "sub" claim of a second, unrelated plain test
+// user, minted by support.SecondUserAuthToken - used to exercise
+// visibility-scoped reads of another user's items (see internal/authz)
+// where TestUserSubject and AdminUserSubject aren't a fit: authorization
+// there is by ownership, not admin membership.
+const SecondUserSubject = "test-user-0002"
+
 // AdminGroups is the cognito:groups claim value admin-flavored test tokens
 // carry - matches the "admins" group template.yaml's AdminsGroup declares
 // (see internal/auth.Claims.Groups).

@@ -287,6 +287,89 @@ func (_c *MockDynamoAPI_PutItem_Call) RunAndReturn(run func(ctx context.Context,
 	return _c
 }
 
+// Query provides a mock function for the type MockDynamoAPI
+func (_mock *MockDynamoAPI) Query(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error) {
+	var tmpRet mock.Arguments
+	if len(optFns) > 0 {
+		tmpRet = _mock.Called(ctx, params, optFns)
+	} else {
+		tmpRet = _mock.Called(ctx, params)
+	}
+	ret := tmpRet
+
+	if len(ret) == 0 {
+		panic("no return value specified for Query")
+	}
+
+	var r0 *dynamodb.QueryOutput
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)); ok {
+		return returnFunc(ctx, params, optFns...)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) *dynamodb.QueryOutput); ok {
+		r0 = returnFunc(ctx, params, optFns...)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*dynamodb.QueryOutput)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, *dynamodb.QueryInput, ...func(*dynamodb.Options)) error); ok {
+		r1 = returnFunc(ctx, params, optFns...)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockDynamoAPI_Query_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Query'
+type MockDynamoAPI_Query_Call struct {
+	*mock.Call
+}
+
+// Query is a helper method to define mock.On call
+//   - ctx context.Context
+//   - params *dynamodb.QueryInput
+//   - optFns ...func(*dynamodb.Options)
+func (_e *MockDynamoAPI_Expecter) Query(ctx any, params any, optFns ...any) *MockDynamoAPI_Query_Call {
+	return &MockDynamoAPI_Query_Call{Call: _e.mock.On("Query",
+		append([]any{ctx, params}, optFns...)...)}
+}
+
+func (_c *MockDynamoAPI_Query_Call) Run(run func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options))) *MockDynamoAPI_Query_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *dynamodb.QueryInput
+		if args[1] != nil {
+			arg1 = args[1].(*dynamodb.QueryInput)
+		}
+		var arg2 []func(*dynamodb.Options)
+		var variadicArgs []func(*dynamodb.Options)
+		if len(args) > 2 {
+			variadicArgs = args[2].([]func(*dynamodb.Options))
+		}
+		arg2 = variadicArgs
+		run(
+			arg0,
+			arg1,
+			arg2...,
+		)
+	})
+	return _c
+}
+
+func (_c *MockDynamoAPI_Query_Call) Return(queryOutput *dynamodb.QueryOutput, err error) *MockDynamoAPI_Query_Call {
+	_c.Call.Return(queryOutput, err)
+	return _c
+}
+
+func (_c *MockDynamoAPI_Query_Call) RunAndReturn(run func(ctx context.Context, params *dynamodb.QueryInput, optFns ...func(*dynamodb.Options)) (*dynamodb.QueryOutput, error)) *MockDynamoAPI_Query_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Scan provides a mock function for the type MockDynamoAPI
 func (_mock *MockDynamoAPI) Scan(ctx context.Context, params *dynamodb.ScanInput, optFns ...func(*dynamodb.Options)) (*dynamodb.ScanOutput, error) {
 	var tmpRet mock.Arguments
