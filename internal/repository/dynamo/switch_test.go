@@ -55,6 +55,18 @@ func (s *SwitchRepositorySuite) TestList_Succeeds() {
 	s.Equal("Gateron", switches[0].Brand)
 }
 
+func (s *SwitchRepositorySuite) TestList_EmptyVisibilities_ReturnsEmptySliceWithoutQuerying() {
+	// No EXPECT() on s.mockClient.Query - an empty visibilities slice must
+	// short-circuit before building a Query, since expression.In(...)
+	// requires at least one value and would otherwise panic.
+	switches, next, err := s.repo.List(context.Background(), "alice", nil, 20, "")
+
+	s.Require().NoError(err)
+	s.NotNil(switches)
+	s.Empty(switches)
+	s.Empty(next)
+}
+
 func (s *SwitchRepositorySuite) TestList_EmptyResult_ReturnsEmptySliceNotNil() {
 	s.mockClient.EXPECT().
 		Query(mock.Anything, mock.Anything).

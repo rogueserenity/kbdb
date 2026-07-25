@@ -34,14 +34,21 @@ func (r *SwitchRepository) List(
 	limit int,
 	cursor string,
 ) ([]repository.Switch, string, error) {
+	// No visibility tier is readable, so nothing can match - short-circuit
+	// rather than build a Query with an empty IN(...) filter (which the
+	// expression builder below would panic constructing).
+	if len(visibilities) == 0 {
+		return []repository.Switch{}, "", nil
+	}
+
 	startKey, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", fmt.Errorf("decoding cursor: %w", err)
 	}
 
 	// limit is validated by the handler against api/openapi.yaml's Limit
-	// parameter (1-100) before reaching here; clamp defensively so a bad
-	// caller can't overflow the int32 DynamoDB's API expects.
+	// parameter (1-100) before reaching here; List's exported signature
+	// accepts any int, so clamp defensively rather than trust that.
 	if limit < 1 {
 		limit = 1
 	} else if limit > math.MaxInt32 {
