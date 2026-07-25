@@ -1,4 +1,4 @@
-package support
+package api
 
 import (
 	"bytes"

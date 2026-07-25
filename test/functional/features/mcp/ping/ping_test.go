@@ -1,4 +1,4 @@
-package mcp_test
+package ping_test
 
 import (
 	gomcp "github.com/mark3labs/mcp-go/mcp"
@@ -7,12 +7,13 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
+	"github.com/rogueserenity/kbdb/test/functional/support/api"
 )
 
 var _ = Describe("Ping", func() {
 	var (
-		client *support.MCPClient
-		resp   *support.RPCResponse
+		client *api.MCPClient
+		resp   *api.RPCResponse
 	)
 
 	BeforeEach(func() {
@@ -22,7 +23,7 @@ var _ = Describe("Ping", func() {
 
 	Context("given no bearer token", func() {
 		BeforeEach(func() {
-			client = support.NewMCPClient(support.BaseURL()+"/mcp", "")
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
 		})
 
 		When("the initialize handshake is performed", func() {
@@ -59,9 +60,9 @@ var _ = Describe("Ping", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, err := support.AuthToken(ctx)
+			token, err := api.AuthToken(ctx)
 			Expect(err).NotTo(HaveOccurred())
-			client = support.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
 		})
 
 		When("the ping tool is called", func() {
