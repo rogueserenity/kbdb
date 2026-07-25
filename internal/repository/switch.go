@@ -48,13 +48,3 @@ type Switch struct {
 	Notes        string         `dynamodbav:"notes" json:"notes"`
 	Visibility   Visibility     `dynamodbav:"visibility" json:"visibility"`
 }
-
-// OwnerID implements authz.Owned.
-func (s Switch) OwnerID() string {
-	return s.UserID
-}
-
-// VisibilityTier implements authz.Owned.
-func (s Switch) VisibilityTier() Visibility {
-	return s.Visibility
-}

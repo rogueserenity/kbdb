@@ -11,36 +11,28 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// fakeOwned is a minimal authz.Owned implementation, kept local to this
-// test so authz's tests don't depend on any one entity's struct shape.
-type fakeOwned struct {
-	ownerID    string
-	visibility repository.Visibility
-}
-
-func (f fakeOwned) OwnerID() string                       { return f.ownerID }
-func (f fakeOwned) VisibilityTier() repository.Visibility { return f.visibility }
-
-func newFakeOwned(userID string, visibility repository.Visibility) fakeOwned {
-	return fakeOwned{ownerID: userID, visibility: visibility}
-}
-
-func TestCanRead(t *testing.T) {
+func TestReadableVisibilities(t *testing.T) {
 	tests := []struct {
-		name       string
-		ownerID    string
-		visibility repository.Visibility
-		caller     string // "" means no user ID set on the context at all
-		want       bool
+		name    string
+		ownerID string
+		caller  string // "" means no user ID set on the context at all
+		want    []repository.Visibility
 	}{
-		{"owner reading own private item", "alice", repository.VisibilityPrivate, "alice", true},
-		{"owner reading own public item", "alice", repository.VisibilityPublic, "alice", true},
-		{"anonymous reading public item", "alice", repository.VisibilityPublic, "", true},
-		{"anonymous reading authenticated item", "alice", repository.VisibilityAuthenticated, "", false},
-		{"anonymous reading private item", "alice", repository.VisibilityPrivate, "", false},
-		{"other user reading authenticated item", "alice", repository.VisibilityAuthenticated, "bob", true},
-		{"other user reading public item", "alice", repository.VisibilityPublic, "bob", true},
-		{"other user reading private item", "alice", repository.VisibilityPrivate, "bob", false},
+		{
+			"owner requesting own collection",
+			"alice", "alice",
+			[]repository.Visibility{repository.VisibilityPublic, repository.VisibilityAuthenticated, repository.VisibilityPrivate},
+		},
+		{
+			"anonymous requesting someone's collection",
+			"alice", "",
+			[]repository.Visibility{repository.VisibilityPublic},
+		},
+		{
+			"other authenticated user requesting someone's collection",
+			"alice", "bob",
+			[]repository.Visibility{repository.VisibilityPublic, repository.VisibilityAuthenticated},
+		},
 	}
 
 	for _, tt := range tests {
@@ -50,9 +42,7 @@ func TestCanRead(t *testing.T) {
 				ctx = kbdbctx.WithUserID(ctx, tt.caller)
 			}
 
-			item := newFakeOwned(tt.ownerID, tt.visibility)
-
-			assert.Equal(t, tt.want, authz.CanRead(ctx, item))
+			assert.ElementsMatch(t, tt.want, authz.ReadableVisibilities(ctx, tt.ownerID))
 		})
 	}
 }
@@ -76,9 +66,7 @@ func TestIsOwner(t *testing.T) {
 				ctx = kbdbctx.WithUserID(ctx, tt.caller)
 			}
 
-			item := newFakeOwned(tt.ownerID, repository.VisibilityPrivate)
-
-			assert.Equal(t, tt.want, authz.IsOwner(ctx, item))
+			assert.Equal(t, tt.want, authz.IsOwner(ctx, tt.ownerID))
 		})
 	}
 }
