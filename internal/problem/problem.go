@@ -7,10 +7,18 @@ import (
 )
 
 type body struct {
-	Type   string `json:"type"`
-	Title  string `json:"title"`
-	Status int    `json:"status"`
-	Detail string `json:"detail,omitempty"`
+	Type          string         `json:"type"`
+	Title         string         `json:"title"`
+	Status        int            `json:"status"`
+	Detail        string         `json:"detail,omitempty"`
+	InvalidParams []InvalidParam `json:"invalid_params,omitempty"`
+}
+
+// InvalidParam is one field-level violation reported in a validation
+// problem's invalid_params member (RFC 9457 §3.2).
+type InvalidParam struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
 }
 
 // Write writes an RFC 9457 application/problem+json response with the given
@@ -24,6 +32,20 @@ func Write(w http.ResponseWriter, status int, problemType, title, detail string)
 		Title:  title,
 		Status: status,
 		Detail: detail,
+	})
+}
+
+// ValidationFailed writes a 400 Problem response listing every field-level
+// violation in invalidParams, per RFC 9457 §3.2's invalid_params member.
+func ValidationFailed(w http.ResponseWriter, detail string, invalidParams []InvalidParam) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(http.StatusBadRequest)
+	_ = json.NewEncoder(w).Encode(body{
+		Type:          "https://mykeebs.info/errors/bad-request",
+		Title:         "Bad Request",
+		Status:        http.StatusBadRequest,
+		Detail:        detail,
+		InvalidParams: invalidParams,
 	})
 }
 

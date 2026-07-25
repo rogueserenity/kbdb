@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
+	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -54,9 +55,10 @@ func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
 	s.Equal(http.StatusOK, rec.Code)
 	s.Equal("application/json", rec.Header().Get("Content-Type"))
 
-	var got switchListPage
+	var got api.SwitchListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Equal([]switchSummary{{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear"}}, got.Items)
+	id, brand, name, typ := "sw1", "Gateron", "Yellow", "Linear"
+	s.Equal(&[]api.SwitchSummary{{Id: &id, Brand: &brand, Name: &name, Type: &typ}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 
@@ -105,34 +107,10 @@ func (s *ListSwitchesSuite) TestListSwitches_ReturnsNextCursor_WhenPresent() {
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(context.Background(), ""))
 
-	var got switchListPage
+	var got api.SwitchListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.NextCursor)
 	s.Equal("next-page-token", *got.NextCursor)
-}
-
-func (s *ListSwitchesSuite) TestListSwitches_InvalidLimit_Returns400() {
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=0"))
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *ListSwitchesSuite) TestListSwitches_LimitTooHigh_Returns400() {
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=101"))
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *ListSwitchesSuite) TestListSwitches_NonNumericLimit_Returns400() {
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=abc"))
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_RepositoryError_Returns500() {
@@ -310,7 +288,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_Succeeds() {
 		})).
 		Return(&repository.Switch{UserID: "alice", ID: "generated-id", Brand: "Gateron", Name: "Yellow", Type: "Linear"}, nil)
 
-	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -322,7 +300,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_Succeeds() {
 	s.Equal("generated-id", got.ID)
 }
 
-func (s *CreateSwitchSuite) TestCreateSwitch_ExplicitVisibility_Preserved() {
+func (s *CreateSwitchSuite) TestCreateSwitch_Visibility_Preserved() {
 	s.expectValidType()
 	s.mockSwitchRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(sw repository.Switch) bool {
@@ -427,31 +405,12 @@ func (s *CreateSwitchSuite) TestCreateSwitch_InvalidBody_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *CreateSwitchSuite) TestCreateSwitch_MissingRequiredFields_Returns400() {
-	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *CreateSwitchSuite) TestCreateSwitch_UnapprovedType_Returns400() {
 	s.mockLookupRepo.EXPECT().
 		GetCategory(mock.Anything, "switch_type").
 		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Bogus"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateSwitchSuite) TestCreateSwitch_InvalidVisibility_Returns400() {
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"bogus"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 

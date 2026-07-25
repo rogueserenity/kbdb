@@ -78,7 +78,7 @@ var _ = Describe("Listing switches", func() {
 			When("listing switches", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.List(ctx, ownerID, ownerToken)
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -96,7 +96,7 @@ var _ = Describe("Listing switches", func() {
 			When("listing switches", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.List(ctx, ownerID, "")
+					resp, err = client.List(ctx, ownerID, "", -1)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -122,7 +122,7 @@ var _ = Describe("Listing switches", func() {
 			When("listing switches", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.List(ctx, ownerID, token)
+					resp, err = client.List(ctx, ownerID, token, -1)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -132,6 +132,21 @@ var _ = Describe("Listing switches", func() {
 					Expect(ids).To(ContainElements(publicID, authenticatedID))
 					Expect(ids).NotTo(ContainElement(privateID))
 				})
+			})
+		})
+	})
+
+	Context("given an out-of-range limit", func() {
+		When("listing switches", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.List(ctx, ownerID, ownerToken, 101)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns 400 with a problem+json body", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+				Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 			})
 		})
 	})

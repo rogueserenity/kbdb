@@ -11,15 +11,14 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-const (
-	defaultSwitchListLimit = 20
-	maxSwitchListLimit     = 100
-)
+const defaultSwitchListLimit = 20
 
 // Lookup categories SwitchInput's open-vocabulary fields validate against,
 // per their api/openapi.yaml descriptions ("validated against the ...
@@ -31,36 +30,19 @@ const (
 	vendorCategory               = "vendor"
 )
 
-// switchSummary is the SwitchSummary schema in api/openapi.yaml: a subset
-// of Switch's fields, returned by the list endpoint.
-type switchSummary struct {
-	ID    string `json:"id"`
-	Brand string `json:"brand"`
-	Name  string `json:"name"`
-	Type  string `json:"type"`
-}
-
-type switchListPage struct {
-	Items      []switchSummary `json:"items"`
-	NextCursor *string         `json:"next_cursor"`
-}
-
-// parseListLimit reads the limit query param per api/openapi.yaml's Limit
-// parameter (1-100, default 20), writing a 400 and returning ok=false if
-// it's present but invalid.
-func parseListLimit(w http.ResponseWriter, r *http.Request) (limit int, ok bool) {
+// parseListLimit reads the limit query param, defaulting when absent. Range
+// (1-100) and type are enforced by the OpenAPI request validator
+// (internal/router.restOpenAPIValidator) before this handler runs, so a
+// present value is always a valid integer here.
+func parseListLimit(r *http.Request) int {
 	raw := r.URL.Query().Get("limit")
 	if raw == "" {
-		return defaultSwitchListLimit, true
+		return defaultSwitchListLimit
 	}
 
-	limit, err := strconv.Atoi(raw)
-	if err != nil || limit < 1 || limit > maxSwitchListLimit {
-		problem.BadRequest(w, "limit must be an integer between 1 and 100")
-		return 0, false
-	}
+	limit, _ := strconv.Atoi(raw)
 
-	return limit, true
+	return limit
 }
 
 // ListSwitches returns a handler for GET /users/{userId}/switches. userId
@@ -72,10 +54,7 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
-		limit, ok := parseListLimit(w, r)
-		if !ok {
-			return
-		}
+		limit := parseListLimit(r)
 		cursor := r.URL.Query().Get("cursor")
 
 		visibilities := authz.ReadableVisibilities(r.Context(), ownerID)
@@ -87,12 +66,12 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
-		items := make([]switchSummary, len(switches))
+		items := make([]api.SwitchSummary, len(switches))
 		for i, sw := range switches {
-			items[i] = switchSummary{ID: sw.ID, Brand: sw.Brand, Name: sw.Name, Type: sw.Type}
+			items[i] = repoapi.SwitchToAPISummary(sw)
 		}
 
-		page := switchListPage{Items: items}
+		page := api.SwitchListPage{Items: &items}
 		if nextCursor != "" {
 			page.NextCursor = &nextCursor
 		}
@@ -131,47 +110,38 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(sw)
+		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*sw))
 	}
 }
 
-// decodeSwitchInput reads and shape-validates a request body against
-// api/openapi.yaml's SwitchInput schema (required fields), writing a 400
-// and returning ok=false if the body is malformed or fails shape
-// validation. Open-vocabulary fields (type, material.*, spring.material,
-// purchase.vendor) aren't checked here - see validateSwitchLookups, which
-// needs a repository.LookupRepository this function doesn't have.
+// decodeSwitchInput reads the request body into a repository.Switch.
+// Shape/required-field validation already happened in the OpenAPI request
+// validator (internal/router.restOpenAPIValidator) before this handler ran.
+// Open-vocabulary fields aren't checked here either - see
+// validateSwitchLookups, which needs a repository.LookupRepository this
+// function doesn't have.
 func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Switch, ok bool) {
-	if err := json.NewDecoder(r.Body).Decode(&sw); err != nil {
+	var in api.SwitchInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		problem.BadRequest(w, "invalid request body")
 		return repository.Switch{}, false
 	}
 
-	if sw.Brand == "" || sw.Name == "" || sw.Type == "" {
-		problem.BadRequest(w, "brand, name, and type are required")
-		return repository.Switch{}, false
-	}
-
-	if sw.Visibility == "" {
-		sw.Visibility = repository.VisibilityPrivate
-	} else if !sw.Visibility.Valid() {
-		problem.BadRequest(w, "visibility must be one of public, authenticated, private")
-		return repository.Switch{}, false
-	}
+	sw = repoapi.SwitchToRepo(in)
 
 	return sw, true
 }
 
 // validateSwitchLookups writes a 400 naming the first invalid field and
-// returns ok=false if any check fails. A blank field is skipped, not
+// returns ok=false if any check fails. An unset (nil) field is skipped, not
 // treated as invalid - SwitchInput doesn't require these.
 func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, sw repository.Switch) (ok bool) {
 	checks := []struct {
 		field    string
-		value    string
+		value    *string
 		category string
 	}{
-		{"type", sw.Type, switchTypeCategory},
+		{"type", &sw.Type, switchTypeCategory},
 		{"material.top_housing", sw.Material.TopHousing, switchMaterialCategory},
 		{"material.bottom_housing", sw.Material.BottomHousing, switchMaterialCategory},
 		{"material.stem", sw.Material.Stem, switchMaterialCategory},
@@ -180,18 +150,18 @@ func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRep
 	}
 
 	for _, c := range checks {
-		if c.value == "" {
+		if c.value == nil {
 			continue
 		}
 
-		valid, err := lookupContains(ctx, lookupRepo, c.category, c.value)
+		valid, err := lookupContains(ctx, lookupRepo, c.category, *c.value)
 		if err != nil {
 			log.FromContext(ctx).Error("validating switch lookup field", "field", c.field, "error", err)
 			problem.Internal(w, "failed to validate "+c.field)
 			return false
 		}
 		if !valid {
-			problem.BadRequest(w, fmt.Sprintf("%s: %q is not an approved %s value", c.field, c.value, c.category))
+			problem.BadRequest(w, fmt.Sprintf("%s: %q is not an approved %s value", c.field, *c.value, c.category))
 			return false
 		}
 	}
@@ -275,6 +245,6 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(created)
+		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*created))
 	}
 }

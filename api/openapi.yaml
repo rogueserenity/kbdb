@@ -4,7 +4,7 @@ info:
   description: >
     API for tracking a personal mechanical keyboard collection: keyboards,
     switches, keycap sets, and the builds that combine them. Routes are
-    nested under /users/{userId}/... to support both a caller's own
+    nested under /v1/users/{userId}/... to support both a caller's own
     collection and items other users have explicitly shared with them —
     see the userId path parameter's description for the exact rules.
   version: "1.0.0"
@@ -14,7 +14,7 @@ info:
     name: MIT
     url: https://github.com/rogueserenity/kbdb/blob/main/LICENSE
 servers:
-  - url: https://api.mykeebs.info/v1
+  - url: https://api.mykeebs.info
 security:
   - CognitoAuth: []
 
@@ -31,7 +31,7 @@ tags:
     description: Approved value lists for enum-like fields (vendors, materials, profiles, etc.) — non-sensitive global reference data, not owned by any user. Reads require no authentication at all; writes require admin access.
 
 paths:
-  /users/{userId}/keyboards:
+  /v1/users/{userId}/keyboards:
     parameters:
       - $ref: "#/components/parameters/UserId"
     get:
@@ -81,7 +81,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/keyboards/{id}:
+  /v1/users/{userId}/keyboards/{id}:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -142,7 +142,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/switches:
+  /v1/users/{userId}/switches:
     parameters:
       - $ref: "#/components/parameters/UserId"
     get:
@@ -192,7 +192,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/switches/{id}:
+  /v1/users/{userId}/switches/{id}:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -253,7 +253,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/keycap-sets:
+  /v1/users/{userId}/keycap-sets:
     parameters:
       - $ref: "#/components/parameters/UserId"
     get:
@@ -303,7 +303,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/keycap-sets/{id}:
+  /v1/users/{userId}/keycap-sets/{id}:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -364,7 +364,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/keycap-sets/{id}/kits:
+  /v1/users/{userId}/keycap-sets/{id}/kits:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -417,7 +417,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/keycap-sets/{id}/kits/{kitId}:
+  /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -487,7 +487,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/keycap-sets/{id}/kits/{kitId}/image:
+  /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}/image:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -559,7 +559,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/builds:
+  /v1/users/{userId}/builds:
     parameters:
       - $ref: "#/components/parameters/UserId"
     get:
@@ -609,7 +609,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/builds/{id}:
+  /v1/users/{userId}/builds/{id}:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -670,7 +670,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/builds/{id}/images:
+  /v1/users/{userId}/builds/{id}/images:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -725,7 +725,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /users/{userId}/builds/{id}/images/{imageId}:
+  /v1/users/{userId}/builds/{id}/images/{imageId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
@@ -750,7 +750,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /lookups:
+  /v1/lookups:
     get:
       tags: [lookups]
       summary: List all lookup category names
@@ -774,7 +774,7 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /lookups/{category}:
+  /v1/lookups/{category}:
     parameters:
       - name: category
         in: path
@@ -1187,7 +1187,7 @@ components:
 
     SwitchInput:
       type: object
-      required: [brand, name, type]
+      required: [brand, name, type, visibility]
       properties:
         brand:
           type: string

@@ -25,6 +25,7 @@ Single-test invocations use the underlying tools directly:
 go test ./... -run TestVerifyTokenSuite -v   # a single suite
 go test ./internal/auth/... -v               # a single package
 mockery                                       # regenerate mocks after changing an interface
+go tool oapi-codegen -config .oapi-codegen.yml api/openapi.yaml  # regenerate internal/handlers/api after editing api/openapi.yaml
 sam validate --lint
 ```
 
