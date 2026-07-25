@@ -79,10 +79,24 @@ func AdminAuthToken(ctx context.Context) (string, error) {
 	return authToken(ctx, "KBDB_ADMIN_AUTH_TOKEN", fixtures.AdminUserSubject, fixtures.AdminGroups)
 }
 
+// SecondUserAuthToken returns a valid bearer token for a second, unrelated
+// plain (non-admin) test user - distinct from AuthToken's identity, for
+// exercising ownership/visibility-scoped reads of another user's items. See
+// authToken for the KBDB_SECOND_USER_AUTH_TOKEN override behavior.
+func SecondUserAuthToken(ctx context.Context) (string, error) {
+	return authToken(ctx, "KBDB_SECOND_USER_AUTH_TOKEN", fixtures.SecondUserSubject, nil)
+}
+
 // LookupTableName returns the DynamoDB table name backing GET /v1/lookups,
 // so specs can seed fixture rows directly.
 func LookupTableName() string {
 	return os.Getenv("KBDB_LOOKUP_TABLE_NAME")
+}
+
+// SwitchTableName returns the DynamoDB table name backing
+// GET /users/{userId}/switches, so specs can seed fixture rows directly.
+func SwitchTableName() string {
+	return os.Getenv("KBDB_SWITCH_TABLE_NAME")
 }
 
 // DynamoDBEndpointURL returns the DynamoDB endpoint specs should talk to.

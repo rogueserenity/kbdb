@@ -9,6 +9,7 @@ type Config struct {
 	OIDCAudience     string `env:"OIDC_AUDIENCE" required:""`
 	ImagesBucketName string `env:"IMAGES_BUCKET_NAME" required:""`
 	LookupTableName  string `env:"LOOKUP_TABLE_NAME" required:""`
+	SwitchTableName  string `env:"SWITCH_TABLE_NAME" required:""`
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`

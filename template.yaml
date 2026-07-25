@@ -104,6 +104,28 @@ Resources:
         - AttributeName: category
           KeyType: HASH
 
+  # User-owned switches. user_id (Cognito subject, the owner) is the
+  # partition key, id the sort key - every real access pattern is scoped to
+  # an already-known user_id (see README's DynamoDB rationale), so no GSI is
+  # needed; visibility filtering happens as a Query filter expression, not
+  # an index. scripts/func-setup.sh hand-creates an equivalent table against
+  # LocalStack (sam local start-api doesn't run a real CloudFormation
+  # deploy) - keep that script's schema in sync with this resource.
+  SwitchTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+
   # Single Lambda function for all routes (REST entities + MCP), not split
   # by protocol or by entity - see plan rationale. Packaged as a container
   # image (aws-lambda-web-adapter sidecar) rather than a zip - see
@@ -120,6 +142,7 @@ Resources:
           OIDC_AUDIENCE: !Ref UserPoolClient
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           LOOKUP_TABLE_NAME: !Ref LookupTable
+          SWITCH_TABLE_NAME: !Ref SwitchTable
           # Empty in real deployments; sam local's --env-vars override
           # (env.local.json) can only override a var declared here.
           DYNAMODB_ENDPOINT_URL: ""
@@ -147,6 +170,10 @@ Resources:
                 - dynamodb:PutItem
                 - dynamodb:DeleteItem
               Resource: !GetAtt LookupTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt SwitchTable.Arn
       Events:
         PingEvent:
           Type: HttpApi
@@ -199,6 +226,18 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/lookups/{category}
             Method: delete
+        # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
+        # api/openapi.yaml - anonymous callers are allowed); the app enforces
+        # per-item visibility itself via middleware.OptionalAuth and
+        # internal/authz.ReadableVisibilities.
+        ListSwitchesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /users/{userId}/switches
+            Method: get
+            Auth:
+              Authorizer: NONE
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/
@@ -356,3 +395,6 @@ Outputs:
   LookupTableName:
     Description: DynamoDB table backing GET /v1/lookups
     Value: !Ref LookupTable
+  SwitchTableName:
+    Description: DynamoDB table backing GET /users/{userId}/switches
+    Value: !Ref SwitchTable

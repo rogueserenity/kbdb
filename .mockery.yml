@@ -17,6 +17,9 @@ packages:
       LookupRepository:
         config:
           structname: 'MockLookupRepository'
+      SwitchRepository:
+        config:
+          structname: 'MockSwitchRepository'
   github.com/rogueserenity/kbdb/internal/repository/dynamo:
     config:
       dir: '{{.InterfaceDir}}/mocks'

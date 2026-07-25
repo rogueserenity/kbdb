@@ -20,7 +20,7 @@ import (
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see internal/mcp.Handlers doc comment for why. version is
 // advertised to MCP clients in the server's initialize handshake.
-func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuerURL, version string) http.Handler {
+func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, switchRepo repository.SwitchRepository, issuerURL, version string) http.Handler {
 	mux := http.NewServeMux()
 
 	// REST: auth failures are HTTP-level (401) — appropriate for REST.
@@ -35,6 +35,11 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuer
 		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.ReplaceLookup(lookupRepo))))
 	mux.Handle("DELETE /v1/lookups/{category}",
 		middleware.Auth(verifier)(middleware.RequireAdmin(handlers.DeleteLookup(lookupRepo))))
+
+	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// only public switches (see internal/authz.ReadableVisibilities).
+	mux.Handle("GET /users/{userId}/switches",
+		middleware.OptionalAuth(verifier)(handlers.ListSwitches(switchRepo)))
 
 	// MCP: auth happens inside the MCP server itself (context func + tool
 	// handler middleware), returning MCP-shaped errors rather than a bare
