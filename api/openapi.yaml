@@ -1526,4 +1526,5 @@ components:
       properties:
         values:
           type: array
+          minItems: 1
           items: {}

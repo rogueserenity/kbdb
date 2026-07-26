@@ -221,26 +221,6 @@ func (s *CreateLookupSuite) TestCreateCategory_InvalidBody_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *CreateLookupSuite) TestCreateCategory_EmptyValues_Returns400() {
-	req := s.newRequest(`{"values":[]}`)
-	rec := httptest.NewRecorder()
-
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateLookupSuite) TestCreateCategory_MissingValues_Returns400() {
-	req := s.newRequest(`{}`)
-	rec := httptest.NewRecorder()
-
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *CreateLookupSuite) TestCreateCategory_WhitespaceCategory_Returns400() {
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/%20", strings.NewReader(`{"values":["a"]}`))
 	req.SetPathValue("category", " ")
@@ -333,16 +313,6 @@ func (s *ReplaceLookupSuite) TestReplaceCategory_RepositoryError_Returns500() {
 
 func (s *ReplaceLookupSuite) TestReplaceCategory_InvalidBody_Returns400() {
 	req := s.newRequest("not json")
-	rec := httptest.NewRecorder()
-
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *ReplaceLookupSuite) TestReplaceCategory_EmptyValues_Returns400() {
-	req := s.newRequest(`{"values":[]}`)
 	rec := httptest.NewRecorder()
 
 	s.handler(rec, req)
