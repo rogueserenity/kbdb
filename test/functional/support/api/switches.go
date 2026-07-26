@@ -33,6 +33,17 @@ func (c *SwitchesClient) List(ctx context.Context, ownerID, token string, limit 
 	return c.client.Do(ctx, http.MethodGet, path, token, nil)
 }
 
+// ListWithRawLimit is List, but sends limit verbatim rather than requiring
+// an int - lets a spec send a non-numeric limit to check the OpenAPI
+// validator's own rejection, which List's typed parameter can't express.
+// The caller owns closing resp.Body.
+func (c *SwitchesClient) ListWithRawLimit(ctx context.Context, ownerID, token, limit string) (*http.Response, error) {
+	query := url.Values{"limit": []string{limit}}
+	path := "/v1/users/" + ownerID + "/switches?" + query.Encode()
+
+	return c.client.Do(ctx, http.MethodGet, path, token, nil)
+}
+
 // Get calls GET /v1/users/{ownerID}/switches/{id} with the given bearer
 // token (empty for an anonymous request). The caller owns closing resp.Body.
 func (c *SwitchesClient) Get(ctx context.Context, ownerID, id, token string) (*http.Response, error) {

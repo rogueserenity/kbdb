@@ -45,7 +45,7 @@ func parseListLimit(r *http.Request) int {
 	return limit
 }
 
-// ListSwitches returns a handler for GET /users/{userId}/switches. userId
+// ListSwitches returns a handler for GET /v1/users/{userId}/switches. userId
 // need not be the caller's own subject: the caller sees userId's switches
 // whose visibility is readable to them, per internal/authz.
 // middleware.OptionalAuth must run first so an anonymous caller is still
@@ -82,7 +82,7 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 	}
 }
 
-// GetSwitch returns a handler for GET /users/{userId}/switches/{id}. Per
+// GetSwitch returns a handler for GET /v1/users/{userId}/switches/{id}. Per
 // api/openapi.yaml, a switch that exists but isn't owned by or shared with
 // the caller returns 404, not 403 - this avoids revealing that an unshared
 // item exists. middleware.OptionalAuth must run first, same as
@@ -202,7 +202,7 @@ func lookupContains(ctx context.Context, lookupRepo repository.LookupRepository,
 	return false, nil
 }
 
-// CreateSwitch returns a handler for POST /users/{userId}/switches. Per
+// CreateSwitch returns a handler for POST /v1/users/{userId}/switches. Per
 // api/openapi.yaml, userId must be the caller's own subject - creating in
 // another user's collection returns 404 (not 403, matching the read
 // routes' anti-enumeration behavior), enforced via authz.IsOwner.

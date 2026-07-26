@@ -130,6 +130,17 @@ func collectInvalidParams(err error) []problem.InvalidParam {
 		if !ok || reqErr.Err == nil {
 			continue
 		}
+
+		// A parameter-level failure (query/path/header/cookie) names itself
+		// via Parameter.Name - reqErr.Err here is often a plain parse/
+		// required error, not a *openapi3.SchemaError with a JSONPointer,
+		// so schemaErrorsFrom below (body-only) can't name it and would
+		// otherwise mislabel it "body".
+		if reqErr.Parameter != nil {
+			params = append(params, problem.InvalidParam{Name: reqErr.Parameter.Name, Reason: reqErr.Err.Error()})
+			continue
+		}
+
 		params = append(params, schemaErrorsFrom(reqErr.Err)...)
 	}
 

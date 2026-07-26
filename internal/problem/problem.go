@@ -25,9 +25,7 @@ type InvalidParam struct {
 // status, title, and detail. problemType should be a stable URI identifying
 // the problem category (e.g. "https://mykeebs.info/errors/internal-error").
 func Write(w http.ResponseWriter, status int, problemType, title, detail string) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(body{
+	writeBody(w, status, body{
 		Type:   problemType,
 		Title:  title,
 		Status: status,
@@ -38,15 +36,19 @@ func Write(w http.ResponseWriter, status int, problemType, title, detail string)
 // ValidationFailed writes a 400 Problem response listing every field-level
 // violation in invalidParams, per RFC 9457 §3.2's invalid_params member.
 func ValidationFailed(w http.ResponseWriter, detail string, invalidParams []InvalidParam) {
-	w.Header().Set("Content-Type", "application/problem+json")
-	w.WriteHeader(http.StatusBadRequest)
-	_ = json.NewEncoder(w).Encode(body{
+	writeBody(w, http.StatusBadRequest, body{
 		Type:          "https://mykeebs.info/errors/bad-request",
 		Title:         "Bad Request",
 		Status:        http.StatusBadRequest,
 		Detail:        detail,
 		InvalidParams: invalidParams,
 	})
+}
+
+func writeBody(w http.ResponseWriter, status int, b body) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(b)
 }
 
 // NotFound writes a 404 Problem response.

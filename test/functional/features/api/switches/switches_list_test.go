@@ -136,11 +136,24 @@ var _ = Describe("Listing switches", func() {
 		})
 	})
 
-	Context("given an out-of-range limit", func() {
+	DescribeTable("given an invalid limit",
+		func(ctx SpecContext, limit int) {
+			var err error
+			resp, err = client.List(ctx, ownerID, ownerToken, limit)
+			Expect(err).NotTo(HaveOccurred())
+
+			Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+			Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+		},
+		Entry("below the minimum", 0),
+		Entry("above the maximum", 101),
+	)
+
+	Context("given a non-numeric limit", func() {
 		When("listing switches", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.List(ctx, ownerID, ownerToken, 101)
+				resp, err = client.ListWithRawLimit(ctx, ownerID, ownerToken, "abc")
 				Expect(err).NotTo(HaveOccurred())
 			})
 

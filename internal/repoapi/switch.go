@@ -61,6 +61,10 @@ func SwitchToAPISummary(sw repository.Switch) api.SwitchSummary {
 }
 
 func switchMaterialToAPI(m repository.SwitchMaterial) *api.SwitchMaterial {
+	if m.TopHousing == nil && m.BottomHousing == nil && m.Stem == nil {
+		return nil
+	}
+
 	return &api.SwitchMaterial{
 		TopHousing:    m.TopHousing,
 		BottomHousing: m.BottomHousing,
@@ -81,6 +85,10 @@ func switchMaterialToRepo(m *api.SwitchMaterial) repository.SwitchMaterial {
 }
 
 func switchForceToAPI(f repository.SwitchForce) *api.SwitchForce {
+	if f.Actuation == nil && f.BottomOut == nil {
+		return nil
+	}
+
 	return &api.SwitchForce{
 		Actuation: f.Actuation,
 		BottomOut: f.BottomOut,
@@ -99,6 +107,10 @@ func switchForceToRepo(f *api.SwitchForce) repository.SwitchForce {
 }
 
 func switchSpringToAPI(s repository.SwitchSpring) *api.SwitchSpring {
+	if s.Material == nil && s.PreTravel == nil && s.TotalTravel == nil {
+		return nil
+	}
+
 	return &api.SwitchSpring{
 		Material:    s.Material,
 		PreTravel:   s.PreTravel,
@@ -119,6 +131,10 @@ func switchSpringToRepo(s *api.SwitchSpring) repository.SwitchSpring {
 }
 
 func switchPurchaseToAPI(p repository.SwitchPurchase) *api.SwitchPurchase {
+	if p.Vendor == nil && p.Price == nil && p.Quantity == nil {
+		return nil
+	}
+
 	return &api.SwitchPurchase{
 		Vendor:   p.Vendor,
 		Price:    p.Price,
