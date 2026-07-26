@@ -66,6 +66,11 @@ func Forbidden(w http.ResponseWriter, detail string) {
 	Write(w, http.StatusForbidden, "https://mykeebs.info/errors/forbidden", "Forbidden", detail)
 }
 
+// Unauthorized writes a 401 Problem response.
+func Unauthorized(w http.ResponseWriter, detail string) {
+	Write(w, http.StatusUnauthorized, "https://mykeebs.info/errors/unauthorized", "Unauthorized", detail)
+}
+
 // Conflict writes a 409 Problem response.
 func Conflict(w http.ResponseWriter, detail string) {
 	Write(w, http.StatusConflict, "https://mykeebs.info/errors/conflict", "Conflict", detail)

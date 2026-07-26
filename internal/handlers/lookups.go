@@ -115,10 +115,6 @@ func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, re
 func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		categories, err := repo.ListCategories(r.Context())
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("listing lookup categories", "error", err)
 			problem.Internal(w, "failed to list lookup categories")

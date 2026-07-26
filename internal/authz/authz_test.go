@@ -4,97 +4,96 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-func TestReadableVisibilities(t *testing.T) {
-	tests := []struct {
-		name    string
-		ownerID string
-		caller  string // "" means no user ID set on the context at all
-		want    []repository.Visibility
-	}{
-		{
-			"owner requesting own collection",
-			"alice", "alice",
-			[]repository.Visibility{repository.VisibilityPublic, repository.VisibilityAuthenticated, repository.VisibilityPrivate},
-		},
-		{
-			"anonymous requesting someone's collection",
-			"alice", "",
-			[]repository.Visibility{repository.VisibilityPublic},
-		},
-		{
-			"other authenticated user requesting someone's collection",
-			"alice", "bob",
-			[]repository.Visibility{repository.VisibilityPublic, repository.VisibilityAuthenticated},
-		},
+func ctxFor(caller string) context.Context {
+	ctx := context.Background()
+	if caller != "" {
+		ctx = kbdbctx.WithUserID(ctx, caller)
 	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			if tt.caller != "" {
-				ctx = kbdbctx.WithUserID(ctx, tt.caller)
-			}
-
-			assert.ElementsMatch(t, tt.want, authz.ReadableVisibilities(ctx, tt.ownerID))
-		})
-	}
+	return ctx
 }
 
-func TestCanReadVisibility(t *testing.T) {
-	tests := []struct {
-		name       string
-		ownerID    string
-		visibility repository.Visibility
-		caller     string
-		want       bool
-	}{
-		{"owner reading own private item", "alice", repository.VisibilityPrivate, "alice", true},
-		{"anonymous reading public item", "alice", repository.VisibilityPublic, "", true},
-		{"anonymous reading authenticated item", "alice", repository.VisibilityAuthenticated, "", false},
-		{"anonymous reading private item", "alice", repository.VisibilityPrivate, "", false},
-		{"other user reading authenticated item", "alice", repository.VisibilityAuthenticated, "bob", true},
-		{"other user reading private item", "alice", repository.VisibilityPrivate, "bob", false},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			if tt.caller != "" {
-				ctx = kbdbctx.WithUserID(ctx, tt.caller)
-			}
-
-			assert.Equal(t, tt.want, authz.CanReadVisibility(ctx, tt.ownerID, tt.visibility))
-		})
-	}
+type ReadableVisibilitiesSuite struct {
+	suite.Suite
 }
 
-func TestIsOwner(t *testing.T) {
-	tests := []struct {
-		name    string
-		ownerID string
-		caller  string
-		want    bool
-	}{
-		{"owner", "alice", "alice", true},
-		{"other user", "alice", "bob", false},
-		{"anonymous", "alice", "", false},
-	}
+func TestReadableVisibilitiesSuite(t *testing.T) {
+	suite.Run(t, new(ReadableVisibilitiesSuite))
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			ctx := context.Background()
-			if tt.caller != "" {
-				ctx = kbdbctx.WithUserID(ctx, tt.caller)
-			}
+func (s *ReadableVisibilitiesSuite) TestOwnerRequestingOwnCollection() {
+	got := authz.ReadableVisibilities(ctxFor("alice"), "alice")
+	s.ElementsMatch([]repository.Visibility{
+		repository.VisibilityPublic, repository.VisibilityAuthenticated, repository.VisibilityPrivate,
+	}, got)
+}
 
-			assert.Equal(t, tt.want, authz.IsOwner(ctx, tt.ownerID))
-		})
-	}
+func (s *ReadableVisibilitiesSuite) TestAnonymousRequestingSomeonesCollection() {
+	got := authz.ReadableVisibilities(ctxFor(""), "alice")
+	s.ElementsMatch([]repository.Visibility{repository.VisibilityPublic}, got)
+}
+
+func (s *ReadableVisibilitiesSuite) TestOtherAuthenticatedUserRequestingSomeonesCollection() {
+	got := authz.ReadableVisibilities(ctxFor("bob"), "alice")
+	s.ElementsMatch([]repository.Visibility{
+		repository.VisibilityPublic, repository.VisibilityAuthenticated,
+	}, got)
+}
+
+type CanReadVisibilitySuite struct {
+	suite.Suite
+}
+
+func TestCanReadVisibilitySuite(t *testing.T) {
+	suite.Run(t, new(CanReadVisibilitySuite))
+}
+
+func (s *CanReadVisibilitySuite) TestOwnerReadingOwnPrivateItem() {
+	s.True(authz.CanReadVisibility(ctxFor("alice"), "alice", repository.VisibilityPrivate))
+}
+
+func (s *CanReadVisibilitySuite) TestAnonymousReadingPublicItem() {
+	s.True(authz.CanReadVisibility(ctxFor(""), "alice", repository.VisibilityPublic))
+}
+
+func (s *CanReadVisibilitySuite) TestAnonymousReadingAuthenticatedItem() {
+	s.False(authz.CanReadVisibility(ctxFor(""), "alice", repository.VisibilityAuthenticated))
+}
+
+func (s *CanReadVisibilitySuite) TestAnonymousReadingPrivateItem() {
+	s.False(authz.CanReadVisibility(ctxFor(""), "alice", repository.VisibilityPrivate))
+}
+
+func (s *CanReadVisibilitySuite) TestOtherUserReadingAuthenticatedItem() {
+	s.True(authz.CanReadVisibility(ctxFor("bob"), "alice", repository.VisibilityAuthenticated))
+}
+
+func (s *CanReadVisibilitySuite) TestOtherUserReadingPrivateItem() {
+	s.False(authz.CanReadVisibility(ctxFor("bob"), "alice", repository.VisibilityPrivate))
+}
+
+type IsOwnerSuite struct {
+	suite.Suite
+}
+
+func TestIsOwnerSuite(t *testing.T) {
+	suite.Run(t, new(IsOwnerSuite))
+}
+
+func (s *IsOwnerSuite) TestOwner() {
+	s.True(authz.IsOwner(ctxFor("alice"), "alice"))
+}
+
+func (s *IsOwnerSuite) TestOtherUser() {
+	s.False(authz.IsOwner(ctxFor("bob"), "alice"))
+}
+
+func (s *IsOwnerSuite) TestAnonymous() {
+	s.False(authz.IsOwner(ctxFor(""), "alice"))
 }

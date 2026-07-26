@@ -3,23 +3,30 @@ package repoapi
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-func TestLookupToAPI_PlainStringCategory_PassesThrough(t *testing.T) {
+type LookupToAPISuite struct {
+	suite.Suite
+}
+
+func TestLookupToAPISuite(t *testing.T) {
+	suite.Run(t, new(LookupToAPISuite))
+}
+
+func (s *LookupToAPISuite) TestPlainStringCategory_PassesThrough() {
 	l := repository.Lookup{Category: "vendor", Values: []any{"Amazon", "CannonKeys"}}
 
 	got, err := LookupToAPI(l)
 
-	require.NoError(t, err)
-	assert.Equal(t, "vendor", got.Category)
-	assert.Equal(t, []any{"Amazon", "CannonKeys"}, got.Values)
+	s.Require().NoError(err)
+	s.Equal("vendor", got.Category)
+	s.Equal([]any{"Amazon", "CannonKeys"}, got.Values)
 }
 
-func TestLookupToAPI_KeyboardLayout_DecodesTyped(t *testing.T) {
+func (s *LookupToAPISuite) TestKeyboardLayout_DecodesTyped() {
 	l := repository.Lookup{
 		Category: repository.CategoryKeyboardLayout,
 		Values: []any{
@@ -29,12 +36,12 @@ func TestLookupToAPI_KeyboardLayout_DecodesTyped(t *testing.T) {
 
 	got, err := LookupToAPI(l)
 
-	require.NoError(t, err)
-	require.Len(t, got.Values, 1)
-	assert.Equal(t, repository.LayoutValue{Name: "WK", Sizes: []string{"60%", "65%"}}, got.Values[0])
+	s.Require().NoError(err)
+	s.Require().Len(got.Values, 1)
+	s.Equal(repository.LayoutValue{Name: "WK", Sizes: []string{"60%", "65%"}}, got.Values[0])
 }
 
-func TestLookupToAPI_KeyboardLayout_WrongShape_Errors(t *testing.T) {
+func (s *LookupToAPISuite) TestKeyboardLayout_WrongShape_Errors() {
 	l := repository.Lookup{
 		Category: repository.CategoryKeyboardLayout,
 		Values:   []any{"WK"},
@@ -42,10 +49,10 @@ func TestLookupToAPI_KeyboardLayout_WrongShape_Errors(t *testing.T) {
 
 	_, err := LookupToAPI(l)
 
-	require.Error(t, err)
+	s.Require().Error(err)
 }
 
-func TestLookupToAPI_BuildCaseMountType_DecodesTyped(t *testing.T) {
+func (s *LookupToAPISuite) TestBuildCaseMountType_DecodesTyped() {
 	l := repository.Lookup{
 		Category: repository.CategoryBuildCaseMountType,
 		Values: []any{
@@ -55,12 +62,12 @@ func TestLookupToAPI_BuildCaseMountType_DecodesTyped(t *testing.T) {
 
 	got, err := LookupToAPI(l)
 
-	require.NoError(t, err)
-	require.Len(t, got.Values, 1)
-	assert.Equal(t, repository.CaseMountTypeValue{Name: "Gasket Mount", SupportsDurometer: true}, got.Values[0])
+	s.Require().NoError(err)
+	s.Require().Len(got.Values, 1)
+	s.Equal(repository.CaseMountTypeValue{Name: "Gasket Mount", SupportsDurometer: true}, got.Values[0])
 }
 
-func TestLookupToAPI_BuildCaseMountType_WrongShape_Errors(t *testing.T) {
+func (s *LookupToAPISuite) TestBuildCaseMountType_WrongShape_Errors() {
 	l := repository.Lookup{
 		Category: repository.CategoryBuildCaseMountType,
 		Values:   []any{"Gasket Mount"},
@@ -68,5 +75,5 @@ func TestLookupToAPI_BuildCaseMountType_WrongShape_Errors(t *testing.T) {
 
 	_, err := LookupToAPI(l)
 
-	require.Error(t, err)
+	s.Require().Error(err)
 }

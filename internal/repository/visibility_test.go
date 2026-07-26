@@ -3,27 +3,35 @@ package repository_test
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-func TestVisibility_Valid(t *testing.T) {
-	tests := []struct {
-		name string
-		v    repository.Visibility
-		want bool
-	}{
-		{"public", repository.VisibilityPublic, true},
-		{"authenticated", repository.VisibilityAuthenticated, true},
-		{"private", repository.VisibilityPrivate, true},
-		{"empty", repository.Visibility(""), false},
-		{"unknown", repository.Visibility("shared"), false},
-	}
+type VisibilitySuite struct {
+	suite.Suite
+}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, tt.v.Valid())
-		})
-	}
+func TestVisibilitySuite(t *testing.T) {
+	suite.Run(t, new(VisibilitySuite))
+}
+
+func (s *VisibilitySuite) TestValid_Public_ReturnsTrue() {
+	s.True(repository.VisibilityPublic.Valid())
+}
+
+func (s *VisibilitySuite) TestValid_Authenticated_ReturnsTrue() {
+	s.True(repository.VisibilityAuthenticated.Valid())
+}
+
+func (s *VisibilitySuite) TestValid_Private_ReturnsTrue() {
+	s.True(repository.VisibilityPrivate.Valid())
+}
+
+func (s *VisibilitySuite) TestValid_Empty_ReturnsFalse() {
+	s.False(repository.Visibility("").Valid())
+}
+
+func (s *VisibilitySuite) TestValid_Unknown_ReturnsFalse() {
+	s.False(repository.Visibility("shared").Valid())
 }

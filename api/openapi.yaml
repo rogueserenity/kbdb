@@ -995,7 +995,6 @@ components:
     Visibility:
       type: string
       enum: [public, authenticated, private]
-      default: private
       description: >
         Who can read this item via its GET routes (create/update/delete
         always require the caller to be the item's owner, regardless of
@@ -1050,7 +1049,7 @@ components:
           type: array
           items:
             type: string
-            description: Open vocabulary — validated against the "plate_material" lookup at request time.
+            description: Open vocabulary — validated against the "keyboard_plate_material" lookup at request time.
 
     KeyboardPcb:
       type: object
@@ -1061,7 +1060,7 @@ components:
           example: 1.6
         firmware:
           type: string
-          description: Open vocabulary — validated against the "firmware" lookup at request time.
+          description: Open vocabulary — validated against the "keyboard_pcb_firmware" lookup at request time.
         assembly:
           type: string
           description: Open vocabulary — validated against the "keyboard_pcb_assembly_type" lookup at request time.
@@ -1079,11 +1078,11 @@ components:
           type: string
         size:
           type: string
-          description: Open vocabulary — validated against the "size" lookup at request time.
+          description: Open vocabulary — validated against the "keyboard_size" lookup at request time.
         layout:
           type: string
           description: >
-            Open vocabulary — validated against the "layout" lookup at
+            Open vocabulary — validated against the "keyboard_layout" lookup at
             request time, including that the chosen layout is valid for
             the keyboard's size.
         design:

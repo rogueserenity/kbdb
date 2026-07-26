@@ -3,7 +3,7 @@ package repoapi
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -48,57 +48,65 @@ func fullRepoSwitch() repository.Switch {
 	}
 }
 
-func TestSwitchToAPI_FullRoundTrip_PreservesEveryField(t *testing.T) {
+type SwitchToAPISuite struct {
+	suite.Suite
+}
+
+func TestSwitchToAPISuite(t *testing.T) {
+	suite.Run(t, new(SwitchToAPISuite))
+}
+
+func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	sw := fullRepoSwitch()
 	out := SwitchToAPI(sw)
 
-	assert.Equal(t, sw.ID, out.Id)
-	assert.Equal(t, sw.Brand, out.Brand)
-	assert.Equal(t, sw.Manufacturer, out.Manufacturer)
-	assert.Equal(t, sw.Name, out.Name)
-	assert.Equal(t, sw.Type, out.Type)
-	assert.Equal(t, sw.Pins, out.Pins)
-	assert.Equal(t, sw.FactoryLubed, out.FactoryLubed)
-	assert.Equal(t, sw.Notes, out.Notes)
-	assert.Equal(t, api.Visibility(sw.Visibility), out.Visibility)
+	s.Equal(sw.ID, out.Id)
+	s.Equal(sw.Brand, out.Brand)
+	s.Equal(sw.Manufacturer, out.Manufacturer)
+	s.Equal(sw.Name, out.Name)
+	s.Equal(sw.Type, out.Type)
+	s.Equal(sw.Pins, out.Pins)
+	s.Equal(sw.FactoryLubed, out.FactoryLubed)
+	s.Equal(sw.Notes, out.Notes)
+	s.Equal(api.Visibility(sw.Visibility), out.Visibility)
 
-	if assert.NotNil(t, out.Material) {
-		assert.Equal(t, sw.Material.TopHousing, out.Material.TopHousing)
-		assert.Equal(t, sw.Material.BottomHousing, out.Material.BottomHousing)
-		assert.Equal(t, sw.Material.Stem, out.Material.Stem)
+	if s.NotNil(out.Material) {
+		s.Equal(sw.Material.TopHousing, out.Material.TopHousing)
+		s.Equal(sw.Material.BottomHousing, out.Material.BottomHousing)
+		s.Equal(sw.Material.Stem, out.Material.Stem)
 	}
-	if assert.NotNil(t, out.Force) {
-		assert.Equal(t, sw.Force.Actuation, out.Force.Actuation)
-		assert.Equal(t, sw.Force.BottomOut, out.Force.BottomOut)
+	if s.NotNil(out.Force) {
+		s.Equal(sw.Force.Actuation, out.Force.Actuation)
+		s.Equal(sw.Force.BottomOut, out.Force.BottomOut)
 	}
-	if assert.NotNil(t, out.Spring) {
-		assert.Equal(t, sw.Spring.Material, out.Spring.Material)
-		assert.Equal(t, sw.Spring.PreTravel, out.Spring.PreTravel)
-		assert.Equal(t, sw.Spring.TotalTravel, out.Spring.TotalTravel)
+	if s.NotNil(out.Spring) {
+		s.Equal(sw.Spring.Material, out.Spring.Material)
+		s.Equal(sw.Spring.PreTravel, out.Spring.PreTravel)
+		s.Equal(sw.Spring.TotalTravel, out.Spring.TotalTravel)
 	}
-	if assert.NotNil(t, out.Purchase) {
-		assert.Equal(t, sw.Purchase.Vendor, out.Purchase.Vendor)
-		assert.Equal(t, sw.Purchase.Price, out.Purchase.Price)
-		assert.Equal(t, sw.Purchase.Quantity, out.Purchase.Quantity)
+	if s.NotNil(out.Purchase) {
+		s.Equal(sw.Purchase.Vendor, out.Purchase.Vendor)
+		s.Equal(sw.Purchase.Price, out.Purchase.Price)
+		s.Equal(sw.Purchase.Quantity, out.Purchase.Quantity)
 	}
 }
 
-func TestSwitchToAPI_AllOptionalFieldsNil_SubStructsOmitted(t *testing.T) {
+func (s *SwitchToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	sw := repository.Switch{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate}
 
 	out := SwitchToAPI(sw)
 
-	assert.Nil(t, out.Manufacturer)
-	assert.Nil(t, out.Pins)
-	assert.Nil(t, out.FactoryLubed)
-	assert.Nil(t, out.Notes)
-	assert.Nil(t, out.Material, "an all-nil SwitchMaterial must map to a nil pointer, not an empty object")
-	assert.Nil(t, out.Force, "an all-nil SwitchForce must map to a nil pointer, not an empty object")
-	assert.Nil(t, out.Spring, "an all-nil SwitchSpring must map to a nil pointer, not an empty object")
-	assert.Nil(t, out.Purchase, "an all-nil SwitchPurchase must map to a nil pointer, not an empty object")
+	s.Nil(out.Manufacturer)
+	s.Nil(out.Pins)
+	s.Nil(out.FactoryLubed)
+	s.Nil(out.Notes)
+	s.Nil(out.Material, "an all-nil SwitchMaterial must map to a nil pointer, not an empty object")
+	s.Nil(out.Force, "an all-nil SwitchForce must map to a nil pointer, not an empty object")
+	s.Nil(out.Spring, "an all-nil SwitchSpring must map to a nil pointer, not an empty object")
+	s.Nil(out.Purchase, "an all-nil SwitchPurchase must map to a nil pointer, not an empty object")
 }
 
-func TestSwitchToAPI_OneFieldSetInSubStruct_SubStructPresent(t *testing.T) {
+func (s *SwitchToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 	sw := repository.Switch{
 		ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate,
 		Material: repository.SwitchMaterial{Stem: strPtr("POM")},
@@ -106,14 +114,33 @@ func TestSwitchToAPI_OneFieldSetInSubStruct_SubStructPresent(t *testing.T) {
 
 	out := SwitchToAPI(sw)
 
-	if assert.NotNil(t, out.Material) {
-		assert.Nil(t, out.Material.TopHousing)
-		assert.Nil(t, out.Material.BottomHousing)
-		assert.Equal(t, strPtr("POM"), out.Material.Stem)
+	if s.NotNil(out.Material) {
+		s.Nil(out.Material.TopHousing)
+		s.Nil(out.Material.BottomHousing)
+		s.Equal(strPtr("POM"), out.Material.Stem)
 	}
 }
 
-func TestSwitchToRepo_FullRoundTrip_PreservesEveryField(t *testing.T) {
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
+	sw := fullRepoSwitch()
+
+	summary := SwitchToAPISummary(sw)
+
+	s.Equal(&sw.ID, summary.Id)
+	s.Equal(&sw.Brand, summary.Brand)
+	s.Equal(&sw.Name, summary.Name)
+	s.Equal(&sw.Type, summary.Type)
+}
+
+type SwitchToRepoSuite struct {
+	suite.Suite
+}
+
+func TestSwitchToRepoSuite(t *testing.T) {
+	suite.Run(t, new(SwitchToRepoSuite))
+}
+
+func (s *SwitchToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	in := api.SwitchInput{
 		Brand:        "Gateron",
 		Manufacturer: strPtr("Gateron Inc"),
@@ -146,48 +173,37 @@ func TestSwitchToRepo_FullRoundTrip_PreservesEveryField(t *testing.T) {
 
 	sw := SwitchToRepo(in)
 
-	assert.Empty(t, sw.UserID, "SwitchToRepo must not set UserID - that's the handler's job")
-	assert.Empty(t, sw.ID, "SwitchToRepo must not set ID - that's the handler's job")
-	assert.Equal(t, in.Brand, sw.Brand)
-	assert.Equal(t, in.Manufacturer, sw.Manufacturer)
-	assert.Equal(t, in.Name, sw.Name)
-	assert.Equal(t, in.Type, sw.Type)
-	assert.Equal(t, in.Pins, sw.Pins)
-	assert.Equal(t, in.FactoryLubed, sw.FactoryLubed)
-	assert.Equal(t, in.Notes, sw.Notes)
-	assert.Equal(t, repository.Visibility(in.Visibility), sw.Visibility)
+	s.Empty(sw.UserID, "SwitchToRepo must not set UserID - that's the handler's job")
+	s.Empty(sw.ID, "SwitchToRepo must not set ID - that's the handler's job")
+	s.Equal(in.Brand, sw.Brand)
+	s.Equal(in.Manufacturer, sw.Manufacturer)
+	s.Equal(in.Name, sw.Name)
+	s.Equal(in.Type, sw.Type)
+	s.Equal(in.Pins, sw.Pins)
+	s.Equal(in.FactoryLubed, sw.FactoryLubed)
+	s.Equal(in.Notes, sw.Notes)
+	s.Equal(repository.Visibility(in.Visibility), sw.Visibility)
 
-	assert.Equal(t, in.Material.TopHousing, sw.Material.TopHousing)
-	assert.Equal(t, in.Material.BottomHousing, sw.Material.BottomHousing)
-	assert.Equal(t, in.Material.Stem, sw.Material.Stem)
-	assert.Equal(t, in.Force.Actuation, sw.Force.Actuation)
-	assert.Equal(t, in.Force.BottomOut, sw.Force.BottomOut)
-	assert.Equal(t, in.Spring.Material, sw.Spring.Material)
-	assert.Equal(t, in.Spring.PreTravel, sw.Spring.PreTravel)
-	assert.Equal(t, in.Spring.TotalTravel, sw.Spring.TotalTravel)
-	assert.Equal(t, in.Purchase.Vendor, sw.Purchase.Vendor)
-	assert.Equal(t, in.Purchase.Price, sw.Purchase.Price)
-	assert.Equal(t, in.Purchase.Quantity, sw.Purchase.Quantity)
+	s.Equal(in.Material.TopHousing, sw.Material.TopHousing)
+	s.Equal(in.Material.BottomHousing, sw.Material.BottomHousing)
+	s.Equal(in.Material.Stem, sw.Material.Stem)
+	s.Equal(in.Force.Actuation, sw.Force.Actuation)
+	s.Equal(in.Force.BottomOut, sw.Force.BottomOut)
+	s.Equal(in.Spring.Material, sw.Spring.Material)
+	s.Equal(in.Spring.PreTravel, sw.Spring.PreTravel)
+	s.Equal(in.Spring.TotalTravel, sw.Spring.TotalTravel)
+	s.Equal(in.Purchase.Vendor, sw.Purchase.Vendor)
+	s.Equal(in.Purchase.Price, sw.Purchase.Price)
+	s.Equal(in.Purchase.Quantity, sw.Purchase.Quantity)
 }
 
-func TestSwitchToRepo_NilSubStructs_ProduceZeroValueStructs(t *testing.T) {
+func (s *SwitchToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {
 	in := api.SwitchInput{Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: api.Private}
 
 	sw := SwitchToRepo(in)
 
-	assert.Equal(t, repository.SwitchMaterial{}, sw.Material)
-	assert.Equal(t, repository.SwitchForce{}, sw.Force)
-	assert.Equal(t, repository.SwitchSpring{}, sw.Spring)
-	assert.Equal(t, repository.SwitchPurchase{}, sw.Purchase)
-}
-
-func TestSwitchToAPISummary_MapsOnlySummaryFields(t *testing.T) {
-	sw := fullRepoSwitch()
-
-	summary := SwitchToAPISummary(sw)
-
-	assert.Equal(t, &sw.ID, summary.Id)
-	assert.Equal(t, &sw.Brand, summary.Brand)
-	assert.Equal(t, &sw.Name, summary.Name)
-	assert.Equal(t, &sw.Type, summary.Type)
+	s.Equal(repository.SwitchMaterial{}, sw.Material)
+	s.Equal(repository.SwitchForce{}, sw.Force)
+	s.Equal(repository.SwitchSpring{}, sw.Spring)
+	s.Equal(repository.SwitchPurchase{}, sw.Purchase)
 }
