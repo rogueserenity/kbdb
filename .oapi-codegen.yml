@@ -1,0 +1,7 @@
+package: api
+output: internal/handlers/api/api.gen.go
+generate:
+  models: true
+  embedded-spec: true
+output-options:
+  skip-prune: false

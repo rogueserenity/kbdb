@@ -4,50 +4,54 @@ import "context"
 
 // SwitchMaterial is the housing/stem material makeup of a switch.
 type SwitchMaterial struct {
-	TopHousing    string `dynamodbav:"top_housing" json:"top_housing"`
-	BottomHousing string `dynamodbav:"bottom_housing" json:"bottom_housing"`
-	Stem          string `dynamodbav:"stem" json:"stem"`
+	TopHousing    *string `dynamodbav:"top_housing,omitempty" json:"top_housing,omitempty"`
+	BottomHousing *string `dynamodbav:"bottom_housing,omitempty" json:"bottom_housing,omitempty"`
+	Stem          *string `dynamodbav:"stem,omitempty" json:"stem,omitempty"`
 }
 
 // SwitchForce is a switch's nominal actuation/bottom-out force, in grams.
 type SwitchForce struct {
-	Actuation float64 `dynamodbav:"actuation" json:"actuation"`
-	BottomOut float64 `dynamodbav:"bottom_out" json:"bottom_out"`
+	Actuation *float64 `dynamodbav:"actuation,omitempty" json:"actuation,omitempty"`
+	BottomOut *float64 `dynamodbav:"bottom_out,omitempty" json:"bottom_out,omitempty"`
 }
 
 // SwitchSpring is a switch's spring material and travel distances (mm).
 type SwitchSpring struct {
-	Material    string  `dynamodbav:"material" json:"material"`
-	PreTravel   float64 `dynamodbav:"pre_travel" json:"pre_travel"`
-	TotalTravel float64 `dynamodbav:"total_travel" json:"total_travel"`
+	Material    *string  `dynamodbav:"material,omitempty" json:"material,omitempty"`
+	PreTravel   *float64 `dynamodbav:"pre_travel,omitempty" json:"pre_travel,omitempty"`
+	TotalTravel *float64 `dynamodbav:"total_travel,omitempty" json:"total_travel,omitempty"`
 }
 
 // SwitchPurchase is where/how much/how many of a switch were bought.
 // Simpler than Build's purchase shape — switches aren't tracked with
 // order/delivery dates.
 type SwitchPurchase struct {
-	Vendor   string  `dynamodbav:"vendor" json:"vendor"`
-	Price    float64 `dynamodbav:"price" json:"price"`
-	Quantity int     `dynamodbav:"quantity" json:"quantity"`
+	Vendor   *string  `dynamodbav:"vendor,omitempty" json:"vendor,omitempty"`
+	Price    *float64 `dynamodbav:"price,omitempty" json:"price,omitempty"`
+	Quantity *int     `dynamodbav:"quantity,omitempty" json:"quantity,omitempty"`
 }
 
 // Switch is a mechanical keyboard switch in a user's collection, or shared
 // with the caller. UserID is the DynamoDB partition key (the owner's
-// Cognito subject); ID is the sort key.
+// Cognito subject); ID is the sort key. Only Brand, Name, Type, and
+// Visibility are required, per api/openapi.yaml's SwitchInput schema; every
+// other field (here and in SwitchMaterial/SwitchForce/SwitchSpring/
+// SwitchPurchase) is a pointer so nil ("not provided") round-trips
+// distinctly from an explicit zero value.
 type Switch struct {
 	UserID       string         `dynamodbav:"user_id" json:"-"`
 	ID           string         `dynamodbav:"id" json:"id"`
 	Brand        string         `dynamodbav:"brand" json:"brand"`
-	Manufacturer string         `dynamodbav:"manufacturer" json:"manufacturer"`
+	Manufacturer *string        `dynamodbav:"manufacturer,omitempty" json:"manufacturer,omitempty"`
 	Name         string         `dynamodbav:"name" json:"name"`
 	Type         string         `dynamodbav:"type" json:"type"`
-	Pins         int            `dynamodbav:"pins" json:"pins"`
-	FactoryLubed bool           `dynamodbav:"factory_lubed" json:"factory_lubed"`
+	Pins         *int           `dynamodbav:"pins,omitempty" json:"pins,omitempty"`
+	FactoryLubed *bool          `dynamodbav:"factory_lubed,omitempty" json:"factory_lubed,omitempty"`
 	Material     SwitchMaterial `dynamodbav:"material" json:"material"`
 	Force        SwitchForce    `dynamodbav:"force" json:"force"`
 	Spring       SwitchSpring   `dynamodbav:"spring" json:"spring"`
 	Purchase     SwitchPurchase `dynamodbav:"purchase" json:"purchase"`
-	Notes        string         `dynamodbav:"notes" json:"notes"`
+	Notes        *string        `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility   Visibility     `dynamodbav:"visibility" json:"visibility"`
 }
 

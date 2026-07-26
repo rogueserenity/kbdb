@@ -57,14 +57,14 @@ var _ = Describe("Creating a switch", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
 					resp, err = client.Create(ctx, ownerID, ownerToken,
-						`{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
 					Expect(err).NotTo(HaveOccurred())
 					if resp.StatusCode == http.StatusCreated {
 						captureCreatedID(resp)
 					}
 				})
 
-				It("creates the switch with the default visibility", func() {
+				It("creates the switch", func() {
 					By("returning 201 Created")
 					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -79,7 +79,7 @@ var _ = Describe("Creating a switch", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
 					resp, err = client.Create(ctx, ownerID, ownerToken,
-						`{"brand":"Gateron","name":"Yellow","type":"Linear",`+
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private",`+
 							`"material":{"stem":"`+approvedStem+`"},`+
 							`"spring":{"material":"`+approvedSpringMaterial+`"},`+
 							`"purchase":{"vendor":"`+approvedVendor+`"}}`)
@@ -101,7 +101,7 @@ var _ = Describe("Creating a switch", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
 					resp, err = client.Create(ctx, ownerID, ownerToken,
-						`{"brand":"Gateron","name":"Yellow","type":"Linear","material":{"stem":"NotApproved"}}`)
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"NotApproved"}}`)
 					Expect(err).NotTo(HaveOccurred())
 				})
 

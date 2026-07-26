@@ -177,12 +177,6 @@ Resources:
                 - dynamodb:PutItem
               Resource: !GetAtt SwitchTable.Arn
       Events:
-        PingEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /v1/ping
-            Method: get
         # No auth: security: [] in api/openapi.yaml.
         LookupsEvent:
           Type: HttpApi
@@ -236,7 +230,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /users/{userId}/switches
+            Path: /v1/users/{userId}/switches
             Method: get
             Auth:
               Authorizer: NONE
@@ -245,7 +239,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /users/{userId}/switches/{id}
+            Path: /v1/users/{userId}/switches/{id}
             Method: get
             Auth:
               Authorizer: NONE
@@ -256,7 +250,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /users/{userId}/switches
+            Path: /v1/users/{userId}/switches
             Method: post
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -

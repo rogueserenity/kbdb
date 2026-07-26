@@ -14,9 +14,11 @@ mise activate  # add to your shell profile so `go`, `sam`, `aws`, etc. resolve d
 ## Everyday commands
 
 ```sh
-mise run lint          # golangci-lint + actionlint + shellcheck
-mise run test          # unit tests
-mise run build         # sam build
+mise run lint             # golangci-lint + actionlint + shellcheck
+mise run test             # unit tests
+mise run build            # sam build
+mise run gen              # regenerate mocks, OpenAPI types, and go.mod/go.sum after changing an interface or api/openapi.yaml
+mise run check-generated  # run gen and fail if it changed anything (what CI runs)
 ```
 
 Single-test invocations use the underlying tools directly:
@@ -24,7 +26,6 @@ Single-test invocations use the underlying tools directly:
 ```sh
 go test ./... -run TestVerifyTokenSuite -v   # a single suite
 go test ./internal/auth/... -v               # a single package
-mockery                                       # regenerate mocks after changing an interface
 sam validate --lint
 ```
 
