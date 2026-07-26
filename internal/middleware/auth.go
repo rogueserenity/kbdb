@@ -6,6 +6,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/auth"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/problem"
 )
 
 // Auth verifies the bearer token on every request independently of any
@@ -18,13 +19,13 @@ func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			rawToken, ok := auth.BearerToken(r)
 			if !ok {
-				http.Error(w, "missing or malformed authorization header", http.StatusUnauthorized)
+				problem.Unauthorized(w, "missing or malformed authorization header")
 				return
 			}
 
 			authedReq, err := authenticate(r, verifier, rawToken)
 			if err != nil {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
+				problem.Unauthorized(w, "invalid token")
 				return
 			}
 
@@ -50,7 +51,7 @@ func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 
 			authedReq, err := authenticate(r, verifier, rawToken)
 			if err != nil {
-				http.Error(w, "invalid token", http.StatusUnauthorized)
+				problem.Unauthorized(w, "invalid token")
 				return
 			}
 

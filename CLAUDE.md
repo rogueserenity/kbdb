@@ -32,3 +32,5 @@ Follow this same split when adding Phase 1 entities: a handler per route in `han
 **Config is env-var-only, read via Kong (`functions/api/config.go`)**, not raw `os.Getenv` calls — Kong gives struct-tag-driven required-field validation and defaults even though there are no CLI flags to parse (this is a Lambda entrypoint, not a CLI tool). Add new config by adding a field to `Config`, not by reaching for `os.Getenv` elsewhere.
 
 **`template.yaml` also declares an `AWS::Budgets::Budget`** (`CostBudget`) as a cost tripwire — don't remove it when touching the template, and raise the threshold deliberately if the project's real usage/cost profile changes rather than deleting it.
+
+**Unit tests under `internal/` use `testify/suite`** (`type XSuite struct { suite.Suite }`, `TestXSuite` runner, `s.Equal`/`s.Require()` methods), not bare `func TestX(t *testing.T)` + `t.Run` tables. Applies even to small files. `test/functional/` is Ginkgo instead — not covered by this rule.

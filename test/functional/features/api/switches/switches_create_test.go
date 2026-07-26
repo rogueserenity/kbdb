@@ -129,15 +129,29 @@ var _ = Describe("Creating a switch", func() {
 	})
 
 	Context("given the caller is anonymous", func() {
-		When("creating a switch", func() {
+		When("creating a switch with an otherwise-valid body", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
 				resp, err = client.Create(ctx, ownerID, "",
-					`{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+					`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
 			It("returns 401", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+			})
+		})
+
+		// Auth middleware runs before OpenAPI body validation, so a bad
+		// token must win over a bad body.
+		When("creating a switch with a body missing required fields", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Create(ctx, ownerID, "", `{"brand":"Gateron"}`)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns 401, not 400", func() {
 				Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
 			})
 		})
@@ -156,7 +170,7 @@ var _ = Describe("Creating a switch", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
 				resp, err = client.Create(ctx, ownerID, token,
-					`{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+					`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
 				Expect(err).NotTo(HaveOccurred())
 			})
 

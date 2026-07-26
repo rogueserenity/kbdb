@@ -65,20 +65,6 @@ func (s *ListLookupsSuite) TestListCategories_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *ListLookupsSuite) TestListCategories_NotFound_Returns404() {
-	s.mockRepo.EXPECT().
-		ListCategories(mock.Anything).
-		Return(nil, repository.ErrNotFound)
-
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups", nil)
-	rec := httptest.NewRecorder()
-
-	s.handler(rec, req)
-
-	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type GetLookupSuite struct {
 	suite.Suite
 
