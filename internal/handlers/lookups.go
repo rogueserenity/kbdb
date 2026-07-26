@@ -6,13 +6,18 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 // requireNonBlankCategory writes a 400 and returns false if category is
-// empty or whitespace-only.
+// empty or whitespace-only. Not schema-enforceable: net/http's own {category}
+// wildcard resolves a URL-encoded-space segment (e.g. "/lookups/%20") to an
+// empty PathValue before the OpenAPI validator's separate route matching
+// ever sees it, so this can't be replaced with a path parameter pattern.
 func requireNonBlankCategory(w http.ResponseWriter, category string) bool {
 	if strings.TrimSpace(category) == "" {
 		problem.BadRequest(w, "category must not be blank")
@@ -21,22 +26,18 @@ func requireNonBlankCategory(w http.ResponseWriter, category string) bool {
 	return true
 }
 
-// decodeValues reads and validates a request body against
-// api/openapi.yaml's LookupInput schema, writing a 400 and returning
-// ok=false if the body is malformed or values is empty.
+// decodeValues reads the request body into a []any. Shape/required-field
+// validation (values present and non-empty) already happened in the
+// OpenAPI request validator (internal/router.restOpenAPIValidator) before
+// this handler ran.
 func decodeValues(w http.ResponseWriter, r *http.Request) (values []any, ok bool) {
-	var input struct {
-		Values []any `json:"values"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+	var in api.LookupInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
 		problem.BadRequest(w, "invalid request body")
 		return nil, false
 	}
-	if len(input.Values) == 0 {
-		problem.BadRequest(w, "values must not be empty")
-		return nil, false
-	}
-	return input.Values, true
+
+	return in.Values, true
 }
 
 // ListLookups returns a handler for GET /v1/lookups: all lookup category
@@ -79,7 +80,7 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(lookup)
+		_ = json.NewEncoder(w).Encode(repoapi.LookupToAPI(*lookup))
 	}
 }
 
@@ -110,7 +111,7 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(lookup)
+		_ = json.NewEncoder(w).Encode(repoapi.LookupToAPI(*lookup))
 	}
 }
 
@@ -142,7 +143,7 @@ func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(lookup)
+		_ = json.NewEncoder(w).Encode(repoapi.LookupToAPI(*lookup))
 	}
 }
 
