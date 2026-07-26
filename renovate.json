@@ -6,6 +6,7 @@
     ":semanticCommits"
   ],
   "automerge": true,
+  "postUpdateOptions": ["gomodTidy"],
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
