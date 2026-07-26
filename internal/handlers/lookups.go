@@ -1,9 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"slices"
 	"strings"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -39,6 +42,74 @@ func decodeValues(w http.ResponseWriter, r *http.Request) (values []any, ok bool
 	return repoapi.LookupInputToRepo(in), true
 }
 
+// validateLookupValues checks that values is shaped the way category
+// requires, writing a 400 and returning false if not.
+func validateLookupValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, category string, values []any) (ok bool) {
+	switch category {
+	case repository.CategoryKeyboardLayout:
+		return validateKeyboardLayoutValues(ctx, w, repo, values)
+	case repository.CategoryBuildCaseMountType:
+		if _, err := repository.ParseCaseMountTypeValues(values); err != nil {
+			problem.BadRequest(w, fmt.Sprintf("values: %s", err))
+			return false
+		}
+	default:
+		if _, err := repository.ParseStrings(values); err != nil {
+			problem.BadRequest(w, fmt.Sprintf("values: %s", err))
+			return false
+		}
+	}
+
+	return true
+}
+
+// validateKeyboardLayoutValues also cross-checks each entry's sizes against
+// CategoryKeyboardSize, so a keyboard can't later pass its layout-vs-size
+// check against a size that was never itself approved.
+func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, values []any) (ok bool) {
+	layouts, err := repository.ParseLayoutValues(values)
+	if err != nil {
+		problem.BadRequest(w, fmt.Sprintf("values: %s", err))
+		return false
+	}
+
+	sizeLookup, err := repo.GetCategory(ctx, repository.CategoryKeyboardSize)
+	var approvedSizes []string
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		// approvedSizes stays nil - every non-empty sizes list fails below.
+	case err != nil:
+		log.FromContext(ctx).Error("fetching keyboard_size for keyboard_layout validation", "error", err)
+		problem.Internal(w, "failed to validate values")
+		return false
+	default:
+		approvedSizes, err = repository.ParseStrings(sizeLookup.Values)
+		if err != nil {
+			log.FromContext(ctx).Error("parsing keyboard_size values", "error", err)
+			problem.Internal(w, "failed to validate values")
+			return false
+		}
+	}
+
+	var invalidParams []problem.InvalidParam
+	for _, l := range layouts {
+		for _, size := range l.Sizes {
+			if !slices.Contains(approvedSizes, size) {
+				invalidParams = append(invalidParams, problem.InvalidParam{
+					Name:   fmt.Sprintf("values[%s].sizes", l.Name),
+					Reason: fmt.Sprintf("%q is not an approved keyboard_size value", size),
+				})
+			}
+		}
+	}
+	if len(invalidParams) > 0 {
+		problem.ValidationFailed(w, "one or more layout sizes are not approved keyboard_size values", invalidParams)
+		return false
+	}
+
+	return true
+}
+
 // ListLookups returns a handler for GET /v1/lookups: all lookup category
 // names, not their values (see GET /v1/lookups/{category} for that).
 func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
@@ -60,6 +131,21 @@ func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
 	}
 }
 
+// writeLookup writes lookup as the response body, or a 500 if its stored
+// values don't match the shape its category expects.
+func writeLookup(ctx context.Context, w http.ResponseWriter, status int, lookup repository.Lookup) {
+	out, err := repoapi.LookupToAPI(lookup)
+	if err != nil {
+		log.FromContext(ctx).Error("mapping lookup category to API shape", "category", lookup.Category, "error", err)
+		problem.Internal(w, "failed to read lookup category")
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(out)
+}
+
 // GetLookup returns a handler for GET /v1/lookups/{category}: one lookup
 // category's approved values.
 func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
@@ -77,9 +163,7 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(repoapi.LookupToAPI(*lookup))
+		writeLookup(r.Context(), w, http.StatusOK, *lookup)
 	}
 }
 
@@ -97,6 +181,10 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
+		if !validateLookupValues(r.Context(), w, repo, category, values) {
+			return
+		}
+
 		lookup, err := repo.CreateCategory(r.Context(), category, values)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			problem.Conflict(w, "category already exists")
@@ -108,9 +196,7 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(repoapi.LookupToAPI(*lookup))
+		writeLookup(r.Context(), w, http.StatusCreated, *lookup)
 	}
 }
 
@@ -129,6 +215,10 @@ func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
+		if !validateLookupValues(r.Context(), w, repo, category, values) {
+			return
+		}
+
 		lookup, err := repo.ReplaceCategory(r.Context(), category, values)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
@@ -140,9 +230,7 @@ func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(repoapi.LookupToAPI(*lookup))
+		writeLookup(r.Context(), w, http.StatusOK, *lookup)
 	}
 }
 

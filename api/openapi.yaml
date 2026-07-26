@@ -1386,7 +1386,7 @@ components:
       properties:
         name:
           type: string
-          description: Open vocabulary — validated against the "stabs" lookup at request time.
+          description: Open vocabulary — validated against the "build_stabilizer" lookup at request time.
         mount_type:
           type: string
           description: Open vocabulary — validated against the "build_stabilizer_mount_type" lookup at request time.
@@ -1508,9 +1508,10 @@ components:
     Lookup:
       type: object
       description: >
-        A lookup category's approved values. "values" is usually an array
-        of plain strings, but some categories (layout, case_mount_type) use
-        objects to attach per-value constraints/flags — see model/lookup_seed.json.
+        A lookup category's approved values. "values" is plain strings
+        except for "keyboard_layout" and "build_case_mount_type", whose
+        entries are objects - see the examples below and
+        model/lookup_seed.json.
       required: [category, values]
       properties:
         category:
@@ -1519,6 +1520,10 @@ components:
         values:
           type: array
           items: {}
+          examples:
+            - ["Amazon", "CannonKeys"]
+            - [{ name: "WK", sizes: ["60%", "65%"] }]
+            - [{ name: "Gasket Mount", supports_durometer: true }]
 
     LookupInput:
       type: object

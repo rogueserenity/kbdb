@@ -14,6 +14,7 @@ import (
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -352,13 +353,15 @@ func (s *CreateSwitchSuite) TestCreateSwitch_ValidatesOpenVocabularyFields() {
 	}
 }
 
-func (s *CreateSwitchSuite) TestCreateSwitch_MultipleInvalidFields_NamesTheFirstOne() {
-	// type is checked before material.top_housing (see validateSwitchLookups'
-	// checks slice) - both are invalid here, so the error must name type,
-	// not material.top_housing.
+func (s *CreateSwitchSuite) TestCreateSwitch_MultipleInvalidFields_NamesAll() {
+	// type and material.top_housing are both invalid here - the response
+	// must report both via invalid_params, not just the first one checked.
 	s.mockLookupRepo.EXPECT().
 		GetCategory(mock.Anything, "switch_type").
 		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil)
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "switch_material").
+		Return(&repository.Lookup{Category: "switch_material", Values: []any{"POM"}}, nil)
 
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Gateron","name":"Yellow","type":"NotApproved",`+
@@ -369,11 +372,15 @@ func (s *CreateSwitchSuite) TestCreateSwitch_MultipleInvalidFields_NamesTheFirst
 	s.Equal(http.StatusBadRequest, rec.Code)
 
 	var got struct {
-		Detail string `json:"detail"`
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
 	}
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Contains(got.Detail, "type:")
-	s.NotContains(got.Detail, "material.top_housing")
+	names := make([]string, len(got.InvalidParams))
+	for i, p := range got.InvalidParams {
+		names[i] = p.Name
+	}
+	s.Contains(names, "type")
+	s.Contains(names, "material.top_housing")
 }
 
 func (s *CreateSwitchSuite) TestCreateSwitch_NotOwner_Returns404() {
@@ -433,7 +440,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_UnapprovedLookupValue_Returns400() 
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *CreateSwitchSuite) TestCreateSwitch_NonStringLookupValue_SkippedNotMatched() {
+func (s *CreateSwitchSuite) TestCreateSwitch_NonStringLookupValue_Returns500() {
 	s.expectValidType()
 	s.mockLookupRepo.EXPECT().
 		GetCategory(mock.Anything, "vendor").
@@ -441,16 +448,14 @@ func (s *CreateSwitchSuite) TestCreateSwitch_NonStringLookupValue_SkippedNotMatc
 			Category: "vendor",
 			Values:   []any{map[string]any{"name": "Amazon"}, "CannonKeys"},
 		}, nil)
-	s.mockSwitchRepo.EXPECT().
-		Create(mock.Anything, mock.Anything).
-		Return(&repository.Switch{UserID: "alice", ID: "generated-id"}, nil)
 
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Gateron","name":"Yellow","type":"Linear","purchase":{"vendor":"CannonKeys"}}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
-	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *CreateSwitchSuite) TestCreateSwitch_LookupCategoryMissing_Returns400() {

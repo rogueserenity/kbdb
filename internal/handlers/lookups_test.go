@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -120,6 +121,44 @@ func (s *GetLookupSuite) TestGetCategory_RepositoryError_Returns500() {
 
 	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/vendor", nil)
 	req.SetPathValue("category", "vendor")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *GetLookupSuite) TestGetCategory_KeyboardLayout_ReturnsTypedValues() {
+	s.mockRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_layout").
+		Return(&repository.Lookup{
+			Category: "keyboard_layout",
+			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}},
+		}, nil)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/keyboard_layout", nil)
+	req.SetPathValue("category", "keyboard_layout")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got struct {
+		Values []repository.LayoutValue `json:"values"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal([]repository.LayoutValue{{Name: "WK", Sizes: []string{"60%", "65%"}}}, got.Values)
+}
+
+func (s *GetLookupSuite) TestGetCategory_KeyboardLayout_CorruptStoredShape_Returns500() {
+	s.mockRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_layout").
+		Return(&repository.Lookup{Category: "keyboard_layout", Values: []any{"WK"}}, nil)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/keyboard_layout", nil)
+	req.SetPathValue("category", "keyboard_layout")
 	rec := httptest.NewRecorder()
 
 	s.handler(rec, req)
@@ -243,6 +282,120 @@ func (s *CreateLookupSuite) TestCreateCategory_EmptyCategory_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *CreateLookupSuite) TestCreateCategory_NonStringValue_Returns400() {
+	req := s.newRequest(`{"values":["a", {"name":"b"}]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) newKeyboardLayoutRequest(body string) *http.Request {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/keyboard_layout", strings.NewReader(body))
+	req.SetPathValue("category", "keyboard_layout")
+	return req
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_WrongShape_Returns400() {
+	req := s.newKeyboardLayoutRequest(`{"values":["WK"]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_MissingName_Returns400() {
+	req := s.newKeyboardLayoutRequest(`{"values":[{"sizes":["60%"]}]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_SizeNotApproved_Returns400() {
+	s.mockRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_size").
+		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%", "65%"}}, nil)
+
+	req := s.newKeyboardLayoutRequest(`{"values":[{"name":"WK","sizes":["60%","85%"]}]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("values[WK].sizes", got.InvalidParams[0].Name)
+	s.Contains(got.InvalidParams[0].Reason, "85%")
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_KeyboardSizeMissing_AllSizesInvalid() {
+	s.mockRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_size").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newKeyboardLayoutRequest(`{"values":[{"name":"WK","sizes":["60%"]}]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_Succeeds() {
+	s.mockRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_size").
+		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%", "65%"}}, nil)
+	values := []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}}
+	s.mockRepo.EXPECT().
+		CreateCategory(mock.Anything, "keyboard_layout", values).
+		Return(&repository.Lookup{Category: "keyboard_layout", Values: values}, nil)
+
+	req := s.newKeyboardLayoutRequest(`{"values":[{"name":"WK","sizes":["60%","65%"]}]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_BuildCaseMountType_WrongShape_Returns400() {
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/build_case_mount_type", strings.NewReader(`{"values":["Top Mount"]}`))
+	req.SetPathValue("category", "build_case_mount_type")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateLookupSuite) TestCreateCategory_BuildCaseMountType_Succeeds() {
+	values := []any{map[string]any{"name": "Top Mount", "supports_durometer": false}}
+	s.mockRepo.EXPECT().
+		CreateCategory(mock.Anything, "build_case_mount_type", values).
+		Return(&repository.Lookup{Category: "build_case_mount_type", Values: values}, nil)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/build_case_mount_type",
+		strings.NewReader(`{"values":[{"name":"Top Mount","supports_durometer":false}]}`))
+	req.SetPathValue("category", "build_case_mount_type")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
 type ReplaceLookupSuite struct {
 	suite.Suite
 
@@ -281,6 +434,31 @@ func (s *ReplaceLookupSuite) TestReplaceCategory_Succeeds() {
 	var got repository.Lookup
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal(repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}, got)
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_NonStringValue_Returns400() {
+	req := s.newRequest(`{"values":["a", {"name":"b"}]}`)
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *ReplaceLookupSuite) TestReplaceCategory_KeyboardLayout_SizeNotApproved_Returns400() {
+	s.mockRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_size").
+		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
+
+	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/lookups/keyboard_layout",
+		strings.NewReader(`{"values":[{"name":"WK","sizes":["85%"]}]}`))
+	req.SetPathValue("category", "keyboard_layout")
+	rec := httptest.NewRecorder()
+
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
 }
 
 func (s *ReplaceLookupSuite) TestReplaceCategory_NotFound_Returns404() {

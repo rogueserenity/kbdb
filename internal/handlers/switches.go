@@ -20,16 +20,6 @@ import (
 
 const defaultSwitchListLimit = 20
 
-// Lookup categories SwitchInput's open-vocabulary fields validate against,
-// per their api/openapi.yaml descriptions ("validated against the ...
-// lookup at request time"). Names match model/lookup_seed.json.
-const (
-	switchTypeCategory           = "switch_type"
-	switchMaterialCategory       = "switch_material"
-	switchSpringMaterialCategory = "switch_spring_material"
-	vendorCategory               = "vendor"
-)
-
 // parseListLimit reads the limit query param, defaulting when absent. Range
 // (1-100) and type are enforced by the OpenAPI request validator
 // (internal/router.restOpenAPIValidator) before this handler runs, so a
@@ -132,74 +122,43 @@ func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Sw
 	return sw, true
 }
 
-// validateSwitchLookups writes a 400 naming the first invalid field and
-// returns ok=false if any check fails. An unset (nil) field is skipped, not
-// treated as invalid - SwitchInput doesn't require these.
+// validateSwitchLookups writes a 400 listing every invalid field if any
+// check fails. An unset (nil) field is skipped, not treated as invalid.
 func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, sw repository.Switch) (ok bool) {
-	checks := []struct {
-		field    string
-		value    *string
-		category string
-	}{
-		{"type", &sw.Type, switchTypeCategory},
-		{"material.top_housing", sw.Material.TopHousing, switchMaterialCategory},
-		{"material.bottom_housing", sw.Material.BottomHousing, switchMaterialCategory},
-		{"material.stem", sw.Material.Stem, switchMaterialCategory},
-		{"spring.material", sw.Spring.Material, switchSpringMaterialCategory},
-		{"purchase.vendor", sw.Purchase.Vendor, vendorCategory},
+	var checks []repository.FieldCheck
+	add := func(field string, value *string, category string) {
+		if value == nil {
+			return
+		}
+		checks = append(checks, repository.FieldCheck{Field: field, Value: *value, Category: category})
 	}
 
-	for _, c := range checks {
-		if c.value == nil {
-			continue
-		}
+	add("type", &sw.Type, repository.CategorySwitchType)
+	add("material.top_housing", sw.Material.TopHousing, repository.CategorySwitchMaterial)
+	add("material.bottom_housing", sw.Material.BottomHousing, repository.CategorySwitchMaterial)
+	add("material.stem", sw.Material.Stem, repository.CategorySwitchMaterial)
+	add("spring.material", sw.Spring.Material, repository.CategorySwitchSpringMaterial)
+	add("purchase.vendor", sw.Purchase.Vendor, repository.CategoryVendor)
 
-		valid, err := lookupContains(ctx, lookupRepo, c.category, *c.value)
-		if err != nil {
-			log.FromContext(ctx).Error("validating switch lookup field", "field", c.field, "error", err)
-			problem.Internal(w, "failed to validate "+c.field)
-			return false
+	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
+	if err != nil {
+		log.FromContext(ctx).Error("validating switch lookup fields", "error", err)
+		problem.Internal(w, "failed to validate lookup fields")
+		return false
+	}
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = problem.InvalidParam{
+				Name:   fe.Field,
+				Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
+			}
 		}
-		if !valid {
-			problem.BadRequest(w, fmt.Sprintf("%s: %q is not an approved %s value", c.field, *c.value, c.category))
-			return false
-		}
+		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
+		return false
 	}
 
 	return true
-}
-
-// lookupContains reports whether value is one of category's approved
-// values. category not existing is not itself an error here (it just means
-// nothing validates) - CreateSwitch treats that the same as "not found" via
-// the false return, since either way value can't be approved.
-func lookupContains(ctx context.Context, lookupRepo repository.LookupRepository, category, value string) (bool, error) {
-	lookup, err := lookupRepo.GetCategory(ctx, category)
-	if errors.Is(err, repository.ErrNotFound) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-
-	for _, v := range lookup.Values {
-		s, ok := v.(string)
-		if !ok {
-			// repository.Lookup.Values is []any because some categories
-			// (e.g. build_case_mount_type) store objects, not strings - a
-			// non-string entry here means this category's data isn't
-			// shaped the way switches validation expects, not that value
-			// is unapproved. Log it so that's discoverable rather than
-			// looking like an ordinary rejection.
-			log.FromContext(ctx).Warn("lookup category has non-string value", "category", category)
-			continue
-		}
-		if s == value {
-			return true, nil
-		}
-	}
-
-	return false, nil
 }
 
 // CreateSwitch returns a handler for POST /v1/users/{userId}/switches. Per
