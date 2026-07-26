@@ -12,3 +12,13 @@ func LookupToAPI(l repository.Lookup) api.Lookup {
 		Values:   l.Values,
 	}
 }
+
+// LookupInputToRepo maps a generated LookupInput (already schema-validated
+// by the OpenAPI request validator) to the values slice
+// LookupRepository.CreateCategory/ReplaceCategory take. There's no
+// LookupInputToRepo equivalent of repository.Lookup itself - Category is a
+// path parameter, not part of the request body, so the repo layer's write
+// methods take values alone rather than a full Lookup.
+func LookupInputToRepo(in api.LookupInput) []any {
+	return in.Values
+}

@@ -14,10 +14,9 @@ import (
 )
 
 // requireNonBlankCategory writes a 400 and returns false if category is
-// empty or whitespace-only. Not schema-enforceable: net/http's own {category}
-// wildcard resolves a URL-encoded-space segment (e.g. "/lookups/%20") to an
-// empty PathValue before the OpenAPI validator's separate route matching
-// ever sees it, so this can't be replaced with a path parameter pattern.
+// empty or whitespace-only. Not schema-enforceable: net/http's own
+// {category} routing already collapses a whitespace-only path segment to
+// an empty PathValue before the OpenAPI validator ever sees it.
 func requireNonBlankCategory(w http.ResponseWriter, category string) bool {
 	if strings.TrimSpace(category) == "" {
 		problem.BadRequest(w, "category must not be blank")
@@ -37,7 +36,7 @@ func decodeValues(w http.ResponseWriter, r *http.Request) (values []any, ok bool
 		return nil, false
 	}
 
-	return in.Values, true
+	return repoapi.LookupInputToRepo(in), true
 }
 
 // ListLookups returns a handler for GET /v1/lookups: all lookup category
