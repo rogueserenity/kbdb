@@ -196,5 +196,9 @@
   {
     "category": "build_durometer",
     "values": ["30A", "40A", "50A", "60A", "70A", "80A", "90A"]
+  },
+  {
+    "category": "image_content_type",
+    "values": ["image/jpeg", "image/png", "image/webp"]
   }
 ]

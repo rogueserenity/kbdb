@@ -521,7 +521,7 @@ paths:
               properties:
                 content_type:
                   type: string
-                  enum: [image/jpeg, image/png, image/webp]
+                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
       responses:
         "201":
           description: >
@@ -699,7 +699,7 @@ paths:
               properties:
                 content_type:
                   type: string
-                  enum: [image/jpeg, image/png, image/webp]
+                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
       responses:
         "201":
           description: >
