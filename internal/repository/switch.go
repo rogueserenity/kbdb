@@ -56,9 +56,9 @@ type Switch struct {
 }
 
 // SwitchRepository provides access to switches. List/Get take an explicit
-// ownerID since reads can target another user's shared items; Create/Delete
-// read the caller from ctx (internal/ctx.UserID) instead, since writes are
-// always self-scoped.
+// ownerID since reads can target another user's shared items;
+// Create/Update/Delete read the caller from ctx (internal/ctx.UserID)
+// instead, since writes are always self-scoped.
 type SwitchRepository interface {
 	// List returns up to limit switches owned by ownerID whose Visibility is
 	// in visibilities, ordered by ID. cursor, if non-empty, resumes from a
@@ -76,6 +76,11 @@ type SwitchRepository interface {
 	// Create stores sw (UserID is set from ctx, sw.ID must already be set).
 	// Returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, sw Switch) (*Switch, error)
+
+	// Update replaces the caller's switch (UserID is set from ctx, sw.ID
+	// must already be set to the switch being updated). Returns ErrNotFound
+	// if no switch with that id exists for the caller.
+	Update(ctx context.Context, sw Switch) (*Switch, error)
 
 	// Delete removes the caller's switch with the given id. Idempotent: a
 	// nonexistent id is not an error.
