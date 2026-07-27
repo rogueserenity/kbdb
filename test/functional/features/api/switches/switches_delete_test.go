@@ -90,6 +90,19 @@ var _ = Describe("Deleting a switch", func() {
 					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 				})
 			})
+
+			When("deleting a switch id that was never seeded", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Delete(ctx, ownerID, "no-such-switch-"+uuid.NewString(), token)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 404, not the owner's idempotent 204", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
 		})
 
 		Context("given the caller is anonymous", func() {
