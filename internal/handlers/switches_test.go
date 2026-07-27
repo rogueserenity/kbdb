@@ -47,11 +47,11 @@ func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
 			return len(vis) == 3
-		}), defaultSwitchListLimit, "").
+		}), 20, "").
 		Return([]repository.Switch{{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear"}}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx, ""))
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
 
 	s.Equal(http.StatusOK, rec.Code)
 	s.Equal("application/json", rec.Header().Get("Content-Type"))
@@ -65,11 +65,11 @@ func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
 
 func (s *ListSwitchesSuite) TestListSwitches_Anonymous_RequestsPublicOnly() {
 	s.mockRepo.EXPECT().
-		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, defaultSwitchListLimit, "").
+		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, 20, "").
 		Return([]repository.Switch{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), ""))
+	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -80,11 +80,11 @@ func (s *ListSwitchesSuite) TestListSwitches_OtherUser_RequestsPublicAndAuthenti
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
 			return len(vis) == 2
-		}), defaultSwitchListLimit, "").
+		}), 20, "").
 		Return([]repository.Switch{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx, ""))
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -102,11 +102,11 @@ func (s *ListSwitchesSuite) TestListSwitches_PassesLimitAndCursor() {
 
 func (s *ListSwitchesSuite) TestListSwitches_ReturnsNextCursor_WhenPresent() {
 	s.mockRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, defaultSwitchListLimit, "").
+		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Switch{}, "next-page-token", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), ""))
+	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
 
 	var got api.SwitchListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
@@ -116,11 +116,11 @@ func (s *ListSwitchesSuite) TestListSwitches_ReturnsNextCursor_WhenPresent() {
 
 func (s *ListSwitchesSuite) TestListSwitches_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, defaultSwitchListLimit, "").
+		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return(nil, "", errors.New("query failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), ""))
+	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
