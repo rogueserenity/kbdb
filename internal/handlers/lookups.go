@@ -110,8 +110,8 @@ func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, re
 	return true
 }
 
-// ListLookups returns a handler for GET /v1/lookups: all lookup category
-// names, not their values (see GET /v1/lookups/{category} for that).
+// ListLookups reads no path values and requires no auth. Returns category
+// names only, not their values (see GetLookup for that).
 func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		categories, err := repo.ListCategories(r.Context())
@@ -142,8 +142,7 @@ func writeLookup(ctx context.Context, w http.ResponseWriter, status int, lookup 
 	_ = json.NewEncoder(w).Encode(out)
 }
 
-// GetLookup returns a handler for GET /v1/lookups/{category}: one lookup
-// category's approved values.
+// GetLookup reads the {category} path value and requires no auth.
 func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("category")
@@ -163,8 +162,8 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 	}
 }
 
-// CreateLookup returns a handler for POST /v1/lookups/{category}: create a
-// new lookup category (admin only - see middleware.RequireAdmin).
+// CreateLookup reads the {category} path value and requires an admin
+// caller.
 func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("category")
@@ -196,9 +195,8 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 	}
 }
 
-// ReplaceLookup returns a handler for PUT /v1/lookups/{category}: replace
-// an existing lookup category's approved values (admin only - see
-// middleware.RequireAdmin).
+// ReplaceLookup reads the {category} path value and requires an admin
+// caller.
 func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("category")
@@ -230,9 +228,8 @@ func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 	}
 }
 
-// DeleteLookup returns a handler for DELETE /v1/lookups/{category}: delete
-// a lookup category (admin only - see middleware.RequireAdmin). Idempotent:
-// returns 204 whether or not the category existed.
+// DeleteLookup reads the {category} path value and requires an admin
+// caller. Idempotent: returns 204 whether or not the category existed.
 func DeleteLookup(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		category := r.PathValue("category")

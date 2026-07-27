@@ -27,11 +27,9 @@ func parseListLimit(r *http.Request) int {
 	return limit
 }
 
-// ListSwitches returns a handler for GET /v1/users/{userId}/switches. userId
-// need not be the caller's own subject: the caller sees userId's switches
-// whose visibility is readable to them, per internal/authz.
-// middleware.OptionalAuth must run first so an anonymous caller is still
-// permitted (limited to public switches) rather than rejected.
+// ListSwitches reads the {userId} path value and lists that owner's
+// switches. Anonymous callers are allowed; visibility is scoped to what the
+// caller (if any) may read, per internal/authz.
 func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -64,11 +62,9 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 	}
 }
 
-// GetSwitch returns a handler for GET /v1/users/{userId}/switches/{id}. Per
-// api/openapi.yaml, a switch that exists but isn't owned by or shared with
-// the caller returns 404, not 403 - this avoids revealing that an unshared
-// item exists. middleware.OptionalAuth must run first, same as
-// ListSwitches.
+// GetSwitch reads the {userId} and {id} path values. Anonymous callers are
+// allowed; a switch that exists but isn't readable by the caller returns
+// 404, not 403, to avoid revealing it exists.
 func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -153,12 +149,9 @@ func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRep
 	return true
 }
 
-// CreateSwitch returns a handler for POST /v1/users/{userId}/switches. Per
-// api/openapi.yaml, userId must be the caller's own subject - creating in
-// another user's collection returns 404 (not 403, matching the read
-// routes' anti-enumeration behavior), enforced via authz.IsOwner.
-// middleware.Auth (not OptionalAuth) must run first: writes always require
-// an authenticated caller.
+// CreateSwitch reads the {userId} path value and requires an authenticated
+// caller. userId must be the caller's own subject; creating in another
+// user's collection returns 404, not 403, to avoid revealing it exists.
 func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -177,7 +170,6 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 			return
 		}
 
-		sw.UserID = ownerID
 		sw.ID = uuid.NewString()
 
 		created, err := switchRepo.Create(r.Context(), sw)
@@ -197,5 +189,28 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*created))
+	}
+}
+
+// DeleteSwitch reads the {userId} and {id} path values and requires an
+// authenticated caller. userId must be the caller's own subject; deleting
+// another user's switch returns 404, not 403, to avoid revealing it exists.
+func DeleteSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		if err := switchRepo.Delete(r.Context(), id); err != nil {
+			log.FromContext(r.Context()).Error("deleting switch", "error", err)
+			problem.Internal(w, "failed to delete switch")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

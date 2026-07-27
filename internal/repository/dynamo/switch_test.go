@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/dynamo/mocks"
 )
@@ -200,7 +201,8 @@ func (s *SwitchRepositorySuite) TestCreate_Succeeds() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	sw, err := s.repo.Create(context.Background(), repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron"})
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	sw, err := s.repo.Create(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
 	s.Equal(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron"}, sw)
@@ -211,7 +213,8 @@ func (s *SwitchRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	sw, err := s.repo.Create(context.Background(), repository.Switch{UserID: "alice", ID: "sw1"})
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	sw, err := s.repo.Create(ctx, repository.Switch{ID: "sw1"})
 
 	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
 	s.Nil(sw)
@@ -222,9 +225,44 @@ func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	sw, err := s.repo.Create(context.Background(), repository.Switch{UserID: "alice", ID: "sw1"})
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	sw, err := s.repo.Create(ctx, repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
 	s.Nil(sw)
+}
+
+func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "sw1")
+
+	s.Require().NoError(err)
+}
+
+func (s *SwitchRepositorySuite) TestDelete_NonexistentID_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "no-such-switch")
+
+	s.Require().NoError(err)
+}
+
+func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "sw1")
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
 }

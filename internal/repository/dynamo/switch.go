@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -121,6 +122,8 @@ func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*reposi
 }
 
 func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
+	sw.UserID, _ = kbdbctx.UserID(ctx)
+
 	item, err := attributevalue.MarshalMap(sw)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling switch %q for owner %q: %w", sw.ID, sw.UserID, err)
@@ -140,6 +143,23 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 	}
 
 	return &sw, nil
+}
+
+func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
+	ownerID, _ := kbdbctx.UserID(ctx)
+
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
+			"id":      &types.AttributeValueMemberS{Value: id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("deleting switch %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return nil
 }
 
 // decodeCursor reverses encodeCursor, returning nil (no key) for an empty

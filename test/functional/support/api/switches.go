@@ -57,3 +57,10 @@ func (c *SwitchesClient) Get(ctx context.Context, ownerID, id, token string) (*h
 func (c *SwitchesClient) Create(ctx context.Context, ownerID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/switches", token, bytes.NewBufferString(body))
 }
+
+// Delete calls DELETE /v1/users/{ownerID}/switches/{id} with the given
+// bearer token (empty for an anonymous request). The caller owns closing
+// resp.Body.
+func (c *SwitchesClient) Delete(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/switches/"+id, token, nil)
+}
