@@ -244,9 +244,6 @@ func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 	s.Require().NoError(err)
 }
 
-// TestDelete_NonexistentID_Succeeds verifies Delete is idempotent: DynamoDB's
-// unconditional DeleteItem on a missing key is already a no-op, so a
-// nonexistent id is not an error (matching lookups' delete).
 func (s *SwitchRepositorySuite) TestDelete_NonexistentID_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).
