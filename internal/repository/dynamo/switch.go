@@ -145,6 +145,30 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 	return &sw, nil
 }
 
+func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
+	sw.UserID, _ = kbdbctx.UserID(ctx)
+
+	item, err := attributevalue.MarshalMap(sw)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling switch %q for owner %q: %w", sw.ID, sw.UserID, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_exists(id)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("updating switch %q for owner %q: %w", sw.ID, sw.UserID, err)
+	}
+
+	return &sw, nil
+}
+
 func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 	ownerID, _ := kbdbctx.UserID(ctx)
 

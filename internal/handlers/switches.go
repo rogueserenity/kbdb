@@ -192,6 +192,48 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 	}
 }
 
+// UpdateSwitch reads the {userId} and {id} path values and requires an
+// authenticated caller. userId must be the caller's own subject; updating
+// another user's switch, or one that doesn't exist, both return 404, to
+// avoid revealing it exists.
+func UpdateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		sw, ok := decodeSwitchInput(w, r)
+		if !ok {
+			return
+		}
+
+		if !validateSwitchLookups(r.Context(), w, lookupRepo, sw) {
+			return
+		}
+
+		sw.ID = id
+
+		updated, err := switchRepo.Update(r.Context(), sw)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("updating switch", "error", err)
+			problem.Internal(w, "failed to update switch")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*updated))
+	}
+}
+
 // DeleteSwitch reads the {userId} and {id} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's switch returns 404, not 403, to avoid revealing it exists.

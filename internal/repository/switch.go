@@ -77,6 +77,11 @@ type SwitchRepository interface {
 	// Returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, sw Switch) (*Switch, error)
 
+	// Update replaces the caller's switch (UserID is set from ctx, sw.ID
+	// must already be set to the switch being updated). Returns ErrNotFound
+	// if no switch with that id exists for the caller.
+	Update(ctx context.Context, sw Switch) (*Switch, error)
+
 	// Delete removes the caller's switch with the given id. Idempotent: a
 	// nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error

@@ -255,6 +255,14 @@ Resources:
             Method: post
         # Default CognitoAuthorizer applies - same rationale as
         # CreateSwitchEvent.
+        UpdateSwitchEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/switches/{id}
+            Method: put
+        # Default CognitoAuthorizer applies - same rationale as
+        # CreateSwitchEvent.
         DeleteSwitchEvent:
           Type: HttpApi
           Properties:

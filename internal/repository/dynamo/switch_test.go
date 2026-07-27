@@ -233,6 +233,45 @@ func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
 	s.Nil(sw)
 }
 
+func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			return *in.ConditionExpression == "attribute_exists(id)"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron"}, sw)
+}
+
+func (s *SwitchRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1"})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(sw)
+}
+
+func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Nil(sw)
+}
+
 func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).

@@ -515,6 +515,279 @@ func (s *CreateSwitchSuite) TestCreateSwitch_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+type UpdateSwitchSuite struct {
+	suite.Suite
+
+	mockSwitchRepo *mocks.MockSwitchRepository
+	mockLookupRepo *mocks.MockLookupRepository
+	handler        http.HandlerFunc
+}
+
+func TestUpdateSwitchSuite(t *testing.T) {
+	suite.Run(t, new(UpdateSwitchSuite))
+}
+
+func (s *UpdateSwitchSuite) SetupTest() {
+	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
+	s.handler = UpdateSwitch(s.mockSwitchRepo, s.mockLookupRepo)
+}
+
+func (s *UpdateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/switches/sw1", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "sw1")
+	return req
+}
+
+func (s *UpdateSwitchSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+// expectValidType mocks switch_type lookup approval for "Linear" - every
+// test below that sends type:"Linear" and expects validation to proceed
+// past it needs this.
+func (s *UpdateSwitchSuite) expectValidType() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "switch_type").
+		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil)
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_Succeeds() {
+	s.expectValidType()
+	s.mockSwitchRepo.EXPECT().
+		Update(mock.Anything, mock.MatchedBy(func(sw repository.Switch) bool {
+			return sw.ID == "sw1" && sw.Brand == "Gateron" && sw.Visibility == repository.VisibilityPrivate
+		})).
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got repository.Switch
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("sw1", got.ID)
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_Visibility_Preserved() {
+	s.expectValidType()
+	s.mockSwitchRepo.EXPECT().
+		Update(mock.Anything, mock.MatchedBy(func(sw repository.Switch) bool {
+			return sw.Visibility == repository.VisibilityPublic
+		})).
+		Return(&repository.Switch{UserID: "alice", ID: "sw1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"public"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_ValidatesOpenVocabularyFields() {
+	tests := []struct {
+		name     string
+		category string
+		body     string
+	}{
+		{"type", "switch_type", `{"brand":"Gateron","name":"Yellow","type":"POM","visibility":"private"}`},
+		{"material.top_housing", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"top_housing":"POM"}}`},
+		{"material.bottom_housing", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"bottom_housing":"POM"}}`},
+		{"material.stem", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"POM"}}`},
+		{"spring.material", "switch_spring_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","spring":{"material":"POM"}}`},
+		{"purchase.vendor", "vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"vendor":"POM"}}`},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			s.SetupTest()
+
+			if tt.category != "switch_type" {
+				s.expectValidType()
+			}
+			s.mockLookupRepo.EXPECT().
+				GetCategory(mock.Anything, tt.category).
+				Return(&repository.Lookup{Category: tt.category, Values: []any{"POM"}}, nil)
+			s.mockSwitchRepo.EXPECT().
+				Update(mock.Anything, mock.Anything).
+				Return(&repository.Switch{UserID: "alice", ID: "sw1"}, nil)
+
+			req := s.newRequest(s.ownerCtx(), tt.body)
+			rec := httptest.NewRecorder()
+			s.handler(rec, req)
+
+			s.Equal(http.StatusOK, rec.Code)
+		})
+	}
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_MultipleInvalidFields_NamesAll() {
+	// type and material.top_housing are both invalid here - the response
+	// must report both via invalid_params, not just the first one checked.
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "switch_type").
+		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil)
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "switch_material").
+		Return(&repository.Lookup{Category: "switch_material", Values: []any{"POM"}}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"Gateron","name":"Yellow","type":"NotApproved","visibility":"private",`+
+			`"material":{"top_housing":"AlsoNotApproved"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	names := make([]string, len(got.InvalidParams))
+	for i, p := range got.InvalidParams {
+		names[i] = p.Name
+	}
+	s.Contains(names, "type")
+	s.Contains(names, "material.top_housing")
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	req := s.newRequest(ctx, `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_Anonymous_Returns404() {
+	req := s.newRequest(context.Background(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_UnapprovedType_Returns400() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "switch_type").
+		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Bogus"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_UnapprovedLookupValue_Returns400() {
+	s.expectValidType()
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "vendor").
+		Return(&repository.Lookup{Category: "vendor", Values: []any{"Amazon"}}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"Gateron","name":"Yellow","type":"Linear","purchase":{"vendor":"NotARealVendor"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_NonStringLookupValue_Returns500() {
+	s.expectValidType()
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "vendor").
+		Return(&repository.Lookup{
+			Category: "vendor",
+			Values:   []any{map[string]any{"name": "Amazon"}, "CannonKeys"},
+		}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"Gateron","name":"Yellow","type":"Linear","purchase":{"vendor":"CannonKeys"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_LookupCategoryMissing_Returns400() {
+	s.expectValidType()
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "vendor").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"Gateron","name":"Yellow","type":"Linear","purchase":{"vendor":"Amazon"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_LookupRepositoryError_Returns500() {
+	s.expectValidType()
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "vendor").
+		Return(nil, errors.New("get item failed"))
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"Gateron","name":"Yellow","type":"Linear","purchase":{"vendor":"Amazon"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_NotFound_Returns404() {
+	s.expectValidType()
+	s.mockSwitchRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_RepositoryError_Returns500() {
+	s.expectValidType()
+	s.mockSwitchRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type DeleteSwitchSuite struct {
 	suite.Suite
 
