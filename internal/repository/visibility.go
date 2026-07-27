@@ -11,8 +11,7 @@ const (
 	// VisibilityAuthenticated items are readable by any signed-in user,
 	// but not anonymous callers.
 	VisibilityAuthenticated Visibility = "authenticated"
-	// VisibilityPrivate items are readable only by their owner. This is
-	// the default when a caller omits visibility on create.
+	// VisibilityPrivate items are readable only by their owner.
 	VisibilityPrivate Visibility = "private"
 )
 
