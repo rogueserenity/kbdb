@@ -18,20 +18,12 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-const defaultSwitchListLimit = 20
-
-// parseListLimit reads the limit query param, defaulting when absent. Range
-// (1-100) and type are enforced by the OpenAPI request validator
-// (internal/router.restOpenAPIValidator) before this handler runs, so a
-// present value is always a valid integer here.
+// parseListLimit reads the limit query param. The OpenAPI request validator
+// (internal/router.restOpenAPIValidator) enforces range (1-100) and injects
+// the spec's default (api/openapi.yaml's Limit param) when absent, so it's
+// always present and a valid integer here.
 func parseListLimit(r *http.Request) int {
-	raw := r.URL.Query().Get("limit")
-	if raw == "" {
-		return defaultSwitchListLimit
-	}
-
-	limit, _ := strconv.Atoi(raw)
-
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	return limit
 }
 
