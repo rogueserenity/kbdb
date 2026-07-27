@@ -90,19 +90,6 @@ var _ = Describe("Deleting a switch", func() {
 					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 				})
 			})
-
-			When("deleting a switch id that was never seeded", func() {
-				BeforeEach(func(ctx SpecContext) {
-					var err error
-					resp, err = client.Delete(ctx, ownerID, "no-such-switch-"+uuid.NewString(), token)
-					Expect(err).NotTo(HaveOccurred())
-				})
-
-				It("returns 404, not the owner's idempotent 204", func() {
-					Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
-					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
-				})
-			})
 		})
 
 		Context("given the caller is anonymous", func() {
@@ -121,15 +108,40 @@ var _ = Describe("Deleting a switch", func() {
 	})
 
 	Context("given the switch does not exist", func() {
-		When("deleting the switch", func() {
+		Context("given the caller is the owner", func() {
+			When("deleting the switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Delete(ctx, ownerID, "no-such-switch-"+uuid.NewString(), ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 204, idempotently", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+				})
+			})
+		})
+
+		Context("given the caller is a different authenticated user", func() {
+			var token string
+
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.Delete(ctx, ownerID, "no-such-switch-"+uuid.NewString(), ownerToken)
+				token, err = api.SecondUserAuthToken(ctx)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("returns 204, idempotently", func() {
-				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+			When("deleting the switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Delete(ctx, ownerID, "no-such-switch-"+uuid.NewString(), token)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 404, not the owner's idempotent 204", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
 			})
 		})
 	})
