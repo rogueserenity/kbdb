@@ -55,11 +55,14 @@ type Switch struct {
 	Visibility   Visibility     `dynamodbav:"visibility" json:"visibility"`
 }
 
-// SwitchRepository provides access to switches. ownerID is always the
-// {userId} path segment (the collection's owner, per api/openapi.yaml), not
-// necessarily the caller — List returns only items whose Visibility is in
-// visibilities, which the caller (a handler) derives from
-// internal/authz.ReadableVisibilities before calling in.
+// SwitchRepository provides access to switches. List/Get take an explicit
+// ownerID - the {userId} path segment, not necessarily the caller, since
+// reads can target another user's shared items (List filters by
+// visibilities, which the caller derives from
+// internal/authz.ReadableVisibilities before calling in). Create/Delete
+// have no ownerID param and instead read the caller's identity from ctx
+// (internal/ctx.UserID), since api/openapi.yaml requires those routes'
+// userId to always be the caller's own subject.
 type SwitchRepository interface {
 	// List returns up to limit switches owned by ownerID whose Visibility is
 	// in visibilities, ordered by ID. cursor, if non-empty, resumes from a
@@ -74,11 +77,19 @@ type SwitchRepository interface {
 	// Visibility via internal/authz.CanReadVisibility.
 	Get(ctx context.Context, ownerID, id string) (*Switch, error)
 
-	// Create stores sw, which must already have UserID and ID set (the
-	// caller assigns ID - see handlers.CreateSwitch), and returns the
-	// stored value. Returns ErrAlreadyExists if an item with the same
-	// UserID+ID already exists, which should not happen in practice since
-	// callers generate ID fresh per create, but guards against a UUID
-	// collision rather than silently overwriting.
+	// Create stores sw, setting UserID from the caller's identity in ctx
+	// (internal/ctx.UserID) - api/openapi.yaml requires create/update/
+	// delete's userId path segment to be the caller's own subject, so
+	// there's no separate ownerID to accept. sw.ID must already be set
+	// (the caller assigns ID - see handlers.CreateSwitch). Returns
+	// ErrAlreadyExists if an item with the same UserID+ID already exists,
+	// which should not happen in practice since callers generate ID fresh
+	// per create, but guards against a UUID collision rather than
+	// silently overwriting.
 	Create(ctx context.Context, sw Switch) (*Switch, error)
+
+	// Delete removes the switch owned by the caller (internal/ctx.UserID)
+	// with the given id. Idempotent, like lookups' delete: a nonexistent
+	// id is not an error.
+	Delete(ctx context.Context, id string) error
 }

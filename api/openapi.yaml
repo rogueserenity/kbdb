@@ -245,9 +245,10 @@ paths:
       operationId: deleteSwitch
       description: >
         userId must be the caller's own subject; deleting another user's switch always returns 404.
+        Idempotent for the caller's own switches - returns 204 whether or not id existed.
       responses:
         "204":
-          description: Deleted.
+          description: Deleted (or already absent).
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         default:

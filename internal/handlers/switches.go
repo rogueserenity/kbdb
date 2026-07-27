@@ -177,7 +177,6 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 			return
 		}
 
-		sw.UserID = ownerID
 		sw.ID = uuid.NewString()
 
 		created, err := switchRepo.Create(r.Context(), sw)
@@ -197,5 +196,32 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*created))
+	}
+}
+
+// DeleteSwitch returns a handler for DELETE /v1/users/{userId}/switches/{id}.
+// Per api/openapi.yaml, userId must be the caller's own subject - deleting
+// another user's switch returns 404 (anti-enumeration, via authz.IsOwner).
+// Deleting the caller's own switch is idempotent - a nonexistent id is not
+// an error, matching lookups' delete (see repository.SwitchRepository.
+// Delete). middleware.Auth (not OptionalAuth) must run first: writes always
+// require an authenticated caller.
+func DeleteSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		if err := switchRepo.Delete(r.Context(), id); err != nil {
+			log.FromContext(r.Context()).Error("deleting switch", "error", err)
+			problem.Internal(w, "failed to delete switch")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

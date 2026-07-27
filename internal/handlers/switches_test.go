@@ -284,8 +284,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_Succeeds() {
 	s.expectValidType()
 	s.mockSwitchRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(sw repository.Switch) bool {
-			return sw.UserID == "alice" && sw.ID != "" && sw.Brand == "Gateron" &&
-				sw.Visibility == repository.VisibilityPrivate
+			return sw.ID != "" && sw.Brand == "Gateron" && sw.Visibility == repository.VisibilityPrivate
 		})).
 		Return(&repository.Switch{UserID: "alice", ID: "generated-id", Brand: "Gateron", Name: "Yellow", Type: "Linear"}, nil)
 
@@ -511,6 +510,85 @@ func (s *CreateSwitchSuite) TestCreateSwitch_RepositoryError_Returns500() {
 	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type DeleteSwitchSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockSwitchRepository
+	handler  http.HandlerFunc
+}
+
+func TestDeleteSwitchSuite(t *testing.T) {
+	suite.Run(t, new(DeleteSwitchSuite))
+}
+
+func (s *DeleteSwitchSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
+	s.handler = DeleteSwitch(s.mockRepo)
+}
+
+func (s *DeleteSwitchSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/switches/sw1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "sw1")
+	return req
+}
+
+func (s *DeleteSwitchSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Succeeds() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "sw1").
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteSwitchSuite) TestDeleteSwitch_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchSuite) TestDeleteSwitch_Anonymous_Returns404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchSuite) TestDeleteSwitch_NonexistentID_Returns204() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "sw1").
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteSwitchSuite) TestDeleteSwitch_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "sw1").
+		Return(errors.New("delete item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))

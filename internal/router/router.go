@@ -55,6 +55,8 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, switch
 		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
 		middleware.Auth(verifier)(validate(handlers.CreateSwitch(switchRepo, lookupRepo))))
+	mux.Handle("DELETE /v1/users/{userId}/switches/{id}",
+		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
