@@ -322,12 +322,12 @@ func (s *CreateSwitchSuite) TestCreateSwitch_ValidatesOpenVocabularyFields() {
 		category string
 		body     string
 	}{
-		{"type", "switch_type", `{"brand":"Gateron","name":"Yellow","type":"POM"}`},
-		{"material.top_housing", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","material":{"top_housing":"POM"}}`},
-		{"material.bottom_housing", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","material":{"bottom_housing":"POM"}}`},
-		{"material.stem", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","material":{"stem":"POM"}}`},
-		{"spring.material", "switch_spring_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","spring":{"material":"POM"}}`},
-		{"purchase.vendor", "vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","purchase":{"vendor":"POM"}}`},
+		{"type", "switch_type", `{"brand":"Gateron","name":"Yellow","type":"POM","visibility":"private"}`},
+		{"material.top_housing", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"top_housing":"POM"}}`},
+		{"material.bottom_housing", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"bottom_housing":"POM"}}`},
+		{"material.stem", "switch_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"POM"}}`},
+		{"spring.material", "switch_spring_material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","spring":{"material":"POM"}}`},
+		{"purchase.vendor", "vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"vendor":"POM"}}`},
 	}
 
 	for _, tt := range tests {
@@ -364,7 +364,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_MultipleInvalidFields_NamesAll() {
 		Return(&repository.Lookup{Category: "switch_material", Values: []any{"POM"}}, nil)
 
 	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Gateron","name":"Yellow","type":"NotApproved",`+
+		`{"brand":"Gateron","name":"Yellow","type":"NotApproved","visibility":"private",`+
 			`"material":{"top_housing":"AlsoNotApproved"}}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)

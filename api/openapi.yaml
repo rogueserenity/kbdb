@@ -1070,7 +1070,7 @@ components:
 
     KeyboardInput:
       type: object
-      required: [brand, name]
+      required: [brand, name, visibility]
       properties:
         brand:
           type: string
@@ -1291,7 +1291,7 @@ components:
 
     KeycapSetInput:
       type: object
-      required: [brand, name]
+      required: [brand, name, visibility]
       properties:
         brand:
           type: string
@@ -1408,7 +1408,7 @@ components:
 
     BuildInput:
       type: object
-      required: [keyboard]
+      required: [keyboard, visibility]
       properties:
         keyboard:
           type: string
