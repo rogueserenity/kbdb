@@ -56,9 +56,9 @@ type Switch struct {
 }
 
 // SwitchRepository provides access to switches. List/Get take an explicit
-// ownerID since reads can target another user's shared items; Create/Delete
-// read the caller from ctx (internal/ctx.UserID) instead, since writes are
-// always self-scoped.
+// ownerID since reads can target another user's shared items;
+// Create/Update/Delete read the caller from ctx (internal/ctx.UserID)
+// instead, since writes are always self-scoped.
 type SwitchRepository interface {
 	// List returns up to limit switches owned by ownerID whose Visibility is
 	// in visibilities, ordered by ID. cursor, if non-empty, resumes from a

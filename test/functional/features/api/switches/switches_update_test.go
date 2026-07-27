@@ -53,7 +53,7 @@ var _ = Describe("Updating a switch", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("returns 200 with the updated switch", func() {
+					It("returns 200 with the updated switch, persisted", func(ctx SpecContext) {
 						By("returning 200 OK")
 						Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
@@ -65,6 +65,36 @@ var _ = Describe("Updating a switch", func() {
 						Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 						Expect(got.ID).To(Equal(switchID))
 						Expect(got.Name).To(Equal("Yellow2"))
+
+						By("actually persisting the new name, not a no-op")
+						getResp, err := client.Get(ctx, ownerID, switchID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(getResp.StatusCode).To(Equal(http.StatusOK))
+
+						var reGot struct {
+							Name string `json:"name"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&reGot)).To(Succeed())
+						Expect(reGot.Name).To(Equal("Yellow2"))
+					})
+				})
+			})
+
+			Context("given a request body changing visibility to public", func() {
+				When("updating the switch", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.Update(ctx, ownerID, switchID, ownerToken,
+							`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"public"}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("makes the switch visible to an anonymous caller", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+						getResp, err := client.Get(ctx, ownerID, switchID, "")
+						Expect(err).NotTo(HaveOccurred())
+						Expect(getResp.StatusCode).To(Equal(http.StatusOK))
 					})
 				})
 			})
@@ -136,6 +166,51 @@ var _ = Describe("Updating a switch", func() {
 
 				It("returns 401", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusUnauthorized))
+				})
+			})
+		})
+	})
+
+	Context("given an existing switch has an optional field set", func() {
+		var switchID string
+
+		BeforeEach(func(ctx SpecContext) {
+			createResp, err := client.Create(ctx, ownerID, ownerToken,
+				`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","notes":"smooth"}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(createResp.StatusCode).To(Equal(http.StatusCreated))
+
+			var created struct {
+				ID string `json:"id"`
+			}
+			Expect(json.NewDecoder(createResp.Body).Decode(&created)).To(Succeed())
+			switchID = created.ID
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+		})
+
+		Context("given a request body omitting that field", func() {
+			When("updating the switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, switchID, ownerToken,
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("clears the omitted field, since PUT replaces rather than merges", func(ctx SpecContext) {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					getResp, err := client.Get(ctx, ownerID, switchID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+
+					var got struct {
+						Notes *string `json:"notes"`
+					}
+					Expect(json.NewDecoder(getResp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Notes).To(BeNil())
 				})
 			})
 		})
