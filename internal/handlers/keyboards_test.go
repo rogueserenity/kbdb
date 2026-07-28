@@ -512,11 +512,7 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_InvalidSize_DoesNotCascadeIntoL
 			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
 		}, nil)
 
-	// size is invalid on its own; layout ("WK") is genuinely valid. An
-	// invalid size can never appear in any layout's Sizes list, so
-	// checking layout against it would always fail too - the response
-	// must blame only size, not report a second, misleading error
-	// against a layout that's actually fine.
+	// layout ("WK") is genuinely valid despite size being invalid.
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved","layout":"WK"}`)
 	rec := httptest.NewRecorder()
