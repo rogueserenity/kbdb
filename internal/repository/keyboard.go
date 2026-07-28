@@ -71,4 +71,8 @@ type KeyboardRepository interface {
 	// visibility - the caller (a handler) checks the returned item's
 	// Visibility via internal/authz.CanReadVisibility.
 	Get(ctx context.Context, ownerID, id string) (*Keyboard, error)
+
+	// Create stores kb (UserID is set from ctx, kb.ID must already be set).
+	// Returns ErrAlreadyExists on an ID collision.
+	Create(ctx context.Context, kb Keyboard) (*Keyboard, error)
 }

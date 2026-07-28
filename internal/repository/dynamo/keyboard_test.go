@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/dynamo/mocks"
 )
@@ -192,5 +193,42 @@ func (s *KeyboardRepositorySuite) TestGet_GetItemError_Propagates() {
 	kb, err := s.repo.Get(context.Background(), "alice", "kb1")
 
 	s.Require().Error(err)
+	s.Nil(kb)
+}
+
+func (s *KeyboardRepositorySuite) TestCreate_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	kb, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1", Brand: "Keychron"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron"}, kb)
+}
+
+func (s *KeyboardRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	kb, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1"})
+
+	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(kb)
+}
+
+func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	kb, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
 	s.Nil(kb)
 }

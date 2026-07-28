@@ -32,7 +32,7 @@ var _ = Describe("Getting a category", func() {
 
 	Context("given the category exists", func() {
 		BeforeEach(func(ctx SpecContext) {
-			Expect(db.SeedLookupCategory(ctx, category, []string{"a", "b"})).To(Succeed())
+			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 		})
 
 		When("getting the category", func() {

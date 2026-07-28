@@ -31,7 +31,7 @@ var _ = Describe("Listing categories", func() {
 
 	Context("given the lookup table has a category", func() {
 		BeforeEach(func(ctx SpecContext) {
-			Expect(db.SeedLookupCategory(ctx, category, []string{"a", "b"})).To(Succeed())
+			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 		})
 
 		When("listing categories", func() {

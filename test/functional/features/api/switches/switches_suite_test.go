@@ -14,9 +14,10 @@ import (
 // switchTypeCategory/switchMaterialCategory/switchSpringMaterialCategory/
 // vendorCategory consts) - not per-spec values, since the handler always
 // looks up these exact literal names. Seeded once for the whole suite (see
-// BeforeSuite) rather than per-spec, so concurrent specs sharing this
-// suite's lookup table rows can't race each other seeding/deleting the same
-// category.
+// BeforeSuite) rather than per-spec. "vendor" is also seeded/deleted by
+// keyboards_suite_test.go - safe because ginkgo run always executes suite
+// packages one at a time (only specs within a suite are ever parallelized
+// via -p/--procs), so the two BeforeSuite/AfterSuite pairs can't interleave.
 const (
 	switchTypeCategory           = "switch_type"
 	switchMaterialCategory       = "switch_material"
@@ -41,10 +42,10 @@ func TestSwitches(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
-	Expect(db.SeedLookupCategory(ctx, switchTypeCategory, []string{approvedType})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, switchMaterialCategory, []string{approvedStem})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, switchSpringMaterialCategory, []string{approvedSpringMaterial})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, vendorCategory, []string{approvedVendor})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, switchTypeCategory, []any{approvedType})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, switchMaterialCategory, []any{approvedStem})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, switchSpringMaterialCategory, []any{approvedSpringMaterial})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, vendorCategory, []any{approvedVendor})).To(Succeed())
 })
 
 var _ = AfterSuite(func(ctx SpecContext) {
