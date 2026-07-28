@@ -103,11 +103,6 @@ func decodeKeyboardInput(w http.ResponseWriter, r *http.Request) (kb repository.
 
 // validateKeyboardLookups writes a 400 listing every invalid field if any
 // check fails. An unset (nil) field is skipped, not treated as invalid.
-// layout gets an extra check beyond plain lookup-value membership: it must
-// be valid for the keyboard's size, per the "keyboard_layout" category's
-// per-entry Sizes list (see repository.LayoutValue) - a single-category
-// FieldCheck can't express that cross-field relationship, so it's handled
-// separately from the FieldCheck-based checks below.
 func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, kb repository.Keyboard) (ok bool) {
 	var checks []repository.FieldCheck
 	add := func(field string, value *string, category string) {
@@ -170,11 +165,8 @@ func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupR
 	return true
 }
 
-// validateKeyboardLayout checks layout against the "keyboard_layout"
-// category, including that it's approved for size (per that category
-// entry's Sizes list) - not just that layout is a recognized name on its
-// own. A nil size skips the size-membership part of the check, since
-// size is independently optional and validated separately.
+// validateKeyboardLayout skips the size-membership check when size is nil,
+// since size is independently optional.
 func validateKeyboardLayout(
 	ctx context.Context,
 	lookupRepo repository.LookupRepository,
