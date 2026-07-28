@@ -38,6 +38,80 @@ func (_m *MockKeyboardRepository) EXPECT() *MockKeyboardRepository_Expecter {
 	return &MockKeyboardRepository_Expecter{mock: &_m.Mock}
 }
 
+// Get provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) Get(ctx context.Context, ownerID string, id string) (*repository.Keyboard, error) {
+	ret := _mock.Called(ctx, ownerID, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Get")
+	}
+
+	var r0 *repository.Keyboard
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*repository.Keyboard, error)); ok {
+		return returnFunc(ctx, ownerID, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *repository.Keyboard); ok {
+		r0 = returnFunc(ctx, ownerID, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.Keyboard)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, ownerID, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_Get_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Get'
+type MockKeyboardRepository_Get_Call struct {
+	*mock.Call
+}
+
+// Get is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ownerID string
+//   - id string
+func (_e *MockKeyboardRepository_Expecter) Get(ctx any, ownerID any, id any) *MockKeyboardRepository_Get_Call {
+	return &MockKeyboardRepository_Get_Call{Call: _e.mock.On("Get", ctx, ownerID, id)}
+}
+
+func (_c *MockKeyboardRepository_Get_Call) Run(run func(ctx context.Context, ownerID string, id string)) *MockKeyboardRepository_Get_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_Get_Call) Return(keyboard *repository.Keyboard, err error) *MockKeyboardRepository_Get_Call {
+	_c.Call.Return(keyboard, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_Get_Call) RunAndReturn(run func(ctx context.Context, ownerID string, id string) (*repository.Keyboard, error)) *MockKeyboardRepository_Get_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // List provides a mock function for the type MockKeyboardRepository
 func (_mock *MockKeyboardRepository) List(ctx context.Context, ownerID string, visibilities []repository.Visibility, limit int, cursor string) ([]repository.Keyboard, string, error) {
 	ret := _mock.Called(ctx, ownerID, visibilities, limit, cursor)

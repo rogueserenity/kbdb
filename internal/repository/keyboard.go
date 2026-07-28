@@ -64,4 +64,11 @@ type KeyboardRepository interface {
 	// a previous call's returned cursor; the returned cursor is empty when
 	// there are no more pages.
 	List(ctx context.Context, ownerID string, visibilities []Visibility, limit int, cursor string) (keyboards []Keyboard, nextCursor string, err error)
+
+	// Get returns the keyboard owned by ownerID with the given id, or
+	// ErrNotFound if it doesn't exist. Get doesn't take a visibility
+	// argument: unlike List, it fetches by exact key regardless of
+	// visibility - the caller (a handler) checks the returned item's
+	// Visibility via internal/authz.CanReadVisibility.
+	Get(ctx context.Context, ownerID, id string) (*Keyboard, error)
 }

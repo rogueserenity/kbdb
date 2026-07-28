@@ -70,6 +70,8 @@ func New(
 	// only public keyboards (see internal/authz.ReadableVisibilities).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo))))
+	mux.Handle("GET /v1/users/{userId}/keyboards/{id}",
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml

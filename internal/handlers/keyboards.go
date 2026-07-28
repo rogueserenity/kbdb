@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
@@ -44,5 +45,35 @@ func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(page)
+	}
+}
+
+// GetKeyboard reads the {userId} and {id} path values. Anonymous callers
+// are allowed; a keyboard that exists but isn't readable by the caller
+// returns 404, not 403, to avoid revealing it exists.
+func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		kb, err := repo.Get(r.Context(), ownerID, id)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting keyboard", "error", err)
+			problem.Internal(w, "failed to get keyboard")
+			return
+		}
+
+		if !authz.CanReadVisibility(r.Context(), ownerID, kb.Visibility) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*kb))
 	}
 }

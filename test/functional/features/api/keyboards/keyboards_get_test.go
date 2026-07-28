@@ -1,4 +1,4 @@
-package switches_test
+package keyboards_test
 
 import (
 	"encoding/json"
@@ -12,17 +12,17 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
-var _ = Describe("Getting a switch", func() {
+var _ = Describe("Getting a keyboard", func() {
 	var (
 		resp       *http.Response
-		client     *api.SwitchesClient
+		client     *api.KeyboardsClient
 		ownerID    string
 		ownerToken string
 	)
 
 	BeforeEach(func(ctx SpecContext) {
 		resp = nil
-		client = api.NewSwitchesClient()
+		client = api.NewKeyboardsClient()
 
 		var err error
 		ownerToken, err = api.AuthToken(ctx)
@@ -31,53 +31,53 @@ var _ = Describe("Getting a switch", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	seedSwitch := func(ctx SpecContext, visibility string) string {
-		id := visibility + "-switch-" + uuid.NewString()
-		Expect(db.SeedSwitch(ctx, ownerID, id, visibility)).To(Succeed())
+	seedKeyboard := func(ctx SpecContext, visibility string) string {
+		id := visibility + "-keyboard-" + uuid.NewString()
+		Expect(db.SeedKeyboard(ctx, ownerID, id, visibility)).To(Succeed())
 		return id
 	}
 
-	Context("given a public switch", func() {
-		var switchID string
+	Context("given a public keyboard", func() {
+		var keyboardID string
 
 		BeforeEach(func(ctx SpecContext) {
-			switchID = seedSwitch(ctx, "public")
+			keyboardID = seedKeyboard(ctx, "public")
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 		})
 
 		Context("given the caller is anonymous", func() {
-			When("getting the switch", func() {
+			When("getting the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.Get(ctx, ownerID, switchID, "")
+					resp, err = client.Get(ctx, ownerID, keyboardID, "")
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the switch", func() {
+				It("returns the keyboard", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got struct {
 						ID string `json:"id"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
-					Expect(got.ID).To(Equal(switchID))
+					Expect(got.ID).To(Equal(keyboardID))
 				})
 			})
 		})
 	})
 
-	Context("given an authenticated-only switch", func() {
-		var switchID string
+	Context("given an authenticated-only keyboard", func() {
+		var keyboardID string
 
 		BeforeEach(func(ctx SpecContext) {
-			switchID = seedSwitch(ctx, "authenticated")
+			keyboardID = seedKeyboard(ctx, "authenticated")
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 		})
 
 		Context("given the caller is a different authenticated user", func() {
@@ -89,30 +89,30 @@ var _ = Describe("Getting a switch", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			When("getting the switch", func() {
+			When("getting the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.Get(ctx, ownerID, switchID, token)
+					resp, err = client.Get(ctx, ownerID, keyboardID, token)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the switch", func() {
+				It("returns the keyboard", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got struct {
 						ID string `json:"id"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
-					Expect(got.ID).To(Equal(switchID))
+					Expect(got.ID).To(Equal(keyboardID))
 				})
 			})
 		})
 
 		Context("given the caller is anonymous", func() {
-			When("getting the switch", func() {
+			When("getting the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.Get(ctx, ownerID, switchID, "")
+					resp, err = client.Get(ctx, ownerID, keyboardID, "")
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -124,35 +124,35 @@ var _ = Describe("Getting a switch", func() {
 		})
 	})
 
-	Context("given a private switch", func() {
-		var switchID string
+	Context("given a private keyboard", func() {
+		var keyboardID string
 
 		BeforeEach(func(ctx SpecContext) {
-			switchID = seedSwitch(ctx, "private")
+			keyboardID = seedKeyboard(ctx, "private")
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 		})
 
 		Context("given the caller is the owner", func() {
-			When("getting the switch", func() {
+			When("getting the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.Get(ctx, ownerID, switchID, ownerToken)
+					resp, err = client.Get(ctx, ownerID, keyboardID, ownerToken)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the switch", func() {
+				It("returns the keyboard", func() {
 					By("returning 200 OK")
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-					By("returning the switch's id")
+					By("returning the keyboard's id")
 					var got struct {
 						ID string `json:"id"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
-					Expect(got.ID).To(Equal(switchID))
+					Expect(got.ID).To(Equal(keyboardID))
 				})
 			})
 		})
@@ -166,10 +166,10 @@ var _ = Describe("Getting a switch", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			When("getting the switch", func() {
+			When("getting the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.Get(ctx, ownerID, switchID, token)
+					resp, err = client.Get(ctx, ownerID, keyboardID, token)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -181,10 +181,10 @@ var _ = Describe("Getting a switch", func() {
 		})
 
 		Context("given the caller is anonymous", func() {
-			When("getting the switch", func() {
+			When("getting the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.Get(ctx, ownerID, switchID, "")
+					resp, err = client.Get(ctx, ownerID, keyboardID, "")
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -196,11 +196,11 @@ var _ = Describe("Getting a switch", func() {
 		})
 	})
 
-	Context("given the switch does not exist", func() {
-		When("getting the switch", func() {
+	Context("given the keyboard does not exist", func() {
+		When("getting the keyboard", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.Get(ctx, ownerID, "no-such-switch-"+uuid.NewString(), ownerToken)
+				resp, err = client.Get(ctx, ownerID, "no-such-keyboard-"+uuid.NewString(), ownerToken)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
