@@ -199,6 +199,7 @@ Resources:
             - Effect: Allow
               Action:
                 - dynamodb:Query
+                - dynamodb:GetItem
               Resource: !GetAtt KeyboardTable.Arn
       Events:
         # No auth: security: [] in api/openapi.yaml.
@@ -301,6 +302,15 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards
+            Method: get
+            Auth:
+              Authorizer: NONE
+        # Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
+        GetKeyboardEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{id}
             Method: get
             Auth:
               Authorizer: NONE

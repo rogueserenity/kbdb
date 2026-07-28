@@ -150,3 +150,47 @@ func (s *KeyboardRepositorySuite) TestList_QueryError_Propagates() {
 	s.Nil(keyboards)
 	s.Empty(next)
 }
+
+func (s *KeyboardRepositorySuite) TestGet_Succeeds() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
+			userID, ok := in.Key["user_id"].(*types.AttributeValueMemberS)
+			id, ok2 := in.Key["id"].(*types.AttributeValueMemberS)
+			return ok && ok2 && userID.Value == "alice" && id.Value == "kb1"
+		})).
+		Return(&dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"user_id": &types.AttributeValueMemberS{Value: "alice"},
+				"id":      &types.AttributeValueMemberS{Value: "kb1"},
+				"brand":   &types.AttributeValueMemberS{Value: "Keychron"},
+			},
+		}, nil)
+
+	kb, err := s.repo.Get(context.Background(), "alice", "kb1")
+
+	s.Require().NoError(err)
+	s.Equal("kb1", kb.ID)
+	s.Equal("Keychron", kb.Brand)
+}
+
+func (s *KeyboardRepositorySuite) TestGet_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	kb, err := s.repo.Get(context.Background(), "alice", "missing")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(kb)
+}
+
+func (s *KeyboardRepositorySuite) TestGet_GetItemError_Propagates() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	kb, err := s.repo.Get(context.Background(), "alice", "kb1")
+
+	s.Require().Error(err)
+	s.Nil(kb)
+}
