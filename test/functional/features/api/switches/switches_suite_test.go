@@ -15,10 +15,9 @@ import (
 // vendorCategory consts) - not per-spec values, since the handler always
 // looks up these exact literal names. Seeded once for the whole suite (see
 // BeforeSuite) rather than per-spec. "vendor" is also seeded/deleted by
-// keyboards_suite_test.go - safe today only because scripts/func-test.sh
-// runs suite packages consecutively (no -p/--procs), not because anything
-// here scopes the category per-suite; adding parallelism would need this
-// reworked first.
+// keyboards_suite_test.go - safe because ginkgo run always executes suite
+// packages one at a time (only specs within a suite are ever parallelized
+// via -p/--procs), so the two BeforeSuite/AfterSuite pairs can't interleave.
 const (
 	switchTypeCategory           = "switch_type"
 	switchMaterialCategory       = "switch_material"
