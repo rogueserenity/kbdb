@@ -118,12 +118,17 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --query "Stacks[0].Outputs[?OutputKey=='SwitchTableName'].OutputValue" \
             --output text)
+          KEYBOARD_TABLE_NAME=$(aws cloudformation describe-stacks \
+            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='KeyboardTableName'].OutputValue" \
+            --output text)
           {
             echo "api-url=$API_URL"
             echo "user-pool-id=$USER_POOL_ID"
             echo "user-pool-client-id=$USER_POOL_CLIENT_ID"
             echo "lookup-table-name=$LOOKUP_TABLE_NAME"
             echo "switch-table-name=$SWITCH_TABLE_NAME"
+            echo "keyboard-table-name=$KEYBOARD_TABLE_NAME"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create throwaway Cognito test users and mint tokens
@@ -157,6 +162,7 @@ jobs:
           KBDB_SECOND_USER_AUTH_TOKEN: ${{ steps.auth-token.outputs.second-user-token }}
           KBDB_LOOKUP_TABLE_NAME: ${{ steps.stack-outputs.outputs.lookup-table-name }}
           KBDB_SWITCH_TABLE_NAME: ${{ steps.stack-outputs.outputs.switch-table-name }}
+          KBDB_KEYBOARD_TABLE_NAME: ${{ steps.stack-outputs.outputs.keyboard-table-name }}
           # Explicitly empty (not omitted) - func-test.sh only falls back to
           # its LocalStack default for a genuinely unset variable.
           KBDB_DYNAMODB_ENDPOINT_URL: ""

@@ -20,6 +20,9 @@ packages:
       SwitchRepository:
         config:
           structname: 'MockSwitchRepository'
+      KeyboardRepository:
+        config:
+          structname: 'MockKeyboardRepository'
   github.com/rogueserenity/kbdb/internal/repository/dynamo:
     config:
       dir: '{{.InterfaceDir}}/mocks'

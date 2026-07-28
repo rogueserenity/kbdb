@@ -1052,7 +1052,7 @@ components:
             type: string
             description: Open vocabulary — validated against the "keyboard_plate_material" lookup at request time.
 
-    KeyboardPcb:
+    KeyboardPCB:
       type: object
       properties:
         thickness:
@@ -1089,7 +1089,7 @@ components:
         design:
           $ref: "#/components/schemas/KeyboardDesign"
         pcb:
-          $ref: "#/components/schemas/KeyboardPcb"
+          $ref: "#/components/schemas/KeyboardPCB"
         purchase:
           $ref: "#/components/schemas/Purchase"
         notes:

@@ -30,7 +30,13 @@ import (
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see internal/mcp.Handlers doc comment for why. version is
 // advertised to MCP clients in the server's initialize handshake.
-func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, switchRepo repository.SwitchRepository, issuerURL, version string) http.Handler {
+func New(
+	verifier *auth.Verifier,
+	lookupRepo repository.LookupRepository,
+	switchRepo repository.SwitchRepository,
+	keyboardRepo repository.KeyboardRepository,
+	issuerURL, version string,
+) http.Handler {
 	validate := restOpenAPIValidator()
 
 	mux := http.NewServeMux()
@@ -59,6 +65,11 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, switch
 		middleware.Auth(verifier)(validate(handlers.UpdateSwitch(switchRepo, lookupRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{id}",
 		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo))))
+
+	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// only public keyboards (see internal/authz.ReadableVisibilities).
+	mux.Handle("GET /v1/users/{userId}/keyboards",
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
