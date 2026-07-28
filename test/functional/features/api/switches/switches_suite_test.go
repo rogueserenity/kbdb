@@ -41,10 +41,10 @@ func TestSwitches(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
-	Expect(db.SeedLookupCategory(ctx, switchTypeCategory, []string{approvedType})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, switchMaterialCategory, []string{approvedStem})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, switchSpringMaterialCategory, []string{approvedSpringMaterial})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, vendorCategory, []string{approvedVendor})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, switchTypeCategory, []any{approvedType})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, switchMaterialCategory, []any{approvedStem})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, switchSpringMaterialCategory, []any{approvedSpringMaterial})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, vendorCategory, []any{approvedVendor})).To(Succeed())
 })
 
 var _ = AfterSuite(func(ctx SpecContext) {

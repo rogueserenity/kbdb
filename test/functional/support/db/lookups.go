@@ -8,8 +8,10 @@ import (
 
 // SeedLookupCategory PutItems a lookup category directly into DynamoDB,
 // bypassing the API - for specs that need lookup fixture data in place
-// before exercising a different route.
-func SeedLookupCategory(ctx context.Context, category string, values []string) error {
+// before exercising a different route. values is []any (not []string)
+// since some categories store objects instead of plain strings - see
+// model/lookup_seed.json.
+func SeedLookupCategory(ctx context.Context, category string, values []any) error {
 	table := NewDynamoTable(ctx, support.LookupTableName())
 	return table.PutItem(ctx, map[string]any{
 		"category": category,

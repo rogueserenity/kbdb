@@ -200,6 +200,7 @@ Resources:
               Action:
                 - dynamodb:Query
                 - dynamodb:GetItem
+                - dynamodb:PutItem
               Resource: !GetAtt KeyboardTable.Arn
       Events:
         # No auth: security: [] in api/openapi.yaml.
@@ -314,6 +315,15 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
+        # api/openapi.yaml, no anonymous override, unlike the GET routes) -
+        # ownership is checked at the app layer by authz.IsOwner.
+        CreateKeyboardEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards
+            Method: post
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/

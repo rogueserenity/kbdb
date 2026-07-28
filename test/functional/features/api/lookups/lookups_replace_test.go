@@ -41,7 +41,7 @@ var _ = Describe("Replacing a category", func() {
 
 		Context("given the category exists", func() {
 			BeforeEach(func(ctx SpecContext) {
-				Expect(db.SeedLookupCategory(ctx, category, []string{"a", "b"})).To(Succeed())
+				Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 			})
 
 			When("replacing the category", func() {
@@ -95,7 +95,7 @@ var _ = Describe("Replacing a category", func() {
 
 		Context("given the category exists and values is empty", func() {
 			BeforeEach(func(ctx SpecContext) {
-				Expect(db.SeedLookupCategory(ctx, category, []string{"a", "b"})).To(Succeed())
+				Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 			})
 
 			When("replacing the category", func() {
@@ -117,7 +117,7 @@ var _ = Describe("Replacing a category", func() {
 		var token string
 
 		BeforeEach(func(ctx SpecContext) {
-			Expect(db.SeedLookupCategory(ctx, category, []string{"a", "b"})).To(Succeed())
+			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 
 			var err error
 			token, err = api.AuthToken(ctx)
