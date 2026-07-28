@@ -126,6 +126,24 @@ Resources:
         - AttributeName: id
           KeyType: RANGE
 
+  # User-owned keyboards. Same key schema/rationale as SwitchTable above.
+  # scripts/func-setup.sh hand-creates an equivalent table against
+  # LocalStack - keep that script's schema in sync with this resource.
+  KeyboardTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+
   # Single Lambda function for all routes (REST entities + MCP), not split
   # by protocol or by entity - see plan rationale. Packaged as a container
   # image (aws-lambda-web-adapter sidecar) rather than a zip - see
@@ -143,6 +161,7 @@ Resources:
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           LOOKUP_TABLE_NAME: !Ref LookupTable
           SWITCH_TABLE_NAME: !Ref SwitchTable
+          KEYBOARD_TABLE_NAME: !Ref KeyboardTable
           # Empty in real deployments; sam local's --env-vars override
           # (env.local.json) can only override a var declared here.
           DYNAMODB_ENDPOINT_URL: ""
@@ -177,6 +196,10 @@ Resources:
                 - dynamodb:PutItem
                 - dynamodb:DeleteItem
               Resource: !GetAtt SwitchTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !GetAtt KeyboardTable.Arn
       Events:
         # No auth: security: [] in api/openapi.yaml.
         LookupsEvent:
@@ -269,6 +292,18 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches/{id}
             Method: delete
+        # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
+        # api/openapi.yaml - anonymous callers are allowed); the app enforces
+        # per-item visibility itself via middleware.OptionalAuth and
+        # internal/authz.ReadableVisibilities.
+        ListKeyboardsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards
+            Method: get
+            Auth:
+              Authorizer: NONE
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/
@@ -429,3 +464,6 @@ Outputs:
   SwitchTableName:
     Description: DynamoDB table backing GET /users/{userId}/switches
     Value: !Ref SwitchTable
+  KeyboardTableName:
+    Description: DynamoDB table backing GET /users/{userId}/keyboards
+    Value: !Ref KeyboardTable

@@ -1,0 +1,152 @@
+package dynamo
+
+import (
+	"context"
+	"errors"
+	"testing"
+
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/suite"
+
+	"github.com/rogueserenity/kbdb/internal/repository"
+	"github.com/rogueserenity/kbdb/internal/repository/dynamo/mocks"
+)
+
+type KeyboardRepositorySuite struct {
+	suite.Suite
+
+	mockClient *mocks.MockDynamoAPI
+	repo       *KeyboardRepository
+}
+
+func TestKeyboardRepositorySuite(t *testing.T) {
+	suite.Run(t, new(KeyboardRepositorySuite))
+}
+
+func (s *KeyboardRepositorySuite) SetupTest() {
+	s.mockClient = mocks.NewMockDynamoAPI(s.T())
+	s.repo = &KeyboardRepository{client: s.mockClient, tableName: "keyboard-table"}
+}
+
+func (s *KeyboardRepositorySuite) TestList_Succeeds() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return len(in.ExclusiveStartKey) == 0 && *in.Limit == 20
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{
+				{
+					"user_id": &types.AttributeValueMemberS{Value: "alice"},
+					"id":      &types.AttributeValueMemberS{Value: "kb1"},
+					"brand":   &types.AttributeValueMemberS{Value: "Keychron"},
+				},
+			},
+		}, nil)
+
+	keyboards, next, err := s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+
+	s.Require().NoError(err)
+	s.Empty(next)
+	s.Require().Len(keyboards, 1)
+	s.Equal("kb1", keyboards[0].ID)
+	s.Equal("Keychron", keyboards[0].Brand)
+}
+
+func (s *KeyboardRepositorySuite) TestList_EmptyVisibilities_ReturnsEmptySliceWithoutQuerying() {
+	// No EXPECT() on s.mockClient.Query - an empty visibilities slice must
+	// short-circuit before building a Query, since expression.In(...)
+	// requires at least one value and would otherwise panic.
+	keyboards, next, err := s.repo.List(context.Background(), "alice", nil, 20, "")
+
+	s.Require().NoError(err)
+	s.NotNil(keyboards)
+	s.Empty(keyboards)
+	s.Empty(next)
+}
+
+func (s *KeyboardRepositorySuite) TestList_EmptyResult_ReturnsEmptySliceNotNil() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
+
+	keyboards, _, err := s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+
+	s.Require().NoError(err)
+	s.NotNil(keyboards)
+	s.Empty(keyboards)
+}
+
+func (s *KeyboardRepositorySuite) TestList_ReturnsEncodedCursor_WhenMorePagesExist() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id": &types.AttributeValueMemberS{Value: "alice"},
+				"id":      &types.AttributeValueMemberS{Value: "kb1"},
+			},
+		}, nil)
+
+	_, next, err := s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+
+	s.Require().NoError(err)
+	s.NotEmpty(next)
+}
+
+func (s *KeyboardRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey() {
+	// Round-trip: encode a key via a first call, then confirm the second
+	// call's ExclusiveStartKey matches what was encoded.
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return len(in.ExclusiveStartKey) == 0
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id": &types.AttributeValueMemberS{Value: "alice"},
+				"id":      &types.AttributeValueMemberS{Value: "kb1"},
+			},
+		}, nil).Once()
+
+	_, cursor, err := s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+	s.Require().NoError(err)
+
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			key, ok := in.ExclusiveStartKey["id"].(*types.AttributeValueMemberS)
+			return ok && key.Value == "kb1"
+		})).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
+
+	_, _, err = s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, cursor)
+	s.Require().NoError(err)
+}
+
+func (s *KeyboardRepositorySuite) TestList_InvalidCursor_ReturnsError() {
+	keyboards, next, err := s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
+
+	s.Require().Error(err)
+	s.Nil(keyboards)
+	s.Empty(next)
+}
+
+func (s *KeyboardRepositorySuite) TestList_QueryError_Propagates() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	keyboards, next, err := s.repo.List(context.Background(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+
+	s.Require().Error(err)
+	s.Nil(keyboards)
+	s.Empty(next)
+}

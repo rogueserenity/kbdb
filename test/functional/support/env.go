@@ -57,6 +57,12 @@ func SwitchTableName() string {
 	return os.Getenv("KBDB_SWITCH_TABLE_NAME")
 }
 
+// KeyboardTableName returns the DynamoDB table name backing
+// GET /users/{userId}/keyboards, so specs can seed fixture rows directly.
+func KeyboardTableName() string {
+	return os.Getenv("KBDB_KEYBOARD_TABLE_NAME")
+}
+
 // DynamoDBEndpointURL returns the DynamoDB endpoint specs should talk to.
 // Empty uses default AWS endpoint resolution.
 func DynamoDBEndpointURL() string {

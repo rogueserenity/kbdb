@@ -55,8 +55,9 @@ func main() {
 	})
 	lookupRepo := dynamo.NewLookupRepository(dynamoClient, cfg.LookupTableName)
 	switchRepo := dynamo.NewSwitchRepository(dynamoClient, cfg.SwitchTableName)
+	keyboardRepo := dynamo.NewKeyboardRepository(dynamoClient, cfg.KeyboardTableName)
 
-	handler := router.New(verifier, lookupRepo, switchRepo, cfg.OIDCIssuerURL, Version)
+	handler := router.New(verifier, lookupRepo, switchRepo, keyboardRepo, cfg.OIDCIssuerURL, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.
