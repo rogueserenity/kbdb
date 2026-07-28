@@ -24,13 +24,18 @@ const (
 )
 
 // approvedSize/approvedLayout/approvedCaseMaterial/approvedVendor are the
-// one approved value seeded into each category above - specs testing the
+// approved value(s) seeded into each category above - specs testing the
 // "approved value" path use these; specs testing the "unapproved value"
 // path use any string not in this fixed set (e.g. "NotApproved").
-// approvedLayout is only valid for approvedSize, per the keyboard_layout
-// category's per-entry Sizes list - see validateKeyboardLayout.
+// approvedLayout is only valid for approvedSize, not approvedOtherSize, per
+// the keyboard_layout category's per-entry Sizes list - see
+// validateKeyboardLayout. approvedOtherSize exists so a spec can send a
+// size that's itself approved (passes the plain keyboard_size membership
+// check) but wrong for approvedLayout, isolating the layout/size
+// cross-check from the plain size check.
 const (
 	approvedSize         = "60%"
+	approvedOtherSize    = "65%"
 	approvedLayout       = "WK"
 	approvedCaseMaterial = "Aluminum"
 	approvedVendor       = "Amazon"
@@ -42,7 +47,7 @@ func TestKeyboards(t *testing.T) {
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
-	Expect(db.SeedLookupCategory(ctx, keyboardSizeCategory, []any{approvedSize})).To(Succeed())
+	Expect(db.SeedLookupCategory(ctx, keyboardSizeCategory, []any{approvedSize, approvedOtherSize})).To(Succeed())
 	Expect(db.SeedLookupCategory(ctx, keyboardLayoutCategory, []any{
 		map[string]any{"name": approvedLayout, "sizes": []any{approvedSize}},
 	})).To(Succeed())

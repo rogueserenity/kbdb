@@ -112,16 +112,16 @@ var _ = Describe("Creating a keyboard", func() {
 			})
 		})
 
-		Context("given layout is not valid for the given size", func() {
+		Context("given size is approved but not valid for the given layout", func() {
 			When("creating a keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
 					resp, err = client.Create(ctx, ownerID, ownerToken,
-						`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved","layout":"`+approvedLayout+`"}`)
+						`{"brand":"Keychron","name":"Q1","visibility":"private","size":"`+approvedOtherSize+`","layout":"`+approvedLayout+`"}`)
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns 400 with a problem+json body naming layout", func() {
+				It("returns 400 with a problem+json body naming only layout", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
 					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 
@@ -135,7 +135,23 @@ var _ = Describe("Creating a keyboard", func() {
 					for i, p := range got.InvalidParams {
 						names[i] = p.Name
 					}
-					Expect(names).To(ContainElement("layout"))
+					Expect(names).To(ConsistOf("layout"))
+				})
+			})
+		})
+
+		Context("given layout is not a recognized value", func() {
+			When("creating a keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"NotApproved"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 				})
 			})
 		})
