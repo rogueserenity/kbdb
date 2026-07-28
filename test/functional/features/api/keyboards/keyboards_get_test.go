@@ -31,12 +31,104 @@ var _ = Describe("Getting a keyboard", func() {
 		Expect(err).NotTo(HaveOccurred())
 	})
 
-	Context("given a private keyboard owned by the caller", func() {
+	seedKeyboard := func(ctx SpecContext, visibility string) string {
+		id := visibility + "-keyboard-" + uuid.NewString()
+		Expect(db.SeedKeyboard(ctx, ownerID, id, visibility)).To(Succeed())
+		return id
+	}
+
+	Context("given a public keyboard", func() {
 		var keyboardID string
 
 		BeforeEach(func(ctx SpecContext) {
-			keyboardID = "get-keyboard-" + uuid.NewString()
-			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
+			keyboardID = seedKeyboard(ctx, "public")
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+		})
+
+		Context("given the caller is anonymous", func() {
+			When("getting the keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keyboardID, "")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the keyboard", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						ID string `json:"id"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.ID).To(Equal(keyboardID))
+				})
+			})
+		})
+	})
+
+	Context("given an authenticated-only keyboard", func() {
+		var keyboardID string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = seedKeyboard(ctx, "authenticated")
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+		})
+
+		Context("given the caller is a different authenticated user", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, err = api.SecondUserAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("getting the keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keyboardID, token)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the keyboard", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						ID string `json:"id"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.ID).To(Equal(keyboardID))
+				})
+			})
+		})
+
+		Context("given the caller is anonymous", func() {
+			When("getting the keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keyboardID, "")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 404, not 403, to avoid revealing the item exists", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+	})
+
+	Context("given a private keyboard", func() {
+		var keyboardID string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = seedKeyboard(ctx, "private")
 		})
 
 		AfterEach(func(ctx SpecContext) {
