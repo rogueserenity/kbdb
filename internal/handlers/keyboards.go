@@ -132,15 +132,28 @@ func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupR
 	}
 
 	var invalidParams []problem.InvalidParam
+	sizeInvalid := false
 	for _, fe := range fieldErrs {
 		invalidParams = append(invalidParams, problem.InvalidParam{
 			Name:   fe.Field,
 			Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
 		})
+		if fe.Field == "size" {
+			sizeInvalid = true
+		}
 	}
 
 	if kb.Layout != nil {
-		layoutErr, err := validateKeyboardLayout(ctx, lookupRepo, kb.Size, *kb.Layout)
+		// An already-invalid size can never appear in any layout's Sizes
+		// list, so checking against it here would always fail the
+		// cross-check too - report size's own error instead of a
+		// second, misleading one blaming a perfectly valid layout.
+		size := kb.Size
+		if sizeInvalid {
+			size = nil
+		}
+
+		layoutErr, err := validateKeyboardLayout(ctx, lookupRepo, size, *kb.Layout)
 		if err != nil {
 			log.FromContext(ctx).Error("validating keyboard layout", "error", err)
 			problem.Internal(w, "failed to validate lookup fields")

@@ -501,6 +501,40 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_MultipleInvalidFields_NamesAll(
 	s.Contains(names, "pcb.firmware")
 }
 
+func (s *CreateKeyboardSuite) TestCreateKeyboard_InvalidSize_DoesNotCascadeIntoLayoutError() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_size").
+		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keyboard_layout").
+		Return(&repository.Lookup{
+			Category: "keyboard_layout",
+			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
+		}, nil)
+
+	// size is invalid on its own; layout ("WK") is genuinely valid. An
+	// invalid size can never appear in any layout's Sizes list, so
+	// checking layout against it would always fail too - the response
+	// must blame only size, not report a second, misleading error
+	// against a layout that's actually fine.
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved","layout":"WK"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	names := make([]string, len(got.InvalidParams))
+	for i, p := range got.InvalidParams {
+		names[i] = p.Name
+	}
+	s.Equal([]string{"size"}, names)
+}
+
 func (s *CreateKeyboardSuite) TestCreateKeyboard_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(context.Background(), "bob")
 

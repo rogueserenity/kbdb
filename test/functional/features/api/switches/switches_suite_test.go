@@ -14,9 +14,11 @@ import (
 // switchTypeCategory/switchMaterialCategory/switchSpringMaterialCategory/
 // vendorCategory consts) - not per-spec values, since the handler always
 // looks up these exact literal names. Seeded once for the whole suite (see
-// BeforeSuite) rather than per-spec, so concurrent specs sharing this
-// suite's lookup table rows can't race each other seeding/deleting the same
-// category.
+// BeforeSuite) rather than per-spec. "vendor" is also seeded/deleted by
+// keyboards_suite_test.go - safe today only because scripts/func-test.sh
+// runs suite packages consecutively (no -p/--procs), not because anything
+// here scopes the category per-suite; adding parallelism would need this
+// reworked first.
 const (
 	switchTypeCategory           = "switch_type"
 	switchMaterialCategory       = "switch_material"
