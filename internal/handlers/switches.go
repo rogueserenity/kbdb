@@ -92,12 +92,6 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 	}
 }
 
-// decodeSwitchInput reads the request body into a repository.Switch.
-// Shape/required-field validation already happened in the OpenAPI request
-// validator (internal/router.restOpenAPIValidator) before this handler ran.
-// Open-vocabulary fields aren't checked here either - see
-// validateSwitchLookups, which needs a repository.LookupRepository this
-// function doesn't have.
 func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Switch, ok bool) {
 	var in api.SwitchInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {

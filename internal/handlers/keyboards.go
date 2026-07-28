@@ -83,12 +83,6 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 	}
 }
 
-// decodeKeyboardInput reads the request body into a repository.Keyboard.
-// Shape/required-field validation already happened in the OpenAPI request
-// validator (internal/router.restOpenAPIValidator) before this handler ran.
-// Open-vocabulary fields aren't checked here either - see
-// validateKeyboardLookups, which needs a repository.LookupRepository this
-// function doesn't have.
 func decodeKeyboardInput(w http.ResponseWriter, r *http.Request) (kb repository.Keyboard, ok bool) {
 	var in api.KeyboardInput
 	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
