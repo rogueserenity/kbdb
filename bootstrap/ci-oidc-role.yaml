@@ -119,7 +119,7 @@ Resources:
               - Sid: LambdaScoped
                 Effect: Allow
                 Action: lambda:*
-                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:kbdb-pr-*
+                Resource: !Sub arn:aws:lambda:${AWS::Region}:${AWS::AccountId}:function:kbdb-api-kbdb-pr-*
               - Sid: ApiGatewayManagement
                 Effect: Allow
                 Action: apigateway:*
