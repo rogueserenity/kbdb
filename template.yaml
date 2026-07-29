@@ -144,6 +144,14 @@ Resources:
         - AttributeName: id
           KeyType: RANGE
 
+  # Matches ApiFunction's explicit FunctionName below so Lambda writes here
+  # instead of auto-creating an unmanaged, never-expiring log group.
+  ApiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/kbdb-api-${AWS::StackName}
+      RetentionInDays: 14
+
   # Single Lambda function for all routes (REST entities + MCP), not split
   # by protocol or by entity - see plan rationale. Packaged as a container
   # image (aws-lambda-web-adapter sidecar) rather than a zip - see
@@ -151,6 +159,7 @@ Resources:
   ApiFunction:
     Type: AWS::Serverless::Function
     Properties:
+      FunctionName: !Sub kbdb-api-${AWS::StackName}
       PackageType: Image
       Architectures:
         - arm64
