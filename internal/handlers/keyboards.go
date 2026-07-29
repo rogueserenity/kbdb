@@ -259,3 +259,45 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*created))
 	}
 }
+
+// UpdateKeyboard reads the {userId} and {id} path values and requires an
+// authenticated caller. userId must be the caller's own subject; updating
+// another user's keyboard, or one that doesn't exist, both return 404, to
+// avoid revealing it exists.
+func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		kb, ok := decodeKeyboardInput(w, r)
+		if !ok {
+			return
+		}
+
+		if !validateKeyboardLookups(r.Context(), w, lookupRepo, kb) {
+			return
+		}
+
+		kb.ID = id
+
+		updated, err := keyboardRepo.Update(r.Context(), kb)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("updating keyboard", "error", err)
+			problem.Internal(w, "failed to update keyboard")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*updated))
+	}
+}

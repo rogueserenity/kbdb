@@ -142,3 +142,27 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 
 	return &kb, nil
 }
+
+func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
+	kb.UserID, _ = kbdbctx.UserID(ctx)
+
+	item, err := attributevalue.MarshalMap(kb)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling keyboard %q for owner %q: %w", kb.ID, kb.UserID, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_exists(id)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("updating keyboard %q for owner %q: %w", kb.ID, kb.UserID, err)
+	}
+
+	return &kb, nil
+}

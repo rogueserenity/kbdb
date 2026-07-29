@@ -58,3 +58,10 @@ func (c *KeyboardsClient) Get(ctx context.Context, ownerID, id, token string) (*
 func (c *KeyboardsClient) Create(ctx context.Context, ownerID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/keyboards", token, bytes.NewBufferString(body))
 }
+
+// Update calls PUT /v1/users/{ownerID}/keyboards/{id} with body as the raw
+// JSON request body and the given bearer token (empty for an anonymous
+// request). The caller owns closing resp.Body.
+func (c *KeyboardsClient) Update(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPut, "/v1/users/"+ownerID+"/keyboards/"+id, token, bytes.NewBufferString(body))
+}

@@ -75,4 +75,9 @@ type KeyboardRepository interface {
 	// Create stores kb (UserID is set from ctx, kb.ID must already be set).
 	// Returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, kb Keyboard) (*Keyboard, error)
+
+	// Update replaces the caller's keyboard (UserID is set from ctx, kb.ID
+	// must already be set to the keyboard being updated). Returns
+	// ErrNotFound if no keyboard with that id exists for the caller.
+	Update(ctx context.Context, kb Keyboard) (*Keyboard, error)
 }

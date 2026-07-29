@@ -74,6 +74,8 @@ func New(
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
 		middleware.Auth(verifier)(validate(handlers.CreateKeyboard(keyboardRepo, lookupRepo))))
+	mux.Handle("PUT /v1/users/{userId}/keyboards/{id}",
+		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo, lookupRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
