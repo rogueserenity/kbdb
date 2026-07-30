@@ -271,3 +271,37 @@ func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
 	s.Require().NotErrorIs(err, repository.ErrNotFound)
 	s.Nil(kb)
 }
+
+func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "kb1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeyboardRepositorySuite) TestDelete_NonexistentID_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "no-such-keyboard")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeyboardRepositorySuite) TestDelete_DeleteItemError_Propagates() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "kb1")
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
+}

@@ -166,3 +166,20 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 
 	return &kb, nil
 }
+
+func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
+	ownerID, _ := kbdbctx.UserID(ctx)
+
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
+			"id":      &types.AttributeValueMemberS{Value: id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("deleting keyboard %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return nil
+}

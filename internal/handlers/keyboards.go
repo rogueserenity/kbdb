@@ -301,3 +301,27 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*updated))
 	}
 }
+
+// DeleteKeyboard reads the {userId} and {id} path values and requires an
+// authenticated caller. userId must be the caller's own subject; deleting
+// another user's keyboard returns 404, not 403, to avoid revealing it
+// exists.
+func DeleteKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		if err := keyboardRepo.Delete(r.Context(), id); err != nil {
+			log.FromContext(r.Context()).Error("deleting keyboard", "error", err)
+			problem.Internal(w, "failed to delete keyboard")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

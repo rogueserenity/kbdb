@@ -65,3 +65,10 @@ func (c *KeyboardsClient) Create(ctx context.Context, ownerID, token, body strin
 func (c *KeyboardsClient) Update(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPut, "/v1/users/"+ownerID+"/keyboards/"+id, token, bytes.NewBufferString(body))
 }
+
+// Delete calls DELETE /v1/users/{ownerID}/keyboards/{id} with the given
+// bearer token (empty for an anonymous request). The caller owns closing
+// resp.Body.
+func (c *KeyboardsClient) Delete(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keyboards/"+id, token, nil)
+}
