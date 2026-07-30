@@ -232,3 +232,42 @@ func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
 	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
 	s.Nil(kb)
 }
+
+func (s *KeyboardRepositorySuite) TestUpdate_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			return *in.ConditionExpression == "attribute_exists(id)"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	kb, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1", Brand: "Keychron"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron"}, kb)
+}
+
+func (s *KeyboardRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	kb, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1"})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(kb)
+}
+
+func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	kb, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Nil(kb)
+}
