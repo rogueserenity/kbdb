@@ -11,7 +11,15 @@ import (
 )
 
 // KeyboardToAPI maps a repository.Keyboard to its wire representation.
-func KeyboardToAPI(kb repository.Keyboard) api.Keyboard {
+// Returns an error if a stored Purchase date is malformed - the layout is
+// enforced on write, but a row can still be poisoned by something outside
+// that path (e.g. a manual DynamoDB edit or a restored backup).
+func KeyboardToAPI(kb repository.Keyboard) (api.Keyboard, error) {
+	purchase, err := keyboardPurchaseToAPI(kb.Purchase)
+	if err != nil {
+		return api.Keyboard{}, err
+	}
+
 	return api.Keyboard{
 		Id:         kb.ID,
 		Brand:      kb.Brand,
@@ -20,10 +28,10 @@ func KeyboardToAPI(kb repository.Keyboard) api.Keyboard {
 		Layout:     kb.Layout,
 		Design:     keyboardDesignToAPI(kb.Design),
 		Pcb:        keyboardPCBToAPI(kb.PCB),
-		Purchase:   keyboardPurchaseToAPI(kb.Purchase),
+		Purchase:   purchase,
 		Notes:      kb.Notes,
 		Visibility: api.Visibility(kb.Visibility),
-	}
+	}, nil
 }
 
 // KeyboardToRepo maps a generated KeyboardInput (already schema-validated by
@@ -146,9 +154,9 @@ func keyboardPCBToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
 // dateLayout matches how openapi_types.Date marshals/unmarshals.
 const dateLayout = "2006-01-02"
 
-func keyboardPurchaseToAPI(p repository.KeyboardPurchase) *api.Purchase {
+func keyboardPurchaseToAPI(p repository.KeyboardPurchase) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
-		return nil
+		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
 
 	out := &api.Purchase{
@@ -157,25 +165,30 @@ func keyboardPurchaseToAPI(p repository.KeyboardPurchase) *api.Purchase {
 		OrderStatus: p.OrderStatus,
 	}
 	if p.OrderDate != nil {
-		out.OrderDate = parseAPIDate(*p.OrderDate)
+		d, err := parseAPIDate(*p.OrderDate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing order_date: %w", err)
+		}
+		out.OrderDate = d
 	}
 	if p.DeliveryDate != nil {
-		out.DeliveryDate = parseAPIDate(*p.DeliveryDate)
+		d, err := parseAPIDate(*p.DeliveryDate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing delivery_date: %w", err)
+		}
+		out.DeliveryDate = d
 	}
 
-	return out
+	return out, nil
 }
 
-// parseAPIDate panics on malformed input - keyboardPurchaseToRepo is the
-// only writer of this field, so a bad layout here means corrupted state,
-// not a normal runtime condition to handle gracefully.
-func parseAPIDate(s string) *openapi_types.Date {
+func parseAPIDate(s string) (*openapi_types.Date, error) {
 	t, err := time.Parse(dateLayout, s)
 	if err != nil {
-		panic(fmt.Sprintf("repoapi: stored date %q does not match layout %q: %v", s, dateLayout, err))
+		return nil, fmt.Errorf("stored date %q does not match layout %q: %w", s, dateLayout, err)
 	}
 
-	return &openapi_types.Date{Time: t}
+	return &openapi_types.Date{Time: t}, nil
 }
 
 func keyboardPurchaseToRepo(p *api.Purchase) repository.KeyboardPurchase {
