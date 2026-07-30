@@ -120,7 +120,11 @@ func (r *KeyboardRepository) Get(ctx context.Context, ownerID, id string) (*repo
 }
 
 func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-	kb.UserID, _ = kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("creating keyboard %q: %w", kb.ID, errNoUserID)
+	}
+	kb.UserID = ownerID
 
 	item, err := attributevalue.MarshalMap(kb)
 	if err != nil {
@@ -144,7 +148,11 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 }
 
 func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-	kb.UserID, _ = kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("updating keyboard %q: %w", kb.ID, errNoUserID)
+	}
+	kb.UserID = ownerID
 
 	item, err := attributevalue.MarshalMap(kb)
 	if err != nil {
