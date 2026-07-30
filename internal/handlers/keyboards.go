@@ -77,9 +77,16 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 			return
 		}
 
+		out, err := repoapi.KeyboardToAPI(*kb)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err)
+			problem.Internal(w, "failed to get keyboard")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*kb))
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 
@@ -254,9 +261,16 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 			return
 		}
 
+		out, err := repoapi.KeyboardToAPI(*created)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err)
+			problem.Internal(w, "failed to create keyboard")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*created))
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 
@@ -296,9 +310,16 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 			return
 		}
 
+		out, err := repoapi.KeyboardToAPI(*updated)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err)
+			problem.Internal(w, "failed to update keyboard")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(repoapi.KeyboardToAPI(*updated))
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 

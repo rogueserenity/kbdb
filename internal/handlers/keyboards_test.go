@@ -242,6 +242,23 @@ func (s *GetKeyboardSuite) TestGetKeyboard_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *GetKeyboardSuite) TestGetKeyboard_MalformedStoredDate_Returns500NotPanic() {
+	malformedDate := "not-a-date"
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			ID:         "kb1",
+			Visibility: repository.VisibilityPublic,
+			Purchase:   repository.KeyboardPurchase{OrderDate: &malformedDate},
+		}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type CreateKeyboardSuite struct {
 	suite.Suite
 
