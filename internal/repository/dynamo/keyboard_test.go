@@ -283,15 +283,13 @@ func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
 	s.Require().NoError(err)
 }
 
-func (s *KeyboardRepositorySuite) TestDelete_NonexistentID_Succeeds() {
-	s.mockClient.EXPECT().
-		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{}, nil)
+func (s *KeyboardRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on s.mockClient.DeleteItem - a missing UserID must be
+	// rejected before ever reaching DynamoDB, not sent as an empty-string
+	// partition key that matches nothing and silently deletes no rows.
+	err := s.repo.Delete(context.Background(), "kb1")
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
-	err := s.repo.Delete(ctx, "no-such-keyboard")
-
-	s.Require().NoError(err)
+	s.Require().Error(err)
 }
 
 func (s *KeyboardRepositorySuite) TestDelete_DeleteItemError_Propagates() {

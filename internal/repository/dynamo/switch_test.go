@@ -283,15 +283,13 @@ func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 	s.Require().NoError(err)
 }
 
-func (s *SwitchRepositorySuite) TestDelete_NonexistentID_Succeeds() {
-	s.mockClient.EXPECT().
-		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{}, nil)
+func (s *SwitchRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on s.mockClient.DeleteItem - a missing UserID must be
+	// rejected before ever reaching DynamoDB, not sent as an empty-string
+	// partition key that matches nothing and silently deletes no rows.
+	err := s.repo.Delete(context.Background(), "sw1")
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
-	err := s.repo.Delete(ctx, "no-such-switch")
-
-	s.Require().NoError(err)
+	s.Require().Error(err)
 }
 
 func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {

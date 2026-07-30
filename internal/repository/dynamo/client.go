@@ -4,9 +4,16 @@ package dynamo
 
 import (
 	"context"
+	"errors"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
+
+// errNoUserID guards Delete methods, which have no ConditionExpression to
+// fall back on if kbdbctx.UserID's ok is silently ignored - unlike Create/
+// Update, an empty-string partition key would otherwise delete nothing
+// without any indication something was wrong.
+var errNoUserID = errors.New("no user id in context")
 
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.

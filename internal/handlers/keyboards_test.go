@@ -1077,17 +1077,6 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Anonymous_Returns404() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *DeleteKeyboardSuite) TestDeleteKeyboard_NonexistentID_Returns204() {
-	s.mockRepo.EXPECT().
-		Delete(mock.Anything, "kb1").
-		Return(nil)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusNoContent, rec.Code)
-}
-
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "kb1").

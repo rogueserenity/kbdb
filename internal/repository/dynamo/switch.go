@@ -170,7 +170,10 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 }
 
 func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
-	ownerID, _ := kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("deleting switch %q: %w", id, errNoUserID)
+	}
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
