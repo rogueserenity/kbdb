@@ -79,7 +79,7 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 
 		out, err := repoapi.KeyboardToAPI(*kb)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err)
+			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err, "id", id)
 			problem.Internal(w, "failed to get keyboard")
 			return
 		}
@@ -263,7 +263,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 
 		out, err := repoapi.KeyboardToAPI(*created)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err)
+			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err, "id", created.ID)
 			problem.Internal(w, "failed to create keyboard")
 			return
 		}
@@ -312,7 +312,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 
 		out, err := repoapi.KeyboardToAPI(*updated)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err)
+			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err, "id", updated.ID)
 			problem.Internal(w, "failed to update keyboard")
 			return
 		}

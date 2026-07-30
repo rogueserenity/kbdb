@@ -648,6 +648,24 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *CreateKeyboardSuite) TestCreateKeyboard_MalformedStoredDate_Returns500NotPanic() {
+	malformedDate := "not-a-date"
+	s.mockKeyboardRepo.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(&repository.Keyboard{
+			ID:         "kb1",
+			Visibility: repository.VisibilityPrivate,
+			Purchase:   repository.KeyboardPurchase{OrderDate: &malformedDate},
+		}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type UpdateKeyboardSuite struct {
 	suite.Suite
 
@@ -1029,6 +1047,24 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_RepositoryError_Returns500() {
 	s.mockKeyboardRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MalformedStoredDate_Returns500NotPanic() {
+	malformedDate := "not-a-date"
+	s.mockKeyboardRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(&repository.Keyboard{
+			ID:         "kb1",
+			Visibility: repository.VisibilityPrivate,
+			Purchase:   repository.KeyboardPurchase{OrderDate: &malformedDate},
+		}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
 	rec := httptest.NewRecorder()
