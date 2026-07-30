@@ -1020,3 +1020,71 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_RepositoryError_Returns500() {
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteKeyboardSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockKeyboardRepository
+	handler  http.HandlerFunc
+}
+
+func TestDeleteKeyboardSuite(t *testing.T) {
+	suite.Run(t, new(DeleteKeyboardSuite))
+}
+
+func (s *DeleteKeyboardSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.handler = DeleteKeyboard(s.mockRepo)
+}
+
+func (s *DeleteKeyboardSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keyboards/kb1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "kb1")
+	return req
+}
+
+func (s *DeleteKeyboardSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Succeeds() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "kb1").
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Anonymous_Returns404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "kb1").
+		Return(errors.New("delete item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

@@ -120,7 +120,11 @@ func (r *KeyboardRepository) Get(ctx context.Context, ownerID, id string) (*repo
 }
 
 func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-	kb.UserID, _ = kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("creating keyboard %q: %w", kb.ID, errNoUserID)
+	}
+	kb.UserID = ownerID
 
 	item, err := attributevalue.MarshalMap(kb)
 	if err != nil {
@@ -144,7 +148,11 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 }
 
 func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-	kb.UserID, _ = kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("updating keyboard %q: %w", kb.ID, errNoUserID)
+	}
+	kb.UserID = ownerID
 
 	item, err := attributevalue.MarshalMap(kb)
 	if err != nil {
@@ -165,4 +173,24 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 	}
 
 	return &kb, nil
+}
+
+func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("deleting keyboard %q: %w", id, errNoUserID)
+	}
+
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
+			"id":      &types.AttributeValueMemberS{Value: id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("deleting keyboard %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return nil
 }

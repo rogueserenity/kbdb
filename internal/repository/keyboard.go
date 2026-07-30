@@ -80,4 +80,8 @@ type KeyboardRepository interface {
 	// must already be set to the keyboard being updated). Returns
 	// ErrNotFound if no keyboard with that id exists for the caller.
 	Update(ctx context.Context, kb Keyboard) (*Keyboard, error)
+
+	// Delete removes the caller's keyboard with the given id. Idempotent: a
+	// nonexistent id is not an error.
+	Delete(ctx context.Context, id string) error
 }

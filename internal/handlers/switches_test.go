@@ -844,17 +844,6 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Anonymous_Returns404() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *DeleteSwitchSuite) TestDeleteSwitch_NonexistentID_Returns204() {
-	s.mockRepo.EXPECT().
-		Delete(mock.Anything, "sw1").
-		Return(nil)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusNoContent, rec.Code)
-}
-
 func (s *DeleteSwitchSuite) TestDeleteSwitch_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "sw1").

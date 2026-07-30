@@ -233,6 +233,14 @@ func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
 	s.Nil(kb)
 }
 
+func (s *KeyboardRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	kb, err := s.repo.Create(context.Background(), repository.Keyboard{ID: "kb1"})
+
+	s.Require().Error(err)
+	s.Nil(kb)
+}
+
 func (s *KeyboardRepositorySuite) TestUpdate_Succeeds() {
 	s.mockClient.EXPECT().
 		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
@@ -270,4 +278,42 @@ func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrNotFound)
 	s.Nil(kb)
+}
+
+func (s *KeyboardRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	kb, err := s.repo.Update(context.Background(), repository.Keyboard{ID: "kb1"})
+
+	s.Require().Error(err)
+	s.Nil(kb)
+}
+
+func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "kb1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeyboardRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
+	err := s.repo.Delete(context.Background(), "kb1")
+
+	s.Require().Error(err)
+}
+
+func (s *KeyboardRepositorySuite) TestDelete_DeleteItemError_Propagates() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "kb1")
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
 }

@@ -233,6 +233,14 @@ func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
 	s.Nil(sw)
 }
 
+func (s *SwitchRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	sw, err := s.repo.Create(context.Background(), repository.Switch{ID: "sw1"})
+
+	s.Require().Error(err)
+	s.Nil(sw)
+}
+
 func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
 	s.mockClient.EXPECT().
 		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
@@ -272,6 +280,14 @@ func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
 	s.Nil(sw)
 }
 
+func (s *SwitchRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	sw, err := s.repo.Update(context.Background(), repository.Switch{ID: "sw1"})
+
+	s.Require().Error(err)
+	s.Nil(sw)
+}
+
 func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).
@@ -283,15 +299,11 @@ func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 	s.Require().NoError(err)
 }
 
-func (s *SwitchRepositorySuite) TestDelete_NonexistentID_Succeeds() {
-	s.mockClient.EXPECT().
-		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{}, nil)
+func (s *SwitchRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
+	err := s.repo.Delete(context.Background(), "sw1")
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
-	err := s.repo.Delete(ctx, "no-such-switch")
-
-	s.Require().NoError(err)
+	s.Require().Error(err)
 }
 
 func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {

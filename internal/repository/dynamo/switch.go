@@ -122,7 +122,11 @@ func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*reposi
 }
 
 func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
-	sw.UserID, _ = kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("creating switch %q: %w", sw.ID, errNoUserID)
+	}
+	sw.UserID = ownerID
 
 	item, err := attributevalue.MarshalMap(sw)
 	if err != nil {
@@ -146,7 +150,11 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 }
 
 func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
-	sw.UserID, _ = kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("updating switch %q: %w", sw.ID, errNoUserID)
+	}
+	sw.UserID = ownerID
 
 	item, err := attributevalue.MarshalMap(sw)
 	if err != nil {
@@ -170,7 +178,10 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 }
 
 func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
-	ownerID, _ := kbdbctx.UserID(ctx)
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("deleting switch %q: %w", id, errNoUserID)
+	}
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
