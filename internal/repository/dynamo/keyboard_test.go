@@ -234,10 +234,7 @@ func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
 }
 
 func (s *KeyboardRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on s.mockClient.PutItem - a missing UserID must be
-	// rejected before ever reaching DynamoDB. attribute_not_exists(id) only
-	// guards an id collision, not a missing user_id, so it's not a
-	// substitute for this check.
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
 	kb, err := s.repo.Create(context.Background(), repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
@@ -284,10 +281,7 @@ func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
 }
 
 func (s *KeyboardRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on s.mockClient.PutItem - a missing UserID must be
-	// rejected before ever reaching DynamoDB. attribute_exists(id) only
-	// guards an id collision, not a missing user_id, so it's not a
-	// substitute for this check.
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
 	kb, err := s.repo.Update(context.Background(), repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
@@ -306,9 +300,7 @@ func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
 }
 
 func (s *KeyboardRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on s.mockClient.DeleteItem - a missing UserID must be
-	// rejected before ever reaching DynamoDB, not sent as an empty-string
-	// partition key that matches nothing and silently deletes no rows.
+	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
 	err := s.repo.Delete(context.Background(), "kb1")
 
 	s.Require().Error(err)
