@@ -42,3 +42,10 @@ func (c *KeycapSetsClient) ListWithRawLimit(ctx context.Context, ownerID, token,
 
 	return c.client.Do(ctx, http.MethodGet, path, token, nil)
 }
+
+// Get calls GET /v1/users/{ownerID}/keycap-sets/{id} with the given bearer
+// token (empty for an anonymous request). The caller owns closing
+// resp.Body.
+func (c *KeycapSetsClient) Get(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodGet, "/v1/users/"+ownerID+"/keycap-sets/"+id, token, nil)
+}

@@ -1280,7 +1280,7 @@ components:
                 $ref: "#/components/schemas/KeycapKit"
               description: >
                 Managed via the dedicated kit endpoints below, not via PUT
-                on the set itself — see POST/GET/PUT/DELETE
+                on the set itself — see POST/PUT/DELETE
                 .../keycap-sets/{id}/kits[/{kitId}].
 
     KeycapSetSummary:

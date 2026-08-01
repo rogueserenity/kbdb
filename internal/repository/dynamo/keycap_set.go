@@ -9,6 +9,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -90,4 +91,28 @@ func (r *KeycapSetRepository) List(
 	}
 
 	return sets, nextCursor, nil
+}
+
+func (r *KeycapSetRepository) Get(ctx context.Context, ownerID, id string) (*repository.KeycapSet, error) {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
+			"id":      &types.AttributeValueMemberS{Value: id},
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("getting keycap set %q for owner %q: %w", id, ownerID, err)
+	}
+
+	if len(out.Item) == 0 {
+		return nil, repository.ErrNotFound
+	}
+
+	var ks repository.KeycapSet
+	if err := attributevalue.UnmarshalMap(out.Item, &ks); err != nil {
+		return nil, fmt.Errorf("unmarshalling keycap set %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return &ks, nil
 }
