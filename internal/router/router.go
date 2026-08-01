@@ -35,6 +35,7 @@ func New(
 	lookupRepo repository.LookupRepository,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
+	keycapSetRepo repository.KeycapSetRepository,
 	issuerURL, version string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
@@ -78,6 +79,11 @@ func New(
 		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo, lookupRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{id}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeyboard(keyboardRepo))))
+
+	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// only public keycap sets (see internal/authz.ReadableVisibilities).
+	mux.Handle("GET /v1/users/{userId}/keycap-sets",
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml

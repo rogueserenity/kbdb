@@ -1,0 +1,27 @@
+package repository
+
+import "context"
+
+// KeycapSet is a keycap set in a user's collection, or shared with the
+// caller. UserID is the DynamoDB partition key (the owner's Cognito
+// subject); ID is the sort key. Only Brand, Name, and Visibility are
+// required, per api/openapi.yaml's KeycapSetInput schema.
+type KeycapSet struct {
+	UserID     string     `dynamodbav:"user_id" json:"-"`
+	ID         string     `dynamodbav:"id" json:"id"`
+	Brand      string     `dynamodbav:"brand" json:"brand"`
+	Name       string     `dynamodbav:"name" json:"name"`
+	Profile    *string    `dynamodbav:"profile,omitempty" json:"profile,omitempty"`
+	Material   *string    `dynamodbav:"material,omitempty" json:"material,omitempty"`
+	Notes      *string    `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
+	Visibility Visibility `dynamodbav:"visibility" json:"visibility"`
+}
+
+// KeycapSetRepository provides access to keycap sets.
+type KeycapSetRepository interface {
+	// List returns up to limit keycap sets owned by ownerID whose
+	// Visibility is in visibilities, ordered by ID. cursor, if non-empty,
+	// resumes from a previous call's returned cursor; the returned cursor
+	// is empty when there are no more pages.
+	List(ctx context.Context, ownerID string, visibilities []Visibility, limit int, cursor string) (sets []KeycapSet, nextCursor string, err error)
+}
