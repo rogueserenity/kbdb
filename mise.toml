@@ -1,7 +1,7 @@
 [tools]
 go = "1.26.5"
 aws-cli = "2"
-aws-sam-cli = "1.164.0"
+aws-sam-cli = "1.165.0"
 mockery = "3.7.2"
 golangci-lint = "2.12.2"
 actionlint = "1.7.12"
