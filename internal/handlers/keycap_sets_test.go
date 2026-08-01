@@ -289,6 +289,20 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_Succeeds() {
 	s.Equal("generated-id", got.Id)
 }
 
+func (s *CreateKeycapSetSuite) TestCreateKeycapSet_Visibility_Preserved() {
+	s.mockKeycapSetRepo.EXPECT().
+		Create(mock.Anything, mock.MatchedBy(func(ks repository.KeycapSet) bool {
+			return ks.Visibility == repository.VisibilityPublic
+		})).
+		Return(&repository.KeycapSet{UserID: "alice", ID: "generated-id"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"public"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_ValidatesOpenVocabularyFields() {
 	tests := []struct {
 		name     string
@@ -322,6 +336,36 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_ValidatesOpenVocabularyFields
 			s.Equal(tt.name, got.InvalidParams[0].Name)
 		})
 	}
+}
+
+func (s *CreateKeycapSetSuite) TestCreateKeycapSet_MultipleInvalidFields_NamesAll() {
+	// profile and material are both invalid here - the response must
+	// report both via invalid_params, not just the first one checked.
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_profile").
+		Return(&repository.Lookup{Category: "keycap_profile", Values: []any{"Cherry"}}, nil)
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_material").
+		Return(&repository.Lookup{Category: "keycap_material", Values: []any{"ABS"}}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved",`+
+			`"material":"AlsoNotApproved"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	names := make([]string, len(got.InvalidParams))
+	for i, p := range got.InvalidParams {
+		names[i] = p.Name
+	}
+	s.Contains(names, "profile")
+	s.Contains(names, "material")
 }
 
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_NotOwner_Returns404() {
