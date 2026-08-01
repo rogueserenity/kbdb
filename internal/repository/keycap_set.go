@@ -36,8 +36,12 @@ type KeycapSetRepository interface {
 	// Returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
-	// Update replaces the keycap set with ks.ID (UserID is set from ctx).
-	// Returns ErrNotFound if no keycap set with that ID exists for the
-	// owner.
+	// Update replaces the keycap set with ks.ID (UserID is set from ctx,
+	// ks.ID must already be set to the keycap set being updated). Returns
+	// ErrNotFound if no keycap set with that ID exists for the owner.
 	Update(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
+
+	// Delete removes the caller's keycap set with the given id. Idempotent:
+	// a nonexistent id is not an error.
+	Delete(ctx context.Context, id string) error
 }

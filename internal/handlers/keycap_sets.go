@@ -214,3 +214,27 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 		_ = json.NewEncoder(w).Encode(repoapi.KeycapSetToAPI(*updated))
 	}
 }
+
+// DeleteKeycapSet reads the {userId} and {id} path values and requires an
+// authenticated caller. userId must be the caller's own subject; deleting
+// another user's keycap set returns 404, not 403, to avoid revealing it
+// exists.
+func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		if err := keycapSetRepo.Delete(r.Context(), id); err != nil {
+			log.FromContext(r.Context()).Error("deleting keycap set", "error", err)
+			problem.Internal(w, "failed to delete keycap set")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
