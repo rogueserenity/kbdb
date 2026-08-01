@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/dynamo/mocks"
 )
@@ -190,6 +191,51 @@ func (s *KeycapSetRepositorySuite) TestGet_GetItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ks, err := s.repo.Get(context.Background(), "alice", "ks1")
+
+	s.Require().Error(err)
+	s.Nil(ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestCreate_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Create(ctx, repository.KeycapSet{ID: "ks1", Brand: "GMK"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK"}, ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Create(ctx, repository.KeycapSet{ID: "ks1"})
+
+	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestCreate_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Create(ctx, repository.KeycapSet{ID: "ks1"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
+	s.Nil(ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	ks, err := s.repo.Create(context.Background(), repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
 	s.Nil(ks)

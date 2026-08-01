@@ -1,9 +1,13 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+
+	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -75,5 +79,96 @@ func GetKeycapSet(repo repository.KeycapSetRepository) http.HandlerFunc {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(repoapi.KeycapSetToAPI(*ks))
+	}
+}
+
+func decodeKeycapSetInput(w http.ResponseWriter, r *http.Request) (ks repository.KeycapSet, ok bool) {
+	var in api.KeycapSetInput
+	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+		problem.BadRequest(w, "invalid request body")
+		return repository.KeycapSet{}, false
+	}
+
+	return repoapi.KeycapSetToRepo(in), true
+}
+
+// validateKeycapSetLookups writes a 400 listing every invalid field if any
+// check fails. An unset (nil) field is skipped, not treated as invalid.
+func validateKeycapSetLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, ks repository.KeycapSet) (ok bool) {
+	var checks []repository.FieldCheck
+	add := func(field string, value *string, category string) {
+		if value == nil {
+			return
+		}
+		checks = append(checks, repository.FieldCheck{Field: field, Value: *value, Category: category})
+	}
+
+	add("profile", ks.Profile, repository.CategoryKeycapProfile)
+	add("material", ks.Material, repository.CategoryKeycapMaterial)
+
+	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
+	if err != nil {
+		log.FromContext(ctx).Error("validating keycap set lookup fields", "error", err)
+		problem.Internal(w, "failed to validate lookup fields")
+		return false
+	}
+
+	var invalidParams []problem.InvalidParam
+	for _, fe := range fieldErrs {
+		invalidParams = append(invalidParams, problem.InvalidParam{
+			Name:   fe.Field,
+			Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
+		})
+	}
+
+	if len(invalidParams) > 0 {
+		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
+		return false
+	}
+
+	return true
+}
+
+// CreateKeycapSet reads the {userId} path value and requires an
+// authenticated caller. userId must be the caller's own subject; creating
+// in another user's collection returns 404, not 403, to avoid revealing it
+// exists.
+func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		ks, ok := decodeKeycapSetInput(w, r)
+		if !ok {
+			return
+		}
+
+		if !validateKeycapSetLookups(r.Context(), w, lookupRepo, ks) {
+			return
+		}
+
+		ks.ID = uuid.NewString()
+
+		created, err := keycapSetRepo.Create(r.Context(), ks)
+		if errors.Is(err, repository.ErrAlreadyExists) {
+			// Practically unreachable - ID is a fresh UUID, not caller
+			// input - but Create's ConditionExpression guards a collision
+			// regardless, so surface it the same way CreateKeyboard does.
+			problem.Conflict(w, "keycap set already exists")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("creating keycap set", "error", err)
+			problem.Internal(w, "failed to create keycap set")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(repoapi.KeycapSetToAPI(*created))
 	}
 }
