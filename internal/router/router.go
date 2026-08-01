@@ -84,6 +84,8 @@ func New(
 	// only public keycap sets (see internal/authz.ReadableVisibilities).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo))))
+	mux.Handle("GET /v1/users/{userId}/keycap-sets/{id}",
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
