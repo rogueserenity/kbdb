@@ -63,6 +63,12 @@ func KeyboardTableName() string {
 	return os.Getenv("KBDB_KEYBOARD_TABLE_NAME")
 }
 
+// KeycapSetTableName returns the DynamoDB table name backing
+// GET /users/{userId}/keycap-sets, so specs can seed fixture rows directly.
+func KeycapSetTableName() string {
+	return os.Getenv("KBDB_KEYCAP_SET_TABLE_NAME")
+}
+
 // DynamoDBEndpointURL returns the DynamoDB endpoint specs should talk to.
 // Empty uses default AWS endpoint resolution.
 func DynamoDBEndpointURL() string {
