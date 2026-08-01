@@ -240,3 +240,50 @@ func (s *KeycapSetRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	s.Require().Error(err)
 	s.Nil(ks)
 }
+
+func (s *KeycapSetRepositorySuite) TestUpdate_Succeeds() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			return *in.ConditionExpression == "attribute_exists(id)"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "GMK"})
+
+	s.Require().NoError(err)
+	s.Equal(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK"}, ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1"})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdate_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1"})
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Nil(ks)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	ks, err := s.repo.Update(context.Background(), repository.KeycapSet{ID: "ks1"})
+
+	s.Require().Error(err)
+	s.Nil(ks)
+}

@@ -172,3 +172,45 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 		_ = json.NewEncoder(w).Encode(repoapi.KeycapSetToAPI(*created))
 	}
 }
+
+// UpdateKeycapSet reads the {userId} and {id} path values and requires an
+// authenticated caller. userId must be the caller's own subject; updating
+// another user's keycap set, or one that doesn't exist, both return 404, to
+// avoid revealing it exists.
+func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("id")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		ks, ok := decodeKeycapSetInput(w, r)
+		if !ok {
+			return
+		}
+
+		if !validateKeycapSetLookups(r.Context(), w, lookupRepo, ks) {
+			return
+		}
+
+		ks.ID = id
+
+		updated, err := keycapSetRepo.Update(r.Context(), ks)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("updating keycap set", "error", err)
+			problem.Internal(w, "failed to update keycap set")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(repoapi.KeycapSetToAPI(*updated))
+	}
+}

@@ -450,3 +450,213 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_RepositoryError_Returns500() 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type UpdateKeycapSetSuite struct {
+	suite.Suite
+
+	mockKeycapSetRepo *mocks.MockKeycapSetRepository
+	mockLookupRepo    *mocks.MockLookupRepository
+	handler           http.HandlerFunc
+}
+
+func TestUpdateKeycapSetSuite(t *testing.T) {
+	suite.Run(t, new(UpdateKeycapSetSuite))
+}
+
+func (s *UpdateKeycapSetSuite) SetupTest() {
+	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
+	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo)
+}
+
+func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keycap-sets/ks1", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "ks1")
+	return req
+}
+
+func (s *UpdateKeycapSetSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_Succeeds() {
+	s.mockKeycapSetRepo.EXPECT().
+		Update(mock.Anything, mock.MatchedBy(func(ks repository.KeycapSet) bool {
+			return ks.ID == "ks1" && ks.Brand == "GMK" && ks.Visibility == repository.VisibilityPrivate
+		})).
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Laser"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got api.KeycapSet
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("ks1", got.Id)
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_Visibility_Preserved() {
+	s.mockKeycapSetRepo.EXPECT().
+		Update(mock.Anything, mock.MatchedBy(func(ks repository.KeycapSet) bool {
+			return ks.Visibility == repository.VisibilityPublic
+		})).
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"public"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_ValidatesOpenVocabularyFields() {
+	tests := []struct {
+		name     string
+		category string
+		body     string
+	}{
+		{"profile", "keycap_profile", `{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved"}`},
+		{"material", "keycap_material", `{"brand":"GMK","name":"Laser","visibility":"private","material":"NotApproved"}`},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			s.SetupTest()
+
+			s.mockLookupRepo.EXPECT().
+				GetCategory(mock.Anything, tt.category).
+				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
+
+			req := s.newRequest(s.ownerCtx(), tt.body)
+			rec := httptest.NewRecorder()
+			s.handler(rec, req)
+
+			s.Equal(http.StatusBadRequest, rec.Code)
+			s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+			var got struct {
+				InvalidParams []problem.InvalidParam `json:"invalid_params"`
+			}
+			s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+			s.Require().Len(got.InvalidParams, 1)
+			s.Equal(tt.name, got.InvalidParams[0].Name)
+		})
+	}
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MultipleInvalidFields_NamesAll() {
+	// profile and material are both invalid here - the response must
+	// report both via invalid_params, not just the first one checked.
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_profile").
+		Return(&repository.Lookup{Category: "keycap_profile", Values: []any{"Cherry"}}, nil)
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_material").
+		Return(&repository.Lookup{Category: "keycap_material", Values: []any{"ABS"}}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved",`+
+			`"material":"AlsoNotApproved"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	names := make([]string, len(got.InvalidParams))
+	for i, p := range got.InvalidParams {
+		names[i] = p.Name
+	}
+	s.Contains(names, "profile")
+	s.Contains(names, "material")
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	req := s.newRequest(ctx, `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_Anonymous_Returns404() {
+	req := s.newRequest(context.Background(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_LookupCategoryMissing_Returns400() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_profile").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_LookupRepositoryError_Returns500() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_profile").
+		Return(nil, errors.New("get item failed"))
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_NotFound_Returns404() {
+	s.mockKeycapSetRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_RepositoryError_Returns500() {
+	s.mockKeycapSetRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

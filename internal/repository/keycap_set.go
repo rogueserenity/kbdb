@@ -35,4 +35,9 @@ type KeycapSetRepository interface {
 	// Create stores ks (UserID is set from ctx, ks.ID must already be set).
 	// Returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
+
+	// Update replaces the keycap set with ks.ID (UserID is set from ctx).
+	// Returns ErrNotFound if no keycap set with that ID exists for the
+	// owner.
+	Update(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 }

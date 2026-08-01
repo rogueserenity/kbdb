@@ -146,3 +146,31 @@ func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSe
 
 	return &ks, nil
 }
+
+func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("updating keycap set %q: %w", ks.ID, errNoUserID)
+	}
+	ks.UserID = ownerID
+
+	item, err := attributevalue.MarshalMap(ks)
+	if err != nil {
+		return nil, fmt.Errorf("marshalling keycap set %q for owner %q: %w", ks.ID, ks.UserID, err)
+	}
+
+	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+		TableName:           &r.tableName,
+		Item:                item,
+		ConditionExpression: aws.String("attribute_exists(id)"),
+	})
+	if err != nil {
+		var condErr *types.ConditionalCheckFailedException
+		if errors.As(err, &condErr) {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("updating keycap set %q for owner %q: %w", ks.ID, ks.UserID, err)
+	}
+
+	return &ks, nil
+}
