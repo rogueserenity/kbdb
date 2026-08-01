@@ -290,7 +290,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("adding keycap kit", "error", err)
+			log.FromContext(r.Context()).Error("adding keycap kit", "error", err, "set_id", setID)
 			problem.Internal(w, "failed to add kit")
 			return
 		}
