@@ -194,3 +194,83 @@ func (r *KeycapSetRepository) Delete(ctx context.Context, id string) error {
 
 	return nil
 }
+
+const maxKitMutationAttempts = 3
+
+// mutateKits performs a bounded read-modify-write of setID's Kits slice
+// under a Version-based CAS loop: Get the set, run mutate against the
+// in-memory struct, increment Version, and PutItem with a
+// ConditionExpression requiring the version to still match what was read.
+// On a CAS miss (another writer won the race), re-Get and retry. This is
+// necessary because DynamoDB's Go SDK has no built-in optimistic-locking
+// primitive (unlike DynamoDBMapper on the Java SDK) and kit fields have no
+// server-side way to be addressed by kit_id within a List attribute -
+// mutate must operate on the whole decoded slice in Go.
+func (r *KeycapSetRepository) mutateKits(
+	ctx context.Context,
+	ownerID, setID string,
+	mutate func(ks *repository.KeycapSet) error,
+) (*repository.KeycapSet, error) {
+	for range maxKitMutationAttempts {
+		ks, err := r.Get(ctx, ownerID, setID)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := mutate(ks); err != nil {
+			return nil, err
+		}
+
+		expectedVersion := ks.Version
+		ks.Version++
+
+		item, err := attributevalue.MarshalMap(*ks)
+		if err != nil {
+			return nil, fmt.Errorf("marshalling keycap set %q for owner %q: %w", setID, ownerID, err)
+		}
+
+		expr, err := expression.NewBuilder().
+			WithCondition(expression.Name("version").Equal(expression.Value(expectedVersion))).
+			Build()
+		if err != nil {
+			return nil, fmt.Errorf("building kit mutation condition for set %q: %w", setID, err)
+		}
+
+		_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
+			TableName:                 &r.tableName,
+			Item:                      item,
+			ConditionExpression:       expr.Condition(),
+			ExpressionAttributeNames:  expr.Names(),
+			ExpressionAttributeValues: expr.Values(),
+		})
+		if err == nil {
+			return ks, nil
+		}
+
+		var condErr *types.ConditionalCheckFailedException
+		if !errors.As(err, &condErr) {
+			return nil, fmt.Errorf("mutating kits for set %q owner %q: %w", setID, ownerID, err)
+		}
+		// Lost the CAS race - another writer updated Version first. Loop
+		// and retry from a fresh Get.
+	}
+
+	return nil, fmt.Errorf("mutating kits for set %q owner %q: %w", setID, ownerID, errKitMutationExhausted)
+}
+
+func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("adding kit to keycap set %q: %w", setID, errNoUserID)
+	}
+
+	_, err := r.mutateKits(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
+		ks.Kits = append(ks.Kits, kit)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &kit, nil
+}

@@ -16,6 +16,11 @@ import (
 // so it's not a substitute for this check.
 var errNoUserID = errors.New("no user id in context")
 
+// errKitMutationExhausted is returned when KeycapSetRepository's kit
+// mutation methods lose the version-CAS race maxKitMutationAttempts times
+// in a row - see keycap_set.go's mutateKits.
+var errKitMutationExhausted = errors.New("exhausted kit mutation retry attempts")
+
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.
 type dynamoAPI interface {

@@ -38,6 +38,80 @@ func (_m *MockKeycapSetRepository) EXPECT() *MockKeycapSetRepository_Expecter {
 	return &MockKeycapSetRepository_Expecter{mock: &_m.Mock}
 }
 
+// AddKit provides a mock function for the type MockKeycapSetRepository
+func (_mock *MockKeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+	ret := _mock.Called(ctx, setID, kit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddKit")
+	}
+
+	var r0 *repository.KeycapKit
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit) (*repository.KeycapKit, error)); ok {
+		return returnFunc(ctx, setID, kit)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit) *repository.KeycapKit); ok {
+		r0 = returnFunc(ctx, setID, kit)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeycapKit)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeycapKit) error); ok {
+		r1 = returnFunc(ctx, setID, kit)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeycapSetRepository_AddKit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddKit'
+type MockKeycapSetRepository_AddKit_Call struct {
+	*mock.Call
+}
+
+// AddKit is a helper method to define mock.On call
+//   - ctx context.Context
+//   - setID string
+//   - kit repository.KeycapKit
+func (_e *MockKeycapSetRepository_Expecter) AddKit(ctx any, setID any, kit any) *MockKeycapSetRepository_AddKit_Call {
+	return &MockKeycapSetRepository_AddKit_Call{Call: _e.mock.On("AddKit", ctx, setID, kit)}
+}
+
+func (_c *MockKeycapSetRepository_AddKit_Call) Run(run func(ctx context.Context, setID string, kit repository.KeycapKit)) *MockKeycapSetRepository_AddKit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.KeycapKit
+		if args[2] != nil {
+			arg2 = args[2].(repository.KeycapKit)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeycapSetRepository_AddKit_Call) Return(keycapKit *repository.KeycapKit, err error) *MockKeycapSetRepository_AddKit_Call {
+	_c.Call.Return(keycapKit, err)
+	return _c
+}
+
+func (_c *MockKeycapSetRepository_AddKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error)) *MockKeycapSetRepository_AddKit_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockKeycapSetRepository
 func (_mock *MockKeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ret := _mock.Called(ctx, ks)
