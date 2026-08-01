@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/url"
@@ -48,4 +49,11 @@ func (c *KeycapSetsClient) ListWithRawLimit(ctx context.Context, ownerID, token,
 // resp.Body.
 func (c *KeycapSetsClient) Get(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodGet, "/v1/users/"+ownerID+"/keycap-sets/"+id, token, nil)
+}
+
+// Create calls POST /v1/users/{ownerID}/keycap-sets with body as the raw
+// JSON request body and the given bearer token (empty for an anonymous
+// request). The caller owns closing resp.Body.
+func (c *KeycapSetsClient) Create(ctx context.Context, ownerID, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/keycap-sets", token, bytes.NewBufferString(body))
 }

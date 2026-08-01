@@ -63,3 +63,46 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() 
 	s.Equal(&ks.Name, summary.Name)
 	s.Equal(ks.Profile, summary.Profile)
 }
+
+func fullAPIKeycapSetInput() api.KeycapSetInput {
+	return api.KeycapSetInput{
+		Brand:      "GMK",
+		Name:       "Laser",
+		Profile:    strPtr("Cherry"),
+		Material:   strPtr("ABS"),
+		Notes:      strPtr("group buy"),
+		Visibility: api.Visibility(repository.VisibilityPrivate),
+	}
+}
+
+type KeycapSetToRepoSuite struct {
+	suite.Suite
+}
+
+func TestKeycapSetToRepoSuite(t *testing.T) {
+	suite.Run(t, new(KeycapSetToRepoSuite))
+}
+
+func (s *KeycapSetToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
+	in := fullAPIKeycapSetInput()
+	out := KeycapSetToRepo(in)
+
+	s.Equal(in.Brand, out.Brand)
+	s.Equal(in.Name, out.Name)
+	s.Equal(in.Profile, out.Profile)
+	s.Equal(in.Material, out.Material)
+	s.Equal(in.Notes, out.Notes)
+	s.Equal(repository.Visibility(in.Visibility), out.Visibility)
+	s.Empty(out.UserID)
+	s.Empty(out.ID)
+}
+
+func (s *KeycapSetToRepoSuite) TestAllOptionalFieldsNil_MapsToNil() {
+	in := api.KeycapSetInput{Brand: "GMK", Name: "Laser", Visibility: api.Visibility(repository.VisibilityPrivate)}
+
+	out := KeycapSetToRepo(in)
+
+	s.Nil(out.Profile)
+	s.Nil(out.Material)
+	s.Nil(out.Notes)
+}
