@@ -369,28 +369,6 @@ paths:
     parameters:
       - $ref: "#/components/parameters/UserId"
       - $ref: "#/components/parameters/Id"
-    get:
-      tags: [keycap-sets]
-      summary: List a keycap set's kits
-      operationId: listKeycapKits
-      security:
-        - {}
-        - CognitoAuth: []
-      description: >
-        Returns the set's kits under the same access rules as getKeycapSet
-        (own, or shared with the caller — 404 otherwise). Not paginated;
-        see KeycapKitListPage.
-      responses:
-        "200":
-          description: The set's kits.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeycapKitListPage"
-        "404":
-          $ref: "#/components/responses/NotFoundResponse"
-        default:
-          $ref: "#/components/responses/ProblemResponse"
     post:
       tags: [keycap-sets]
       summary: Add a kit to a keycap set
@@ -428,27 +406,6 @@ paths:
         schema:
           type: string
         description: The kit_id returned when the kit was created.
-    get:
-      tags: [keycap-sets]
-      summary: Get a kit
-      operationId: getKeycapKit
-      security:
-        - {}
-        - CognitoAuth: []
-      description: >
-        Returns the kit under the same access rules as getKeycapSet (own,
-        or shared with the caller — 404 otherwise).
-      responses:
-        "200":
-          description: The requested kit.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/KeycapKit"
-        "404":
-          $ref: "#/components/responses/NotFoundResponse"
-        default:
-          $ref: "#/components/responses/ProblemResponse"
     put:
       tags: [keycap-sets]
       summary: Update a kit
@@ -1347,18 +1304,6 @@ components:
             $ref: "#/components/schemas/KeycapSetSummary"
         next_cursor:
           type: [string, "null"]
-
-    KeycapKitListPage:
-      type: object
-      description: >
-        Not paginated (limit/cursor) like the top-level entity list
-        endpoints — a keycap set's kits are few enough in practice that
-        the full list is always returned in one response.
-      properties:
-        items:
-          type: array
-          items:
-            $ref: "#/components/schemas/KeycapKit"
 
     BuildSwitchEntry:
       type: object
