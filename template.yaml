@@ -145,10 +145,8 @@ Resources:
           KeyType: RANGE
 
   # User-owned keycap sets. Same key schema/rationale as SwitchTable above.
-  # Kits live nested inside a set's item (see internal/repository/
-  # keycap_set.go), not a separate table. scripts/func-setup.sh
-  # hand-creates an equivalent table against LocalStack - keep that
-  # script's schema in sync with this resource.
+  # scripts/func-setup.sh hand-creates an equivalent table against
+  # LocalStack - keep that script's schema in sync with this resource.
   KeycapSetTable:
     Type: AWS::DynamoDB::Table
     Properties:
