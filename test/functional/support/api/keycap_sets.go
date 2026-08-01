@@ -64,3 +64,10 @@ func (c *KeycapSetsClient) Create(ctx context.Context, ownerID, token, body stri
 func (c *KeycapSetsClient) Update(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPut, "/v1/users/"+ownerID+"/keycap-sets/"+id, token, bytes.NewBufferString(body))
 }
+
+// Delete calls DELETE /v1/users/{ownerID}/keycap-sets/{id} with the given
+// bearer token (empty for an anonymous request). The caller owns closing
+// resp.Body.
+func (c *KeycapSetsClient) Delete(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keycap-sets/"+id, token, nil)
+}

@@ -90,6 +90,8 @@ func New(
 		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, lookupRepo))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{id}",
 		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, lookupRepo))))
+	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{id}",
+		middleware.Auth(verifier)(validate(handlers.DeleteKeycapSet(keycapSetRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml

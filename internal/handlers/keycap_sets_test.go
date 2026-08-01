@@ -660,3 +660,71 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_RepositoryError_Returns500() 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteKeycapSetSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockKeycapSetRepository
+	handler  http.HandlerFunc
+}
+
+func TestDeleteKeycapSetSuite(t *testing.T) {
+	suite.Run(t, new(DeleteKeycapSetSuite))
+}
+
+func (s *DeleteKeycapSetSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.handler = DeleteKeycapSet(s.mockRepo)
+}
+
+func (s *DeleteKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keycap-sets/ks1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "ks1")
+	return req
+}
+
+func (s *DeleteKeycapSetSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Anonymous_Returns404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(context.Background()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(errors.New("delete item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

@@ -174,3 +174,23 @@ func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSe
 
 	return &ks, nil
 }
+
+func (r *KeycapSetRepository) Delete(ctx context.Context, id string) error {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("deleting keycap set %q: %w", id, errNoUserID)
+	}
+
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+		TableName: &r.tableName,
+		Key: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
+			"id":      &types.AttributeValueMemberS{Value: id},
+		},
+	})
+	if err != nil {
+		return fmt.Errorf("deleting keycap set %q for owner %q: %w", id, ownerID, err)
+	}
+
+	return nil
+}

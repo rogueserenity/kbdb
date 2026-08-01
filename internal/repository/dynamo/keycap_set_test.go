@@ -287,3 +287,32 @@ func (s *KeycapSetRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 	s.Require().Error(err)
 	s.Nil(ks)
 }
+
+func (s *KeycapSetRepositorySuite) TestDelete_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "ks1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
+	err := s.repo.Delete(context.Background(), "ks1")
+
+	s.Require().Error(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDelete_DeleteItemError_Propagates() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.Delete(ctx, "ks1")
+
+	s.Require().Error(err)
+}

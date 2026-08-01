@@ -410,6 +410,14 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{id}
             Method: put
+        # Default CognitoAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        DeleteKeycapSetEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keycap-sets/{id}
+            Method: delete
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/
