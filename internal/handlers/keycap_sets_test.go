@@ -170,6 +170,34 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_Succeeds() {
 	s.Equal("GMK", got.Brand)
 }
 
+func (s *GetKeycapSetSuite) TestGetKeycapSet_KitWithImagePath_IncludesPresignedURL() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	imagePath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			ID:         "ks1",
+			Visibility: repository.VisibilityPrivate,
+			Kits:       []repository.KeycapKit{{KitID: "kit1", Name: "Base", ImagePath: &imagePath}},
+		}, nil)
+	s.mockImages.EXPECT().
+		PresignGet(mock.Anything, imagePath).
+		Return("https://example.com/presigned-get", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.KeycapSet
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Kits)
+	s.Require().Len(*got.Kits, 1)
+	s.Require().NotNil((*got.Kits)[0].Image)
+	s.Equal("https://example.com/presigned-get", (*got.Kits)[0].Image.Url)
+}
+
 func (s *GetKeycapSetSuite) TestGetKeycapSet_AnonymousReadingPublicKeycapSet_Succeeds() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
