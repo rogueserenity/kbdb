@@ -32,7 +32,7 @@ func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
 
 		keyboards, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
 		if err != nil {
-			log.FromContext(r.Context()).Error("listing keyboards", "error", err)
+			log.FromContext(r.Context()).Error("listing keyboards", log.Error, err)
 			problem.Internal(w, "failed to list keyboards")
 			return
 		}
@@ -67,7 +67,7 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting keyboard", "error", err)
+			log.FromContext(r.Context()).Error("getting keyboard", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to get keyboard")
 			return
 		}
@@ -79,7 +79,7 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 
 		out, err := repoapi.KeyboardToAPI(*kb)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err, "id", id)
+			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to get keyboard")
 			return
 		}
@@ -133,7 +133,7 @@ func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupR
 
 	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
 	if err != nil {
-		log.FromContext(ctx).Error("validating keyboard lookup fields", "error", err)
+		log.FromContext(ctx).Error("validating keyboard lookup fields", log.Error, err)
 		problem.Internal(w, "failed to validate lookup fields")
 		return false
 	}
@@ -162,7 +162,7 @@ func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupR
 
 		layoutErr, err := validateKeyboardLayout(ctx, lookupRepo, size, *kb.Layout)
 		if err != nil {
-			log.FromContext(ctx).Error("validating keyboard layout", "error", err)
+			log.FromContext(ctx).Error("validating keyboard layout", log.Error, err)
 			problem.Internal(w, "failed to validate lookup fields")
 			return false
 		}
@@ -256,14 +256,14 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("creating keyboard", "error", err)
+			log.FromContext(r.Context()).Error("creating keyboard", log.Error, err, log.KeyboardID, kb.ID)
 			problem.Internal(w, "failed to create keyboard")
 			return
 		}
 
 		out, err := repoapi.KeyboardToAPI(*created)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err, "id", created.ID)
+			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, created.ID)
 			problem.Internal(w, "failed to create keyboard")
 			return
 		}
@@ -305,14 +305,14 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("updating keyboard", "error", err)
+			log.FromContext(r.Context()).Error("updating keyboard", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to update keyboard")
 			return
 		}
 
 		out, err := repoapi.KeyboardToAPI(*updated)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboard to API", "error", err, "id", updated.ID)
+			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, updated.ID)
 			problem.Internal(w, "failed to update keyboard")
 			return
 		}
@@ -338,7 +338,7 @@ func DeleteKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 		}
 
 		if err := keyboardRepo.Delete(r.Context(), id); err != nil {
-			log.FromContext(r.Context()).Error("deleting keyboard", "error", err)
+			log.FromContext(r.Context()).Error("deleting keyboard", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to delete keyboard")
 			return
 		}

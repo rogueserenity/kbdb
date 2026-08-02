@@ -79,13 +79,13 @@ func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, re
 	case errors.Is(err, repository.ErrNotFound):
 		// approvedSizes stays nil - every non-empty sizes list fails below.
 	case err != nil:
-		log.FromContext(ctx).Error("fetching keyboard_size for keyboard_layout validation", "error", err)
+		log.FromContext(ctx).Error("fetching keyboard_size for keyboard_layout validation", log.Error, err)
 		problem.Internal(w, "failed to validate values")
 		return false
 	default:
 		approvedSizes, err = repository.ParseStrings(sizeLookup.Values)
 		if err != nil {
-			log.FromContext(ctx).Error("parsing keyboard_size values", "error", err)
+			log.FromContext(ctx).Error("parsing keyboard_size values", log.Error, err)
 			problem.Internal(w, "failed to validate values")
 			return false
 		}
@@ -116,7 +116,7 @@ func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		categories, err := repo.ListCategories(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("listing lookup categories", "error", err)
+			log.FromContext(r.Context()).Error("listing lookup categories", log.Error, err)
 			problem.Internal(w, "failed to list lookup categories")
 			return
 		}
@@ -132,7 +132,7 @@ func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
 func writeLookup(ctx context.Context, w http.ResponseWriter, status int, lookup repository.Lookup) {
 	out, err := repoapi.LookupToAPI(lookup)
 	if err != nil {
-		log.FromContext(ctx).Error("mapping lookup category to API shape", "category", lookup.Category, "error", err)
+		log.FromContext(ctx).Error("mapping lookup category to API shape", log.LookupCategory, lookup.Category, log.Error, err)
 		problem.Internal(w, "failed to read lookup category")
 		return
 	}
@@ -153,7 +153,7 @@ func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting lookup category", "error", err)
+			log.FromContext(r.Context()).Error("getting lookup category", log.Error, err, log.LookupCategory, category)
 			problem.Internal(w, "failed to get lookup category")
 			return
 		}
@@ -186,7 +186,7 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("creating lookup category", "error", err)
+			log.FromContext(r.Context()).Error("creating lookup category", log.Error, err, log.LookupCategory, category)
 			problem.Internal(w, "failed to create lookup category")
 			return
 		}
@@ -219,7 +219,7 @@ func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("replacing lookup category", "error", err)
+			log.FromContext(r.Context()).Error("replacing lookup category", log.Error, err, log.LookupCategory, category)
 			problem.Internal(w, "failed to replace lookup category")
 			return
 		}
@@ -238,7 +238,7 @@ func DeleteLookup(repo repository.LookupRepository) http.HandlerFunc {
 		}
 
 		if err := repo.DeleteCategory(r.Context(), category); err != nil {
-			log.FromContext(r.Context()).Error("deleting lookup category", "error", err)
+			log.FromContext(r.Context()).Error("deleting lookup category", log.Error, err, log.LookupCategory, category)
 			problem.Internal(w, "failed to delete lookup category")
 			return
 		}

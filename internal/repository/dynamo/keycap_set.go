@@ -14,6 +14,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
+	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -271,6 +272,7 @@ func (r *KeycapSetRepository) mutateSet(
 		}
 		// Lost the CAS race - another writer updated Version first. Loop
 		// and retry from a fresh Get.
+		log.FromContext(ctx).Warn("keycap set CAS retry", log.KeycapSetID, setID, "attempted_version", expectedVersion)
 	}
 
 	return nil, fmt.Errorf("mutating set %q owner %q: %w", setID, ownerID, repository.ErrMutationConflict)

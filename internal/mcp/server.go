@@ -123,6 +123,10 @@ func authMiddleware(verifier *auth.Verifier) server.ToolHandlerMiddleware {
 
 			claims, err := verifier.VerifyToken(ctx, token)
 			if err != nil {
+				// Warn, not Error: an individual invalid/expired token from
+				// one client is expected traffic, not a bug - still worth a
+				// trace to spot a misconfigured client or repeated probing.
+				logpkg.FromContext(ctx).Warn("token verification failed", logpkg.Error, err)
 				return gomcp.NewToolResultError("invalid token"), nil
 			}
 
