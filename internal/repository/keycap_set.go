@@ -80,4 +80,10 @@ type KeycapSetRepository interface {
 	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
+
+	// DeleteKit removes the kit matching kitID from setID's Kits.
+	// Idempotent: a kitID not present in the set is not an error. Returns
+	// ErrNotFound if setID doesn't exist for the owner, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	DeleteKit(ctx context.Context, setID, kitID string) error
 }

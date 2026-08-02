@@ -331,3 +331,24 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 
 	return &updated.Kits[idx], nil
 }
+
+func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) error {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("deleting kit from keycap set %q: %w", setID, errNoUserID)
+	}
+
+	_, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
+		idx := slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
+		if idx == -1 {
+			return errKitAlreadyAbsent
+		}
+		ks.Kits = slices.Delete(ks.Kits, idx, idx+1)
+		return nil
+	})
+	if errors.Is(err, errKitAlreadyAbsent) {
+		return nil
+	}
+
+	return err
+}

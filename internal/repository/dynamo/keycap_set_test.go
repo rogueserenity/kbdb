@@ -800,3 +800,128 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_NoUserIDInContext_ReturnsError(
 	s.Require().Error(err)
 	s.Nil(kit)
 }
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_Succeeds() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.Version == 1 && len(ks.Kits) == 0
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_KitAlreadyAbsent_SucceedsWithoutWriting() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.DeleteKit(ctx, "ks1", "no-such-kit")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_ParentSetNotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.DeleteKit(ctx, "missing", "kit1")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflict_RetriesThenSucceeds() {
+	// The second Get returns a set with an additional kit (kit-from-winner)
+	// alongside kit1 - proves the retry recomputes state from a fresh Get
+	// rather than reusing the first attempt's now-stale slice.
+	firstGet := s.getItemOutputWithKit()
+	secondGet := s.getItemOutput(1)
+	secondGet.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit-from-winner"},
+				"name":     &types.AttributeValueMemberS{Value: "Winner"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit1"},
+				"name":     &types.AttributeValueMemberS{Value: "Base"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(firstGet, nil).Once()
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{}).Once()
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(secondGet, nil).Once()
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.Version == 2 && len(ks.Kits) == 1 && ks.Kits[0].KitID == "kit-from-winner"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil).Once()
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflictExhausted_ReturnsError() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil).Times(maxSetMutationAttempts)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
+	err := s.repo.DeleteKit(context.Background(), "ks1", "kit1")
+
+	s.Require().Error(err)
+}

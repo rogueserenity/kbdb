@@ -85,3 +85,10 @@ func (c *KeycapSetsClient) CreateKit(ctx context.Context, ownerID, setID, token,
 func (c *KeycapSetsClient) UpdateKit(ctx context.Context, ownerID, setID, kitID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPut, "/v1/users/"+ownerID+"/keycap-sets/"+setID+"/kits/"+kitID, token, bytes.NewBufferString(body))
 }
+
+// DeleteKit calls DELETE /v1/users/{ownerID}/keycap-sets/{setID}/kits/{kitID}
+// with the given bearer token (empty for an anonymous request). The caller
+// owns closing resp.Body.
+func (c *KeycapSetsClient) DeleteKit(ctx context.Context, ownerID, setID, kitID, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keycap-sets/"+setID+"/kits/"+kitID, token, nil)
+}
