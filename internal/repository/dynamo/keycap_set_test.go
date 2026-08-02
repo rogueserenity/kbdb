@@ -618,17 +618,25 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 				return false
 			}
 			return ks.Version == 1 && len(ks.Kits) == 1 &&
-				ks.Kits[0].KitID == "kit1" && ks.Kits[0].Name == "Extension"
+				ks.Kits[0].KitID == "kit1" && ks.Kits[0].Name == "Extension" &&
+				ks.Kits[0].Purchase.Vendor != nil && *ks.Kits[0].Purchase.Vendor == "CannonKeys"
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(context.Background(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	vendor := "CannonKeys"
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{
+		KitID:    "kit1",
+		Name:     "Extension",
+		Purchase: repository.KeycapKitPurchase{Vendor: &vendor},
+	})
 
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
 	s.Equal("kit1", kit.KitID)
 	s.Equal("Extension", kit.Name)
+	s.Require().NotNil(kit.Purchase.Vendor)
+	s.Equal("CannonKeys", *kit.Purchase.Vendor)
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
@@ -658,9 +666,6 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(context.Background(), "alice")
-	// The caller's input never carries ImagePath - it's server-managed via
-	// SetKeycapKitImage, not something a PUT request body can set - so
-	// UpdateKit must not let this nil overwrite what's already stored.
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().NoError(err)
@@ -697,20 +702,22 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_ParentSetNotFound_ReturnsErrNot
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflict_RetriesThenSucceeds() {
 	// The second Get returns a set with a different kit (kit-from-winner)
-	// that the first Get never saw - proves the retry re-reads fresh state
-	// rather than overlaying onto the first attempt's now-stale struct.
+	// placed BEFORE kit1, shifting kit1 from index 0 to index 1 - proves
+	// the retry recomputes which index to update against fresh state,
+	// rather than reusing an index captured from the first attempt (which
+	// would wrongly update kit-from-winner here).
 	firstGet := s.getItemOutputWithKit()
 	secondGet := s.getItemOutput(1)
 	secondGet.Item["kits"] = &types.AttributeValueMemberL{
 		Value: []types.AttributeValue{
 			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"kit_id":   &types.AttributeValueMemberS{Value: "kit1"},
-				"name":     &types.AttributeValueMemberS{Value: "Base"},
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit-from-winner"},
+				"name":     &types.AttributeValueMemberS{Value: "Winner"},
 				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
 			}},
 			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"kit_id":   &types.AttributeValueMemberS{Value: "kit-from-winner"},
-				"name":     &types.AttributeValueMemberS{Value: "Winner"},
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit1"},
+				"name":     &types.AttributeValueMemberS{Value: "Base"},
 				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
 			}},
 		},
@@ -732,8 +739,8 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflict_RetriesThenSucceeds
 				return false
 			}
 			return ks.Version == 2 && len(ks.Kits) == 2 &&
-				ks.Kits[0].KitID == "kit1" && ks.Kits[0].Name == "Extension" &&
-				ks.Kits[1].KitID == "kit-from-winner"
+				ks.Kits[0].KitID == "kit-from-winner" && ks.Kits[0].Name == "Winner" &&
+				ks.Kits[1].KitID == "kit1" && ks.Kits[1].Name == "Extension"
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 

@@ -305,10 +305,7 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 	return &updated.Kits[idx], nil
 }
 
-// UpdateKit only replaces Name and Purchase on the matched kit - not the
-// whole element - so it doesn't clobber ImagePath, which is server-managed
-// (set via SetKeycapKitImage, never present on the caller's input) rather
-// than something a PUT request body ever carries.
+// UpdateKit updates the details for the specified kit in this set.
 func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
 	if kit.KitID == "" {
 		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errEmptyKitID)
@@ -325,8 +322,8 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 		if idx == -1 {
 			return repository.ErrNotFound
 		}
-		ks.Kits[idx].Name = kit.Name
-		ks.Kits[idx].Purchase = kit.Purchase
+		kit.ImagePath = ks.Kits[idx].ImagePath
+		ks.Kits[idx] = kit
 		return nil
 	})
 	if err != nil {
