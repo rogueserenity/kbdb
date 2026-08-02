@@ -62,13 +62,13 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 	}
 }
 
-// GetSwitch reads the {userId} and {id} path values. Anonymous callers are
+// GetSwitch reads the {userId} and {switchId} path values. Anonymous callers are
 // allowed; a switch that exists but isn't readable by the caller returns
 // 404, not 403, to avoid revealing it exists.
 func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("switchId")
 
 		sw, err := repo.Get(r.Context(), ownerID, id)
 		if errors.Is(err, repository.ErrNotFound) {
@@ -186,14 +186,14 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 	}
 }
 
-// UpdateSwitch reads the {userId} and {id} path values and requires an
+// UpdateSwitch reads the {userId} and {switchId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's switch, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
 func UpdateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("switchId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")
@@ -228,13 +228,13 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 	}
 }
 
-// DeleteSwitch reads the {userId} and {id} path values and requires an
+// DeleteSwitch reads the {userId} and {switchId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's switch returns 404, not 403, to avoid revealing it exists.
 func DeleteSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("switchId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")

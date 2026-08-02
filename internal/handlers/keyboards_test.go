@@ -145,7 +145,7 @@ func (s *GetKeyboardSuite) SetupTest() {
 func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keyboards/kb1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "kb1")
+	req.SetPathValue("keyboardId", "kb1")
 	return req
 }
 
@@ -687,7 +687,7 @@ func (s *UpdateKeyboardSuite) SetupTest() {
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keyboards/kb1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "kb1")
+	req.SetPathValue("keyboardId", "kb1")
 	return req
 }
 
@@ -1093,7 +1093,7 @@ func (s *DeleteKeyboardSuite) SetupTest() {
 func (s *DeleteKeyboardSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keyboards/kb1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "kb1")
+	req.SetPathValue("keyboardId", "kb1")
 	return req
 }
 

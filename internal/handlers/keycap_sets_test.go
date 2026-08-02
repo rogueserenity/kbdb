@@ -145,7 +145,7 @@ func (s *GetKeycapSetSuite) SetupTest() {
 func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keycap-sets/ks1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "ks1")
+	req.SetPathValue("keycapSetId", "ks1")
 	return req
 }
 
@@ -492,7 +492,7 @@ func (s *UpdateKeycapSetSuite) SetupTest() {
 func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keycap-sets/ks1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "ks1")
+	req.SetPathValue("keycapSetId", "ks1")
 	return req
 }
 
@@ -713,7 +713,7 @@ func (s *DeleteKeycapSetSuite) SetupTest() {
 func (s *DeleteKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keycap-sets/ks1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "ks1")
+	req.SetPathValue("keycapSetId", "ks1")
 	return req
 }
 
@@ -781,7 +781,7 @@ func (s *CreateKeycapKitSuite) SetupTest() {
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keycap-sets/ks1/kits", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "ks1")
+	req.SetPathValue("keycapSetId", "ks1")
 	return req
 }
 
@@ -896,7 +896,7 @@ func (s *UpdateKeycapKitSuite) SetupTest() {
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keycap-sets/ks1/kits/kit1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "ks1")
+	req.SetPathValue("keycapSetId", "ks1")
 	req.SetPathValue("kitId", "kit1")
 	return req
 }
@@ -1012,7 +1012,7 @@ func (s *DeleteKeycapKitSuite) SetupTest() {
 func (s *DeleteKeycapKitSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keycap-sets/ks1/kits/kit1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "ks1")
+	req.SetPathValue("keycapSetId", "ks1")
 	req.SetPathValue("kitId", "kit1")
 	return req
 }

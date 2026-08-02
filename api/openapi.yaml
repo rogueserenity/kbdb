@@ -81,10 +81,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/keyboards/{id}:
+  /v1/users/{userId}/keyboards/{keyboardId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/KeyboardId"
     get:
       tags: [keyboards]
       summary: Get a keyboard
@@ -192,10 +192,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/switches/{id}:
+  /v1/users/{userId}/switches/{switchId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/SwitchId"
     get:
       tags: [switches]
       summary: Get a switch
@@ -304,10 +304,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/keycap-sets/{id}:
+  /v1/users/{userId}/keycap-sets/{keycapSetId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/KeycapSetId"
     get:
       tags: [keycap-sets]
       summary: Get a keycap set
@@ -367,10 +367,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/keycap-sets/{id}/kits:
+  /v1/users/{userId}/keycap-sets/{keycapSetId}/kits:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/KeycapSetId"
     post:
       tags: [keycap-sets]
       summary: Add a kit to a keycap set
@@ -400,10 +400,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}:
+  /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/KeycapSetId"
       - name: kitId
         in: path
         required: true
@@ -455,10 +455,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}/image:
+  /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/KeycapSetId"
       - name: kitId
         in: path
         required: true
@@ -577,10 +577,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/builds/{id}:
+  /v1/users/{userId}/builds/{buildId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/BuildId"
     get:
       tags: [builds]
       summary: Get a build
@@ -638,10 +638,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/builds/{id}/images:
+  /v1/users/{userId}/builds/{buildId}/images:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/BuildId"
     post:
       tags: [builds]
       summary: Add an image to a build
@@ -693,10 +693,10 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
-  /v1/users/{userId}/builds/{id}/images/{imageId}:
+  /v1/users/{userId}/builds/{buildId}/images/{imageId}:
     parameters:
       - $ref: "#/components/parameters/UserId"
-      - $ref: "#/components/parameters/Id"
+      - $ref: "#/components/parameters/BuildId"
       - name: imageId
         in: path
         required: true
@@ -872,13 +872,34 @@ components:
         caller can never modify another user's items. Not a PII/security
         concern to expose in a URL — Cognito subjects are opaque UUIDs, not
         derived from email or any other identifying attribute.
-    Id:
-      name: id
+    KeyboardId:
+      name: keyboardId
       in: path
       required: true
       schema:
         type: string
-      description: Server-generated identifier for the resource.
+      description: Server-generated identifier for the keyboard.
+    SwitchId:
+      name: switchId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Server-generated identifier for the switch.
+    KeycapSetId:
+      name: keycapSetId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Server-generated identifier for the keycap set.
+    BuildId:
+      name: buildId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: Server-generated identifier for the build.
     Limit:
       name: limit
       in: query
@@ -1255,7 +1276,7 @@ components:
               description: >
                 Managed via the dedicated image endpoint, not via PUT on
                 the kit itself — see POST/DELETE
-                .../keycap-sets/{id}/kits/{kitId}/image.
+                .../keycap-sets/{keycapSetId}/kits/{kitId}/image.
 
     KeycapSetInput:
       type: object
@@ -1291,7 +1312,7 @@ components:
               description: >
                 Managed via the dedicated kit endpoints below, not via PUT
                 on the set itself — see POST/PUT/DELETE
-                .../keycap-sets/{id}/kits[/{kitId}].
+                .../keycap-sets/{keycapSetId}/kits[/{kitId}].
 
     KeycapSetSummary:
       type: object
@@ -1424,7 +1445,7 @@ components:
               description: >
                 Managed via the dedicated image endpoints below, not via
                 PUT on the build itself — see POST/DELETE
-                .../builds/{id}/images[/{imageId}].
+                .../builds/{buildId}/images[/{imageId}].
 
     BuildSummary:
       type: object

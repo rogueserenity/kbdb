@@ -53,13 +53,13 @@ func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
 	}
 }
 
-// GetKeyboard reads the {userId} and {id} path values. Anonymous callers
+// GetKeyboard reads the {userId} and {keyboardId} path values. Anonymous callers
 // are allowed; a keyboard that exists but isn't readable by the caller
 // returns 404, not 403, to avoid revealing it exists.
 func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("keyboardId")
 
 		kb, err := repo.Get(r.Context(), ownerID, id)
 		if errors.Is(err, repository.ErrNotFound) {
@@ -274,14 +274,14 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 	}
 }
 
-// UpdateKeyboard reads the {userId} and {id} path values and requires an
+// UpdateKeyboard reads the {userId} and {keyboardId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's keyboard, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
 func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("keyboardId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")
@@ -323,14 +323,14 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 	}
 }
 
-// DeleteKeyboard reads the {userId} and {id} path values and requires an
+// DeleteKeyboard reads the {userId} and {keyboardId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keyboard returns 404, not 403, to avoid revealing it
 // exists.
 func DeleteKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("keyboardId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")
