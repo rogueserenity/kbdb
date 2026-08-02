@@ -1,6 +1,7 @@
 package repoapi
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -11,13 +12,14 @@ import (
 // Returns an error if a stored kit's Purchase date is malformed - the
 // layout is enforced on write, but a row can still be poisoned by
 // something outside that path (e.g. a manual DynamoDB edit or a restored
-// backup), same rationale as KeyboardToAPI.
-func KeycapSetToAPI(ks repository.KeycapSet) (api.KeycapSet, error) {
+// backup), same rationale as KeyboardToAPI - or if a kit has an ImagePath
+// and images.PresignGet fails.
+func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore) (api.KeycapSet, error) {
 	var kits *[]api.KeycapKit
 	if ks.Kits != nil {
 		mapped := make([]api.KeycapKit, len(ks.Kits))
 		for i, k := range ks.Kits {
-			apiKit, err := KeycapKitToAPI(k)
+			apiKit, err := KeycapKitToAPI(ctx, k, images)
 			if err != nil {
 				return api.KeycapSet{}, err
 			}
@@ -65,18 +67,27 @@ func KeycapSetToAPISummary(ks repository.KeycapSet) api.KeycapSetSummary {
 }
 
 // KeycapKitToAPI maps a repository.KeycapKit to its wire representation.
-// Image is always nil here - it's populated by a presigned URL only when
-// the kit-image routes land (SetKeycapKitImage/DeleteKeycapKitImage), not
-// by this mapper.
-func KeycapKitToAPI(k repository.KeycapKit) (api.KeycapKit, error) {
+// Image is nil unless k.ImagePath is set, in which case it's a freshly
+// minted presigned GET URL - never persisted, never cached.
+func KeycapKitToAPI(ctx context.Context, k repository.KeycapKit, images repository.KeycapKitImageStore) (api.KeycapKit, error) {
 	purchase, err := keycapKitPurchaseToAPI(k.Purchase)
 	if err != nil {
 		return api.KeycapKit{}, err
 	}
 
+	var image *api.KeycapKitImage
+	if k.ImagePath != nil {
+		url, err := images.PresignGet(ctx, *k.ImagePath)
+		if err != nil {
+			return api.KeycapKit{}, fmt.Errorf("presigning kit image: %w", err)
+		}
+		image = &api.KeycapKitImage{Url: url}
+	}
+
 	return api.KeycapKit{
 		KitId:    k.KitID,
 		Name:     k.Name,
+		Image:    image,
 		Purchase: purchase,
 	}, nil
 }

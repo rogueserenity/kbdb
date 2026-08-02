@@ -75,6 +75,19 @@ for _ in $(seq 1 15); do
   sleep 1
 done
 
+# KEEP THIS IN SYNC with template.yaml's ImagesBucket resource name
+# (kbdb-local-images is a fixed local-only stand-in, since ImagesBucket's
+# real name is account/stack-suffixed) - same caveat as the LookupTable
+# block above.
+aws s3api head-bucket --endpoint-url http://localhost:4566 \
+  --bucket kbdb-local-images >/dev/null 2>&1 || \
+  aws s3api create-bucket \
+    --endpoint-url http://localhost:4566 \
+    --bucket kbdb-local-images \
+    --region us-east-2 \
+    --create-bucket-configuration LocationConstraint=us-east-2 \
+    >/dev/null 2>&1
+
 sam build
 nohup sam local start-api > .sam-local-api.log 2>&1 &
 echo $! > .sam-local-api.pid

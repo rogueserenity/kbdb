@@ -86,4 +86,26 @@ type KeycapSetRepository interface {
 	// ErrNotFound if setID doesn't exist for the owner, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	DeleteKit(ctx context.Context, setID, kitID string) error
+
+	// SetKitImagePath sets the kit matching kitID's ImagePath and returns
+	// the updated kit. Returns ErrNotFound if setID or the kit doesn't
+	// exist, or ErrMutationConflict if concurrent writers exhaust the
+	// retry budget.
+	SetKitImagePath(ctx context.Context, setID, kitID, imagePath string) (*KeycapKit, error)
+}
+
+// KeycapKitImageStore stores a kit's image object in a private object
+// store, addressed by key. Never called with the caller-facing presigned
+// URL - that's minted fresh per request, never persisted.
+type KeycapKitImageStore interface {
+	// PresignGet returns a short-lived presigned GET URL for key.
+	PresignGet(ctx context.Context, key string) (url string, err error)
+
+	// PresignPut returns a short-lived presigned PUT URL for key, locked
+	// to contentType via the Content-Type header the upload must match.
+	PresignPut(ctx context.Context, key, contentType string) (url string, err error)
+
+	// Delete removes the object at key. Idempotent: a nonexistent key is
+	// not an error, matching S3's own DeleteObject semantics.
+	Delete(ctx context.Context, key string) error
 }

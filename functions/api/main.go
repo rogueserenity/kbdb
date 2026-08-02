@@ -15,9 +15,11 @@ import (
 	"github.com/alecthomas/kong"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
 	"github.com/rogueserenity/kbdb/internal/repository/dynamo"
+	imagestore "github.com/rogueserenity/kbdb/internal/repository/s3"
 	"github.com/rogueserenity/kbdb/internal/router"
 )
 
@@ -58,7 +60,18 @@ func main() {
 	keyboardRepo := dynamo.NewKeyboardRepository(dynamoClient, cfg.KeyboardTableName)
 	keycapSetRepo := dynamo.NewKeycapSetRepository(dynamoClient, cfg.KeycapSetTableName)
 
-	handler := router.New(verifier, lookupRepo, switchRepo, keyboardRepo, keycapSetRepo, cfg.OIDCIssuerURL, Version)
+	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
+		if cfg.S3EndpointURL != "" {
+			o.BaseEndpoint = &cfg.S3EndpointURL
+			// LocalStack needs path-style addressing (bucket.s3.amazonaws.com
+			// virtual-hosted-style doesn't resolve against a non-AWS
+			// endpoint); real S3 doesn't.
+			o.UsePathStyle = true
+		}
+	})
+	imageStore := imagestore.NewImageStore(s3Client, cfg.ImagesBucketName)
+
+	handler := router.New(verifier, lookupRepo, switchRepo, keyboardRepo, keycapSetRepo, imageStore, cfg.OIDCIssuerURL, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

@@ -129,8 +129,9 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_RepositoryError_Returns500() {
 type GetKeycapSetSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestGetKeycapSetSuite(t *testing.T) {
@@ -139,7 +140,8 @@ func TestGetKeycapSetSuite(t *testing.T) {
 
 func (s *GetKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = GetKeycapSet(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = GetKeycapSet(s.mockRepo, s.mockImages)
 }
 
 func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
@@ -267,6 +269,7 @@ type CreateKeycapSetSuite struct {
 
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
 	mockLookupRepo    *mocks.MockLookupRepository
+	mockImages        *mocks.MockKeycapKitImageStore
 	handler           http.HandlerFunc
 }
 
@@ -277,7 +280,8 @@ func TestCreateKeycapSetSuite(t *testing.T) {
 func (s *CreateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
-	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo, s.mockImages)
 }
 
 func (s *CreateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -476,6 +480,7 @@ type UpdateKeycapSetSuite struct {
 
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
 	mockLookupRepo    *mocks.MockLookupRepository
+	mockImages        *mocks.MockKeycapKitImageStore
 	handler           http.HandlerFunc
 }
 
@@ -486,7 +491,8 @@ func TestUpdateKeycapSetSuite(t *testing.T) {
 func (s *UpdateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
-	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo, s.mockImages)
 }
 
 func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -765,8 +771,9 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() 
 type CreateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestCreateKeycapKitSuite(t *testing.T) {
@@ -775,7 +782,8 @@ func TestCreateKeycapKitSuite(t *testing.T) {
 
 func (s *CreateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = CreateKeycapKit(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = CreateKeycapKit(s.mockRepo, s.mockImages)
 }
 
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -880,8 +888,9 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409()
 type UpdateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestUpdateKeycapKitSuite(t *testing.T) {
@@ -890,7 +899,8 @@ func TestUpdateKeycapKitSuite(t *testing.T) {
 
 func (s *UpdateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = UpdateKeycapKit(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = UpdateKeycapKit(s.mockRepo, s.mockImages)
 }
 
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1085,6 +1095,194 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_MutationConflict_Returns409()
 		Return(repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type SetKeycapKitImageSuite struct {
+	suite.Suite
+
+	mockRepo       *mocks.MockKeycapSetRepository
+	mockLookupRepo *mocks.MockLookupRepository
+	mockImages     *mocks.MockKeycapKitImageStore
+	handler        http.HandlerFunc
+}
+
+func TestSetKeycapKitImageSuite(t *testing.T) {
+	suite.Run(t, new(SetKeycapKitImageSuite))
+}
+
+func (s *SetKeycapKitImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = SetKeycapKitImage(s.mockRepo, s.mockLookupRepo, s.mockImages)
+}
+
+func (s *SetKeycapKitImageSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keycap-sets/ks1/kits/kit1/image", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("keycapSetId", "ks1")
+	req.SetPathValue("kitId", "kit1")
+	return req
+}
+
+func (s *SetKeycapKitImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+func (s *SetKeycapKitImageSuite) approveContentType() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "image_content_type").
+		Return(&repository.Lookup{Category: "image_content_type", Values: []any{"image/png"}}, nil)
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
+	s.approveContentType()
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		UploadURL string `json:"upload_url"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("https://example.com/presigned-put", got.UploadURL)
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	req := s.newRequest(ctx, `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Anonymous_Returns404() {
+	req := s.newRequest(s.T().Context(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Returns400() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "image_content_type").
+		Return(&repository.Lookup{Category: "image_content_type", Values: []any{"image/png"}}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"application/pdf"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("content_type", got.InvalidParams[0].Name)
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_ValidatingContentTypeRepositoryError_Returns500() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "image_content_type").
+		Return(nil, errors.New("get item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
+	s.approveContentType()
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
+	s.approveContentType()
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
+	s.approveContentType()
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
+	s.approveContentType()
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 

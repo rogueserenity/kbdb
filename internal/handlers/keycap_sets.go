@@ -55,7 +55,7 @@ func ListKeycapSets(repo repository.KeycapSetRepository) http.HandlerFunc {
 // GetKeycapSet reads the {userId} and {keycapSetId} path values. Anonymous callers
 // are allowed; a keycap set that exists but isn't readable by the caller
 // returns 404, not 403, to avoid revealing it exists.
-func GetKeycapSet(repo repository.KeycapSetRepository) http.HandlerFunc {
+func GetKeycapSet(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keycapSetId")
@@ -76,7 +76,7 @@ func GetKeycapSet(repo repository.KeycapSetRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(*ks)
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *ks, images)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to get keycap set")
@@ -140,7 +140,7 @@ func validateKeycapSetLookups(ctx context.Context, w http.ResponseWriter, lookup
 // authenticated caller. userId must be the caller's own subject; creating
 // in another user's collection returns 404, not 403, to avoid revealing it
 // exists.
-func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -174,7 +174,7 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(*created)
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *created, images)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, created.ID)
 			problem.Internal(w, "failed to create keycap set")
@@ -191,7 +191,7 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's keycap set, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
-func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keycapSetId")
@@ -230,7 +230,7 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(*updated)
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *updated, images)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, updated.ID)
 			problem.Internal(w, "failed to update keycap set")
@@ -272,7 +272,7 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 // authorization is entirely the parent set's ownership. userId must be the
 // caller's own subject; adding a kit to another user's set, or to a set
 // that doesn't exist, both return 404, to avoid revealing it exists.
-func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		setID := r.PathValue("keycapSetId")
@@ -309,7 +309,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 
-		out, err := repoapi.KeycapKitToAPI(*created)
+		out, err := repoapi.KeycapKitToAPI(r.Context(), *created, images)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, created.KitID)
 			problem.Internal(w, "failed to add kit")
@@ -328,7 +328,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 // userId must be the caller's own subject; updating a kit on another
 // user's set, a set that doesn't exist, or a kitId that doesn't exist
 // within it, all return 404, to avoid revealing it exists.
-func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		setID := r.PathValue("keycapSetId")
@@ -364,7 +364,7 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 
-		out, err := repoapi.KeycapKitToAPI(*updated)
+		out, err := repoapi.KeycapKitToAPI(r.Context(), *updated, images)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, updated.KitID)
 			problem.Internal(w, "failed to update kit")
@@ -410,5 +410,83 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 		}
 
 		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// setKeycapKitImageResponse is the response body for a successful
+// SetKeycapKitImage call. Not a generated api.* type - the OpenAPI spec
+// declares this response as an inline object schema, so oapi-codegen
+// doesn't emit a named struct for it.
+type setKeycapKitImageResponse struct {
+	UploadURL string `json:"upload_url"`
+}
+
+// SetKeycapKitImage reads the {userId}, {keycapSetId} (parent set), and
+// {kitId} path values and requires an authenticated caller. userId must be
+// the caller's own subject; setting a kit's image on another user's set, a
+// set that doesn't exist, or a kitId that doesn't exist within it, all
+// return 404, to avoid revealing it exists. Doesn't upload the image
+// itself - the response is a presigned S3 PUT URL the client uploads
+// directly to.
+func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		setID := r.PathValue("keycapSetId")
+		kitID := r.PathValue("kitId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.SetKeycapKitImageJSONRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		fieldErrs, err := repository.ValidateFields(r.Context(), lookupRepo, []repository.FieldCheck{
+			{Field: "content_type", Value: in.ContentType, Category: repository.CategoryImageContentType},
+		})
+		if err != nil {
+			log.FromContext(r.Context()).Error("validating keycap kit image content_type", log.Error, err)
+			problem.Internal(w, "failed to validate content_type")
+			return
+		}
+		if len(fieldErrs) > 0 {
+			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
+				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, repository.CategoryImageContentType)},
+			})
+			return
+		}
+
+		key := fmt.Sprintf("keycap-sets/%s/%s/kits/%s/image", ownerID, setID, kitID)
+
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning keycap kit image upload", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Internal(w, "failed to set kit image")
+			return
+		}
+
+		_, err = keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("setting keycap kit image path", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Internal(w, "failed to set kit image")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(setKeycapKitImageResponse{UploadURL: uploadURL})
 	}
 }

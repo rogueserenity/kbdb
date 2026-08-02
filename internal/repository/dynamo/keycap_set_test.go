@@ -924,3 +924,145 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError(
 
 	s.Require().Error(err)
 }
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_Succeeds() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.Version == 1 && len(ks.Kits) == 1 && ks.Kits[0].KitID == "kit1" &&
+				ks.Kits[0].ImagePath != nil && *ks.Kits[0].ImagePath == "keycap-sets/alice/ks1/kits/kit1/image"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().NoError(err)
+	s.Require().NotNil(kit)
+	s.Require().NotNil(kit.ImagePath)
+	s.Equal("keycap-sets/alice/ks1/kits/kit1/image", *kit.ImagePath)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_KitNotFoundInExistingSet_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil)
+	// No EXPECT() on PutItem - a missing kit is caught inside the mutate
+	// closure, before any write is attempted.
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "missing-kit", "keycap-sets/alice/ks1/kits/missing-kit/image")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(kit)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_ParentSetNotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.SetKitImagePath(ctx, "missing", "kit1", "keycap-sets/alice/missing/kits/kit1/image")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(kit)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflict_RetriesThenSucceeds() {
+	// The second Get returns a set with a different kit (kit-from-winner)
+	// placed BEFORE kit1, shifting kit1 from index 0 to index 1 - proves
+	// the retry recomputes which index to update against fresh state.
+	firstGet := s.getItemOutputWithKit()
+	secondGet := s.getItemOutput(1)
+	secondGet.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit-from-winner"},
+				"name":     &types.AttributeValueMemberS{Value: "Winner"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit1"},
+				"name":     &types.AttributeValueMemberS{Value: "Base"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(firstGet, nil).Once()
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{}).Once()
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(secondGet, nil).Once()
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.Version == 2 && len(ks.Kits) == 2 &&
+				ks.Kits[0].KitID == "kit-from-winner" &&
+				ks.Kits[1].KitID == "kit1" && ks.Kits[1].ImagePath != nil &&
+				*ks.Kits[1].ImagePath == "keycap-sets/alice/ks1/kits/kit1/image"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil).Once()
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().NoError(err)
+	s.Require().NotNil(kit)
+	s.Require().NotNil(kit.ImagePath)
+	s.Equal("keycap-sets/alice/ks1/kits/kit1/image", *kit.ImagePath)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflictExhausted_ReturnsError() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil).Times(maxSetMutationAttempts)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(kit)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_PutItemError_Propagates() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithKit(), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(kit)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NoUserIDInContext_ReturnsError() {
+	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
+	kit, err := s.repo.SetKitImagePath(s.T().Context(), "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().Error(err)
+	s.Nil(kit)
+}

@@ -354,3 +354,25 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 
 	return err
 }
+
+func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID, imagePath string) (*repository.KeycapKit, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("setting kit image path in keycap set %q: %w", setID, errNoUserID)
+	}
+
+	var idx int
+	updated, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
+		idx = slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
+		if idx == -1 {
+			return repository.ErrNotFound
+		}
+		ks.Kits[idx].ImagePath = &imagePath
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &updated.Kits[idx], nil
+}

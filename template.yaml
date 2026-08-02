@@ -193,6 +193,7 @@ Resources:
           # Empty in real deployments; sam local's --env-vars override
           # (env.local.json) can only override a var declared here.
           DYNAMODB_ENDPOINT_URL: ""
+          S3_ENDPOINT_URL: ""
           # Not 8080: sam local start-api's Runtime Interface Emulator already
           # binds that port in-container. Must match functions/api/main.go's
           # port const.
@@ -440,6 +441,12 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}
             Method: delete
+        SetKeycapKitImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image
+            Method: post
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
         # bypass API Gateway's Cognito authorizer for this route so a missing/
