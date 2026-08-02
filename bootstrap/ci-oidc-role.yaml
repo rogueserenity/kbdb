@@ -203,8 +203,6 @@ Resources:
                   - s3:GetEncryptionConfiguration
                   - s3:PutBucketTagging
                   - s3:GetBucketTagging
-                  # ListBucket is a bucket-level action despite operating on
-                  # objects - grouped here, not in ImagesBucketObjects below.
                   - s3:ListBucket
                 Resource: !Sub arn:aws:s3:::kbdb-images-${AWS::AccountId}-kbdb-pr-*
               - Sid: ImagesBucketObjects
