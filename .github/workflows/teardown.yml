@@ -19,9 +19,6 @@ jobs:
         id: pr-stack
         uses: ./.github/actions/kbdb-pr-stack
 
-      # CloudFormation refuses to delete a non-empty bucket. No-ops if the
-      # stack or ImagesBucketName output doesn't exist (e.g. a PR closed
-      # before its first successful deploy).
       - name: Empty ImagesBucket
         run: |
           BUCKET=$(aws cloudformation describe-stacks \
