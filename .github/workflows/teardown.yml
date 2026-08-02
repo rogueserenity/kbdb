@@ -19,15 +19,12 @@ jobs:
         id: pr-stack
         uses: ./.github/actions/kbdb-pr-stack
 
-      # ImagesBucket accumulates real objects over a PR's lifetime (the
-      # functional suite's SetKeycapKitImage spec uploads through real
-      # presigned URLs) - CloudFormation refuses to delete a non-empty
-      # bucket, so DeleteStack alone leaves the stack stuck in
-      # DELETE_FAILED (see kbdb-pr-119, emptied and cleaned up by hand
-      # once before this step existed). Queries the stack's own output
-      # rather than reconstructing the bucket name, and no-ops quietly if
-      # the stack (or that output) doesn't exist - e.g. a PR closed before
-      # its first successful deploy.
+      # CloudFormation refuses to delete a non-empty bucket, and
+      # ImagesBucket accumulates real objects over a PR's lifetime (real
+      # presigned-URL uploads via the functional suite). Reads the bucket
+      # name from the stack's own output rather than reconstructing it;
+      # no-ops if the stack or that output doesn't exist (e.g. a PR closed
+      # before its first successful deploy).
       - name: Empty ImagesBucket
         run: |
           BUCKET=$(aws cloudformation describe-stacks \

@@ -203,13 +203,8 @@ Resources:
                   - s3:GetEncryptionConfiguration
                   - s3:PutBucketTagging
                   - s3:GetBucketTagging
-                  # ListBucket is bucket-level (not object-level, despite
-                  # operating on objects) - needed by teardown.yml's
-                  # empty-bucket step to enumerate what to delete before
-                  # DeleteBucket, since S3 refuses to delete a non-empty
-                  # bucket and CI's own functional tests are what put
-                  # objects in it (real presigned-URL uploads, not fixtures
-                  # cleaned up elsewhere).
+                  # ListBucket is a bucket-level action despite operating on
+                  # objects - grouped here, not in ImagesBucketObjects below.
                   - s3:ListBucket
                 Resource: !Sub arn:aws:s3:::kbdb-images-${AWS::AccountId}-kbdb-pr-*
               - Sid: ImagesBucketObjects
