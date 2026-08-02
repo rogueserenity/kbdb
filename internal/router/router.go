@@ -111,7 +111,7 @@ func New(
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 
-	return middleware.Logging(mux)
+	return middleware.Logging(middleware.Recover(mux))
 }
 
 // restOpenAPIValidator validates incoming REST requests' shape against
