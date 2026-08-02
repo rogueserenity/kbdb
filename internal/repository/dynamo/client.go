@@ -17,6 +17,11 @@ var errKitMissingAfterAdd = errors.New("kit not found in set after AddKit")
 // matching kit - DeleteKit treats this as success, not an error.
 var errKitAlreadyAbsent = errors.New("kit already absent from set")
 
+// errKitImageAlreadyAbsent signals ClearKitImagePath's mutateSet closure
+// found the kit with no ImagePath set - ClearKitImagePath treats this as
+// success, not an error.
+var errKitImageAlreadyAbsent = errors.New("kit image already absent")
+
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.
 type dynamoAPI interface {

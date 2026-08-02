@@ -112,6 +112,80 @@ func (_c *MockKeycapSetRepository_AddKit_Call) RunAndReturn(run func(ctx context
 	return _c
 }
 
+// ClearKitImagePath provides a mock function for the type MockKeycapSetRepository
+func (_mock *MockKeycapSetRepository) ClearKitImagePath(ctx context.Context, setID string, kitID string) (*repository.KeycapKitImageKey, error) {
+	ret := _mock.Called(ctx, setID, kitID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClearKitImagePath")
+	}
+
+	var r0 *repository.KeycapKitImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*repository.KeycapKitImageKey, error)); ok {
+		return returnFunc(ctx, setID, kitID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *repository.KeycapKitImageKey); ok {
+		r0 = returnFunc(ctx, setID, kitID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeycapKitImageKey)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, setID, kitID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeycapSetRepository_ClearKitImagePath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClearKitImagePath'
+type MockKeycapSetRepository_ClearKitImagePath_Call struct {
+	*mock.Call
+}
+
+// ClearKitImagePath is a helper method to define mock.On call
+//   - ctx context.Context
+//   - setID string
+//   - kitID string
+func (_e *MockKeycapSetRepository_Expecter) ClearKitImagePath(ctx any, setID any, kitID any) *MockKeycapSetRepository_ClearKitImagePath_Call {
+	return &MockKeycapSetRepository_ClearKitImagePath_Call{Call: _e.mock.On("ClearKitImagePath", ctx, setID, kitID)}
+}
+
+func (_c *MockKeycapSetRepository_ClearKitImagePath_Call) Run(run func(ctx context.Context, setID string, kitID string)) *MockKeycapSetRepository_ClearKitImagePath_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeycapSetRepository_ClearKitImagePath_Call) Return(keycapKitImageKey *repository.KeycapKitImageKey, err error) *MockKeycapSetRepository_ClearKitImagePath_Call {
+	_c.Call.Return(keycapKitImageKey, err)
+	return _c
+}
+
+func (_c *MockKeycapSetRepository_ClearKitImagePath_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string) (*repository.KeycapKitImageKey, error)) *MockKeycapSetRepository_ClearKitImagePath_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockKeycapSetRepository
 func (_mock *MockKeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ret := _mock.Called(ctx, ks)

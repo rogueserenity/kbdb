@@ -1319,3 +1319,137 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns4
 	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteKeycapKitImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
+}
+
+func TestDeleteKeycapKitImageSuite(t *testing.T) {
+	suite.Run(t, new(DeleteKeycapKitImageSuite))
+}
+
+func (s *DeleteKeycapKitImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = DeleteKeycapKitImage(s.mockRepo, s.mockImages)
+}
+
+func (s *DeleteKeycapKitImageSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keycap-sets/ks1/kits/kit1/image", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("keycapSetId", "ks1")
+	req.SetPathValue("kitId", "kit1")
+	return req
+}
+
+func (s *DeleteKeycapKitImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+var deleteKeycapKitImageTestKey = repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_Succeeds() {
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(&deleteKeycapKitImageTestKey, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteKeycapKitImageTestKey).
+		Return(nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_AlreadyAbsent_SucceedsWithoutS3Call() {
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(nil, nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	req := s.newRequest(ctx)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_Anonymous_Returns404() {
+	req := s.newRequest(s.T().Context())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_NotFound_Returns404() {
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_MutationConflict_Returns409() {
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(nil, errors.New("get item failed"))
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_S3DeleteError_Returns500() {
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(&deleteKeycapKitImageTestKey, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteKeycapKitImageTestKey).
+		Return(errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

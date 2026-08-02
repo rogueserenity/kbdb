@@ -99,3 +99,10 @@ func (c *KeycapSetsClient) DeleteKit(ctx context.Context, ownerID, setID, kitID,
 func (c *KeycapSetsClient) SetKitImage(ctx context.Context, ownerID, setID, kitID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/keycap-sets/"+setID+"/kits/"+kitID+"/image", token, bytes.NewBufferString(body))
 }
+
+// DeleteKitImage calls DELETE /v1/users/{ownerID}/keycap-sets/{setID}/kits/{kitID}/image
+// with the given bearer token (empty for an anonymous request). The caller
+// owns closing resp.Body.
+func (c *KeycapSetsClient) DeleteKitImage(ctx context.Context, ownerID, setID, kitID, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keycap-sets/"+setID+"/kits/"+kitID+"/image", token, nil)
+}
