@@ -122,7 +122,7 @@ func (r *KeyboardRepository) Get(ctx context.Context, ownerID, id string) (*repo
 func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("creating keyboard %q: %w", kb.ID, errNoUserID)
+		return nil, fmt.Errorf("creating keyboard %q: %w", kb.ID, repository.ErrNoUserID)
 	}
 	kb.UserID = ownerID
 
@@ -150,7 +150,7 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("updating keyboard %q: %w", kb.ID, errNoUserID)
+		return nil, fmt.Errorf("updating keyboard %q: %w", kb.ID, repository.ErrNoUserID)
 	}
 	kb.UserID = ownerID
 
@@ -178,7 +178,7 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("deleting keyboard %q: %w", id, errNoUserID)
+		return fmt.Errorf("deleting keyboard %q: %w", id, repository.ErrNoUserID)
 	}
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{

@@ -124,7 +124,7 @@ func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*reposi
 func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("creating switch %q: %w", sw.ID, errNoUserID)
+		return nil, fmt.Errorf("creating switch %q: %w", sw.ID, repository.ErrNoUserID)
 	}
 	sw.UserID = ownerID
 
@@ -152,7 +152,7 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("updating switch %q: %w", sw.ID, errNoUserID)
+		return nil, fmt.Errorf("updating switch %q: %w", sw.ID, repository.ErrNoUserID)
 	}
 	sw.UserID = ownerID
 
@@ -180,7 +180,7 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("deleting switch %q: %w", id, errNoUserID)
+		return fmt.Errorf("deleting switch %q: %w", id, repository.ErrNoUserID)
 	}
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{

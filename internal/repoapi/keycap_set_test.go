@@ -1,12 +1,16 @@
 package repoapi
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
+	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
 
 func fullRepoKeycapSet() repository.KeycapSet {
@@ -32,7 +36,8 @@ func TestKeycapSetToAPISuite(t *testing.T) {
 
 func (s *KeycapSetToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	ks := fullRepoKeycapSet()
-	out, err := KeycapSetToAPI(ks)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	out, err := KeycapSetToAPI(context.Background(), ks, images)
 	s.Require().NoError(err)
 
 	s.Equal(ks.ID, out.Id)
@@ -47,7 +52,8 @@ func (s *KeycapSetToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeycapSetToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	ks := repository.KeycapSet{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPrivate}
 
-	out, err := KeycapSetToAPI(ks)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	out, err := KeycapSetToAPI(context.Background(), ks, images)
 	s.Require().NoError(err)
 
 	s.Nil(out.Profile)
@@ -63,7 +69,8 @@ func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 		{KitID: "kit2", Name: "Extension"},
 	}
 
-	out, err := KeycapSetToAPI(ks)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	out, err := KeycapSetToAPI(context.Background(), ks, images)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Kits)
@@ -80,7 +87,8 @@ func (s *KeycapSetToAPISuite) TestMalformedStoredKitPurchaseDate_ReturnsError() 
 		{KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderDate: strPtr("not-a-date")}},
 	}
 
-	_, err := KeycapSetToAPI(ks)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	_, err := KeycapSetToAPI(context.Background(), ks, images)
 
 	s.Require().Error(err)
 }
@@ -143,7 +151,7 @@ func fullRepoKeycapKit() repository.KeycapKit {
 	return repository.KeycapKit{
 		KitID:     "kit1",
 		Name:      "Base",
-		ImagePath: strPtr("keycap-sets/alice/ks1/kits/kit1/image"),
+		ImagePath: imageKeyPtr("keycap-sets/alice/ks1/kits/kit1/image"),
 		Purchase: repository.KeycapKitPurchase{
 			Vendor:       strPtr("CannonKeys"),
 			Price:        floatPtr(120.00),
@@ -164,12 +172,16 @@ func TestKeycapKitToAPISuite(t *testing.T) {
 
 func (s *KeycapKitToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	k := fullRepoKeycapKit()
-	out, err := KeycapKitToAPI(k)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
+
+	out, err := KeycapKitToAPI(context.Background(), k, images)
 	s.Require().NoError(err)
 
 	s.Equal(k.KitID, out.KitId)
 	s.Equal(k.Name, out.Name)
-	s.Nil(out.Image, "image is only populated by the kit-image routes, not this mapper")
+	s.Require().NotNil(out.Image)
+	s.Equal("https://example.com/presigned-get", out.Image.Url)
 	s.Require().NotNil(out.Purchase)
 	s.Equal(k.Purchase.Vendor, out.Purchase.Vendor)
 	s.Equal(k.Purchase.Price, out.Purchase.Price)
@@ -183,10 +195,12 @@ func (s *KeycapKitToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeycapKitToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	k := repository.KeycapKit{KitID: "kit1", Name: "Base"}
 
-	out, err := KeycapKitToAPI(k)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	out, err := KeycapKitToAPI(context.Background(), k, images)
 	s.Require().NoError(err)
 
 	s.Nil(out.Purchase)
+	s.Nil(out.Image, "no ImagePath set, so images is never called")
 }
 
 func (s *KeycapKitToAPISuite) TestMalformedStoredDate_ReturnsError() {
@@ -195,7 +209,19 @@ func (s *KeycapKitToAPISuite) TestMalformedStoredDate_ReturnsError() {
 		Purchase: repository.KeycapKitPurchase{OrderDate: strPtr("not-a-date")},
 	}
 
-	_, err := KeycapKitToAPI(k)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	_, err := KeycapKitToAPI(context.Background(), k, images)
+
+	s.Require().Error(err)
+}
+
+func (s *KeycapKitToAPISuite) TestPresignGetFails_ReturnsError() {
+	k := repository.KeycapKit{KitID: "kit1", Name: "Base", ImagePath: imageKeyPtr("keycap-sets/alice/ks1/kits/kit1/image")}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("", errors.New("s3: access denied"))
+
+	_, err := KeycapKitToAPI(context.Background(), k, images)
 
 	s.Require().Error(err)
 }

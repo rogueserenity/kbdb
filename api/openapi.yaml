@@ -499,17 +499,13 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [upload_url]
-                properties:
-                  upload_url:
-                    type: string
-                    format: uri
-                    description: Presigned S3 PUT URL. Short-lived — upload promptly.
+                $ref: "#/components/schemas/KeycapKitImageUpload"
         "400":
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -1259,6 +1255,16 @@ components:
             new on every fetch — do not cache or persist this value, it
             expires. A kit has at most one image (its vendor render/product
             shot) — see POST/DELETE .../kits/{kitId}/image.
+
+    KeycapKitImageUpload:
+      type: object
+      required: [upload_url]
+      properties:
+        upload_url:
+          type: string
+          format: uri
+          description: >
+            Presigned S3 PUT URL. Short-lived — upload promptly.
 
     KeycapKit:
       allOf:

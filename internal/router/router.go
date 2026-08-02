@@ -36,6 +36,7 @@ func New(
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
+	imageStore repository.KeycapKitImageStore,
 	issuerURL, version string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
@@ -85,19 +86,21 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, lookupRepo))))
+		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, lookupRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, lookupRepo))))
+		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, lookupRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapSet(keycapSetRepo))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo))))
+		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo))))
+		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKit(keycapSetRepo))))
+	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
+		middleware.Auth(verifier)(validate(handlers.SetKeycapKitImage(keycapSetRepo, lookupRepo, imageStore))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml

@@ -15,4 +15,7 @@ type Config struct {
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`
+
+	// Empty in real deployments; set locally to point at LocalStack.
+	S3EndpointURL string `env:"S3_ENDPOINT_URL"`
 }
