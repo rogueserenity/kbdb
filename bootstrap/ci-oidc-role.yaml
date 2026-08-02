@@ -191,7 +191,6 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}
                   - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}/*
-              # template.yaml's ImagesBucket.
               - Sid: ImagesBucketManagement
                 Effect: Allow
                 Action:

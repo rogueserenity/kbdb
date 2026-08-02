@@ -19,11 +19,8 @@ jobs:
         id: pr-stack
         uses: ./.github/actions/kbdb-pr-stack
 
-      # CloudFormation refuses to delete a non-empty bucket, and
-      # ImagesBucket accumulates real objects over a PR's lifetime (real
-      # presigned-URL uploads via the functional suite). Reads the bucket
-      # name from the stack's own output rather than reconstructing it;
-      # no-ops if the stack or that output doesn't exist (e.g. a PR closed
+      # CloudFormation refuses to delete a non-empty bucket. No-ops if the
+      # stack or ImagesBucketName output doesn't exist (e.g. a PR closed
       # before its first successful deploy).
       - name: Empty ImagesBucket
         run: |
