@@ -50,7 +50,7 @@ func (s *ImageStoreSuite) TestPresignGet_SDKError_Propagates() {
 
 	url, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, "s3: access denied")
 	s.Empty(url)
 }
 
@@ -74,7 +74,7 @@ func (s *ImageStoreSuite) TestPresignPut_SDKError_Propagates() {
 
 	url, err := s.store.PresignPut(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image", "image/png")
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, "s3: access denied")
 	s.Empty(url)
 }
 
@@ -97,5 +97,5 @@ func (s *ImageStoreSuite) TestDelete_SDKError_Propagates() {
 
 	err := s.store.Delete(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, "s3: access denied")
 }

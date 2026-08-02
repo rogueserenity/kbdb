@@ -72,7 +72,7 @@ var _ = Describe("Ping", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("rejects the call, having actually attempted verification rather than treating it as absent", func() {
+			It("rejects the call", func() {
 				var result gomcp.CallToolResult
 				Expect(result.UnmarshalJSON(resp.Result)).To(Succeed())
 
