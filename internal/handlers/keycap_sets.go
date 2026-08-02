@@ -413,14 +413,6 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 	}
 }
 
-// setKeycapKitImageResponse is the response body for a successful
-// SetKeycapKitImage call. Not a generated api.* type - the OpenAPI spec
-// declares this response as an inline object schema, so oapi-codegen
-// doesn't emit a named struct for it.
-type setKeycapKitImageResponse struct {
-	UploadURL string `json:"upload_url"`
-}
-
 // SetKeycapKitImage reads the {userId}, {keycapSetId} (parent set), and
 // {kitId} path values and requires an authenticated caller. userId must be
 // the caller's own subject; setting a kit's image on another user's set, a
@@ -487,6 +479,6 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, lookupRepo 
 
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(setKeycapKitImageResponse{UploadURL: uploadURL})
+		_ = json.NewEncoder(w).Encode(api.KeycapKitImageUpload{UploadUrl: uploadURL})
 	}
 }
