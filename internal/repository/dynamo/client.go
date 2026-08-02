@@ -16,12 +16,8 @@ import (
 // so it's not a substitute for this check.
 var errNoUserID = errors.New("no user id in context")
 
-// errKitMissingAfterAdd guards AddKit's return value: it looks the just-
-// added kit back up by KitID in the set mutateSet actually persisted,
-// rather than assuming a position (e.g. "the last element") or returning
-// the caller's pre-write input - this is that lookup failing, which would
-// mean mutateSet's returned state doesn't actually contain the kit it just
-// appended, a stronger contract violation than a plain CAS failure.
+// errKitMissingAfterAdd means AddKit's just-appended kit isn't present by
+// KitID in the set mutateSet returned - should be unreachable in practice.
 var errKitMissingAfterAdd = errors.New("kit not found in set after AddKit")
 
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the

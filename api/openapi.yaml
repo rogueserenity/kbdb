@@ -349,6 +349,8 @@ paths:
                 $ref: "#/components/schemas/KeycapSet"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -393,6 +395,8 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 

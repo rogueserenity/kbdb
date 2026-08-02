@@ -61,8 +61,10 @@ type KeycapSetRepository interface {
 	Create(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
 	// Update replaces the keycap set with ks.ID (UserID is set from ctx,
-	// ks.ID must already be set to the keycap set being updated). Returns
-	// ErrNotFound if no keycap set with that ID exists for the owner.
+	// ks.ID must already be set to the keycap set being updated), preserving
+	// Kits. Returns ErrNotFound if no keycap set with that ID exists for the
+	// owner, or ErrMutationConflict if concurrent writers exhaust the retry
+	// budget.
 	Update(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
 	// Delete removes the caller's keycap set with the given id. Idempotent:
@@ -70,11 +72,8 @@ type KeycapSetRepository interface {
 	Delete(ctx context.Context, id string) error
 
 	// AddKit appends kit to the set's Kits (kit.KitID must already be set)
-	// and returns the stored kit. Performs a read-modify-write of the whole
-	// parent item under a bounded version-CAS retry loop - not an
-	// independent-table operation - but that's an implementation detail:
-	// callers get back just the kit they created, matching Create's shape
-	// for every other entity. Returns ErrNotFound if the parent set doesn't
-	// exist.
+	// and returns the stored kit, matching Create's shape for every other
+	// entity. Returns ErrNotFound if the parent set doesn't exist, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	AddKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
 }

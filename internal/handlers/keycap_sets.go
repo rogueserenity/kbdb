@@ -218,8 +218,9 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 			return
 		}
 		if errors.Is(err, repository.ErrMutationConflict) {
-			// Legitimate contention, not a bug - the client's fix is to
-			// retry the whole request, so this isn't logged as an error.
+			// Warn, not Error: expected contention under retry, not a bug -
+			// still worth a trace if one set sees this repeatedly.
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "id", id)
 			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}
@@ -296,8 +297,9 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 		if errors.Is(err, repository.ErrMutationConflict) {
-			// Legitimate contention, not a bug - the client's fix is to
-			// retry the whole request, so this isn't logged as an error.
+			// Warn, not Error: expected contention under retry, not a bug -
+			// still worth a trace if one set sees this repeatedly.
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "set_id", setID)
 			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}

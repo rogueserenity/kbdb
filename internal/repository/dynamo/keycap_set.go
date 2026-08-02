@@ -216,15 +216,14 @@ const maxSetMutationAttempts = 3
 // under a Version-based CAS loop: Get the set, run mutate against the
 // in-memory struct, increment Version, and PutItem with a
 // ConditionExpression requiring the version to still match what was read.
-// On a CAS miss (another writer won the race), re-Get and retry. This is
-// the general primitive behind every write that needs to read existing
-// state first - both kit mutations (which must decode/mutate/re-encode the
-// whole Kits slice in Go, since DynamoDB has no server-side way to address
-// a List element by an inner field like kit_id, and the Go SDK has no
-// built-in optimistic-locking primitive unlike DynamoDBMapper on the Java
-// SDK) and Update (which must preserve Kits/Version across an edit to the
-// set's own fields, rather than a naive whole-item PutItem clobbering
-// them).
+// On a CAS miss (another writer won the race), re-Get and retry.
+//
+// Both AddKit and Update go through this rather than a flat PutItem:
+// DynamoDB can't address a List element by an inner field like kit_id, so
+// kit mutations must decode/mutate/re-encode the whole Kits slice in Go;
+// Update must preserve Kits/Version across an edit to the set's own fields.
+// The Go SDK has no built-in optimistic-locking primitive (unlike Java's
+// DynamoDBMapper), hence the hand-rolled loop.
 func (r *KeycapSetRepository) mutateSet(
 	ctx context.Context,
 	ownerID, setID string,

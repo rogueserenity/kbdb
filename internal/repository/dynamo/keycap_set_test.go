@@ -298,11 +298,8 @@ func (s *KeycapSetRepositorySuite) TestUpdate_PreservesExistingKitsAndVersion() 
 
 func (s *KeycapSetRepositorySuite) TestUpdate_CASConflict_RetriesThenSucceeds() {
 	// The second Get returns a set with a kit (kit-from-winner) that the
-	// first Get never saw - proves the retry re-reads fresh state and
-	// overlays the input fields onto that, rather than re-applying the
-	// overlay to the first attempt's now-stale in-memory struct (which
-	// would silently drop kit-from-winner, same as AddKit's equivalent
-	// test guards against for kit mutations).
+	// first Get never saw - proves the retry re-reads fresh state rather
+	// than overlaying onto the first attempt's now-stale struct.
 	firstGet := s.getItemOutput(0)
 	secondGet := s.getItemOutput(1)
 	secondGet.Item["kits"] = &types.AttributeValueMemberL{
