@@ -449,6 +449,23 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_InvalidBody_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *CreateKeycapSetSuite) TestCreateKeycapSet_NonStringLookupValue_Returns500() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_profile").
+		Return(&repository.Lookup{
+			Category: "keycap_profile",
+			Values:   []any{map[string]any{"name": "Cherry"}, "OEM"},
+		}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_LookupCategoryMissing_Returns400() {
 	s.mockLookupRepo.EXPECT().
 		GetCategory(mock.Anything, "keycap_profile").
@@ -658,6 +675,23 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_InvalidBody_Returns400() {
 	s.handler(rec, req)
 
 	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_NonStringLookupValue_Returns500() {
+	s.mockLookupRepo.EXPECT().
+		GetCategory(mock.Anything, "keycap_profile").
+		Return(&repository.Lookup{
+			Category: "keycap_profile",
+			Values:   []any{map[string]any{"name": "Cherry"}, "OEM"},
+		}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

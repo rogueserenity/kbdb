@@ -38,10 +38,26 @@ func Logging(next http.Handler) http.Handler {
 
 type statusRecorder struct {
 	http.ResponseWriter
-	status int
+	status  int
+	written bool
 }
 
 func (r *statusRecorder) WriteHeader(status int) {
+	if r.written {
+		return
+	}
+	r.written = true
 	r.status = status
 	r.ResponseWriter.WriteHeader(status)
+}
+
+// headerWritten reports whether w has already sent a response header -
+// Recover uses this to avoid writing a second, corrupt response body after
+// a panic that occurs partway through an already-started response. Only
+// meaningful when w is the *statusRecorder Logging installs; any other
+// http.ResponseWriter (e.g. in a unit test) reports false, matching
+// net/http's own default assumption that nothing has been written yet.
+func headerWritten(w http.ResponseWriter) bool {
+	rec, ok := w.(*statusRecorder)
+	return ok && rec.written
 }
