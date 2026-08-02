@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -38,7 +37,7 @@ func (s *ListLookupsSuite) TestListCategories_Succeeds() {
 		ListCategories(mock.Anything).
 		Return([]string{"vendor", "switch_material"}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups", nil)
 	rec := httptest.NewRecorder()
 
 	s.handler(rec, req)
@@ -56,7 +55,7 @@ func (s *ListLookupsSuite) TestListCategories_RepositoryError_Returns500() {
 		ListCategories(mock.Anything).
 		Return(nil, errors.New("scan failed"))
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups", nil)
 	rec := httptest.NewRecorder()
 
 	s.handler(rec, req)
@@ -86,7 +85,7 @@ func (s *GetLookupSuite) TestGetCategory_Succeeds() {
 		GetCategory(mock.Anything, "vendor").
 		Return(&repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/vendor", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups/vendor", nil)
 	req.SetPathValue("category", "vendor")
 	rec := httptest.NewRecorder()
 
@@ -105,7 +104,7 @@ func (s *GetLookupSuite) TestGetCategory_RepositoryError_Returns500() {
 		GetCategory(mock.Anything, "vendor").
 		Return(nil, errors.New("get item failed"))
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/vendor", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups/vendor", nil)
 	req.SetPathValue("category", "vendor")
 	rec := httptest.NewRecorder()
 
@@ -123,7 +122,7 @@ func (s *GetLookupSuite) TestGetCategory_KeyboardLayout_ReturnsTypedValues() {
 			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}},
 		}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/keyboard_layout", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups/keyboard_layout", nil)
 	req.SetPathValue("category", "keyboard_layout")
 	rec := httptest.NewRecorder()
 
@@ -143,7 +142,7 @@ func (s *GetLookupSuite) TestGetCategory_KeyboardLayout_CorruptStoredShape_Retur
 		GetCategory(mock.Anything, "keyboard_layout").
 		Return(&repository.Lookup{Category: "keyboard_layout", Values: []any{"WK"}}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/keyboard_layout", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups/keyboard_layout", nil)
 	req.SetPathValue("category", "keyboard_layout")
 	rec := httptest.NewRecorder()
 
@@ -158,7 +157,7 @@ func (s *GetLookupSuite) TestGetCategory_NotFound_Returns404() {
 		GetCategory(mock.Anything, "vendor").
 		Return(nil, repository.ErrNotFound)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/v1/lookups/vendor", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/lookups/vendor", nil)
 	req.SetPathValue("category", "vendor")
 	rec := httptest.NewRecorder()
 
@@ -185,7 +184,7 @@ func (s *CreateLookupSuite) SetupTest() {
 }
 
 func (s *CreateLookupSuite) newRequest(body string) *http.Request {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/vendor", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/vendor", strings.NewReader(body))
 	req.SetPathValue("category", "vendor")
 	return req
 }
@@ -247,7 +246,7 @@ func (s *CreateLookupSuite) TestCreateCategory_InvalidBody_Returns400() {
 }
 
 func (s *CreateLookupSuite) TestCreateCategory_WhitespaceCategory_Returns400() {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/%20", strings.NewReader(`{"values":["a"]}`))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/%20", strings.NewReader(`{"values":["a"]}`))
 	req.SetPathValue("category", " ")
 	rec := httptest.NewRecorder()
 
@@ -258,7 +257,7 @@ func (s *CreateLookupSuite) TestCreateCategory_WhitespaceCategory_Returns400() {
 }
 
 func (s *CreateLookupSuite) TestCreateCategory_EmptyCategory_Returns400() {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/", strings.NewReader(`{"values":["a"]}`))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/", strings.NewReader(`{"values":["a"]}`))
 	req.SetPathValue("category", "")
 	rec := httptest.NewRecorder()
 
@@ -279,7 +278,7 @@ func (s *CreateLookupSuite) TestCreateCategory_NonStringValue_Returns400() {
 }
 
 func (s *CreateLookupSuite) newKeyboardLayoutRequest(body string) *http.Request {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/keyboard_layout", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/keyboard_layout", strings.NewReader(body))
 	req.SetPathValue("category", "keyboard_layout")
 	return req
 }
@@ -356,7 +355,7 @@ func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_Succeeds() {
 }
 
 func (s *CreateLookupSuite) TestCreateCategory_BuildCaseMountType_WrongShape_Returns400() {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/build_case_mount_type", strings.NewReader(`{"values":["Top Mount"]}`))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/build_case_mount_type", strings.NewReader(`{"values":["Top Mount"]}`))
 	req.SetPathValue("category", "build_case_mount_type")
 	rec := httptest.NewRecorder()
 
@@ -372,7 +371,7 @@ func (s *CreateLookupSuite) TestCreateCategory_BuildCaseMountType_Succeeds() {
 		CreateCategory(mock.Anything, "build_case_mount_type", values).
 		Return(&repository.Lookup{Category: "build_case_mount_type", Values: values}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/build_case_mount_type",
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/build_case_mount_type",
 		strings.NewReader(`{"values":[{"name":"Top Mount","supports_durometer":false}]}`))
 	req.SetPathValue("category", "build_case_mount_type")
 	rec := httptest.NewRecorder()
@@ -399,7 +398,7 @@ func (s *ReplaceLookupSuite) SetupTest() {
 }
 
 func (s *ReplaceLookupSuite) newRequest(body string) *http.Request {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/lookups/vendor", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPut, "/v1/lookups/vendor", strings.NewReader(body))
 	req.SetPathValue("category", "vendor")
 	return req
 }
@@ -437,7 +436,7 @@ func (s *ReplaceLookupSuite) TestReplaceCategory_KeyboardLayout_SizeNotApproved_
 		GetCategory(mock.Anything, "keyboard_size").
 		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
 
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/lookups/keyboard_layout",
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPut, "/v1/lookups/keyboard_layout",
 		strings.NewReader(`{"values":[{"name":"WK","sizes":["85%"]}]}`))
 	req.SetPathValue("category", "keyboard_layout")
 	rec := httptest.NewRecorder()
@@ -486,7 +485,7 @@ func (s *ReplaceLookupSuite) TestReplaceCategory_InvalidBody_Returns400() {
 }
 
 func (s *ReplaceLookupSuite) TestReplaceCategory_BlankCategory_Returns400() {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPut, "/v1/lookups/placeholder", strings.NewReader(`{"values":["a"]}`))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPut, "/v1/lookups/placeholder", strings.NewReader(`{"values":["a"]}`))
 	req.SetPathValue("category", " ")
 	rec := httptest.NewRecorder()
 
@@ -513,7 +512,7 @@ func (s *DeleteLookupSuite) SetupTest() {
 }
 
 func (s *DeleteLookupSuite) newRequest(category string) *http.Request {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodDelete, "/v1/lookups/placeholder", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodDelete, "/v1/lookups/placeholder", nil)
 	req.SetPathValue("category", category)
 	return req
 }

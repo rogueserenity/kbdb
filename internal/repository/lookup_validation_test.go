@@ -1,7 +1,6 @@
 package repository_test
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -31,7 +30,7 @@ func (s *ValidateFieldsSuite) TestAllValid_ReturnsNoErrors() {
 		GetCategory(mock.Anything, "switch_type").
 		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil)
 
-	errs, err := repository.ValidateFields(context.Background(), s.mockRepo, []repository.FieldCheck{
+	errs, err := repository.ValidateFields(s.T().Context(), s.mockRepo, []repository.FieldCheck{
 		{Field: "type", Value: "Linear", Category: "switch_type"},
 	})
 	s.Require().NoError(err)
@@ -44,7 +43,7 @@ func (s *ValidateFieldsSuite) TestFetchesEachDistinctCategoryOnlyOnce() {
 		Return(&repository.Lookup{Category: "switch_type", Values: []any{"Linear"}}, nil).
 		Once()
 
-	errs, err := repository.ValidateFields(context.Background(), s.mockRepo, []repository.FieldCheck{
+	errs, err := repository.ValidateFields(s.T().Context(), s.mockRepo, []repository.FieldCheck{
 		{Field: "type", Value: "Linear", Category: "switch_type"},
 		{Field: "type2", Value: "Linear", Category: "switch_type"},
 	})
@@ -57,7 +56,7 @@ func (s *ValidateFieldsSuite) TestCategoryNotFound_TreatsEveryValueInItAsInvalid
 		GetCategory(mock.Anything, "switch_type").
 		Return(nil, repository.ErrNotFound)
 
-	errs, err := repository.ValidateFields(context.Background(), s.mockRepo, []repository.FieldCheck{
+	errs, err := repository.ValidateFields(s.T().Context(), s.mockRepo, []repository.FieldCheck{
 		{Field: "type", Value: "Linear", Category: "switch_type"},
 	})
 	s.Require().NoError(err)
@@ -72,7 +71,7 @@ func (s *ValidateFieldsSuite) TestOtherRepoErrors_Propagate() {
 		GetCategory(mock.Anything, "switch_type").
 		Return(nil, wantErr)
 
-	_, err := repository.ValidateFields(context.Background(), s.mockRepo, []repository.FieldCheck{
+	_, err := repository.ValidateFields(s.T().Context(), s.mockRepo, []repository.FieldCheck{
 		{Field: "type", Value: "Linear", Category: "switch_type"},
 	})
 	s.Require().ErrorIs(err, wantErr)
@@ -86,7 +85,7 @@ func (s *ValidateFieldsSuite) TestReportsEveryInvalidField_NotJustTheFirst() {
 		GetCategory(mock.Anything, "vendor").
 		Return(&repository.Lookup{Category: "vendor", Values: []any{"CannonKeys"}}, nil)
 
-	errs, err := repository.ValidateFields(context.Background(), s.mockRepo, []repository.FieldCheck{
+	errs, err := repository.ValidateFields(s.T().Context(), s.mockRepo, []repository.FieldCheck{
 		{Field: "type", Value: "Tactile", Category: "switch_type"},
 		{Field: "vendor", Value: "NovelKeys", Category: "vendor"},
 	})

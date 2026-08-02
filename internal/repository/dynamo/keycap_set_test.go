@@ -1,7 +1,6 @@
 package dynamo
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"testing"
@@ -48,7 +47,7 @@ func (s *KeycapSetRepositorySuite) TestList_Succeeds() {
 			},
 		}, nil)
 
-	sets, next, err := s.repo.List(context.Background(), "alice",
+	sets, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -62,7 +61,7 @@ func (s *KeycapSetRepositorySuite) TestList_EmptyVisibilities_ReturnsEmptySliceW
 	// No EXPECT() on s.mockClient.Query - an empty visibilities slice must
 	// short-circuit before building a Query, since expression.In(...)
 	// requires at least one value and would otherwise panic.
-	sets, next, err := s.repo.List(context.Background(), "alice", nil, 20, "")
+	sets, next, err := s.repo.List(s.T().Context(), "alice", nil, 20, "")
 
 	s.Require().NoError(err)
 	s.NotNil(sets)
@@ -75,7 +74,7 @@ func (s *KeycapSetRepositorySuite) TestList_EmptyResult_ReturnsEmptySliceNotNil(
 		Query(mock.Anything, mock.Anything).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
 
-	sets, _, err := s.repo.List(context.Background(), "alice",
+	sets, _, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -94,7 +93,7 @@ func (s *KeycapSetRepositorySuite) TestList_ReturnsEncodedCursor_WhenMorePagesEx
 			},
 		}, nil)
 
-	_, next, err := s.repo.List(context.Background(), "alice",
+	_, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -116,7 +115,7 @@ func (s *KeycapSetRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey(
 			},
 		}, nil).Once()
 
-	_, cursor, err := s.repo.List(context.Background(), "alice",
+	_, cursor, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 	s.Require().NoError(err)
 
@@ -127,13 +126,13 @@ func (s *KeycapSetRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey(
 		})).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
 
-	_, _, err = s.repo.List(context.Background(), "alice",
+	_, _, err = s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, cursor)
 	s.Require().NoError(err)
 }
 
 func (s *KeycapSetRepositorySuite) TestList_InvalidCursor_ReturnsError() {
-	sets, next, err := s.repo.List(context.Background(), "alice",
+	sets, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
 
 	s.Require().Error(err)
@@ -146,7 +145,7 @@ func (s *KeycapSetRepositorySuite) TestList_QueryError_Propagates() {
 		Query(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	sets, next, err := s.repo.List(context.Background(), "alice",
+	sets, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().Error(err)
@@ -169,7 +168,7 @@ func (s *KeycapSetRepositorySuite) TestGet_Succeeds() {
 			},
 		}, nil)
 
-	ks, err := s.repo.Get(context.Background(), "alice", "ks1")
+	ks, err := s.repo.Get(s.T().Context(), "alice", "ks1")
 
 	s.Require().NoError(err)
 	s.Equal("ks1", ks.ID)
@@ -181,7 +180,7 @@ func (s *KeycapSetRepositorySuite) TestGet_NotFound_ReturnsErrNotFound() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	ks, err := s.repo.Get(context.Background(), "alice", "missing")
+	ks, err := s.repo.Get(s.T().Context(), "alice", "missing")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(ks)
@@ -192,7 +191,7 @@ func (s *KeycapSetRepositorySuite) TestGet_GetItemError_Propagates() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ks, err := s.repo.Get(context.Background(), "alice", "ks1")
+	ks, err := s.repo.Get(s.T().Context(), "alice", "ks1")
 
 	s.Require().Error(err)
 	s.Nil(ks)
@@ -203,7 +202,7 @@ func (s *KeycapSetRepositorySuite) TestCreate_Succeeds() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Create(ctx, repository.KeycapSet{ID: "ks1", Brand: "GMK"})
 
 	s.Require().NoError(err)
@@ -215,7 +214,7 @@ func (s *KeycapSetRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExi
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Create(ctx, repository.KeycapSet{ID: "ks1"})
 
 	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
@@ -227,7 +226,7 @@ func (s *KeycapSetRepositorySuite) TestCreate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Create(ctx, repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
@@ -237,7 +236,7 @@ func (s *KeycapSetRepositorySuite) TestCreate_PutItemError_Propagates() {
 
 func (s *KeycapSetRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on PutItem - see errNoUserID (client.go).
-	ks, err := s.repo.Create(context.Background(), repository.KeycapSet{ID: "ks1"})
+	ks, err := s.repo.Create(s.T().Context(), repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
 	s.Nil(ks)
@@ -257,7 +256,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_Succeeds() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "Keychron"})
 
 	s.Require().NoError(err)
@@ -288,7 +287,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_PreservesExistingKitsAndVersion() 
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "Keychron"})
 
 	s.Require().NoError(err)
@@ -333,7 +332,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_CASConflict_RetriesThenSucceeds() 
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "Keychron"})
 
 	s.Require().NoError(err)
@@ -351,7 +350,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_CASConflictExhausted_ReturnsError(
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "Keychron"})
 
 	s.Require().Error(err)
@@ -364,7 +363,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -379,7 +378,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
@@ -389,7 +388,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_PutItemError_Propagates() {
 
 func (s *KeycapSetRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on PutItem - see errNoUserID (client.go).
-	ks, err := s.repo.Update(context.Background(), repository.KeycapSet{ID: "ks1"})
+	ks, err := s.repo.Update(s.T().Context(), repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
 	s.Nil(ks)
@@ -400,7 +399,7 @@ func (s *KeycapSetRepositorySuite) TestDelete_Succeeds() {
 		DeleteItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.DeleteItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "ks1")
 
 	s.Require().NoError(err)
@@ -408,7 +407,7 @@ func (s *KeycapSetRepositorySuite) TestDelete_Succeeds() {
 
 func (s *KeycapSetRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
-	err := s.repo.Delete(context.Background(), "ks1")
+	err := s.repo.Delete(s.T().Context(), "ks1")
 
 	s.Require().Error(err)
 }
@@ -418,7 +417,7 @@ func (s *KeycapSetRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 		DeleteItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "ks1")
 
 	s.Require().Error(err)
@@ -449,7 +448,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_Succeeds() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().NoError(err)
@@ -463,7 +462,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_ParentSetNotFound_ReturnsErrNotFou
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "missing", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -509,7 +508,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflict_RetriesThenSucceeds() 
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().NoError(err)
@@ -526,7 +525,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflictExhausted_ReturnsError(
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().Error(err)
@@ -536,7 +535,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflictExhausted_ReturnsError(
 
 func (s *KeycapSetRepositorySuite) TestAddKit_EmptyKitID_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - caught before any DynamoDB call.
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{Name: "Base"})
 
 	s.Require().ErrorIs(err, errEmptyKitID)
@@ -560,7 +559,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_DuplicateKitID_ReturnsError() {
 	// No EXPECT() on PutItem - the duplicate is caught inside the mutate
 	// closure, before any write is attempted.
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().ErrorIs(err, errDuplicateKitID)
@@ -575,7 +574,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().Error(err)
@@ -585,7 +584,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_PutItemError_Propagates() {
 
 func (s *KeycapSetRepositorySuite) TestAddKit_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
-	kit, err := s.repo.AddKit(context.Background(), "ks1", repository.KeycapKit{KitID: "kit1"})
+	kit, err := s.repo.AddKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"})
 
 	s.Require().Error(err)
 	s.Nil(kit)
@@ -623,7 +622,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	vendor := "CannonKeys"
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{
 		KitID:    "kit1",
@@ -665,7 +664,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().NoError(err)
@@ -681,7 +680,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_KitNotFoundInExistingSet_Return
 	// No EXPECT() on PutItem - a missing kit is caught inside the mutate
 	// closure, before any write is attempted.
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "missing-kit", Name: "Extension"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -693,7 +692,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_ParentSetNotFound_ReturnsErrNot
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "missing", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -744,7 +743,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflict_RetriesThenSucceeds
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().NoError(err)
@@ -760,7 +759,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflictExhausted_ReturnsErr
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().Error(err)
@@ -770,7 +769,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflictExhausted_ReturnsErr
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_EmptyKitID_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - caught before any DynamoDB call.
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{Name: "Extension"})
 
 	s.Require().ErrorIs(err, errEmptyKitID)
@@ -785,7 +784,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
 
 	s.Require().Error(err)
@@ -795,7 +794,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PutItemError_Propagates() {
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
-	kit, err := s.repo.UpdateKit(context.Background(), "ks1", repository.KeycapKit{KitID: "kit1"})
+	kit, err := s.repo.UpdateKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"})
 
 	s.Require().Error(err)
 	s.Nil(kit)
@@ -815,7 +814,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_Succeeds() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().NoError(err)
@@ -826,7 +825,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_KitAlreadyAbsent_SucceedsWithou
 		GetItem(mock.Anything, mock.Anything).
 		Return(s.getItemOutputWithKit(), nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "no-such-kit")
 
 	s.Require().NoError(err)
@@ -837,7 +836,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_ParentSetNotFound_ReturnsErrNot
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "missing", "kit1")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -883,7 +882,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflict_RetriesThenSucceeds
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().NoError(err)
@@ -897,7 +896,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflictExhausted_ReturnsErr
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().Error(err)
@@ -912,7 +911,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().Error(err)
@@ -921,7 +920,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_PutItemError_Propagates() {
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
-	err := s.repo.DeleteKit(context.Background(), "ks1", "kit1")
+	err := s.repo.DeleteKit(s.T().Context(), "ks1", "kit1")
 
 	s.Require().Error(err)
 }

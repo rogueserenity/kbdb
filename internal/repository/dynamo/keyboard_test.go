@@ -1,7 +1,6 @@
 package dynamo
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -46,7 +45,7 @@ func (s *KeyboardRepositorySuite) TestList_Succeeds() {
 			},
 		}, nil)
 
-	keyboards, next, err := s.repo.List(context.Background(), "alice",
+	keyboards, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -60,7 +59,7 @@ func (s *KeyboardRepositorySuite) TestList_EmptyVisibilities_ReturnsEmptySliceWi
 	// No EXPECT() on s.mockClient.Query - an empty visibilities slice must
 	// short-circuit before building a Query, since expression.In(...)
 	// requires at least one value and would otherwise panic.
-	keyboards, next, err := s.repo.List(context.Background(), "alice", nil, 20, "")
+	keyboards, next, err := s.repo.List(s.T().Context(), "alice", nil, 20, "")
 
 	s.Require().NoError(err)
 	s.NotNil(keyboards)
@@ -73,7 +72,7 @@ func (s *KeyboardRepositorySuite) TestList_EmptyResult_ReturnsEmptySliceNotNil()
 		Query(mock.Anything, mock.Anything).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
 
-	keyboards, _, err := s.repo.List(context.Background(), "alice",
+	keyboards, _, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -92,7 +91,7 @@ func (s *KeyboardRepositorySuite) TestList_ReturnsEncodedCursor_WhenMorePagesExi
 			},
 		}, nil)
 
-	_, next, err := s.repo.List(context.Background(), "alice",
+	_, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -114,7 +113,7 @@ func (s *KeyboardRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey()
 			},
 		}, nil).Once()
 
-	_, cursor, err := s.repo.List(context.Background(), "alice",
+	_, cursor, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 	s.Require().NoError(err)
 
@@ -125,13 +124,13 @@ func (s *KeyboardRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey()
 		})).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
 
-	_, _, err = s.repo.List(context.Background(), "alice",
+	_, _, err = s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, cursor)
 	s.Require().NoError(err)
 }
 
 func (s *KeyboardRepositorySuite) TestList_InvalidCursor_ReturnsError() {
-	keyboards, next, err := s.repo.List(context.Background(), "alice",
+	keyboards, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
 
 	s.Require().Error(err)
@@ -144,7 +143,7 @@ func (s *KeyboardRepositorySuite) TestList_QueryError_Propagates() {
 		Query(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	keyboards, next, err := s.repo.List(context.Background(), "alice",
+	keyboards, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().Error(err)
@@ -167,7 +166,7 @@ func (s *KeyboardRepositorySuite) TestGet_Succeeds() {
 			},
 		}, nil)
 
-	kb, err := s.repo.Get(context.Background(), "alice", "kb1")
+	kb, err := s.repo.Get(s.T().Context(), "alice", "kb1")
 
 	s.Require().NoError(err)
 	s.Equal("kb1", kb.ID)
@@ -179,7 +178,7 @@ func (s *KeyboardRepositorySuite) TestGet_NotFound_ReturnsErrNotFound() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	kb, err := s.repo.Get(context.Background(), "alice", "missing")
+	kb, err := s.repo.Get(s.T().Context(), "alice", "missing")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(kb)
@@ -190,7 +189,7 @@ func (s *KeyboardRepositorySuite) TestGet_GetItemError_Propagates() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	kb, err := s.repo.Get(context.Background(), "alice", "kb1")
+	kb, err := s.repo.Get(s.T().Context(), "alice", "kb1")
 
 	s.Require().Error(err)
 	s.Nil(kb)
@@ -201,7 +200,7 @@ func (s *KeyboardRepositorySuite) TestCreate_Succeeds() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kb, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1", Brand: "Keychron"})
 
 	s.Require().NoError(err)
@@ -213,7 +212,7 @@ func (s *KeyboardRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExis
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kb, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1"})
 
 	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
@@ -225,7 +224,7 @@ func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kb, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
@@ -235,7 +234,7 @@ func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
 
 func (s *KeyboardRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on PutItem - see errNoUserID (client.go).
-	kb, err := s.repo.Create(context.Background(), repository.Keyboard{ID: "kb1"})
+	kb, err := s.repo.Create(s.T().Context(), repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
 	s.Nil(kb)
@@ -248,7 +247,7 @@ func (s *KeyboardRepositorySuite) TestUpdate_Succeeds() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kb, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1", Brand: "Keychron"})
 
 	s.Require().NoError(err)
@@ -260,7 +259,7 @@ func (s *KeyboardRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kb, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -272,7 +271,7 @@ func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	kb, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
@@ -282,7 +281,7 @@ func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
 
 func (s *KeyboardRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on PutItem - see errNoUserID (client.go).
-	kb, err := s.repo.Update(context.Background(), repository.Keyboard{ID: "kb1"})
+	kb, err := s.repo.Update(s.T().Context(), repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
 	s.Nil(kb)
@@ -293,7 +292,7 @@ func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
 		DeleteItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.DeleteItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "kb1")
 
 	s.Require().NoError(err)
@@ -301,7 +300,7 @@ func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
 
 func (s *KeyboardRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
-	err := s.repo.Delete(context.Background(), "kb1")
+	err := s.repo.Delete(s.T().Context(), "kb1")
 
 	s.Require().Error(err)
 }
@@ -311,7 +310,7 @@ func (s *KeyboardRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 		DeleteItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "kb1")
 
 	s.Require().Error(err)

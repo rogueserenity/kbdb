@@ -42,7 +42,7 @@ func (s *ListKeyboardsSuite) newRequest(ctx context.Context, query string) *http
 }
 
 func (s *ListKeyboardsSuite) TestListKeyboards_Owner_RequestsAllVisibilities() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
@@ -69,13 +69,13 @@ func (s *ListKeyboardsSuite) TestListKeyboards_Anonymous_RequestsPublicOnly() {
 		Return([]repository.Keyboard{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
 
 func (s *ListKeyboardsSuite) TestListKeyboards_OtherUser_RequestsPublicAndAuthenticated() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
@@ -95,7 +95,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_PassesLimitAndCursor() {
 		Return([]repository.Keyboard{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=5&cursor=abc"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=5&cursor=abc"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -106,7 +106,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_ReturnsNextCursor_WhenPresent() {
 		Return([]repository.Keyboard{}, "next-page-token", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	var got api.KeyboardListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
@@ -120,7 +120,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_RepositoryError_Returns500() {
 		Return(nil, "", errors.New("query failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -150,7 +150,7 @@ func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_Owner_Succeeds() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -174,7 +174,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_AnonymousReadingPublicKeyboard_Succee
 		Return(&repository.Keyboard{ID: "kb1", Visibility: repository.VisibilityPublic}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -185,14 +185,14 @@ func (s *GetKeyboardSuite) TestGetKeyboard_AnonymousReadingPrivateKeyboard_Retur
 		Return(&repository.Keyboard{ID: "kb1", Visibility: repository.VisibilityPrivate}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_OtherUserReadingAuthenticatedKeyboard_Succeeds() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -205,7 +205,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_OtherUserReadingAuthenticatedKeyboard
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_OtherUserReadingPrivateKeyboard_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -224,7 +224,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_NotFound_Returns404() {
 		Return(nil, repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -236,7 +236,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_RepositoryError_Returns500() {
 		Return(nil, errors.New("get item failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -253,7 +253,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_MalformedStoredDate_Returns500NotPani
 		}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -284,7 +284,7 @@ func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http
 }
 
 func (s *CreateKeyboardSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_Succeeds() {
@@ -549,7 +549,7 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_InvalidSize_DoesNotCascadeIntoL
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
 	rec := httptest.NewRecorder()
@@ -560,7 +560,7 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_NotOwner_Returns404() {
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
+	req := s.newRequest(s.T().Context(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -692,7 +692,7 @@ func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http
 }
 
 func (s *UpdateKeyboardSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_Succeeds() {
@@ -957,7 +957,7 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_InvalidSize_DoesNotCascadeIntoL
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
 	rec := httptest.NewRecorder()
@@ -968,7 +968,7 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_NotOwner_Returns404() {
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
+	req := s.newRequest(s.T().Context(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1098,7 +1098,7 @@ func (s *DeleteKeyboardSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *DeleteKeyboardSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Succeeds() {
@@ -1113,7 +1113,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Succeeds() {
 }
 
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -1124,7 +1124,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_NotOwner_Returns404() {
 
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Anonymous_Returns404() {
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))

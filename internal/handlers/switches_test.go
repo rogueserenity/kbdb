@@ -42,7 +42,7 @@ func (s *ListSwitchesSuite) newRequest(ctx context.Context, query string) *http.
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
@@ -69,13 +69,13 @@ func (s *ListSwitchesSuite) TestListSwitches_Anonymous_RequestsPublicOnly() {
 		Return([]repository.Switch{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_OtherUser_RequestsPublicAndAuthenticated() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
@@ -95,7 +95,7 @@ func (s *ListSwitchesSuite) TestListSwitches_PassesLimitAndCursor() {
 		Return([]repository.Switch{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=5&cursor=abc"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=5&cursor=abc"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -106,7 +106,7 @@ func (s *ListSwitchesSuite) TestListSwitches_ReturnsNextCursor_WhenPresent() {
 		Return([]repository.Switch{}, "next-page-token", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	var got api.SwitchListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
@@ -120,7 +120,7 @@ func (s *ListSwitchesSuite) TestListSwitches_RepositoryError_Returns500() {
 		Return(nil, "", errors.New("query failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -150,7 +150,7 @@ func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *GetSwitchSuite) TestGetSwitch_Owner_Succeeds() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
@@ -174,7 +174,7 @@ func (s *GetSwitchSuite) TestGetSwitch_AnonymousReadingPublicSwitch_Succeeds() {
 		Return(&repository.Switch{ID: "sw1", Visibility: repository.VisibilityPublic}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -185,14 +185,14 @@ func (s *GetSwitchSuite) TestGetSwitch_AnonymousReadingPrivateSwitch_Returns404(
 		Return(&repository.Switch{ID: "sw1", Visibility: repository.VisibilityPrivate}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetSwitchSuite) TestGetSwitch_OtherUserReadingAuthenticatedSwitch_Succeeds() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
@@ -205,7 +205,7 @@ func (s *GetSwitchSuite) TestGetSwitch_OtherUserReadingAuthenticatedSwitch_Succe
 }
 
 func (s *GetSwitchSuite) TestGetSwitch_OtherUserReadingPrivateSwitch_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
@@ -224,7 +224,7 @@ func (s *GetSwitchSuite) TestGetSwitch_NotFound_Returns404() {
 		Return(nil, repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -236,7 +236,7 @@ func (s *GetSwitchSuite) TestGetSwitch_RepositoryError_Returns500() {
 		Return(nil, errors.New("get item failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -267,7 +267,7 @@ func (s *CreateSwitchSuite) newRequest(ctx context.Context, body string) *http.R
 }
 
 func (s *CreateSwitchSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 // expectValidType mocks switch_type lookup approval for "Linear" - every
@@ -383,7 +383,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_MultipleInvalidFields_NamesAll() {
 }
 
 func (s *CreateSwitchSuite) TestCreateSwitch_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
 	rec := httptest.NewRecorder()
@@ -394,7 +394,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_NotOwner_Returns404() {
 }
 
 func (s *CreateSwitchSuite) TestCreateSwitch_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	req := s.newRequest(s.T().Context(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -541,7 +541,7 @@ func (s *UpdateSwitchSuite) newRequest(ctx context.Context, body string) *http.R
 }
 
 func (s *UpdateSwitchSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 // expectValidType mocks switch_type lookup approval for "Linear" - every
@@ -656,7 +656,7 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_MultipleInvalidFields_NamesAll() {
 }
 
 func (s *UpdateSwitchSuite) TestUpdateSwitch_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
 	rec := httptest.NewRecorder()
@@ -667,7 +667,7 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_NotOwner_Returns404() {
 }
 
 func (s *UpdateSwitchSuite) TestUpdateSwitch_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	req := s.newRequest(s.T().Context(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -812,7 +812,7 @@ func (s *DeleteSwitchSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *DeleteSwitchSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Succeeds() {
@@ -827,7 +827,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Succeeds() {
 }
 
 func (s *DeleteSwitchSuite) TestDeleteSwitch_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -838,7 +838,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_NotOwner_Returns404() {
 
 func (s *DeleteSwitchSuite) TestDeleteSwitch_Anonymous_Returns404() {
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
