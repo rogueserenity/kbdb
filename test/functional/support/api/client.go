@@ -67,12 +67,10 @@ func (c *Client) Do(ctx context.Context, method, path, token string, body io.Rea
 // this string never matches, so DoPresigned is a plain passthrough there.
 const presignedURLHostRewrite = "localstack:4566"
 
-// DoPresigned issues method against a presigned S3 URL (e.g. from
-// SetKeycapKitImage's upload_url), rewriting a LocalStack-internal host to
-// its host-published equivalent first - see presignedURLHostRewrite. body
-// and contentType are only meaningful for a PUT. Package-level, not a
-// Client method: unlike Do, it doesn't target support.BaseURL() - the full
-// presigned URL is the target, so it needs no client state.
+// DoPresigned rewrites a LocalStack-internal host to its host-published
+// equivalent first - see presignedURLHostRewrite. body and contentType are
+// only meaningful for a PUT. Package-level, not a Client method: unlike Do,
+// it doesn't target support.BaseURL(), so it needs no client state.
 func DoPresigned(ctx context.Context, method, presignedURL, contentType string, body io.Reader) (*http.Response, error) {
 	presignedURL = strings.Replace(presignedURL, presignedURLHostRewrite, "localhost:4566", 1)
 

@@ -100,15 +100,14 @@ type KeycapSetRepository interface {
 }
 
 // KeycapKitImageKey is the object key a kit's image is stored under in a
-// KeycapKitImageStore. The only way to construct one is
-// NewKeycapKitImageKey, so a caller can never address an image outside its
-// own owner/set/kit prefix.
+// KeycapKitImageStore.
 type KeycapKitImageKey string
 
 // NewKeycapKitImageKey builds the deterministic object key for kitID's
-// image within setID, scoped to ctx's caller. Fixed, no extension - a
-// re-upload overwrites the same object, so there's no orphan accumulation
-// from repeated uploads.
+// image within setID. ownerID comes from ctx, not a parameter, so a caller
+// can't build a key addressing anyone else's prefix. Fixed, no extension -
+// a re-upload overwrites the same object, so there's no orphan
+// accumulation from repeated uploads.
 func NewKeycapKitImageKey(ctx context.Context, setID, kitID string) (KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
