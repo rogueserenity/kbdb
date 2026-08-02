@@ -19,6 +19,16 @@ jobs:
         id: pr-stack
         uses: ./.github/actions/kbdb-pr-stack
 
+      - name: Empty ImagesBucket
+        run: |
+          BUCKET=$(aws cloudformation describe-stacks \
+            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ImagesBucketName'].OutputValue" \
+            --output text 2>/dev/null || true)
+          if [ -n "$BUCKET" ] && [ "$BUCKET" != "None" ]; then
+            aws s3 rm "s3://$BUCKET" --recursive
+          fi
+
       - name: Delete stack
         run: |
           aws cloudformation delete-stack --stack-name "${{ steps.pr-stack.outputs.stack-name }}"
