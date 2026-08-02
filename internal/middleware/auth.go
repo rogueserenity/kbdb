@@ -65,6 +65,10 @@ func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 func authenticate(r *http.Request, verifier *auth.Verifier, rawToken string) (*http.Request, error) {
 	claims, err := verifier.VerifyToken(r.Context(), rawToken)
 	if err != nil {
+		// Warn, not Error: an individual invalid/expired token from one
+		// client is expected traffic, not a bug - still worth a trace to
+		// spot a misconfigured client or repeated probing.
+		logpkg.FromContext(r.Context()).Warn("token verification failed", logpkg.Error, err)
 		return nil, err
 	}
 

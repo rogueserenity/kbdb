@@ -31,7 +31,7 @@ func ListKeycapSets(repo repository.KeycapSetRepository) http.HandlerFunc {
 
 		sets, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
 		if err != nil {
-			log.FromContext(r.Context()).Error("listing keycap sets", "error", err)
+			log.FromContext(r.Context()).Error("listing keycap sets", log.Error, err)
 			problem.Internal(w, "failed to list keycap sets")
 			return
 		}
@@ -66,7 +66,7 @@ func GetKeycapSet(repo repository.KeycapSetRepository) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting keycap set", "error", err)
+			log.FromContext(r.Context()).Error("getting keycap set", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to get keycap set")
 			return
 		}
@@ -78,7 +78,7 @@ func GetKeycapSet(repo repository.KeycapSetRepository) http.HandlerFunc {
 
 		out, err := repoapi.KeycapSetToAPI(*ks)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keycap set to API", "error", err, "id", id)
+			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to get keycap set")
 			return
 		}
@@ -115,7 +115,7 @@ func validateKeycapSetLookups(ctx context.Context, w http.ResponseWriter, lookup
 
 	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
 	if err != nil {
-		log.FromContext(ctx).Error("validating keycap set lookup fields", "error", err)
+		log.FromContext(ctx).Error("validating keycap set lookup fields", log.Error, err)
 		problem.Internal(w, "failed to validate lookup fields")
 		return false
 	}
@@ -169,14 +169,14 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("creating keycap set", "error", err)
+			log.FromContext(r.Context()).Error("creating keycap set", log.Error, err, log.KeycapSetID, ks.ID)
 			problem.Internal(w, "failed to create keycap set")
 			return
 		}
 
 		out, err := repoapi.KeycapSetToAPI(*created)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keycap set to API", "error", err, "id", created.ID)
+			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, created.ID)
 			problem.Internal(w, "failed to create keycap set")
 			return
 		}
@@ -220,19 +220,19 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 		if errors.Is(err, repository.ErrMutationConflict) {
 			// Warn, not Error: expected contention under retry, not a bug -
 			// still worth a trace if one set sees this repeatedly.
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "id", id)
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, id)
 			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("updating keycap set", "error", err)
+			log.FromContext(r.Context()).Error("updating keycap set", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to update keycap set")
 			return
 		}
 
 		out, err := repoapi.KeycapSetToAPI(*updated)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keycap set to API", "error", err, "id", updated.ID)
+			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, updated.ID)
 			problem.Internal(w, "failed to update keycap set")
 			return
 		}
@@ -258,7 +258,7 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 		}
 
 		if err := keycapSetRepo.Delete(r.Context(), id); err != nil {
-			log.FromContext(r.Context()).Error("deleting keycap set", "error", err)
+			log.FromContext(r.Context()).Error("deleting keycap set", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to delete keycap set")
 			return
 		}
@@ -299,19 +299,19 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 		if errors.Is(err, repository.ErrMutationConflict) {
 			// Warn, not Error: expected contention under retry, not a bug -
 			// still worth a trace if one set sees this repeatedly.
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "set_id", setID)
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kit.KitID)
 			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("adding keycap kit", "error", err, "set_id", setID)
+			log.FromContext(r.Context()).Error("adding keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kit.KitID)
 			problem.Internal(w, "failed to add kit")
 			return
 		}
 
 		out, err := repoapi.KeycapKitToAPI(*created)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keycap kit to API", "error", err, "kit_id", created.KitID)
+			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, created.KitID)
 			problem.Internal(w, "failed to add kit")
 			return
 		}
@@ -354,19 +354,19 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "set_id", setID)
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("updating keycap kit", "error", err, "set_id", setID, "kit_id", kitID)
+			log.FromContext(r.Context()).Error("updating keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Internal(w, "failed to update kit")
 			return
 		}
 
 		out, err := repoapi.KeycapKitToAPI(*updated)
 		if err != nil {
-			log.FromContext(r.Context()).Error("mapping keycap kit to API", "error", err, "kit_id", updated.KitID)
+			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, updated.KitID)
 			problem.Internal(w, "failed to update kit")
 			return
 		}
@@ -399,12 +399,12 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "set_id", setID)
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("deleting keycap kit", "error", err, "set_id", setID, "kit_id", kitID)
+			log.FromContext(r.Context()).Error("deleting keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Internal(w, "failed to delete kit")
 			return
 		}

@@ -41,7 +41,7 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 
 		switches, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
 		if err != nil {
-			log.FromContext(r.Context()).Error("listing switches", "error", err)
+			log.FromContext(r.Context()).Error("listing switches", log.Error, err)
 			problem.Internal(w, "failed to list switches")
 			return
 		}
@@ -76,7 +76,7 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting switch", "error", err)
+			log.FromContext(r.Context()).Error("getting switch", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to get switch")
 			return
 		}
@@ -124,7 +124,7 @@ func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRep
 
 	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
 	if err != nil {
-		log.FromContext(ctx).Error("validating switch lookup fields", "error", err)
+		log.FromContext(ctx).Error("validating switch lookup fields", log.Error, err)
 		problem.Internal(w, "failed to validate lookup fields")
 		return false
 	}
@@ -175,7 +175,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("creating switch", "error", err)
+			log.FromContext(r.Context()).Error("creating switch", log.Error, err, log.SwitchID, sw.ID)
 			problem.Internal(w, "failed to create switch")
 			return
 		}
@@ -217,7 +217,7 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 			return
 		}
 		if err != nil {
-			log.FromContext(r.Context()).Error("updating switch", "error", err)
+			log.FromContext(r.Context()).Error("updating switch", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to update switch")
 			return
 		}
@@ -242,7 +242,7 @@ func DeleteSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 		}
 
 		if err := switchRepo.Delete(r.Context(), id); err != nil {
-			log.FromContext(r.Context()).Error("deleting switch", "error", err)
+			log.FromContext(r.Context()).Error("deleting switch", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to delete switch")
 			return
 		}

@@ -10,6 +10,18 @@ import (
 	"log/slog"
 )
 
+// Structured logging field names, shared across internal/handlers so the
+// same concept (e.g. "the resource's own ID") always logs under the same
+// key regardless of which handler emits the line.
+const (
+	Error          = "error"
+	KeyboardID     = "keyboard_id"
+	SwitchID       = "switch_id"
+	KeycapSetID    = "keycap_set_id"
+	KeycapKitID    = "keycap_kit_id"
+	LookupCategory = "lookup_category"
+)
+
 type loggerKey struct{}
 
 // New returns a base logger with no request-specific fields yet.
