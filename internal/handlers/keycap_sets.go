@@ -487,3 +487,48 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, lookupRepo 
 		_ = json.NewEncoder(w).Encode(api.KeycapKitImageUpload{UploadUrl: uploadURL})
 	}
 }
+
+// DeleteKeycapKitImage reads the {userId}, {keycapSetId} (parent set), and
+// {kitId} path values and requires an authenticated caller. userId must be
+// the caller's own subject; removing a kit's image on another user's set,
+// a set that doesn't exist, or a kitId that doesn't exist within it, all
+// return 404, to avoid revealing it exists. Idempotent: a kit with no
+// image already set is not an error.
+func DeleteKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		setID := r.PathValue("keycapSetId")
+		kitID := r.PathValue("kitId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		cleared, err := keycapSetRepo.ClearKitImagePath(r.Context(), setID, kitID)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("clearing keycap kit image path", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Internal(w, "failed to delete kit image")
+			return
+		}
+
+		if cleared != nil {
+			if err := images.Delete(r.Context(), *cleared); err != nil {
+				log.FromContext(r.Context()).Error("deleting keycap kit image object", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+				problem.Internal(w, "failed to delete kit image")
+				return
+			}
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

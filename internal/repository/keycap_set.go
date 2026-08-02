@@ -97,6 +97,13 @@ type KeycapSetRepository interface {
 	// exist, or ErrMutationConflict if concurrent writers exhaust the
 	// retry budget.
 	SetKitImagePath(ctx context.Context, setID, kitID string, key KeycapKitImageKey) (*KeycapKit, error)
+
+	// ClearKitImagePath clears the kit matching kitID's ImagePath and
+	// returns the key that was cleared, or nil if it was already unset.
+	// Idempotent: a kit with no ImagePath already set is not an error.
+	// Returns ErrNotFound if setID or the kit doesn't exist, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	ClearKitImagePath(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
 }
 
 // KeycapKitImageKey is the object key a kit's image is stored under in a

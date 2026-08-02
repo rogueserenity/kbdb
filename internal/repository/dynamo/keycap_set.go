@@ -376,3 +376,32 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID 
 
 	return &updated.Kits[idx], nil
 }
+
+func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitID string) (*repository.KeycapKitImageKey, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("clearing kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
+	}
+
+	var cleared *repository.KeycapKitImageKey
+	_, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
+		idx := slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
+		if idx == -1 {
+			return repository.ErrNotFound
+		}
+		if ks.Kits[idx].ImagePath == nil {
+			return errKitImageAlreadyAbsent
+		}
+		cleared = ks.Kits[idx].ImagePath
+		ks.Kits[idx].ImagePath = nil
+		return nil
+	})
+	if errors.Is(err, errKitImageAlreadyAbsent) {
+		return nil, nil //nolint:nilnil // no image already set is a valid, expected result
+	}
+	if err != nil {
+		return nil, err
+	}
+
+	return cleared, nil
+}
