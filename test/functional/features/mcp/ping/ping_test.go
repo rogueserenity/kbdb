@@ -58,6 +58,36 @@ var _ = Describe("Ping", func() {
 		})
 	})
 
+	Context("given a malformed bearer token", func() {
+		BeforeEach(func() {
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", "not-a-valid-jwt")
+		})
+
+		When("the ping tool is called", func() {
+			BeforeEach(func(ctx SpecContext) {
+				_, err := client.Initialize(ctx)
+				Expect(err).NotTo(HaveOccurred())
+
+				resp, err = client.CallTool(ctx, "ping", map[string]any{})
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("rejects the call, having actually attempted verification rather than treating it as absent", func() {
+				var result gomcp.CallToolResult
+				Expect(result.UnmarshalJSON(resp.Result)).To(Succeed())
+
+				By("returning an MCP-shaped error result, not a bare HTTP failure")
+				Expect(result.IsError).To(BeTrue())
+
+				By("returning the invalid-token error, not the missing-token one")
+				Expect(result.Content).To(HaveLen(1))
+				textContent, ok := result.Content[0].(gomcp.TextContent)
+				Expect(ok).To(BeTrue())
+				Expect(textContent.Text).To(Equal("invalid token"))
+			})
+		})
+	})
+
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
 			token, err := api.AuthToken(ctx)

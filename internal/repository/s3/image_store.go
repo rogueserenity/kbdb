@@ -8,23 +8,33 @@ import (
 	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+type s3API interface {
+	DeleteObject(ctx context.Context, params *s3.DeleteObjectInput, optFns ...func(*s3.Options)) (*s3.DeleteObjectOutput, error)
+}
+
+type s3PresignAPI interface {
+	PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+	PresignPutObject(ctx context.Context, params *s3.PutObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+}
+
 type ImageStore struct {
-	client  *s3.Client
-	presign *s3.PresignClient
+	client  s3API
+	presign s3PresignAPI
 	bucket  string
 }
 
 var _ repository.KeycapKitImageStore = (*ImageStore)(nil)
 
-func NewImageStore(client *s3.Client, bucket string) *ImageStore {
+func NewImageStore(client *s3.Client, presign *s3.PresignClient, bucket string) *ImageStore {
 	return &ImageStore{
 		client:  client,
-		presign: s3.NewPresignClient(client),
+		presign: presign,
 		bucket:  bucket,
 	}
 }
