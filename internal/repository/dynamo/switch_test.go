@@ -1,7 +1,6 @@
 package dynamo
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -46,7 +45,7 @@ func (s *SwitchRepositorySuite) TestList_Succeeds() {
 			},
 		}, nil)
 
-	switches, next, err := s.repo.List(context.Background(), "alice",
+	switches, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -60,7 +59,7 @@ func (s *SwitchRepositorySuite) TestList_EmptyVisibilities_ReturnsEmptySliceWith
 	// No EXPECT() on s.mockClient.Query - an empty visibilities slice must
 	// short-circuit before building a Query, since expression.In(...)
 	// requires at least one value and would otherwise panic.
-	switches, next, err := s.repo.List(context.Background(), "alice", nil, 20, "")
+	switches, next, err := s.repo.List(s.T().Context(), "alice", nil, 20, "")
 
 	s.Require().NoError(err)
 	s.NotNil(switches)
@@ -73,7 +72,7 @@ func (s *SwitchRepositorySuite) TestList_EmptyResult_ReturnsEmptySliceNotNil() {
 		Query(mock.Anything, mock.Anything).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
 
-	switches, _, err := s.repo.List(context.Background(), "alice",
+	switches, _, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -92,7 +91,7 @@ func (s *SwitchRepositorySuite) TestList_ReturnsEncodedCursor_WhenMorePagesExist
 			},
 		}, nil)
 
-	_, next, err := s.repo.List(context.Background(), "alice",
+	_, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().NoError(err)
@@ -114,7 +113,7 @@ func (s *SwitchRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey() {
 			},
 		}, nil).Once()
 
-	_, cursor, err := s.repo.List(context.Background(), "alice",
+	_, cursor, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 	s.Require().NoError(err)
 
@@ -125,13 +124,13 @@ func (s *SwitchRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey() {
 		})).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
 
-	_, _, err = s.repo.List(context.Background(), "alice",
+	_, _, err = s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, cursor)
 	s.Require().NoError(err)
 }
 
 func (s *SwitchRepositorySuite) TestList_InvalidCursor_ReturnsError() {
-	switches, next, err := s.repo.List(context.Background(), "alice",
+	switches, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
 
 	s.Require().Error(err)
@@ -144,7 +143,7 @@ func (s *SwitchRepositorySuite) TestList_QueryError_Propagates() {
 		Query(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	switches, next, err := s.repo.List(context.Background(), "alice",
+	switches, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
 
 	s.Require().Error(err)
@@ -167,7 +166,7 @@ func (s *SwitchRepositorySuite) TestGet_Succeeds() {
 			},
 		}, nil)
 
-	sw, err := s.repo.Get(context.Background(), "alice", "sw1")
+	sw, err := s.repo.Get(s.T().Context(), "alice", "sw1")
 
 	s.Require().NoError(err)
 	s.Equal("sw1", sw.ID)
@@ -179,7 +178,7 @@ func (s *SwitchRepositorySuite) TestGet_NotFound_ReturnsErrNotFound() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
-	sw, err := s.repo.Get(context.Background(), "alice", "missing")
+	sw, err := s.repo.Get(s.T().Context(), "alice", "missing")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(sw)
@@ -190,7 +189,7 @@ func (s *SwitchRepositorySuite) TestGet_GetItemError_Propagates() {
 		GetItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	sw, err := s.repo.Get(context.Background(), "alice", "sw1")
+	sw, err := s.repo.Get(s.T().Context(), "alice", "sw1")
 
 	s.Require().Error(err)
 	s.Nil(sw)
@@ -201,7 +200,7 @@ func (s *SwitchRepositorySuite) TestCreate_Succeeds() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Create(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
@@ -213,7 +212,7 @@ func (s *SwitchRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Create(ctx, repository.Switch{ID: "sw1"})
 
 	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
@@ -225,7 +224,7 @@ func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Create(ctx, repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
@@ -235,7 +234,7 @@ func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
 
 func (s *SwitchRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on PutItem - see errNoUserID (client.go).
-	sw, err := s.repo.Create(context.Background(), repository.Switch{ID: "sw1"})
+	sw, err := s.repo.Create(s.T().Context(), repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
 	s.Nil(sw)
@@ -248,7 +247,7 @@ func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
@@ -260,7 +259,7 @@ func (s *SwitchRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
@@ -272,7 +271,7 @@ func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
@@ -282,7 +281,7 @@ func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
 
 func (s *SwitchRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on PutItem - see errNoUserID (client.go).
-	sw, err := s.repo.Update(context.Background(), repository.Switch{ID: "sw1"})
+	sw, err := s.repo.Update(s.T().Context(), repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
 	s.Nil(sw)
@@ -293,7 +292,7 @@ func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 		DeleteItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.DeleteItemOutput{}, nil)
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "sw1")
 
 	s.Require().NoError(err)
@@ -301,7 +300,7 @@ func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 
 func (s *SwitchRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
-	err := s.repo.Delete(context.Background(), "sw1")
+	err := s.repo.Delete(s.T().Context(), "sw1")
 
 	s.Require().Error(err)
 }
@@ -311,7 +310,7 @@ func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 		DeleteItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "sw1")
 
 	s.Require().Error(err)

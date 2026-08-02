@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -33,7 +32,7 @@ func (s *VerifyTokenSuite) TestValidToken_Succeeds() {
 		Verify(mock.Anything, "raw-token").
 		Return(&oidc.IDToken{Subject: "user-123"}, nil)
 
-	claims, err := s.verifier.VerifyToken(context.Background(), "raw-token")
+	claims, err := s.verifier.VerifyToken(s.T().Context(), "raw-token")
 
 	s.Require().NoError(err)
 	s.Equal("user-123", claims.Subject)
@@ -44,7 +43,7 @@ func (s *VerifyTokenSuite) TestInvalidToken_Rejected() {
 		Verify(mock.Anything, "bad-token").
 		Return(nil, errors.New("oidc: token is expired"))
 
-	claims, err := s.verifier.VerifyToken(context.Background(), "bad-token")
+	claims, err := s.verifier.VerifyToken(s.T().Context(), "bad-token")
 
 	s.Require().Error(err)
 	s.Nil(claims)

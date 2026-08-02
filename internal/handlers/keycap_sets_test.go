@@ -42,7 +42,7 @@ func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *htt
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_Owner_RequestsAllVisibilities() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
@@ -69,13 +69,13 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_Anonymous_RequestsPublicOnly() 
 		Return([]repository.KeycapSet{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_OtherUser_RequestsPublicAndAuthenticated() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
@@ -95,7 +95,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_PassesLimitAndCursor() {
 		Return([]repository.KeycapSet{}, "", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=5&cursor=abc"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=5&cursor=abc"))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -106,7 +106,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_ReturnsNextCursor_WhenPresent()
 		Return([]repository.KeycapSet{}, "next-page-token", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	var got api.KeycapSetListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
@@ -120,7 +120,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_RepositoryError_Returns500() {
 		Return(nil, "", errors.New("query failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background(), "limit=20"))
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -150,7 +150,7 @@ func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_Succeeds() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
@@ -174,7 +174,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_AnonymousReadingPublicKeycapSet_Suc
 		Return(&repository.KeycapSet{ID: "ks1", Visibility: repository.VisibilityPublic}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusOK, rec.Code)
 }
@@ -185,14 +185,14 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_AnonymousReadingPrivateKeycapSet_Re
 		Return(&repository.KeycapSet{ID: "ks1", Visibility: repository.VisibilityPrivate}, nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_OtherUserReadingAuthenticatedKeycapSet_Succeeds() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
@@ -205,7 +205,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_OtherUserReadingAuthenticatedKeycap
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_OtherUserReadingPrivateKeycapSet_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
@@ -224,7 +224,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_NotFound_Returns404() {
 		Return(nil, repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -236,14 +236,14 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_RepositoryError_Returns500() {
 		Return(nil, errors.New("get item failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_MalformedKitPurchaseDate_Returns500NotPanic() {
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	malformedDate := "not-a-date"
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
@@ -287,7 +287,7 @@ func (s *CreateKeycapSetSuite) newRequest(ctx context.Context, body string) *htt
 }
 
 func (s *CreateKeycapSetSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_Succeeds() {
@@ -389,7 +389,7 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_MultipleInvalidFields_NamesAl
 }
 
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"brand":"GMK","name":"Laser","visibility":"private"}`)
 	rec := httptest.NewRecorder()
@@ -400,7 +400,7 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_NotOwner_Returns404() {
 }
 
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	req := s.newRequest(s.T().Context(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -497,7 +497,7 @@ func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *htt
 }
 
 func (s *UpdateKeycapSetSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_Succeeds() {
@@ -599,7 +599,7 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MultipleInvalidFields_NamesAl
 }
 
 func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"brand":"GMK","name":"Laser","visibility":"private"}`)
 	rec := httptest.NewRecorder()
@@ -610,7 +610,7 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_NotOwner_Returns404() {
 }
 
 func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	req := s.newRequest(s.T().Context(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -718,7 +718,7 @@ func (s *DeleteKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *DeleteKeycapSetSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
@@ -733,7 +733,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
 }
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -744,7 +744,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_NotOwner_Returns404() {
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Anonymous_Returns404() {
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(context.Background()))
+	s.handler(rec, s.newRequest(s.T().Context()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -786,7 +786,7 @@ func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *htt
 }
 
 func (s *CreateKeycapKitSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
@@ -810,7 +810,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
 }
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"name":"Base"}`)
 	rec := httptest.NewRecorder()
@@ -821,7 +821,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_NotOwner_Returns404() {
 }
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"name":"Base"}`)
+	req := s.newRequest(s.T().Context(), `{"name":"Base"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -902,7 +902,7 @@ func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *htt
 }
 
 func (s *UpdateKeycapKitSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Succeeds() {
@@ -926,7 +926,7 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Succeeds() {
 }
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx, `{"name":"Extension"}`)
 	rec := httptest.NewRecorder()
@@ -937,7 +937,7 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_NotOwner_Returns404() {
 }
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Anonymous_Returns404() {
-	req := s.newRequest(context.Background(), `{"name":"Extension"}`)
+	req := s.newRequest(s.T().Context(), `{"name":"Extension"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1018,7 +1018,7 @@ func (s *DeleteKeycapKitSuite) newRequest(ctx context.Context) *http.Request {
 }
 
 func (s *DeleteKeycapKitSuite) ownerCtx() context.Context {
-	return kbdbctx.WithUserID(context.Background(), "alice")
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Succeeds() {
@@ -1034,7 +1034,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Succeeds() {
 }
 
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_NotOwner_Returns404() {
-	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	req := s.newRequest(ctx)
 	rec := httptest.NewRecorder()
@@ -1045,7 +1045,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_NotOwner_Returns404() {
 }
 
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Anonymous_Returns404() {
-	req := s.newRequest(context.Background())
+	req := s.newRequest(s.T().Context())
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 

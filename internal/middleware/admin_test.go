@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,7 +32,7 @@ func (s *RequireAdminSuite) SetupTest() {
 }
 
 func (s *RequireAdminSuite) TestWithAdminsGroup_CallsNext() {
-	ctx := ctxpkg.WithGroups(context.Background(), []string{auth.AdminsGroup})
+	ctx := ctxpkg.WithGroups(s.T().Context(), []string{auth.AdminsGroup})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/v1/lookups/vendor", nil)
 	rec := httptest.NewRecorder()
 
@@ -44,7 +43,7 @@ func (s *RequireAdminSuite) TestWithAdminsGroup_CallsNext() {
 }
 
 func (s *RequireAdminSuite) TestWithoutAdminsGroup_Returns403() {
-	ctx := ctxpkg.WithGroups(context.Background(), []string{"engineering"})
+	ctx := ctxpkg.WithGroups(s.T().Context(), []string{"engineering"})
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/v1/lookups/vendor", nil)
 	rec := httptest.NewRecorder()
 
@@ -56,7 +55,7 @@ func (s *RequireAdminSuite) TestWithoutAdminsGroup_Returns403() {
 }
 
 func (s *RequireAdminSuite) TestNoGroups_Returns403() {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/v1/lookups/vendor", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/vendor", nil)
 	rec := httptest.NewRecorder()
 
 	s.handler.ServeHTTP(rec, req)

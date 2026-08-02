@@ -1,7 +1,6 @@
 package router
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -92,7 +91,7 @@ func (s *ValidationErrorHandlerSuite) SetupTest() {
 }
 
 func (s *ValidationErrorHandlerSuite) post(body string) *httptest.ResponseRecorder {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodPost, "/widgets", strings.NewReader(body))
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/widgets", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 
 	rec := httptest.NewRecorder()
@@ -102,7 +101,7 @@ func (s *ValidationErrorHandlerSuite) post(body string) *httptest.ResponseRecord
 }
 
 func (s *ValidationErrorHandlerSuite) getItems(query string) *httptest.ResponseRecorder {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/items?"+query, nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/items?"+query, nil)
 
 	rec := httptest.NewRecorder()
 	s.server.ServeHTTP(rec, req)
@@ -186,7 +185,7 @@ func (s *ValidationErrorHandlerSuite) TestOutOfRangeQueryParam_NamesTheParam() {
 }
 
 func (s *ValidationErrorHandlerSuite) TestUnmatchedRoute_Returns404() {
-	req := httptest.NewRequestWithContext(context.Background(), http.MethodGet, "/does-not-exist", nil)
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/does-not-exist", nil)
 	rec := httptest.NewRecorder()
 	s.server.ServeHTTP(rec, req)
 
