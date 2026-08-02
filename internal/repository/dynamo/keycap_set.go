@@ -298,5 +298,10 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 		return nil, err
 	}
 
-	return &updated.Kits[len(updated.Kits)-1], nil
+	idx := slices.IndexFunc(updated.Kits, func(k repository.KeycapKit) bool { return k.KitID == kit.KitID })
+	if idx == -1 {
+		return nil, fmt.Errorf("adding kit %q to keycap set %q: %w", kit.KitID, setID, errKitMissingAfterAdd)
+	}
+
+	return &updated.Kits[idx], nil
 }

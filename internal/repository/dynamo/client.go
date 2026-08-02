@@ -16,10 +16,18 @@ import (
 // so it's not a substitute for this check.
 var errNoUserID = errors.New("no user id in context")
 
-// errKitMutationExhausted is returned when KeycapSetRepository's kit
-// mutation methods lose the version-CAS race maxKitMutationAttempts times
-// in a row - see keycap_set.go's mutateKits.
+// errKitMutationExhausted is returned when KeycapSetRepository's set/kit
+// mutation methods lose the version-CAS race maxSetMutationAttempts times
+// in a row - see keycap_set.go's mutateSet.
 var errKitMutationExhausted = errors.New("exhausted kit mutation retry attempts")
+
+// errKitMissingAfterAdd guards AddKit's return value: it looks the just-
+// added kit back up by KitID in the set mutateSet actually persisted,
+// rather than assuming a position (e.g. "the last element") or returning
+// the caller's pre-write input - this is that lookup failing, which would
+// mean mutateSet's returned state doesn't actually contain the kit it just
+// appended, a stronger contract violation than a plain CAS failure.
+var errKitMissingAfterAdd = errors.New("kit not found in set after AddKit")
 
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.
