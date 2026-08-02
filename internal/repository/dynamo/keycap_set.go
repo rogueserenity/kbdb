@@ -305,7 +305,6 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 	return &updated.Kits[idx], nil
 }
 
-// UpdateKit updates the details for the specified kit in this set.
 func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
 	if kit.KitID == "" {
 		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errEmptyKitID)

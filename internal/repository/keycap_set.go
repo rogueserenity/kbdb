@@ -77,9 +77,7 @@ type KeycapSetRepository interface {
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	AddKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
 
-	// UpdateKit updates the details for the kit matching kit.KitID within
-	// setID's Kits and returns the updated kit. Returns ErrNotFound if
-	// setID or the kit doesn't exist, or ErrMutationConflict if concurrent
-	// writers exhaust the retry budget.
+	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
 }
