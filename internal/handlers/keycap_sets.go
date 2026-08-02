@@ -321,3 +321,58 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
+
+// UpdateKeycapKit reads the {userId}, {id} (parent set), and {kitId} path
+// values and requires an authenticated caller. Kits have no independent
+// visibility - authorization is entirely the parent set's ownership.
+// userId must be the caller's own subject; updating a kit on another
+// user's set, a set that doesn't exist, or a kitId that doesn't exist
+// within it, all return 404, to avoid revealing it exists.
+func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		setID := r.PathValue("id")
+		kitID := r.PathValue("kitId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.KeycapKitInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		kit := repoapi.KeycapKitToRepo(in)
+		kit.KitID = kitID
+
+		updated, err := keycapSetRepo.UpdateKit(r.Context(), setID, kit)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "set_id", setID)
+			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("updating keycap kit", "error", err, "set_id", setID, "kit_id", kitID)
+			problem.Internal(w, "failed to update kit")
+			return
+		}
+
+		out, err := repoapi.KeycapKitToAPI(*updated)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping keycap kit to API", "error", err, "kit_id", updated.KitID)
+			problem.Internal(w, "failed to update kit")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}

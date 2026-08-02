@@ -304,3 +304,30 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 
 	return &updated.Kits[idx], nil
 }
+
+func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+	if kit.KitID == "" {
+		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errEmptyKitID)
+	}
+
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errNoUserID)
+	}
+
+	var idx int
+	updated, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
+		idx = slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kit.KitID })
+		if idx == -1 {
+			return repository.ErrNotFound
+		}
+		kit.ImagePath = ks.Kits[idx].ImagePath
+		ks.Kits[idx] = kit
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	return &updated.Kits[idx], nil
+}
