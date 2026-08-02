@@ -76,4 +76,10 @@ type KeycapSetRepository interface {
 	// entity. Returns ErrNotFound if the parent set doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	AddKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
+
+	// UpdateKit replaces the kit matching kit.KitID within setID's Kits and
+	// returns the updated kit, matching AddKit's shape. Returns ErrNotFound
+	// if setID or the kit doesn't exist, or ErrMutationConflict if
+	// concurrent writers exhaust the retry budget.
+	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
 }
