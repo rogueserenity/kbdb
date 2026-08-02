@@ -145,7 +145,7 @@ func (s *GetSwitchSuite) SetupTest() {
 func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/switches/sw1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "sw1")
+	req.SetPathValue("switchId", "sw1")
 	return req
 }
 
@@ -536,7 +536,7 @@ func (s *UpdateSwitchSuite) SetupTest() {
 func (s *UpdateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/switches/sw1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "sw1")
+	req.SetPathValue("switchId", "sw1")
 	return req
 }
 
@@ -807,7 +807,7 @@ func (s *DeleteSwitchSuite) SetupTest() {
 func (s *DeleteSwitchSuite) newRequest(ctx context.Context) *http.Request {
 	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/switches/sw1", nil)
 	req.SetPathValue("userId", "alice")
-	req.SetPathValue("id", "sw1")
+	req.SetPathValue("switchId", "sw1")
 	return req
 }
 

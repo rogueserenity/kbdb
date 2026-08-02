@@ -52,13 +52,13 @@ func ListKeycapSets(repo repository.KeycapSetRepository) http.HandlerFunc {
 	}
 }
 
-// GetKeycapSet reads the {userId} and {id} path values. Anonymous callers
+// GetKeycapSet reads the {userId} and {keycapSetId} path values. Anonymous callers
 // are allowed; a keycap set that exists but isn't readable by the caller
 // returns 404, not 403, to avoid revealing it exists.
 func GetKeycapSet(repo repository.KeycapSetRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("keycapSetId")
 
 		ks, err := repo.Get(r.Context(), ownerID, id)
 		if errors.Is(err, repository.ErrNotFound) {
@@ -187,14 +187,14 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 	}
 }
 
-// UpdateKeycapSet reads the {userId} and {id} path values and requires an
+// UpdateKeycapSet reads the {userId} and {keycapSetId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's keycap set, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
 func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("keycapSetId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")
@@ -243,14 +243,14 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 	}
 }
 
-// DeleteKeycapSet reads the {userId} and {id} path values and requires an
+// DeleteKeycapSet reads the {userId} and {keycapSetId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keycap set returns 404, not 403, to avoid revealing it
 // exists.
 func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		id := r.PathValue("id")
+		id := r.PathValue("keycapSetId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")
@@ -267,7 +267,7 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 	}
 }
 
-// CreateKeycapKit reads the {userId} and {id} (parent set) path values and
+// CreateKeycapKit reads the {userId} and {keycapSetId} (parent set) path values and
 // requires an authenticated caller. Kits have no independent visibility -
 // authorization is entirely the parent set's ownership. userId must be the
 // caller's own subject; adding a kit to another user's set, or to a set
@@ -275,7 +275,7 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		setID := r.PathValue("id")
+		setID := r.PathValue("keycapSetId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
 			problem.NotFound(w, "resource not found")
@@ -322,7 +322,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 	}
 }
 
-// UpdateKeycapKit reads the {userId}, {id} (parent set), and {kitId} path
+// UpdateKeycapKit reads the {userId}, {keycapSetId} (parent set), and {kitId} path
 // values and requires an authenticated caller. Kits have no independent
 // visibility - authorization is entirely the parent set's ownership.
 // userId must be the caller's own subject; updating a kit on another
@@ -331,7 +331,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		setID := r.PathValue("id")
+		setID := r.PathValue("keycapSetId")
 		kitID := r.PathValue("kitId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {
@@ -377,7 +377,7 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 	}
 }
 
-// DeleteKeycapKit reads the {userId}, {id} (parent set), and {kitId} path
+// DeleteKeycapKit reads the {userId}, {keycapSetId} (parent set), and {kitId} path
 // values and requires an authenticated caller. userId must be the caller's
 // own subject; deleting a kit from another user's set, or a set that
 // doesn't exist, both return 404. Idempotent: a kitId not present in the
@@ -385,7 +385,7 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
-		setID := r.PathValue("id")
+		setID := r.PathValue("keycapSetId")
 		kitID := r.PathValue("kitId")
 
 		if !authz.IsOwner(r.Context(), ownerID) {

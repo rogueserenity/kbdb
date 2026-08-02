@@ -58,45 +58,45 @@ func New(
 	// only public switches (see internal/authz.ReadableVisibilities).
 	mux.Handle("GET /v1/users/{userId}/switches",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo))))
-	mux.Handle("GET /v1/users/{userId}/switches/{id}",
+	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
 		middleware.Auth(verifier)(validate(handlers.CreateSwitch(switchRepo, lookupRepo))))
-	mux.Handle("PUT /v1/users/{userId}/switches/{id}",
+	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateSwitch(switchRepo, lookupRepo))))
-	mux.Handle("DELETE /v1/users/{userId}/switches/{id}",
+	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see internal/authz.ReadableVisibilities).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo))))
-	mux.Handle("GET /v1/users/{userId}/keyboards/{id}",
+	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
 		middleware.Auth(verifier)(validate(handlers.CreateKeyboard(keyboardRepo, lookupRepo))))
-	mux.Handle("PUT /v1/users/{userId}/keyboards/{id}",
+	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo, lookupRepo))))
-	mux.Handle("DELETE /v1/users/{userId}/keyboards/{id}",
+	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeyboard(keyboardRepo))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see internal/authz.ReadableVisibilities).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo))))
-	mux.Handle("GET /v1/users/{userId}/keycap-sets/{id}",
+	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
 		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, lookupRepo))))
-	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{id}",
+	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, lookupRepo))))
-	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{id}",
+	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapSet(keycapSetRepo))))
-	mux.Handle("POST /v1/users/{userId}/keycap-sets/{id}/kits",
+	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
 		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo))))
-	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}",
+	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo))))
-	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}",
+	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKit(keycapSetRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped

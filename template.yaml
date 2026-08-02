@@ -301,7 +301,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/switches/{id}
+            Path: /v1/users/{userId}/switches/{switchId}
             Method: get
             Auth:
               Authorizer: NONE
@@ -320,7 +320,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/switches/{id}
+            Path: /v1/users/{userId}/switches/{switchId}
             Method: put
         # Default CognitoAuthorizer applies - same rationale as
         # CreateSwitchEvent.
@@ -328,7 +328,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/switches/{id}
+            Path: /v1/users/{userId}/switches/{switchId}
             Method: delete
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
@@ -347,7 +347,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keyboards/{id}
+            Path: /v1/users/{userId}/keyboards/{keyboardId}
             Method: get
             Auth:
               Authorizer: NONE
@@ -366,7 +366,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keyboards/{id}
+            Path: /v1/users/{userId}/keyboards/{keyboardId}
             Method: put
         # Default CognitoAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
@@ -374,7 +374,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keyboards/{id}
+            Path: /v1/users/{userId}/keyboards/{keyboardId}
             Method: delete
         # Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
         ListKeycapSetsEvent:
@@ -390,7 +390,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keycap-sets/{id}
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: get
             Auth:
               Authorizer: NONE
@@ -408,7 +408,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keycap-sets/{id}
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: put
         # Default CognitoAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
@@ -416,7 +416,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keycap-sets/{id}
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: delete
         # Default CognitoAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
@@ -424,7 +424,7 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keycap-sets/{id}/kits
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits
             Method: post
         # Default CognitoAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
@@ -432,13 +432,13 @@ Resources:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}
             Method: put
         DeleteKeycapKitEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
-            Path: /v1/users/{userId}/keycap-sets/{id}/kits/{kitId}
+            Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}
             Method: delete
         # MCP auth is handled inside the MCP server itself (see internal/mcp),
         # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
