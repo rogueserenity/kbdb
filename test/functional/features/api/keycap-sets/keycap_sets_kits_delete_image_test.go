@@ -119,10 +119,13 @@ var _ = Describe("Deleting a keycap kit's image", func() {
 						Expect(set.Kits).To(HaveLen(1))
 						Expect(set.Kits[0].Image).To(BeNil())
 
-						By("the previously-issued presigned GET URL now 404ing against S3 directly")
+						By("the previously-issued presigned GET URL no longer serving the object from S3")
 						getImageResp, err := api.DoPresigned(ctx, http.MethodGet, imageGetURL, "", nil)
 						Expect(err).NotTo(HaveOccurred())
-						Expect(getImageResp.StatusCode).To(Equal(http.StatusNotFound))
+						// Real S3 returns 403 (not 404) for GetObject against a
+						// missing key when the caller lacks s3:ListBucket, to
+						// avoid leaking object existence; LocalStack returns 404.
+						Expect(getImageResp.StatusCode).To(BeElementOf(http.StatusNotFound, http.StatusForbidden))
 					})
 				})
 			})
