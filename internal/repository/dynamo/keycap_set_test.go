@@ -825,8 +825,6 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_KitAlreadyAbsent_SucceedsWithou
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
 		Return(s.getItemOutputWithKit(), nil)
-	// No EXPECT() on PutItem - a missing kit short-circuits mutateSet
-	// before any write is attempted, per errKitAlreadyAbsent.
 
 	ctx := kbdbctx.WithUserID(context.Background(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "no-such-kit")
