@@ -631,6 +631,44 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 	s.Equal("Extension", kit.Name)
 }
 
+func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
+	getOutput := s.getItemOutput(0)
+	getOutput.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":     &types.AttributeValueMemberS{Value: "kit1"},
+				"name":       &types.AttributeValueMemberS{Value: "Base"},
+				"image_path": &types.AttributeValueMemberS{Value: "keycap-sets/alice/ks1/kits/kit1/image"},
+				"purchase":   &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(getOutput, nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return len(ks.Kits) == 1 && ks.Kits[0].Name == "Extension" &&
+				ks.Kits[0].ImagePath != nil && *ks.Kits[0].ImagePath == "keycap-sets/alice/ks1/kits/kit1/image"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	// The caller's input never carries ImagePath - it's server-managed via
+	// SetKeycapKitImage, not something a PUT request body can set - so
+	// UpdateKit must not let this nil overwrite what's already stored.
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(kit)
+	s.Require().NotNil(kit.ImagePath)
+	s.Equal("keycap-sets/alice/ks1/kits/kit1/image", *kit.ImagePath)
+}
+
 func (s *KeycapSetRepositorySuite) TestUpdateKit_KitNotFoundInExistingSet_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
