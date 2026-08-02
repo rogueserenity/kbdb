@@ -233,7 +233,7 @@ func (s *KeyboardRepositorySuite) TestCreate_PutItemError_Propagates() {
 }
 
 func (s *KeyboardRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	// No EXPECT() on PutItem - see repository.ErrNoUserID.
 	kb, err := s.repo.Create(s.T().Context(), repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
@@ -280,7 +280,7 @@ func (s *KeyboardRepositorySuite) TestUpdate_PutItemError_Propagates() {
 }
 
 func (s *KeyboardRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	// No EXPECT() on PutItem - see repository.ErrNoUserID.
 	kb, err := s.repo.Update(s.T().Context(), repository.Keyboard{ID: "kb1"})
 
 	s.Require().Error(err)
@@ -299,7 +299,7 @@ func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
 }
 
 func (s *KeyboardRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
+	// No EXPECT() on DeleteItem - see repository.ErrNoUserID.
 	err := s.repo.Delete(s.T().Context(), "kb1")
 
 	s.Require().Error(err)

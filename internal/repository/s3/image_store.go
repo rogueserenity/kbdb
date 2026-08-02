@@ -5,6 +5,7 @@ package s3
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -28,36 +29,39 @@ func NewImageStore(client *s3.Client, bucket string) *ImageStore {
 	}
 }
 
-func (s *ImageStore) PresignGet(ctx context.Context, key string) (string, error) {
+func (s *ImageStore) PresignGet(ctx context.Context, key repository.KeycapKitImageKey) (string, error) {
 	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(string(key)),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)
 	}
 
 	return req.URL, nil
 }
 
-func (s *ImageStore) PresignPut(ctx context.Context, key, contentType string) (string, error) {
+func (s *ImageStore) PresignPut(ctx context.Context, key repository.KeycapKitImageKey, contentType string) (string, error) {
 	req, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
 		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(key),
+		Key:         aws.String(string(key)),
 		ContentType: aws.String(contentType),
 	})
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("presigning PUT s3://%s/%s (content-type %q): %w", s.bucket, key, contentType, err)
 	}
 
 	return req.URL, nil
 }
 
-func (s *ImageStore) Delete(ctx context.Context, key string) error {
+func (s *ImageStore) Delete(ctx context.Context, key repository.KeycapKitImageKey) error {
 	_, err := s.client.DeleteObject(ctx, &s3.DeleteObjectInput{
 		Bucket: aws.String(s.bucket),
-		Key:    aws.String(key),
+		Key:    aws.String(string(key)),
 	})
+	if err != nil {
+		return fmt.Errorf("deleting s3://%s/%s: %w", s.bucket, key, err)
+	}
 
-	return err
+	return nil
 }

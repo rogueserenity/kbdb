@@ -1140,13 +1140,15 @@ func (s *SetKeycapKitImageSuite) approveContentType() {
 		Return(&repository.Lookup{Category: "image_content_type", Values: []any{"image/png"}}, nil)
 }
 
+const setKeycapKitImageTestKey = repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
 	s.approveContentType()
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
@@ -1228,7 +1230,7 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_ValidatingContentTypeRepo
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
 	s.approveContentType()
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
@@ -1242,10 +1244,10 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500()
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 	s.approveContentType()
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
@@ -1259,10 +1261,10 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
 	s.approveContentType()
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
@@ -1276,10 +1278,10 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
 	s.approveContentType()
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, "keycap-sets/alice/ks1/kits/kit1/image", "image/png").
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image").
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)

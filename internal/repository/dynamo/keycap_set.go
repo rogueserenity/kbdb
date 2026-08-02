@@ -135,7 +135,7 @@ func (r *KeycapSetRepository) Get(ctx context.Context, ownerID, id string) (*rep
 func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("creating keycap set %q: %w", ks.ID, errNoUserID)
+		return nil, fmt.Errorf("creating keycap set %q: %w", ks.ID, repository.ErrNoUserID)
 	}
 	ks.UserID = ownerID
 
@@ -169,7 +169,7 @@ func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSe
 func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("updating keycap set %q: %w", ks.ID, errNoUserID)
+		return nil, fmt.Errorf("updating keycap set %q: %w", ks.ID, repository.ErrNoUserID)
 	}
 
 	updated, err := r.mutateSet(ctx, ownerID, ks.ID, func(existing *repository.KeycapSet) error {
@@ -194,7 +194,7 @@ func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSe
 func (r *KeycapSetRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("deleting keycap set %q: %w", id, errNoUserID)
+		return fmt.Errorf("deleting keycap set %q: %w", id, repository.ErrNoUserID)
 	}
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
@@ -285,7 +285,7 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("adding kit to keycap set %q: %w", setID, errNoUserID)
+		return nil, fmt.Errorf("adding kit to keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
 	updated, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
@@ -314,7 +314,7 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errNoUserID)
+		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
 	var idx int
@@ -337,7 +337,7 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("deleting kit from keycap set %q: %w", setID, errNoUserID)
+		return fmt.Errorf("deleting kit from keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
 	_, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
@@ -355,10 +355,10 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 	return err
 }
 
-func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID, imagePath string) (*repository.KeycapKit, error) {
+func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKit, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("setting kit image path in keycap set %q: %w", setID, errNoUserID)
+		return nil, fmt.Errorf("setting kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
 	var idx int
@@ -367,7 +367,7 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID,
 		if idx == -1 {
 			return repository.ErrNotFound
 		}
-		ks.Kits[idx].ImagePath = &imagePath
+		ks.Kits[idx].ImagePath = &key
 		return nil
 	})
 	if err != nil {

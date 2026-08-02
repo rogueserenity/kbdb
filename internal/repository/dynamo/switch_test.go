@@ -233,7 +233,7 @@ func (s *SwitchRepositorySuite) TestCreate_PutItemError_Propagates() {
 }
 
 func (s *SwitchRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	// No EXPECT() on PutItem - see repository.ErrNoUserID.
 	sw, err := s.repo.Create(s.T().Context(), repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
@@ -280,7 +280,7 @@ func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	// No EXPECT() on PutItem - see repository.ErrNoUserID.
 	sw, err := s.repo.Update(s.T().Context(), repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
@@ -299,7 +299,7 @@ func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 }
 
 func (s *SwitchRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
+	// No EXPECT() on DeleteItem - see repository.ErrNoUserID.
 	err := s.repo.Delete(s.T().Context(), "sw1")
 
 	s.Require().Error(err)

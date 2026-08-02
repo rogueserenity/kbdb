@@ -19,3 +19,8 @@ var ErrAlreadyExists = errors.New("already exists")
 // errors.Is to return 409 instead of a generic 500: the client's fix is to
 // retry the whole request, not to change anything about it.
 var ErrMutationConflict = errors.New("mutation conflict: too many concurrent writers")
+
+// ErrNoUserID guards every Create/Update/Delete against a silently ignored
+// internal/ctx.UserID ok - an empty-string partition key or object-store key
+// would otherwise write against user_id="" instead of erroring.
+var ErrNoUserID = errors.New("no user id in context")

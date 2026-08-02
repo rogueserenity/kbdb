@@ -452,7 +452,12 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, lookupRepo 
 			return
 		}
 
-		key := fmt.Sprintf("keycap-sets/%s/%s/kits/%s/image", ownerID, setID, kitID)
+		key, err := repository.NewKeycapKitImageKey(r.Context(), setID, kitID)
+		if err != nil {
+			log.FromContext(r.Context()).Error("building keycap kit image key", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Internal(w, "failed to set kit image")
+			return
+		}
 
 		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
 		if err != nil {

@@ -467,8 +467,8 @@ func (_c *MockKeycapSetRepository_List_Call) RunAndReturn(run func(ctx context.C
 }
 
 // SetKitImagePath provides a mock function for the type MockKeycapSetRepository
-func (_mock *MockKeycapSetRepository) SetKitImagePath(ctx context.Context, setID string, kitID string, imagePath string) (*repository.KeycapKit, error) {
-	ret := _mock.Called(ctx, setID, kitID, imagePath)
+func (_mock *MockKeycapSetRepository) SetKitImagePath(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKit, error) {
+	ret := _mock.Called(ctx, setID, kitID, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetKitImagePath")
@@ -476,18 +476,18 @@ func (_mock *MockKeycapSetRepository) SetKitImagePath(ctx context.Context, setID
 
 	var r0 *repository.KeycapKit
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) (*repository.KeycapKit, error)); ok {
-		return returnFunc(ctx, setID, kitID, imagePath)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, repository.KeycapKitImageKey) (*repository.KeycapKit, error)); ok {
+		return returnFunc(ctx, setID, kitID, key)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) *repository.KeycapKit); ok {
-		r0 = returnFunc(ctx, setID, kitID, imagePath)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, repository.KeycapKitImageKey) *repository.KeycapKit); ok {
+		r0 = returnFunc(ctx, setID, kitID, key)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*repository.KeycapKit)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
-		r1 = returnFunc(ctx, setID, kitID, imagePath)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, repository.KeycapKitImageKey) error); ok {
+		r1 = returnFunc(ctx, setID, kitID, key)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -503,12 +503,12 @@ type MockKeycapSetRepository_SetKitImagePath_Call struct {
 //   - ctx context.Context
 //   - setID string
 //   - kitID string
-//   - imagePath string
-func (_e *MockKeycapSetRepository_Expecter) SetKitImagePath(ctx any, setID any, kitID any, imagePath any) *MockKeycapSetRepository_SetKitImagePath_Call {
-	return &MockKeycapSetRepository_SetKitImagePath_Call{Call: _e.mock.On("SetKitImagePath", ctx, setID, kitID, imagePath)}
+//   - key repository.KeycapKitImageKey
+func (_e *MockKeycapSetRepository_Expecter) SetKitImagePath(ctx any, setID any, kitID any, key any) *MockKeycapSetRepository_SetKitImagePath_Call {
+	return &MockKeycapSetRepository_SetKitImagePath_Call{Call: _e.mock.On("SetKitImagePath", ctx, setID, kitID, key)}
 }
 
-func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Run(run func(ctx context.Context, setID string, kitID string, imagePath string)) *MockKeycapSetRepository_SetKitImagePath_Call {
+func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Run(run func(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey)) *MockKeycapSetRepository_SetKitImagePath_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -522,9 +522,9 @@ func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Run(run func(ctx context
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
-		var arg3 string
+		var arg3 repository.KeycapKitImageKey
 		if args[3] != nil {
-			arg3 = args[3].(string)
+			arg3 = args[3].(repository.KeycapKitImageKey)
 		}
 		run(
 			arg0,
@@ -541,7 +541,7 @@ func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Return(keycapKit *reposi
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_SetKitImagePath_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string, imagePath string) (*repository.KeycapKit, error)) *MockKeycapSetRepository_SetKitImagePath_Call {
+func (_c *MockKeycapSetRepository_SetKitImagePath_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKit, error)) *MockKeycapSetRepository_SetKitImagePath_Call {
 	_c.Call.Return(run)
 	return _c
 }

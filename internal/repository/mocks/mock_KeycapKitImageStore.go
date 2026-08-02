@@ -7,6 +7,7 @@ package mocks
 import (
 	"context"
 
+	"github.com/rogueserenity/kbdb/internal/repository"
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -38,7 +39,7 @@ func (_m *MockKeycapKitImageStore) EXPECT() *MockKeycapKitImageStore_Expecter {
 }
 
 // Delete provides a mock function for the type MockKeycapKitImageStore
-func (_mock *MockKeycapKitImageStore) Delete(ctx context.Context, key string) error {
+func (_mock *MockKeycapKitImageStore) Delete(ctx context.Context, key repository.KeycapKitImageKey) error {
 	ret := _mock.Called(ctx, key)
 
 	if len(ret) == 0 {
@@ -46,7 +47,7 @@ func (_mock *MockKeycapKitImageStore) Delete(ctx context.Context, key string) er
 	}
 
 	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeycapKitImageKey) error); ok {
 		r0 = returnFunc(ctx, key)
 	} else {
 		r0 = ret.Error(0)
@@ -61,20 +62,20 @@ type MockKeycapKitImageStore_Delete_Call struct {
 
 // Delete is a helper method to define mock.On call
 //   - ctx context.Context
-//   - key string
+//   - key repository.KeycapKitImageKey
 func (_e *MockKeycapKitImageStore_Expecter) Delete(ctx any, key any) *MockKeycapKitImageStore_Delete_Call {
 	return &MockKeycapKitImageStore_Delete_Call{Call: _e.mock.On("Delete", ctx, key)}
 }
 
-func (_c *MockKeycapKitImageStore_Delete_Call) Run(run func(ctx context.Context, key string)) *MockKeycapKitImageStore_Delete_Call {
+func (_c *MockKeycapKitImageStore_Delete_Call) Run(run func(ctx context.Context, key repository.KeycapKitImageKey)) *MockKeycapKitImageStore_Delete_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 repository.KeycapKitImageKey
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(repository.KeycapKitImageKey)
 		}
 		run(
 			arg0,
@@ -89,13 +90,13 @@ func (_c *MockKeycapKitImageStore_Delete_Call) Return(err error) *MockKeycapKitI
 	return _c
 }
 
-func (_c *MockKeycapKitImageStore_Delete_Call) RunAndReturn(run func(ctx context.Context, key string) error) *MockKeycapKitImageStore_Delete_Call {
+func (_c *MockKeycapKitImageStore_Delete_Call) RunAndReturn(run func(ctx context.Context, key repository.KeycapKitImageKey) error) *MockKeycapKitImageStore_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PresignGet provides a mock function for the type MockKeycapKitImageStore
-func (_mock *MockKeycapKitImageStore) PresignGet(ctx context.Context, key string) (string, error) {
+func (_mock *MockKeycapKitImageStore) PresignGet(ctx context.Context, key repository.KeycapKitImageKey) (string, error) {
 	ret := _mock.Called(ctx, key)
 
 	if len(ret) == 0 {
@@ -104,15 +105,15 @@ func (_mock *MockKeycapKitImageStore) PresignGet(ctx context.Context, key string
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeycapKitImageKey) (string, error)); ok {
 		return returnFunc(ctx, key)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) string); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeycapKitImageKey) string); ok {
 		r0 = returnFunc(ctx, key)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.KeycapKitImageKey) error); ok {
 		r1 = returnFunc(ctx, key)
 	} else {
 		r1 = ret.Error(1)
@@ -127,20 +128,20 @@ type MockKeycapKitImageStore_PresignGet_Call struct {
 
 // PresignGet is a helper method to define mock.On call
 //   - ctx context.Context
-//   - key string
+//   - key repository.KeycapKitImageKey
 func (_e *MockKeycapKitImageStore_Expecter) PresignGet(ctx any, key any) *MockKeycapKitImageStore_PresignGet_Call {
 	return &MockKeycapKitImageStore_PresignGet_Call{Call: _e.mock.On("PresignGet", ctx, key)}
 }
 
-func (_c *MockKeycapKitImageStore_PresignGet_Call) Run(run func(ctx context.Context, key string)) *MockKeycapKitImageStore_PresignGet_Call {
+func (_c *MockKeycapKitImageStore_PresignGet_Call) Run(run func(ctx context.Context, key repository.KeycapKitImageKey)) *MockKeycapKitImageStore_PresignGet_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 repository.KeycapKitImageKey
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(repository.KeycapKitImageKey)
 		}
 		run(
 			arg0,
@@ -155,13 +156,13 @@ func (_c *MockKeycapKitImageStore_PresignGet_Call) Return(url string, err error)
 	return _c
 }
 
-func (_c *MockKeycapKitImageStore_PresignGet_Call) RunAndReturn(run func(ctx context.Context, key string) (string, error)) *MockKeycapKitImageStore_PresignGet_Call {
+func (_c *MockKeycapKitImageStore_PresignGet_Call) RunAndReturn(run func(ctx context.Context, key repository.KeycapKitImageKey) (string, error)) *MockKeycapKitImageStore_PresignGet_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // PresignPut provides a mock function for the type MockKeycapKitImageStore
-func (_mock *MockKeycapKitImageStore) PresignPut(ctx context.Context, key string, contentType string) (string, error) {
+func (_mock *MockKeycapKitImageStore) PresignPut(ctx context.Context, key repository.KeycapKitImageKey, contentType string) (string, error) {
 	ret := _mock.Called(ctx, key, contentType)
 
 	if len(ret) == 0 {
@@ -170,15 +171,15 @@ func (_mock *MockKeycapKitImageStore) PresignPut(ctx context.Context, key string
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (string, error)); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeycapKitImageKey, string) (string, error)); ok {
 		return returnFunc(ctx, key, contentType)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) string); ok {
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeycapKitImageKey, string) string); ok {
 		r0 = returnFunc(ctx, key, contentType)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.KeycapKitImageKey, string) error); ok {
 		r1 = returnFunc(ctx, key, contentType)
 	} else {
 		r1 = ret.Error(1)
@@ -193,21 +194,21 @@ type MockKeycapKitImageStore_PresignPut_Call struct {
 
 // PresignPut is a helper method to define mock.On call
 //   - ctx context.Context
-//   - key string
+//   - key repository.KeycapKitImageKey
 //   - contentType string
 func (_e *MockKeycapKitImageStore_Expecter) PresignPut(ctx any, key any, contentType any) *MockKeycapKitImageStore_PresignPut_Call {
 	return &MockKeycapKitImageStore_PresignPut_Call{Call: _e.mock.On("PresignPut", ctx, key, contentType)}
 }
 
-func (_c *MockKeycapKitImageStore_PresignPut_Call) Run(run func(ctx context.Context, key string, contentType string)) *MockKeycapKitImageStore_PresignPut_Call {
+func (_c *MockKeycapKitImageStore_PresignPut_Call) Run(run func(ctx context.Context, key repository.KeycapKitImageKey, contentType string)) *MockKeycapKitImageStore_PresignPut_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
 			arg0 = args[0].(context.Context)
 		}
-		var arg1 string
+		var arg1 repository.KeycapKitImageKey
 		if args[1] != nil {
-			arg1 = args[1].(string)
+			arg1 = args[1].(repository.KeycapKitImageKey)
 		}
 		var arg2 string
 		if args[2] != nil {
@@ -227,7 +228,7 @@ func (_c *MockKeycapKitImageStore_PresignPut_Call) Return(url string, err error)
 	return _c
 }
 
-func (_c *MockKeycapKitImageStore_PresignPut_Call) RunAndReturn(run func(ctx context.Context, key string, contentType string) (string, error)) *MockKeycapKitImageStore_PresignPut_Call {
+func (_c *MockKeycapKitImageStore_PresignPut_Call) RunAndReturn(run func(ctx context.Context, key repository.KeycapKitImageKey, contentType string) (string, error)) *MockKeycapKitImageStore_PresignPut_Call {
 	_c.Call.Return(run)
 	return _c
 }

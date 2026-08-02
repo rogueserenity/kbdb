@@ -235,7 +235,7 @@ func (s *KeycapSetRepositorySuite) TestCreate_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	// No EXPECT() on PutItem - see repository.ErrNoUserID.
 	ks, err := s.repo.Create(s.T().Context(), repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
@@ -387,7 +387,7 @@ func (s *KeycapSetRepositorySuite) TestUpdate_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on PutItem - see errNoUserID (client.go).
+	// No EXPECT() on PutItem - see repository.ErrNoUserID.
 	ks, err := s.repo.Update(s.T().Context(), repository.KeycapSet{ID: "ks1"})
 
 	s.Require().Error(err)
@@ -406,7 +406,7 @@ func (s *KeycapSetRepositorySuite) TestDelete_Succeeds() {
 }
 
 func (s *KeycapSetRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on DeleteItem - see errNoUserID (client.go).
+	// No EXPECT() on DeleteItem - see repository.ErrNoUserID.
 	err := s.repo.Delete(s.T().Context(), "ks1")
 
 	s.Require().Error(err)
@@ -583,7 +583,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestAddKit_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
+	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
 	kit, err := s.repo.AddKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"})
 
 	s.Require().Error(err)
@@ -670,7 +670,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
 	s.Require().NotNil(kit.ImagePath)
-	s.Equal("keycap-sets/alice/ks1/kits/kit1/image", *kit.ImagePath)
+	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), *kit.ImagePath)
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_KitNotFoundInExistingSet_ReturnsErrNotFound() {
@@ -793,7 +793,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
+	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
 	kit, err := s.repo.UpdateKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"})
 
 	s.Require().Error(err)
@@ -919,7 +919,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
+	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
 	err := s.repo.DeleteKit(s.T().Context(), "ks1", "kit1")
 
 	s.Require().Error(err)
@@ -946,7 +946,7 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_Succeeds() {
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
 	s.Require().NotNil(kit.ImagePath)
-	s.Equal("keycap-sets/alice/ks1/kits/kit1/image", *kit.ImagePath)
+	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), *kit.ImagePath)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_KitNotFoundInExistingSet_ReturnsErrNotFound() {
@@ -1024,7 +1024,7 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflict_RetriesThenSu
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
 	s.Require().NotNil(kit.ImagePath)
-	s.Equal("keycap-sets/alice/ks1/kits/kit1/image", *kit.ImagePath)
+	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), *kit.ImagePath)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflictExhausted_ReturnsError() {
@@ -1060,7 +1060,7 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_PutItemError_Propagates()
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see errNoUserID (client.go).
+	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
 	kit, err := s.repo.SetKitImagePath(s.T().Context(), "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().Error(err)

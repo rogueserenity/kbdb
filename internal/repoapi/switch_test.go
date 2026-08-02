@@ -14,6 +14,11 @@ func intPtr(i int) *int           { return &i }
 func floatPtr(f float64) *float64 { return &f }
 func boolPtr(b bool) *bool        { return &b }
 
+func imageKeyPtr(s string) *repository.KeycapKitImageKey {
+	k := repository.KeycapKitImageKey(s)
+	return &k
+}
+
 func fullRepoSwitch() repository.Switch {
 	return repository.Switch{
 		UserID:       "alice",
