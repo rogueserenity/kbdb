@@ -72,9 +72,11 @@ type KeycapSetRepository interface {
 	// budget.
 	Update(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
-	// Delete removes the caller's keycap set with the given id. Idempotent:
-	// a nonexistent id is not an error.
-	Delete(ctx context.Context, id string) error
+	// Delete removes the caller's keycap set with the given id and returns
+	// the KeycapKitImageKey of every kit that had an image set, so callers
+	// can clean up the corresponding objects in a KeycapKitImageStore.
+	// Returns ErrNotFound if id doesn't exist.
+	Delete(ctx context.Context, id string) ([]KeycapKitImageKey, error)
 
 	// AddKit appends kit to the set's Kits (kit.KitID must already be set)
 	// and returns the stored kit, matching Create's shape for every other
@@ -86,11 +88,13 @@ type KeycapSetRepository interface {
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
 
-	// DeleteKit removes the kit matching kitID from setID's Kits.
-	// Idempotent: a kitID not present in the set is not an error. Returns
-	// ErrNotFound if setID doesn't exist for the owner, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	DeleteKit(ctx context.Context, setID, kitID string) error
+	// DeleteKit removes the kit matching kitID from setID's Kits and
+	// returns the image key that was on it, or nil if it had none.
+	// Idempotent: a kitID not present in the set is not an error, and
+	// returns (nil, nil). Returns ErrNotFound if setID doesn't exist for
+	// the owner, or ErrMutationConflict if concurrent writers exhaust the
+	// retry budget.
+	DeleteKit(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
 
 	// SetKitImagePath sets the kit matching kitID's ImagePath and returns
 	// the updated kit. Returns ErrNotFound if setID or the kit doesn't

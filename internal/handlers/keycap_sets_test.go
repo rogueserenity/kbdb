@@ -731,8 +731,9 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MutationConflict_Returns409()
 type DeleteKeycapSetSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestDeleteKeycapSetSuite(t *testing.T) {
@@ -741,7 +742,8 @@ func TestDeleteKeycapSetSuite(t *testing.T) {
 
 func (s *DeleteKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = DeleteKeycapSet(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = DeleteKeycapSet(s.mockRepo, s.mockImages)
 }
 
 func (s *DeleteKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
@@ -758,7 +760,51 @@ func (s *DeleteKeycapSetSuite) ownerCtx() context.Context {
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
+		Return(nil, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_KitsWithImages_DeletesEachFromImages() {
+	keys := []repository.KeycapKitImageKey{"keycap-sets/alice/ks1/kits/kit1/image", "keycap-sets/alice/ks1/kits/kit2/image"}
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(keys, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, keys[0]).
 		Return(nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, keys[1]).
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_ImageDeleteFails_StillReturns204() {
+	keys := []repository.KeycapKitImageKey{"keycap-sets/alice/ks1/kits/kit1/image"}
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(keys, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, keys[0]).
+		Return(errors.New("s3: access denied"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryNotFound_StillReturns204() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(nil, repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -787,7 +833,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Anonymous_Returns404() {
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
-		Return(errors.New("delete item failed"))
+		Return(nil, errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -1034,8 +1080,9 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_MutationConflict_Returns409()
 type DeleteKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestDeleteKeycapKitSuite(t *testing.T) {
@@ -1044,7 +1091,8 @@ func TestDeleteKeycapKitSuite(t *testing.T) {
 
 func (s *DeleteKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = DeleteKeycapKit(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = DeleteKeycapKit(s.mockRepo, s.mockImages)
 }
 
 func (s *DeleteKeycapKitSuite) newRequest(ctx context.Context) *http.Request {
@@ -1062,7 +1110,39 @@ func (s *DeleteKeycapKitSuite) ownerCtx() context.Context {
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Succeeds() {
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(nil, nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_KitHadImage_DeletesFromImages() {
+	key := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+	s.mockRepo.EXPECT().
+		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(&key, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, key).
 		Return(nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_ImageDeleteFails_StillReturns204() {
+	key := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+	s.mockRepo.EXPECT().
+		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(&key, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, key).
+		Return(errors.New("s3: access denied"))
 
 	req := s.newRequest(s.ownerCtx())
 	rec := httptest.NewRecorder()
@@ -1094,7 +1174,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Anonymous_Returns404() {
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_ParentSetNotFound_Returns404() {
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(repository.ErrNotFound)
+		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx())
 	rec := httptest.NewRecorder()
@@ -1107,7 +1187,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_ParentSetNotFound_Returns404(
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(errors.New("put item failed"))
+		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx())
 	rec := httptest.NewRecorder()
@@ -1120,7 +1200,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_RepositoryError_Returns500() 
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_MutationConflict_Returns409() {
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(repository.ErrMutationConflict)
+		Return(nil, repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx())
 	rec := httptest.NewRecorder()
