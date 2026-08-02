@@ -16,11 +16,6 @@ import (
 // so it's not a substitute for this check.
 var errNoUserID = errors.New("no user id in context")
 
-// errKitMutationExhausted is returned when KeycapSetRepository's set/kit
-// mutation methods lose the version-CAS race maxSetMutationAttempts times
-// in a row - see keycap_set.go's mutateSet.
-var errKitMutationExhausted = errors.New("exhausted kit mutation retry attempts")
-
 // errKitMissingAfterAdd guards AddKit's return value: it looks the just-
 // added kit back up by KitID in the set mutateSet actually persisted,
 // rather than assuming a position (e.g. "the last element") or returning

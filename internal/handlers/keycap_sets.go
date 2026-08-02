@@ -217,6 +217,12 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 			problem.NotFound(w, "resource not found")
 			return
 		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			// Legitimate contention, not a bug - the client's fix is to
+			// retry the whole request, so this isn't logged as an error.
+			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
+			return
+		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("updating keycap set", "error", err)
 			problem.Internal(w, "failed to update keycap set")
@@ -287,6 +293,12 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 		created, err := keycapSetRepo.AddKit(r.Context(), setID, kit)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			// Legitimate contention, not a bug - the client's fix is to
+			// retry the whole request, so this isn't logged as an error.
+			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
 			return
 		}
 		if err != nil {

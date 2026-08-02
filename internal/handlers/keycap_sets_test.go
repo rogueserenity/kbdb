@@ -242,6 +242,26 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *GetKeycapSetSuite) TestGetKeycapSet_MalformedKitPurchaseDate_Returns500NotPanic() {
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	malformedDate := "not-a-date"
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			ID:         "ks1",
+			Visibility: repository.VisibilityPrivate,
+			Kits: []repository.KeycapKit{
+				{KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderDate: &malformedDate}},
+			},
+		}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type CreateKeycapSetSuite struct {
 	suite.Suite
 
@@ -661,6 +681,19 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_RepositoryError_Returns500() 
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MutationConflict_Returns409() {
+	s.mockKeycapSetRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type DeleteKeycapSetSuite struct {
 	suite.Suite
 
@@ -828,5 +861,18 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_RepositoryError_Returns500() 
 	s.handler(rec, req)
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }

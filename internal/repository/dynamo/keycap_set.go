@@ -164,7 +164,7 @@ func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSe
 // read-modify-write as kit mutations (mutateSet) rather than a naive
 // whole-item PutItem - ks (built from the request body) never has Kits or
 // Version set, so overwriting the stored item wholesale would silently
-// wipe every kit on the set and desync Version from mutateKits' CAS loop.
+// wipe every kit on the set and desync Version from mutateSet's CAS loop.
 func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -274,7 +274,7 @@ func (r *KeycapSetRepository) mutateSet(
 		// and retry from a fresh Get.
 	}
 
-	return nil, fmt.Errorf("mutating set %q owner %q: %w", setID, ownerID, errKitMutationExhausted)
+	return nil, fmt.Errorf("mutating set %q owner %q: %w", setID, ownerID, repository.ErrMutationConflict)
 }
 
 func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {

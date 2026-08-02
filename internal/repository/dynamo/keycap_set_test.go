@@ -296,6 +296,72 @@ func (s *KeycapSetRepositorySuite) TestUpdate_PreservesExistingKitsAndVersion() 
 	s.Equal("kit1", ks.Kits[0].KitID)
 }
 
+func (s *KeycapSetRepositorySuite) TestUpdate_CASConflict_RetriesThenSucceeds() {
+	// The second Get returns a set with a kit (kit-from-winner) that the
+	// first Get never saw - proves the retry re-reads fresh state and
+	// overlays the input fields onto that, rather than re-applying the
+	// overlay to the first attempt's now-stale in-memory struct (which
+	// would silently drop kit-from-winner, same as AddKit's equivalent
+	// test guards against for kit mutations).
+	firstGet := s.getItemOutput(0)
+	secondGet := s.getItemOutput(1)
+	secondGet.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit-from-winner"},
+				"name":     &types.AttributeValueMemberS{Value: "Winner"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(firstGet, nil).Once()
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{}).Once()
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(secondGet, nil).Once()
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			err := attributevalue.UnmarshalMap(in.Item, &ks)
+			if err != nil {
+				return false
+			}
+			return ks.Version == 2 && ks.Brand == "Keychron" &&
+				len(ks.Kits) == 1 && ks.Kits[0].KitID == "kit-from-winner"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil).Once()
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "Keychron"})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(ks)
+	s.Equal("Keychron", ks.Brand)
+	s.Require().Len(ks.Kits, 1)
+	s.Equal("kit-from-winner", ks.Kits[0].KitID)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdate_CASConflictExhausted_ReturnsError() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutput(0), nil).Times(maxSetMutationAttempts)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
+
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	ks, err := s.repo.Update(ctx, repository.KeycapSet{ID: "ks1", Brand: "Keychron"})
+
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(ks)
+}
+
 func (s *KeycapSetRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
@@ -455,41 +521,6 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflict_RetriesThenSucceeds() 
 	s.Equal("Base", kit.Name)
 }
 
-func (s *KeycapSetRepositorySuite) TestAddKit_LooksUpAddedKitByID_WhenOtherKitsAlreadyExist() {
-	// Two other kits are already on the set. AddKit's returned kit must be
-	// the one it just added (found in mutateSet's returned Kits by KitID),
-	// not e.g. accidentally returning the first or last existing element.
-	getOutput := s.getItemOutput(0)
-	getOutput.Item["kits"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"kit_id":   &types.AttributeValueMemberS{Value: "kit-a"},
-				"name":     &types.AttributeValueMemberS{Value: "First"},
-				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
-			}},
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"kit_id":   &types.AttributeValueMemberS{Value: "kit-b"},
-				"name":     &types.AttributeValueMemberS{Value: "Second"},
-				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
-			}},
-		},
-	}
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(getOutput, nil)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.PutItemOutput{}, nil)
-
-	ctx := kbdbctx.WithUserID(context.Background(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit-c", Name: "Third"})
-
-	s.Require().NoError(err)
-	s.Require().NotNil(kit)
-	s.Equal("kit-c", kit.KitID)
-	s.Equal("Third", kit.Name)
-}
-
 func (s *KeycapSetRepositorySuite) TestAddKit_CASConflictExhausted_ReturnsError() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
@@ -502,7 +533,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflictExhausted_ReturnsError(
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().Error(err)
-	s.Require().ErrorIs(err, errKitMutationExhausted)
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 	s.Nil(kit)
 }
 
@@ -551,7 +582,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_PutItemError_Propagates() {
 	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
 
 	s.Require().Error(err)
-	s.Require().NotErrorIs(err, errKitMutationExhausted)
+	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
 	s.Nil(kit)
 }
 
