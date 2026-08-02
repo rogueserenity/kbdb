@@ -16,6 +16,10 @@ import (
 // so it's not a substitute for this check.
 var errNoUserID = errors.New("no user id in context")
 
+// errKitMissingAfterAdd means AddKit's just-appended kit isn't present by
+// KitID in the set mutateSet returned - should be unreachable in practice.
+var errKitMissingAfterAdd = errors.New("kit not found in set after AddKit")
+
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.
 type dynamoAPI interface {

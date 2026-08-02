@@ -216,6 +216,58 @@ var _ = Describe("Updating a keycap set", func() {
 		})
 	})
 
+	Context("given an existing keycap set has a kit", func() {
+		var keycapSetID string
+
+		BeforeEach(func(ctx SpecContext) {
+			createResp, err := client.Create(ctx, ownerID, ownerToken,
+				`{"brand":"GMK","name":"Laser","visibility":"private"}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(createResp.StatusCode).To(Equal(http.StatusCreated))
+
+			var created struct {
+				ID string `json:"id"`
+			}
+			Expect(json.NewDecoder(createResp.Body).Decode(&created)).To(Succeed())
+			keycapSetID = created.ID
+
+			kitResp, err := client.CreateKit(ctx, ownerID, keycapSetID, ownerToken, `{"name":"Base"}`)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(kitResp.StatusCode).To(Equal(http.StatusCreated))
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		Context("given an update to one of the set's own fields", func() {
+			When("updating the keycap set", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, keycapSetID, ownerToken,
+						`{"brand":"GMK","name":"Laser V2","visibility":"private"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("preserves the kit rather than wiping it, since Update must not clobber Kits", func(ctx SpecContext) {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+
+					var got struct {
+						Kits []struct {
+							Name string `json:"name"`
+						} `json:"kits"`
+					}
+					Expect(json.NewDecoder(getResp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Kits).To(HaveLen(1))
+					Expect(got.Kits[0].Name).To(Equal("Base"))
+				})
+			})
+		})
+	})
+
 	Context("given the keycap set does not exist", func() {
 		Context("given the caller is the owner", func() {
 			When("updating the keycap set", func() {

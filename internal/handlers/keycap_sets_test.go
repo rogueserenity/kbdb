@@ -242,6 +242,26 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *GetKeycapSetSuite) TestGetKeycapSet_MalformedKitPurchaseDate_Returns500NotPanic() {
+	ctx := kbdbctx.WithUserID(context.Background(), "alice")
+	malformedDate := "not-a-date"
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			ID:         "ks1",
+			Visibility: repository.VisibilityPrivate,
+			Kits: []repository.KeycapKit{
+				{KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderDate: &malformedDate}},
+			},
+		}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type CreateKeycapSetSuite struct {
 	suite.Suite
 
@@ -661,6 +681,19 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_RepositoryError_Returns500() 
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MutationConflict_Returns409() {
+	s.mockKeycapSetRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type DeleteKeycapSetSuite struct {
 	suite.Suite
 
@@ -726,5 +759,120 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() 
 	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type CreateKeycapKitSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockKeycapSetRepository
+	handler  http.HandlerFunc
+}
+
+func TestCreateKeycapKitSuite(t *testing.T) {
+	suite.Run(t, new(CreateKeycapKitSuite))
+}
+
+func (s *CreateKeycapKitSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.handler = CreateKeycapKit(s.mockRepo)
+}
+
+func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keycap-sets/ks1/kits", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "ks1")
+	return req
+}
+
+func (s *CreateKeycapKitSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.MatchedBy(func(k repository.KeycapKit) bool {
+			return k.KitID != "" && k.Name == "Base"
+		})).
+		Return(&repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got api.KeycapKit
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("kit1", got.KitId)
+	s.Equal("Base", got.Name)
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	req := s.newRequest(ctx, `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Anonymous_Returns404() {
+	req := s.newRequest(context.Background(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ParentSetNotFound_Returns404() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.Anything).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }

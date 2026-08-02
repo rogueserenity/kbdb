@@ -71,3 +71,10 @@ func (c *KeycapSetsClient) Update(ctx context.Context, ownerID, id, token, body 
 func (c *KeycapSetsClient) Delete(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keycap-sets/"+id, token, nil)
 }
+
+// CreateKit calls POST /v1/users/{ownerID}/keycap-sets/{setID}/kits with
+// body as the raw JSON request body and the given bearer token (empty for
+// an anonymous request). The caller owns closing resp.Body.
+func (c *KeycapSetsClient) CreateKit(ctx context.Context, ownerID, setID, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/keycap-sets/"+setID+"/kits", token, bytes.NewBufferString(body))
+}
