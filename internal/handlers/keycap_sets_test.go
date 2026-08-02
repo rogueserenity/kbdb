@@ -992,3 +992,102 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_MutationConflict_Returns409()
 	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteKeycapKitSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockKeycapSetRepository
+	handler  http.HandlerFunc
+}
+
+func TestDeleteKeycapKitSuite(t *testing.T) {
+	suite.Run(t, new(DeleteKeycapKitSuite))
+}
+
+func (s *DeleteKeycapKitSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.handler = DeleteKeycapKit(s.mockRepo)
+}
+
+func (s *DeleteKeycapKitSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keycap-sets/ks1/kits/kit1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("id", "ks1")
+	req.SetPathValue("kitId", "kit1")
+	return req
+}
+
+func (s *DeleteKeycapKitSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(context.Background(), "alice")
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Succeeds() {
+	s.mockRepo.EXPECT().
+		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(context.Background(), "bob")
+
+	req := s.newRequest(ctx)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Anonymous_Returns404() {
+	req := s.newRequest(context.Background())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_ParentSetNotFound_Returns404() {
+	s.mockRepo.EXPECT().
+		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_MutationConflict_Returns409() {
+	s.mockRepo.EXPECT().
+		DeleteKit(mock.Anything, "ks1", "kit1").
+		Return(repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

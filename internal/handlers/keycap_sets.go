@@ -376,3 +376,39 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
+
+// DeleteKeycapKit reads the {userId}, {id} (parent set), and {kitId} path
+// values and requires an authenticated caller. userId must be the caller's
+// own subject; deleting a kit from another user's set, or a set that
+// doesn't exist, both return 404. Idempotent: a kitId not present in the
+// set is not an error.
+func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		setID := r.PathValue("id")
+		kitID := r.PathValue("kitId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		err := keycapSetRepo.DeleteKit(r.Context(), setID, kitID)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("keycap set mutation conflict", "set_id", setID)
+			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("deleting keycap kit", "error", err, "set_id", setID, "kit_id", kitID)
+			problem.Internal(w, "failed to delete kit")
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

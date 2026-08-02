@@ -20,6 +20,11 @@ var errNoUserID = errors.New("no user id in context")
 // KitID in the set mutateSet returned - should be unreachable in practice.
 var errKitMissingAfterAdd = errors.New("kit not found in set after AddKit")
 
+// errKitAlreadyAbsent signals DeleteKit's mutateSet closure found no
+// matching kit, so mutateSet should skip its write - DeleteKit itself
+// treats this as success, not an error.
+var errKitAlreadyAbsent = errors.New("kit already absent from set")
+
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.
 type dynamoAPI interface {

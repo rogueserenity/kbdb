@@ -442,12 +442,16 @@ paths:
       operationId: deleteKeycapKit
       description: >
         userId must be the caller's own subject; deleting a kit from
-        another user's keycap set always returns 404.
+        another user's keycap set, or from a keycap set that doesn't exist,
+        both return 404. Idempotent — deleting a kitId not present in the
+        set is not an error.
       responses:
         "204":
           description: Deleted.
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
