@@ -1,6 +1,8 @@
 package keycapsets_test
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -65,6 +67,71 @@ var _ = Describe("Deleting a keycap set", func() {
 					getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(getResp.StatusCode).To(Equal(http.StatusNotFound))
+				})
+			})
+		})
+
+		Context("given the set has a kit with an image", func() {
+			var imageGetURL string
+
+			BeforeEach(func(ctx SpecContext) {
+				createResp, err := client.CreateKit(ctx, ownerID, keycapSetID, ownerToken, `{"name":"Base"}`)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(createResp.StatusCode).To(Equal(http.StatusCreated))
+
+				var created struct {
+					KitID string `json:"kit_id"`
+				}
+				Expect(json.NewDecoder(createResp.Body).Decode(&created)).To(Succeed())
+
+				setResp, err := client.SetKitImage(ctx, ownerID, keycapSetID, created.KitID, ownerToken, `{"content_type":"image/png"}`)
+				Expect(err).NotTo(HaveOccurred())
+				Expect(setResp.StatusCode).To(Equal(http.StatusCreated))
+
+				var upload struct {
+					UploadURL string `json:"upload_url"`
+				}
+				Expect(json.NewDecoder(setResp.Body).Decode(&upload)).To(Succeed())
+
+				putResp, err := api.DoPresigned(ctx, http.MethodPut, upload.UploadURL, "image/png", bytes.NewReader([]byte("fake-image-bytes")))
+				Expect(err).NotTo(HaveOccurred())
+				Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+				getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+
+				var set struct {
+					Kits []struct {
+						Image *struct {
+							URL string `json:"url"`
+						} `json:"image"`
+					} `json:"kits"`
+				}
+				Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+				Expect(set.Kits).To(HaveLen(1))
+				Expect(set.Kits[0].Image).NotTo(BeNil())
+				imageGetURL = set.Kits[0].Image.URL
+			})
+
+			When("deleting the keycap set", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Delete(ctx, ownerID, keycapSetID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusNoContent {
+						deleted = true
+					}
+				})
+
+				It("returns 204 and the kit's image is actually gone from S3", func(ctx SpecContext) {
+					Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+					getImageResp, err := api.DoPresigned(ctx, http.MethodGet, imageGetURL, "", nil)
+					Expect(err).NotTo(HaveOccurred())
+					// Real S3 returns 403 (not 404) for GetObject against a
+					// missing key when the caller lacks s3:ListBucket;
+					// LocalStack returns 404.
+					Expect(getImageResp.StatusCode).To(BeElementOf(http.StatusNotFound, http.StatusForbidden))
 				})
 			})
 		})

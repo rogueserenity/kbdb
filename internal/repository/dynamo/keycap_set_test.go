@@ -395,18 +395,69 @@ func (s *KeycapSetRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 func (s *KeycapSetRepositorySuite) TestDelete_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{Attributes: s.getItemOutput(0).Item}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	imageKeys, err := s.repo.Delete(ctx, "ks1")
+
+	s.Require().NoError(err)
+	s.Empty(imageKeys)
+}
+
+func (s *KeycapSetRepositorySuite) TestDelete_KitsWithImages_ReturnsTheirImageKeys() {
+	out := s.getItemOutput(0)
+	out.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":     &types.AttributeValueMemberS{Value: "kit1"},
+				"name":       &types.AttributeValueMemberS{Value: "Base"},
+				"image_path": &types.AttributeValueMemberS{Value: "keycap-sets/alice/ks1/kits/kit1/image"},
+				"purchase":   &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit2"},
+				"name":     &types.AttributeValueMemberS{Value: "Extension"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":     &types.AttributeValueMemberS{Value: "kit3"},
+				"name":       &types.AttributeValueMemberS{Value: "Novelties"},
+				"image_path": &types.AttributeValueMemberS{Value: "keycap-sets/alice/ks1/kits/kit3/image"},
+				"purchase":   &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.DeleteItemOutput{Attributes: out.Item}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	imageKeys, err := s.repo.Delete(ctx, "ks1")
+
+	s.Require().NoError(err)
+	s.Require().Len(imageKeys, 2)
+	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), imageKeys[0])
+	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit3/image"), imageKeys[1])
+}
+
+func (s *KeycapSetRepositorySuite) TestDelete_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().
+		DeleteItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.DeleteItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.Delete(ctx, "ks1")
+	imageKeys, err := s.repo.Delete(ctx, "ks1")
 
-	s.Require().NoError(err)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(imageKeys)
 }
 
 func (s *KeycapSetRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
-	err := s.repo.Delete(s.T().Context(), "ks1")
+	imageKeys, err := s.repo.Delete(s.T().Context(), "ks1")
 
 	s.Require().Error(err)
+	s.Nil(imageKeys)
 }
 
 func (s *KeycapSetRepositorySuite) TestDelete_DeleteItemError_Propagates() {
@@ -415,9 +466,10 @@ func (s *KeycapSetRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.Delete(ctx, "ks1")
+	imageKeys, err := s.repo.Delete(ctx, "ks1")
 
 	s.Require().Error(err)
+	s.Nil(imageKeys)
 }
 
 func (s *KeycapSetRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutput {
@@ -813,7 +865,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_NoUserIDInContext_ReturnsError(
 func (s *KeycapSetRepositorySuite) TestDeleteKit_Succeeds() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutputWithKit(), nil)
+		Return(s.getItemOutputWithKitImage(), nil)
 	s.mockClient.EXPECT().
 		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
 			var ks repository.KeycapSet
@@ -825,9 +877,11 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_Succeeds() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+	cleared, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().NoError(err)
+	s.Require().NotNil(cleared)
+	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), *cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_KitAlreadyAbsent_SucceedsWithoutWriting() {
@@ -836,9 +890,10 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_KitAlreadyAbsent_SucceedsWithou
 		Return(s.getItemOutputWithKit(), nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.DeleteKit(ctx, "ks1", "no-such-kit")
+	cleared, err := s.repo.DeleteKit(ctx, "ks1", "no-such-kit")
 
 	s.Require().NoError(err)
+	s.Nil(cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_ParentSetNotFound_ReturnsErrNotFound() {
@@ -847,9 +902,10 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_ParentSetNotFound_ReturnsErrNot
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.DeleteKit(ctx, "missing", "kit1")
+	cleared, err := s.repo.DeleteKit(ctx, "missing", "kit1")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflict_RetriesThenSucceeds() {
@@ -893,9 +949,10 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflict_RetriesThenSucceeds
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+	cleared, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().NoError(err)
+	s.Nil(cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflictExhausted_ReturnsError() {
@@ -907,10 +964,11 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_CASConflictExhausted_ReturnsErr
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+	cleared, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_PutItemError_Propagates() {
@@ -922,16 +980,18 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_PutItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+	cleared, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError() {
-	err := s.repo.DeleteKit(s.T().Context(), "ks1", "kit1")
+	cleared, err := s.repo.DeleteKit(s.T().Context(), "ks1", "kit1")
 
 	s.Require().Error(err)
+	s.Nil(cleared)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_Succeeds() {

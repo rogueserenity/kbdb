@@ -191,24 +191,41 @@ func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSe
 	return updated, nil
 }
 
-func (r *KeycapSetRepository) Delete(ctx context.Context, id string) error {
+func (r *KeycapSetRepository) Delete(ctx context.Context, id string) ([]repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("deleting keycap set %q: %w", id, repository.ErrNoUserID)
+		return nil, fmt.Errorf("deleting keycap set %q: %w", id, repository.ErrNoUserID)
 	}
 
-	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+	out, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
 		Key: map[string]types.AttributeValue{
 			"user_id": &types.AttributeValueMemberS{Value: ownerID},
 			"id":      &types.AttributeValueMemberS{Value: id},
 		},
+		ReturnValues: types.ReturnValueAllOld,
 	})
 	if err != nil {
-		return fmt.Errorf("deleting keycap set %q for owner %q: %w", id, ownerID, err)
+		return nil, fmt.Errorf("deleting keycap set %q for owner %q: %w", id, ownerID, err)
 	}
 
-	return nil
+	if len(out.Attributes) == 0 {
+		return nil, repository.ErrNotFound
+	}
+
+	var deleted repository.KeycapSet
+	if err := attributevalue.UnmarshalMap(out.Attributes, &deleted); err != nil {
+		return nil, fmt.Errorf("unmarshalling deleted keycap set %q for owner %q: %w", id, ownerID, err)
+	}
+
+	var imageKeys []repository.KeycapKitImageKey
+	for _, kit := range deleted.Kits {
+		if kit.ImagePath != nil {
+			imageKeys = append(imageKeys, *kit.ImagePath)
+		}
+	}
+
+	return imageKeys, nil
 }
 
 const maxSetMutationAttempts = 3
@@ -334,25 +351,30 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 	return &updated.Kits[idx], nil
 }
 
-func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) error {
+func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) (*repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("deleting kit from keycap set %q: %w", setID, repository.ErrNoUserID)
+		return nil, fmt.Errorf("deleting kit from keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
+	var cleared *repository.KeycapKitImageKey
 	_, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
 		idx := slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
 		if idx == -1 {
 			return errKitAlreadyAbsent
 		}
+		cleared = ks.Kits[idx].ImagePath
 		ks.Kits = slices.Delete(ks.Kits, idx, idx+1)
 		return nil
 	})
 	if errors.Is(err, errKitAlreadyAbsent) {
-		return nil
+		return nil, nil //nolint:nilnil // no such kit already absent is a valid, expected result
+	}
+	if err != nil {
+		return nil, err
 	}
 
-	return err
+	return cleared, nil
 }
 
 func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKit, error) {

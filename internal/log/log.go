@@ -19,6 +19,7 @@ const (
 	SwitchID       = "switch_id"
 	KeycapSetID    = "keycap_set_id"
 	KeycapKitID    = "keycap_kit_id"
+	KeycapKitImage = "keycap_kit_image"
 	LookupCategory = "lookup_category"
 )
 

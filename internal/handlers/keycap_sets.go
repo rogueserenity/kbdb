@@ -246,8 +246,11 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, lookupRepo re
 // DeleteKeycapSet reads the {userId} and {keycapSetId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keycap set returns 404, not 403, to avoid revealing it
-// exists.
-func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+// exists. Idempotent: deleting a set that doesn't exist still returns 204.
+// Any kit images the set had are removed from images best-effort - a
+// failed image delete is logged but doesn't fail the response, since the
+// keycap set itself has already been deleted by that point.
+func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keycapSetId")
@@ -257,10 +260,17 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 
-		if err := keycapSetRepo.Delete(r.Context(), id); err != nil {
+		imageKeys, err := keycapSetRepo.Delete(r.Context(), id)
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(r.Context()).Error("deleting keycap set", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to delete keycap set")
 			return
+		}
+
+		for _, key := range imageKeys {
+			if err := images.Delete(r.Context(), key); err != nil {
+				log.FromContext(r.Context()).Warn("deleting keycap kit image object after set delete", log.Error, err, log.KeycapSetID, id, log.KeycapKitImage, key)
+			}
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -381,8 +391,10 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 // values and requires an authenticated caller. userId must be the caller's
 // own subject; deleting a kit from another user's set, or a set that
 // doesn't exist, both return 404. Idempotent: a kitId not present in the
-// set is not an error.
-func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerFunc {
+// set is not an error. If the kit had an image, it's removed from images
+// best-effort - a failed image delete is logged but doesn't fail the
+// response, since the kit itself has already been deleted by that point.
+func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		setID := r.PathValue("keycapSetId")
@@ -393,7 +405,7 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			return
 		}
 
-		err := keycapSetRepo.DeleteKit(r.Context(), setID, kitID)
+		cleared, err := keycapSetRepo.DeleteKit(r.Context(), setID, kitID)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
 			return
@@ -407,6 +419,12 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository) http.HandlerF
 			log.FromContext(r.Context()).Error("deleting keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Internal(w, "failed to delete kit")
 			return
+		}
+
+		if cleared != nil {
+			if err := images.Delete(r.Context(), *cleared); err != nil {
+				log.FromContext(r.Context()).Warn("deleting keycap kit image object after kit delete", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID, log.KeycapKitImage, *cleared)
+			}
 		}
 
 		w.WriteHeader(http.StatusNoContent)
