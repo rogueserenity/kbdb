@@ -69,7 +69,7 @@ func main() {
 			o.UsePathStyle = true
 		}
 	})
-	imageStore := imagestore.NewImageStore(s3Client, cfg.ImagesBucketName)
+	imageStore := imagestore.NewImageStore(s3Client, s3.NewPresignClient(s3Client), cfg.ImagesBucketName)
 
 	handler := router.New(verifier, lookupRepo, switchRepo, keyboardRepo, keycapSetRepo, imageStore, cfg.OIDCIssuerURL, Version)
 
