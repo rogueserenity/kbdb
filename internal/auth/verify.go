@@ -6,6 +6,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
 )
@@ -17,6 +18,8 @@ type Claims struct {
 	Subject string
 	// Groups is the token's cognito:groups claim. Empty if absent.
 	Groups []string
+	// Expiry is the token's exp claim.
+	Expiry time.Time
 }
 
 // AdminsGroup is the cognito:groups value that grants admin access (see
@@ -67,5 +70,5 @@ func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, e
 	var groups cognitoGroupsClaims
 	_ = idToken.Claims(&groups)
 
-	return &Claims{Subject: idToken.Subject, Groups: groups.Groups}, nil
+	return &Claims{Subject: idToken.Subject, Groups: groups.Groups, Expiry: idToken.Expiry}, nil
 }

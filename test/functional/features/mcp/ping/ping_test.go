@@ -1,7 +1,9 @@
 package ping_test
 
 import (
-	gomcp "github.com/mark3labs/mcp-go/mcp"
+	"net/http"
+
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -13,12 +15,14 @@ import (
 var _ = Describe("Ping", func() {
 	var (
 		client *api.MCPClient
-		resp   *api.RPCResponse
+		result *sdkmcp.CallToolResult
+		err    error
 	)
 
 	BeforeEach(func() {
 		client = nil
-		resp = nil
+		result = nil
+		err = nil
 	})
 
 	Context("given no bearer token", func() {
@@ -26,34 +30,15 @@ var _ = Describe("Ping", func() {
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
 		})
 
-		When("the initialize handshake is performed", func() {
-			BeforeEach(func(ctx SpecContext) {
-				var err error
-				resp, err = client.Initialize(ctx)
-				Expect(err).NotTo(HaveOccurred())
-			})
-
-			It("succeeds", func() {
-				By("returning no protocol-level error")
-				Expect(resp.Error).To(BeEmpty())
-			})
-		})
-
 		When("the ping tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				_, err := client.Initialize(ctx)
-				Expect(err).NotTo(HaveOccurred())
-
-				resp, err = client.CallTool(ctx, "ping", map[string]any{})
-				Expect(err).NotTo(HaveOccurred())
+				result, err = client.CallTool(ctx, "ping", map[string]any{})
 			})
 
-			It("rejects the call", func() {
-				var result gomcp.CallToolResult
-				Expect(result.UnmarshalJSON(resp.Result)).To(Succeed())
-
-				By("returning an MCP-shaped error result, not a bare HTTP failure")
-				Expect(result.IsError).To(BeTrue())
+			It("rejects the call with a real HTTP 401, per the spec's authorization error handling requirements", func() {
+				Expect(result).To(BeNil())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(http.StatusText(http.StatusUnauthorized)))
 			})
 		})
 	})
@@ -65,25 +50,13 @@ var _ = Describe("Ping", func() {
 
 		When("the ping tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				_, err := client.Initialize(ctx)
-				Expect(err).NotTo(HaveOccurred())
-
-				resp, err = client.CallTool(ctx, "ping", map[string]any{})
-				Expect(err).NotTo(HaveOccurred())
+				result, err = client.CallTool(ctx, "ping", map[string]any{})
 			})
 
-			It("rejects the call", func() {
-				var result gomcp.CallToolResult
-				Expect(result.UnmarshalJSON(resp.Result)).To(Succeed())
-
-				By("returning an MCP-shaped error result, not a bare HTTP failure")
-				Expect(result.IsError).To(BeTrue())
-
-				By("returning the invalid-token error, not the missing-token one")
-				Expect(result.Content).To(HaveLen(1))
-				textContent, ok := result.Content[0].(gomcp.TextContent)
-				Expect(ok).To(BeTrue())
-				Expect(textContent.Text).To(Equal("invalid token"))
+			It("rejects the call with a real HTTP 401, not silently falling back to anonymous", func() {
+				Expect(result).To(BeNil())
+				Expect(err).To(HaveOccurred())
+				Expect(err.Error()).To(ContainSubstring(http.StatusText(http.StatusUnauthorized)))
 			})
 		})
 	})
@@ -97,16 +70,11 @@ var _ = Describe("Ping", func() {
 
 		When("the ping tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				_, err := client.Initialize(ctx)
-				Expect(err).NotTo(HaveOccurred())
-
-				resp, err = client.CallTool(ctx, "ping", map[string]any{})
-				Expect(err).NotTo(HaveOccurred())
+				result, err = client.CallTool(ctx, "ping", map[string]any{})
 			})
 
 			It("succeeds", func() {
-				var result gomcp.CallToolResult
-				Expect(result.UnmarshalJSON(resp.Result)).To(Succeed())
+				Expect(err).NotTo(HaveOccurred())
 
 				By("not returning an error result")
 				Expect(result.IsError).To(BeFalse())
@@ -115,7 +83,7 @@ var _ = Describe("Ping", func() {
 				Expect(result.Content).To(HaveLen(1))
 
 				By("returning the trivial OK text")
-				textContent, ok := result.Content[0].(gomcp.TextContent)
+				textContent, ok := result.Content[0].(*sdkmcp.TextContent)
 				Expect(ok).To(BeTrue())
 				Expect(textContent.Text).To(Equal("ok"))
 			})
