@@ -21,8 +21,8 @@ type Lookup struct {
 type LookupRepository interface {
 	ListCategories(ctx context.Context) ([]string, error)
 	GetCategory(ctx context.Context, category string) (*Lookup, error)
-	CreateCategory(ctx context.Context, category string, values []any) (*Lookup, error)
-	ReplaceCategory(ctx context.Context, category string, values []any) (*Lookup, error)
+	CreateCategory(ctx context.Context, lookup Lookup) (*Lookup, error)
+	ReplaceCategory(ctx context.Context, lookup Lookup) (*Lookup, error)
 	DeleteCategory(ctx context.Context, category string) error
 }
 
@@ -38,12 +38,12 @@ type CaseMountTypeValue struct {
 	SupportsDurometer bool   `json:"supports_durometer"`
 }
 
-// ParseStrings errors on a non-string entry instead of skipping it: that
-// means the category's data isn't shaped the way a caller expects, not that
-// a value is merely unapproved.
-func ParseStrings(values []any) ([]string, error) {
-	out := make([]string, 0, len(values))
-	for i, v := range values {
+// Strings errors on a non-string entry instead of skipping it: that means
+// the category's data isn't shaped the way a caller expects, not that a
+// value is merely unapproved.
+func (l Lookup) Strings() ([]string, error) {
+	out := make([]string, 0, len(l.Values))
+	for i, v := range l.Values {
 		s, ok := v.(string)
 		if !ok {
 			return nil, fmt.Errorf("value at index %d is not a string: %#v", i, v)
@@ -54,8 +54,8 @@ func ParseStrings(values []any) ([]string, error) {
 	return out, nil
 }
 
-func ParseLayoutValues(values []any) ([]LayoutValue, error) {
-	out, err := parseObjects[LayoutValue](values)
+func (l Lookup) LayoutValues() ([]LayoutValue, error) {
+	out, err := parseObjects[LayoutValue](l.Values)
 	if err != nil {
 		return nil, err
 	}
@@ -69,8 +69,8 @@ func ParseLayoutValues(values []any) ([]LayoutValue, error) {
 	return out, nil
 }
 
-func ParseCaseMountTypeValues(values []any) ([]CaseMountTypeValue, error) {
-	out, err := parseObjects[CaseMountTypeValue](values)
+func (l Lookup) CaseMountTypeValues() ([]CaseMountTypeValue, error) {
+	out, err := parseObjects[CaseMountTypeValue](l.Values)
 	if err != nil {
 		return nil, err
 	}

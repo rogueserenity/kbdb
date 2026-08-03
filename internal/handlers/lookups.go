@@ -42,19 +42,19 @@ func decodeValues(w http.ResponseWriter, r *http.Request) (values []any, ok bool
 	return repoapi.LookupInputToRepo(in), true
 }
 
-// validateLookupValues checks that values is shaped the way category
-// requires, writing a 400 and returning false if not.
-func validateLookupValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, category string, values []any) (ok bool) {
-	switch category {
+// validateLookupValues checks that candidate.Values is shaped the way
+// candidate.Category requires, writing a 400 and returning false if not.
+func validateLookupValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, candidate repository.Lookup) (ok bool) {
+	switch candidate.Category {
 	case repository.CategoryKeyboardLayout:
-		return validateKeyboardLayoutValues(ctx, w, repo, values)
+		return validateKeyboardLayoutValues(ctx, w, repo, candidate)
 	case repository.CategoryBuildCaseMountType:
-		if _, err := repository.ParseCaseMountTypeValues(values); err != nil {
+		if _, err := candidate.CaseMountTypeValues(); err != nil {
 			problem.BadRequest(w, fmt.Sprintf("values: %s", err))
 			return false
 		}
 	default:
-		if _, err := repository.ParseStrings(values); err != nil {
+		if _, err := candidate.Strings(); err != nil {
 			problem.BadRequest(w, fmt.Sprintf("values: %s", err))
 			return false
 		}
@@ -66,8 +66,8 @@ func validateLookupValues(ctx context.Context, w http.ResponseWriter, repo repos
 // validateKeyboardLayoutValues also cross-checks each entry's sizes against
 // CategoryKeyboardSize, so a keyboard can't later pass its layout-vs-size
 // check against a size that was never itself approved.
-func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, values []any) (ok bool) {
-	layouts, err := repository.ParseLayoutValues(values)
+func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, candidate repository.Lookup) (ok bool) {
+	layouts, err := candidate.LayoutValues()
 	if err != nil {
 		problem.BadRequest(w, fmt.Sprintf("values: %s", err))
 		return false
@@ -83,7 +83,7 @@ func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, re
 		problem.Internal(w, "failed to validate values")
 		return false
 	default:
-		approvedSizes, err = repository.ParseStrings(sizeLookup.Values)
+		approvedSizes, err = sizeLookup.Strings()
 		if err != nil {
 			log.FromContext(ctx).Error("parsing keyboard_size values", log.Error, err)
 			problem.Internal(w, "failed to validate values")
@@ -175,12 +175,13 @@ func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		candidate := repository.Lookup{Category: category, Values: values}
 
-		if !validateLookupValues(r.Context(), w, repo, category, values) {
+		if !validateLookupValues(r.Context(), w, repo, candidate) {
 			return
 		}
 
-		lookup, err := repo.CreateCategory(r.Context(), category, values)
+		lookup, err := repo.CreateCategory(r.Context(), candidate)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			problem.Conflict(w, "category already exists")
 			return
@@ -208,12 +209,13 @@ func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
 		if !ok {
 			return
 		}
+		candidate := repository.Lookup{Category: category, Values: values}
 
-		if !validateLookupValues(r.Context(), w, repo, category, values) {
+		if !validateLookupValues(r.Context(), w, repo, candidate) {
 			return
 		}
 
-		lookup, err := repo.ReplaceCategory(r.Context(), category, values)
+		lookup, err := repo.ReplaceCategory(r.Context(), candidate)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
 			return

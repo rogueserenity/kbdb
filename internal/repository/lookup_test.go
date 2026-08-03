@@ -16,53 +16,53 @@ func TestParseLookupValuesSuite(t *testing.T) {
 	suite.Run(t, new(ParseLookupValuesSuite))
 }
 
-func (s *ParseLookupValuesSuite) TestParseStrings_AllStrings_Succeeds() {
-	got, err := repository.ParseStrings([]any{"a", "b"})
+func (s *ParseLookupValuesSuite) TestStrings_AllStrings_Succeeds() {
+	got, err := repository.Lookup{Values: []any{"a", "b"}}.Strings()
 	s.Require().NoError(err)
 	s.Equal([]string{"a", "b"}, got)
 }
 
-func (s *ParseLookupValuesSuite) TestParseStrings_NonStringEntry_Errors() {
-	_, err := repository.ParseStrings([]any{"a", 1})
+func (s *ParseLookupValuesSuite) TestStrings_NonStringEntry_Errors() {
+	_, err := repository.Lookup{Values: []any{"a", 1}}.Strings()
 	s.Require().Error(err)
 }
 
-func (s *ParseLookupValuesSuite) TestParseLayoutValues_Valid_Succeeds() {
-	got, err := repository.ParseLayoutValues([]any{
+func (s *ParseLookupValuesSuite) TestLayoutValues_Valid_Succeeds() {
+	got, err := repository.Lookup{Values: []any{
 		map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}},
-	})
+	}}.LayoutValues()
 	s.Require().NoError(err)
 	s.Equal([]repository.LayoutValue{{Name: "WK", Sizes: []string{"60%", "65%"}}}, got)
 }
 
-func (s *ParseLookupValuesSuite) TestParseLayoutValues_WrongShape_Errors() {
-	_, err := repository.ParseLayoutValues([]any{"WK"})
+func (s *ParseLookupValuesSuite) TestLayoutValues_WrongShape_Errors() {
+	_, err := repository.Lookup{Values: []any{"WK"}}.LayoutValues()
 	s.Require().Error(err)
 }
 
-func (s *ParseLookupValuesSuite) TestParseLayoutValues_MissingName_Errors() {
-	_, err := repository.ParseLayoutValues([]any{
+func (s *ParseLookupValuesSuite) TestLayoutValues_MissingName_Errors() {
+	_, err := repository.Lookup{Values: []any{
 		map[string]any{"sizes": []any{"60%"}},
-	})
+	}}.LayoutValues()
 	s.Require().Error(err)
 }
 
-func (s *ParseLookupValuesSuite) TestParseCaseMountTypeValues_Valid_Succeeds() {
-	got, err := repository.ParseCaseMountTypeValues([]any{
+func (s *ParseLookupValuesSuite) TestCaseMountTypeValues_Valid_Succeeds() {
+	got, err := repository.Lookup{Values: []any{
 		map[string]any{"name": "Gasket Mount", "supports_durometer": true},
-	})
+	}}.CaseMountTypeValues()
 	s.Require().NoError(err)
 	s.Equal([]repository.CaseMountTypeValue{{Name: "Gasket Mount", SupportsDurometer: true}}, got)
 }
 
-func (s *ParseLookupValuesSuite) TestParseCaseMountTypeValues_WrongShape_Errors() {
-	_, err := repository.ParseCaseMountTypeValues([]any{"Gasket Mount"})
+func (s *ParseLookupValuesSuite) TestCaseMountTypeValues_WrongShape_Errors() {
+	_, err := repository.Lookup{Values: []any{"Gasket Mount"}}.CaseMountTypeValues()
 	s.Require().Error(err)
 }
 
-func (s *ParseLookupValuesSuite) TestParseCaseMountTypeValues_MissingName_Errors() {
-	_, err := repository.ParseCaseMountTypeValues([]any{
+func (s *ParseLookupValuesSuite) TestCaseMountTypeValues_MissingName_Errors() {
+	_, err := repository.Lookup{Values: []any{
 		map[string]any{"supports_durometer": true},
-	})
+	}}.CaseMountTypeValues()
 	s.Require().Error(err)
 }

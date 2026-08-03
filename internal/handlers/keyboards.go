@@ -6,13 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 
 	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -105,73 +105,17 @@ func decodeKeyboardInput(w http.ResponseWriter, r *http.Request) (kb repository.
 // validateKeyboardLookups writes a 400 listing every invalid field if any
 // check fails. An unset (nil) field is skipped, not treated as invalid.
 func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, kb repository.Keyboard) (ok bool) {
-	var checks []repository.FieldCheck
-	add := func(field string, value *string, category string) {
-		if value == nil {
-			return
-		}
-		checks = append(checks, repository.FieldCheck{Field: field, Value: *value, Category: category})
-	}
-
-	add("size", kb.Size, repository.CategoryKeyboardSize)
-	add("design.top_case.material", kb.Design.TopCase.Material, repository.CategoryKeyboardCaseMaterial)
-	add("design.bottom_case.material", kb.Design.BottomCase.Material, repository.CategoryKeyboardCaseMaterial)
-	add("design.weight.material", kb.Design.Weight.Material, repository.CategoryKeyboardWeightMaterial)
-	add("pcb.firmware", kb.PCB.Firmware, repository.CategoryKeyboardPCBFirmware)
-	add("pcb.assembly", kb.PCB.Assembly, repository.CategoryKeyboardPCBAssemblyType)
-	add("pcb.connectivity", kb.PCB.Connectivity, repository.CategoryKeyboardPCBConnectivityType)
-	add("purchase.vendor", kb.Purchase.Vendor, repository.CategoryVendor)
-	add("purchase.order_status", kb.Purchase.OrderStatus, repository.CategoryOrderStatus)
-
-	for i, material := range kb.Design.Plates {
-		checks = append(checks, repository.FieldCheck{
-			Field:    fmt.Sprintf("design.plates[%d]", i),
-			Value:    material,
-			Category: repository.CategoryKeyboardPlateMaterial,
-		})
-	}
-
-	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
+	fieldErrs, err := lookup.ValidateKeyboard(ctx, lookupRepo, kb)
 	if err != nil {
 		log.FromContext(ctx).Error("validating keyboard lookup fields", log.Error, err)
 		problem.Internal(w, "failed to validate lookup fields")
 		return false
 	}
-
-	var invalidParams []problem.InvalidParam
-	sizeInvalid := false
-	for _, fe := range fieldErrs {
-		invalidParams = append(invalidParams, problem.InvalidParam{
-			Name:   fe.Field,
-			Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
-		})
-		if fe.Field == "size" {
-			sizeInvalid = true
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = keyboardFieldErrorToInvalidParam(fe, kb.Size)
 		}
-	}
-
-	if kb.Layout != nil {
-		// An already-invalid size can never appear in any layout's Sizes
-		// list, so checking against it here would always fail the
-		// cross-check too - report size's own error instead of a
-		// second, misleading one blaming a perfectly valid layout.
-		size := kb.Size
-		if sizeInvalid {
-			size = nil
-		}
-
-		layoutErr, err := validateKeyboardLayout(ctx, lookupRepo, size, *kb.Layout)
-		if err != nil {
-			log.FromContext(ctx).Error("validating keyboard layout", log.Error, err)
-			problem.Internal(w, "failed to validate lookup fields")
-			return false
-		}
-		if layoutErr != nil {
-			invalidParams = append(invalidParams, *layoutErr)
-		}
-	}
-
-	if len(invalidParams) > 0 {
 		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
 		return false
 	}
@@ -179,48 +123,20 @@ func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupR
 	return true
 }
 
-// validateKeyboardLayout skips the size-membership check when size is nil,
-// since size is independently optional.
-func validateKeyboardLayout(
-	ctx context.Context,
-	lookupRepo repository.LookupRepository,
-	size *string,
-	layout string,
-) (*problem.InvalidParam, error) {
-	category := repository.CategoryKeyboardLayout
-
-	lookup, err := lookupRepo.GetCategory(ctx, category)
-	if errors.Is(err, repository.ErrNotFound) {
-		return &problem.InvalidParam{
-			Name:   "layout",
-			Reason: fmt.Sprintf("%q is not an approved %s value", layout, category),
-		}, nil
+// keyboardFieldErrorToInvalidParam special-cases the layout/size cross-check
+// (lookup.ValidateKeyboard reports it as a FieldError with Field "layout"
+// and Category CategoryKeyboardSize) to keep its more specific message.
+func keyboardFieldErrorToInvalidParam(fe lookup.FieldError, size *string) problem.InvalidParam {
+	if fe.Field == "layout" && fe.Category == repository.CategoryKeyboardSize {
+		return problem.InvalidParam{
+			Name:   fe.Field,
+			Reason: fmt.Sprintf("%q is not a valid layout for size %q", fe.Value, *size),
+		}
 	}
-	if err != nil {
-		return nil, err
+	return problem.InvalidParam{
+		Name:   fe.Field,
+		Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
 	}
-
-	values, err := repository.ParseLayoutValues(lookup.Values)
-	if err != nil {
-		return nil, err
-	}
-
-	idx := slices.IndexFunc(values, func(v repository.LayoutValue) bool { return v.Name == layout })
-	if idx == -1 {
-		return &problem.InvalidParam{
-			Name:   "layout",
-			Reason: fmt.Sprintf("%q is not an approved %s value", layout, category),
-		}, nil
-	}
-
-	if size != nil && !slices.Contains(values[idx].Sizes, *size) {
-		return &problem.InvalidParam{
-			Name:   "layout",
-			Reason: fmt.Sprintf("%q is not a valid layout for size %q", layout, *size),
-		}, nil
-	}
-
-	return nil, nil //nolint:nilnil // no problem found is a valid, expected result
 }
 
 // CreateKeyboard reads the {userId} path value and requires an

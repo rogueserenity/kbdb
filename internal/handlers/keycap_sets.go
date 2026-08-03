@@ -12,6 +12,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -102,33 +103,20 @@ func decodeKeycapSetInput(w http.ResponseWriter, r *http.Request) (ks repository
 // validateKeycapSetLookups writes a 400 listing every invalid field if any
 // check fails. An unset (nil) field is skipped, not treated as invalid.
 func validateKeycapSetLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, ks repository.KeycapSet) (ok bool) {
-	var checks []repository.FieldCheck
-	add := func(field string, value *string, category string) {
-		if value == nil {
-			return
-		}
-		checks = append(checks, repository.FieldCheck{Field: field, Value: *value, Category: category})
-	}
-
-	add("profile", ks.Profile, repository.CategoryKeycapProfile)
-	add("material", ks.Material, repository.CategoryKeycapMaterial)
-
-	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
+	fieldErrs, err := lookup.ValidateKeycapSet(ctx, lookupRepo, ks)
 	if err != nil {
 		log.FromContext(ctx).Error("validating keycap set lookup fields", log.Error, err)
 		problem.Internal(w, "failed to validate lookup fields")
 		return false
 	}
-
-	var invalidParams []problem.InvalidParam
-	for _, fe := range fieldErrs {
-		invalidParams = append(invalidParams, problem.InvalidParam{
-			Name:   fe.Field,
-			Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
-		})
-	}
-
-	if len(invalidParams) > 0 {
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = problem.InvalidParam{
+				Name:   fe.Field,
+				Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
+			}
+		}
 		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
 		return false
 	}
@@ -455,15 +443,13 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, lookupRepo 
 			return
 		}
 
-		fieldErrs, err := repository.ValidateFields(r.Context(), lookupRepo, []repository.FieldCheck{
-			{Field: "content_type", Value: in.ContentType, Category: repository.CategoryImageContentType},
-		})
+		fieldErr, err := lookup.ValidateImageContentType(r.Context(), lookupRepo, in.ContentType)
 		if err != nil {
 			log.FromContext(r.Context()).Error("validating keycap kit image content_type", log.Error, err)
 			problem.Internal(w, "failed to validate content_type")
 			return
 		}
-		if len(fieldErrs) > 0 {
+		if fieldErr != nil {
 			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
 				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, repository.CategoryImageContentType)},
 			})

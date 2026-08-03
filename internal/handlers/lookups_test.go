@@ -191,7 +191,7 @@ func (s *CreateLookupSuite) newRequest(body string) *http.Request {
 
 func (s *CreateLookupSuite) TestCreateCategory_Succeeds() {
 	s.mockRepo.EXPECT().
-		CreateCategory(mock.Anything, "vendor", []any{"a", "b"}).
+		CreateCategory(mock.Anything, repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}).
 		Return(&repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, nil)
 
 	req := s.newRequest(`{"values":["a","b"]}`)
@@ -209,7 +209,7 @@ func (s *CreateLookupSuite) TestCreateCategory_Succeeds() {
 
 func (s *CreateLookupSuite) TestCreateCategory_AlreadyExists_Returns409() {
 	s.mockRepo.EXPECT().
-		CreateCategory(mock.Anything, "vendor", []any{"a"}).
+		CreateCategory(mock.Anything, repository.Lookup{Category: "vendor", Values: []any{"a"}}).
 		Return(nil, repository.ErrAlreadyExists)
 
 	req := s.newRequest(`{"values":["a"]}`)
@@ -223,7 +223,7 @@ func (s *CreateLookupSuite) TestCreateCategory_AlreadyExists_Returns409() {
 
 func (s *CreateLookupSuite) TestCreateCategory_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		CreateCategory(mock.Anything, "vendor", []any{"a"}).
+		CreateCategory(mock.Anything, repository.Lookup{Category: "vendor", Values: []any{"a"}}).
 		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(`{"values":["a"]}`)
@@ -343,7 +343,7 @@ func (s *CreateLookupSuite) TestCreateCategory_KeyboardLayout_Succeeds() {
 		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%", "65%"}}, nil)
 	values := []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}}
 	s.mockRepo.EXPECT().
-		CreateCategory(mock.Anything, "keyboard_layout", values).
+		CreateCategory(mock.Anything, repository.Lookup{Category: "keyboard_layout", Values: values}).
 		Return(&repository.Lookup{Category: "keyboard_layout", Values: values}, nil)
 
 	req := s.newKeyboardLayoutRequest(`{"values":[{"name":"WK","sizes":["60%","65%"]}]}`)
@@ -368,7 +368,7 @@ func (s *CreateLookupSuite) TestCreateCategory_BuildCaseMountType_WrongShape_Ret
 func (s *CreateLookupSuite) TestCreateCategory_BuildCaseMountType_Succeeds() {
 	values := []any{map[string]any{"name": "Top Mount", "supports_durometer": false}}
 	s.mockRepo.EXPECT().
-		CreateCategory(mock.Anything, "build_case_mount_type", values).
+		CreateCategory(mock.Anything, repository.Lookup{Category: "build_case_mount_type", Values: values}).
 		Return(&repository.Lookup{Category: "build_case_mount_type", Values: values}, nil)
 
 	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/v1/lookups/build_case_mount_type",
@@ -405,7 +405,7 @@ func (s *ReplaceLookupSuite) newRequest(body string) *http.Request {
 
 func (s *ReplaceLookupSuite) TestReplaceCategory_Succeeds() {
 	s.mockRepo.EXPECT().
-		ReplaceCategory(mock.Anything, "vendor", []any{"c", "d"}).
+		ReplaceCategory(mock.Anything, repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}).
 		Return(&repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}, nil)
 
 	req := s.newRequest(`{"values":["c","d"]}`)
@@ -448,7 +448,7 @@ func (s *ReplaceLookupSuite) TestReplaceCategory_KeyboardLayout_SizeNotApproved_
 
 func (s *ReplaceLookupSuite) TestReplaceCategory_NotFound_Returns404() {
 	s.mockRepo.EXPECT().
-		ReplaceCategory(mock.Anything, "vendor", []any{"a"}).
+		ReplaceCategory(mock.Anything, repository.Lookup{Category: "vendor", Values: []any{"a"}}).
 		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(`{"values":["a"]}`)
@@ -462,7 +462,7 @@ func (s *ReplaceLookupSuite) TestReplaceCategory_NotFound_Returns404() {
 
 func (s *ReplaceLookupSuite) TestReplaceCategory_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		ReplaceCategory(mock.Anything, "vendor", []any{"a"}).
+		ReplaceCategory(mock.Anything, repository.Lookup{Category: "vendor", Values: []any{"a"}}).
 		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(`{"values":["a"]}`)
