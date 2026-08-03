@@ -16,13 +16,13 @@ func LookupToAPI(l repository.Lookup) (api.Lookup, error) {
 
 	switch l.Category {
 	case repository.CategoryKeyboardLayout:
-		layouts, err := repository.ParseLayoutValues(l.Values)
+		layouts, err := l.LayoutValues()
 		if err != nil {
 			return api.Lookup{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
 		values = toAnySlice(layouts)
 	case repository.CategoryBuildCaseMountType:
-		mountTypes, err := repository.ParseCaseMountTypeValues(l.Values)
+		mountTypes, err := l.CaseMountTypeValues()
 		if err != nil {
 			return api.Lookup{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
@@ -45,11 +45,9 @@ func toAnySlice[T any](items []T) []any {
 }
 
 // LookupInputToRepo maps a generated LookupInput (already schema-validated
-// by the OpenAPI request validator) to the values slice
-// LookupRepository.CreateCategory/ReplaceCategory take. There's no
-// LookupInputToRepo equivalent of repository.Lookup itself - Category is a
-// path parameter, not part of the request body, so the repo layer's write
-// methods take values alone rather than a full Lookup.
+// by the OpenAPI request validator) to the Values a repository.Lookup needs.
+// Category is a path parameter, not part of the request body, so the caller
+// builds the rest of the Lookup itself.
 func LookupInputToRepo(in api.LookupInput) []any {
 	return in.Values
 }

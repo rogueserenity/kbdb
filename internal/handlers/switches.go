@@ -13,6 +13,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -107,22 +108,7 @@ func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Sw
 // validateSwitchLookups writes a 400 listing every invalid field if any
 // check fails. An unset (nil) field is skipped, not treated as invalid.
 func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, sw repository.Switch) (ok bool) {
-	var checks []repository.FieldCheck
-	add := func(field string, value *string, category string) {
-		if value == nil {
-			return
-		}
-		checks = append(checks, repository.FieldCheck{Field: field, Value: *value, Category: category})
-	}
-
-	add("type", &sw.Type, repository.CategorySwitchType)
-	add("material.top_housing", sw.Material.TopHousing, repository.CategorySwitchMaterial)
-	add("material.bottom_housing", sw.Material.BottomHousing, repository.CategorySwitchMaterial)
-	add("material.stem", sw.Material.Stem, repository.CategorySwitchMaterial)
-	add("spring.material", sw.Spring.Material, repository.CategorySwitchSpringMaterial)
-	add("purchase.vendor", sw.Purchase.Vendor, repository.CategoryVendor)
-
-	fieldErrs, err := repository.ValidateFields(ctx, lookupRepo, checks)
+	fieldErrs, err := lookup.ValidateSwitch(ctx, lookupRepo, sw)
 	if err != nil {
 		log.FromContext(ctx).Error("validating switch lookup fields", log.Error, err)
 		problem.Internal(w, "failed to validate lookup fields")

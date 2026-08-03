@@ -144,7 +144,7 @@ func (s *LookupRepositorySuite) TestCreateCategory_Succeeds() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	lookup, err := s.repo.CreateCategory(s.T().Context(), "vendor", []any{"a", "b"})
+	lookup, err := s.repo.CreateCategory(s.T().Context(), repository.Lookup{Category: "vendor", Values: []any{"a", "b"}})
 
 	s.Require().NoError(err)
 	s.Equal(&repository.Lookup{Category: "vendor", Values: []any{"a", "b"}}, lookup)
@@ -155,7 +155,7 @@ func (s *LookupRepositorySuite) TestCreateCategory_AlreadyExists_ReturnsErrAlrea
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	lookup, err := s.repo.CreateCategory(s.T().Context(), "vendor", []any{"a"})
+	lookup, err := s.repo.CreateCategory(s.T().Context(), repository.Lookup{Category: "vendor", Values: []any{"a"}})
 
 	s.Require().ErrorIs(err, repository.ErrAlreadyExists)
 	s.Nil(lookup)
@@ -166,7 +166,7 @@ func (s *LookupRepositorySuite) TestCreateCategory_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	lookup, err := s.repo.CreateCategory(s.T().Context(), "vendor", []any{"a"})
+	lookup, err := s.repo.CreateCategory(s.T().Context(), repository.Lookup{Category: "vendor", Values: []any{"a"}})
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
@@ -178,7 +178,7 @@ func (s *LookupRepositorySuite) TestReplaceCategory_Succeeds() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.PutItemOutput{}, nil)
 
-	lookup, err := s.repo.ReplaceCategory(s.T().Context(), "vendor", []any{"c", "d"})
+	lookup, err := s.repo.ReplaceCategory(s.T().Context(), repository.Lookup{Category: "vendor", Values: []any{"c", "d"}})
 
 	s.Require().NoError(err)
 	s.Equal(&repository.Lookup{Category: "vendor", Values: []any{"c", "d"}}, lookup)
@@ -189,7 +189,7 @@ func (s *LookupRepositorySuite) TestReplaceCategory_NotFound_ReturnsErrNotFound(
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	lookup, err := s.repo.ReplaceCategory(s.T().Context(), "vendor", []any{"a"})
+	lookup, err := s.repo.ReplaceCategory(s.T().Context(), repository.Lookup{Category: "vendor", Values: []any{"a"}})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(lookup)
@@ -200,7 +200,7 @@ func (s *LookupRepositorySuite) TestReplaceCategory_PutItemError_Propagates() {
 		PutItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
-	lookup, err := s.repo.ReplaceCategory(s.T().Context(), "vendor", []any{"a"})
+	lookup, err := s.repo.ReplaceCategory(s.T().Context(), repository.Lookup{Category: "vendor", Values: []any{"a"}})
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrNotFound)

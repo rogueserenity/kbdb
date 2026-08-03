@@ -83,12 +83,10 @@ func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*r
 	return &lookup, nil
 }
 
-func (r *LookupRepository) ReplaceCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
-	lookup := repository.Lookup{Category: category, Values: values}
-
+func (r *LookupRepository) ReplaceCategory(ctx context.Context, lookup repository.Lookup) (*repository.Lookup, error) {
 	item, err := attributevalue.MarshalMap(lookup)
 	if err != nil {
-		return nil, fmt.Errorf("marshalling lookup category %q: %w", category, err)
+		return nil, fmt.Errorf("marshalling lookup category %q: %w", lookup.Category, err)
 	}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
@@ -101,7 +99,7 @@ func (r *LookupRepository) ReplaceCategory(ctx context.Context, category string,
 		if errors.As(err, &condErr) {
 			return nil, repository.ErrNotFound
 		}
-		return nil, fmt.Errorf("replacing lookup category %q: %w", category, err)
+		return nil, fmt.Errorf("replacing lookup category %q: %w", lookup.Category, err)
 	}
 
 	return &lookup, nil
@@ -121,12 +119,10 @@ func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) 
 	return nil
 }
 
-func (r *LookupRepository) CreateCategory(ctx context.Context, category string, values []any) (*repository.Lookup, error) {
-	lookup := repository.Lookup{Category: category, Values: values}
-
+func (r *LookupRepository) CreateCategory(ctx context.Context, lookup repository.Lookup) (*repository.Lookup, error) {
 	item, err := attributevalue.MarshalMap(lookup)
 	if err != nil {
-		return nil, fmt.Errorf("marshalling lookup category %q: %w", category, err)
+		return nil, fmt.Errorf("marshalling lookup category %q: %w", lookup.Category, err)
 	}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
@@ -139,7 +135,7 @@ func (r *LookupRepository) CreateCategory(ctx context.Context, category string, 
 		if errors.As(err, &condErr) {
 			return nil, repository.ErrAlreadyExists
 		}
-		return nil, fmt.Errorf("creating lookup category %q: %w", category, err)
+		return nil, fmt.Errorf("creating lookup category %q: %w", lookup.Category, err)
 	}
 
 	return &lookup, nil
