@@ -453,10 +453,8 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image
             Method: delete
-        # MCP auth is handled inside the MCP server itself (see internal/mcp),
-        # returning MCP-shaped protocol errors rather than a bare HTTP 401 -
-        # bypass API Gateway's Cognito authorizer for this route so a missing/
-        # invalid token still reaches the app and gets an MCP-shaped response.
+        # Authorizer: NONE is deliberate on all three MCP routes below -
+        # internal/mcp handles auth itself and needs the request to reach it.
         McpEvent:
           Type: HttpApi
           Properties:
@@ -470,6 +468,14 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource
+            Method: get
+            Auth:
+              Authorizer: NONE
+        McpMetadataMcpEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /.well-known/oauth-protected-resource/mcp
             Method: get
             Auth:
               Authorizer: NONE

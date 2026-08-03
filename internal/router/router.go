@@ -110,6 +110,7 @@ func New(
 	mcpHandlers := mcp.New(verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
+	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)
 
 	return middleware.Logging(middleware.Recover(mux))
 }

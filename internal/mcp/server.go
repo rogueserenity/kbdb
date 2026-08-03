@@ -1,35 +1,38 @@
-// Package mcp wires the mcp-go MCP server into the application, reusing the
-// same auth.Verifier (and auth.BearerToken) as REST rather than a second
-// verification implementation. internal/auth holds all protocol-agnostic
-// verification logic shared by this package and internal/middleware (the
-// REST-side adapter); neither adapter depends on the other. Request-scoped
-// identity (internal/ctx) and logging (internal/log) are likewise
-// independent, transport-agnostic packages this one depends on directly,
-// so MCP tool logs get the same user_id/request_id correlation fields as
-// REST without depending on the middleware package at all.
+// Package mcp wires the official modelcontextprotocol/go-sdk MCP server into
+// the application, reusing the same auth.Verifier as REST rather than a
+// second verification implementation. internal/auth holds all
+// protocol-agnostic verification logic shared by this package and
+// internal/middleware (the REST-side adapter); neither adapter depends on
+// the other. Request-scoped identity (internal/ctx) and logging
+// (internal/log) are likewise independent, transport-agnostic packages this
+// one depends on directly, so MCP tool logs get the same
+// user_id/request_id correlation fields as REST without depending on the
+// middleware package at all.
 package mcp
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 
-	gomcp "github.com/mark3labs/mcp-go/mcp"
-	"github.com/mark3labs/mcp-go/server"
+	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
 )
 
-type bearerTokenKey struct{}
-
-// Handlers holds the two HTTP handlers the router needs to mount: the MCP
+// Handlers holds the HTTP handlers the router needs to mount: the MCP
 // Streamable HTTP endpoint itself, and the RFC 9728 Protected Resource
-// Metadata handler. Go's net/http.ServeMux won't route requests for the
-// well-known metadata path to the streamable handler just because it's
-// registered at "/mcp" (an exact-match mux pattern shadows it) — both must
-// be mounted explicitly.
+// Metadata handler (served at two paths - see MetadataPath/RootMetadataPath
+// below). Go's net/http.ServeMux won't route requests for the well-known
+// metadata paths to the streamable handler just because it's registered at
+// "/mcp" (an exact-match mux pattern shadows it) — all three routes must be
+// mounted explicitly.
 //
 // The metadata handler builds its "resource" URL from each request's Host
 // header rather than a static, deploy-time-known value. This isn't just a
@@ -42,43 +45,142 @@ type bearerTokenKey struct{}
 // URL the client actually used to reach the server, which stays right even
 // if a custom domain is added later.
 type Handlers struct {
-	Streamable   http.Handler
-	MetadataPath string
-	Metadata     http.Handler
+	Streamable http.Handler
+	// MetadataPath and RootMetadataPath both serve the identical metadata
+	// document. RFC 9728 discovery checks the endpoint-scoped path first,
+	// falling back to the origin root - a client that only found the root
+	// document would see a "resource" field naming /mcp while having
+	// fetched the document from a different path, which a strict client
+	// may treat as a mismatch. Serving both keeps the document's own
+	// "resource" claim consistent with wherever a client actually found it.
+	MetadataPath     string
+	RootMetadataPath string
+	Metadata         http.Handler
 }
+
+const (
+	MetadataPath     = "/.well-known/oauth-protected-resource/mcp"
+	RootMetadataPath = "/.well-known/oauth-protected-resource"
+)
 
 // New builds the MCP server. issuerURL is the OIDC issuer MCP clients should
 // authenticate against, advertised via RFC 9728 Protected Resource Metadata.
-// version is advertised to MCP clients in the initialize handshake.
+// version is advertised to MCP clients on connect.
 func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
-	mcpServer := server.NewMCPServer("kbdb", version,
-		server.WithToolCapabilities(true),
-		server.WithToolHandlerMiddleware(authMiddleware(verifier)),
-	)
+	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "kbdb", Version: version}, nil)
+	mcpServer.AddReceivingMiddleware(identityMiddleware())
 
 	registerTools(mcpServer)
 
-	streamable := server.NewStreamableHTTPServer(mcpServer,
-		server.WithHTTPContextFunc(func(ctx context.Context, r *http.Request) context.Context {
-			token, _ := auth.BearerToken(r)
-			return context.WithValue(ctx, bearerTokenKey{}, token)
-		}),
-		// mcp-go's DNS rebinding protection rejects any request arriving
-		// over a loopback connection whose Host header isn't itself a
-		// localhost value. aws-lambda-web-adapter always proxies to this
-		// process over 127.0.0.1 while preserving the real client's Host
-		// header (the API Gateway domain), so every request would otherwise
-		// be rejected. The attack this protects against (a browser rebound
-		// to attack a locally-listening server) can't occur in this Lambda
-		// deployment, so disabling it is safe here.
-		server.WithDisableLocalhostProtection(true),
+	streamable := sdkmcp.NewStreamableHTTPHandler(
+		func(*http.Request) *sdkmcp.Server { return mcpServer },
+		&sdkmcp.StreamableHTTPOptions{
+			Stateless: true,
+			// aws-lambda-web-adapter proxies over 127.0.0.1 with the real
+			// Host header intact, which DNS-rebinding protection can't
+			// distinguish from an actual rebinding attack - safe to disable
+			// here since that attack requires a browser, not a Lambda proxy.
+			DisableLocalhostProtection: true,
+		},
 	)
 
 	return Handlers{
-		Streamable:   streamable,
-		MetadataPath: server.WellKnownProtectedResourcePath,
-		Metadata:     metadataHandler(issuerURL),
+		Streamable:       requireBearerToken(verifier, streamable),
+		MetadataPath:     MetadataPath,
+		RootMetadataPath: RootMetadataPath,
+		Metadata:         metadataHandler(issuerURL),
 	}
+}
+
+// requireBearerToken wraps next with the SDK's bearer-token verification
+// middleware, per the MCP 2026-07-28 authorization spec's normative
+// requirement that invalid or expired tokens receive a real HTTP 401 (with
+// a WWW-Authenticate challenge), not an MCP protocol-level error — a prior
+// version of this package got this wrong by rejecting failed auth as an
+// in-band tool-call error instead.
+//
+// ResourceMetadataURL (advertised in the 401's WWW-Authenticate header) is
+// derived per-request for the same reason metadataHandler's "resource"
+// field is: it depends on the request's Host, not a static, deploy-time
+// value.
+func requireBearerToken(verifier *auth.Verifier, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		opts := &sdkauth.RequireBearerTokenOptions{
+			ResourceMetadataURL: resourceMetadataURL(r),
+		}
+		sdkauth.RequireBearerToken(tokenVerifier(verifier), opts)(next).ServeHTTP(w, r)
+	})
+}
+
+// tokenVerifier adapts auth.Verifier.VerifyToken to the SDK's
+// auth.TokenVerifier signature.
+func tokenVerifier(verifier *auth.Verifier) sdkauth.TokenVerifier {
+	return func(ctx context.Context, token string, _ *http.Request) (*sdkauth.TokenInfo, error) {
+		claims, err := verifier.VerifyToken(ctx, token)
+		if err != nil {
+			// Warn, not Error: an individual invalid/expired token from one
+			// client is expected traffic, not a bug - still worth a trace to
+			// spot a misconfigured client or repeated probing.
+			logpkg.FromContext(ctx).Warn("token verification failed", logpkg.Error, err)
+			// The SDK sends this error's message straight to the client in
+			// the 401 body, so return the sentinel itself rather than err -
+			// internal verifier detail (issuer, clock skew, etc.) stays
+			// server-side in the log above.
+			return nil, sdkauth.ErrInvalidToken
+		}
+
+		return &sdkauth.TokenInfo{
+			UserID:     claims.Subject,
+			Expiration: claims.Expiry,
+			Extra:      map[string]any{"groups": claims.Groups},
+		}, nil
+	}
+}
+
+// errNoTokenInfo guards against a request ever reaching the tool dispatch
+// layer without requireBearerToken having run first - unreachable today
+// since it's the only entrypoint into this server, but this fails closed
+// rather than silently proceeding unauthenticated if that wiring is ever
+// broken by a future change (e.g. a second transport added to mcpServer).
+var errNoTokenInfo = errors.New("no verified identity on context")
+
+// identityMiddleware reads the TokenInfo requireBearerToken already
+// verified and stored on context, and writes the caller's identity into
+// ctxpkg/logpkg the same way REST's middleware.Auth does, so tool handlers
+// only depend on those shared, transport-agnostic packages.
+func identityMiddleware() sdkmcp.Middleware {
+	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
+		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
+			info := sdkauth.TokenInfoFromContext(ctx)
+			if info == nil {
+				logpkg.FromContext(ctx).Error("MCP request reached tool dispatch with no verified TokenInfo on context")
+				return nil, errNoTokenInfo
+			}
+
+			groups, ok := info.Extra["groups"].([]string)
+			if !ok && info.Extra["groups"] != nil {
+				logpkg.FromContext(ctx).Error("TokenInfo.Extra[\"groups\"] present but not a []string", "type", fmt.Sprintf("%T", info.Extra["groups"]))
+			}
+			ctx = ctxpkg.WithUserID(ctx, info.UserID)
+			ctx = ctxpkg.WithGroups(ctx, groups)
+			ctx = logpkg.WithLogger(ctx, logpkg.WithUserID(logpkg.FromContext(ctx), info.UserID))
+
+			return next(ctx, method, req)
+		}
+	}
+}
+
+// resourceMetadataURL builds the RFC 9728 metadata document's absolute URL
+// from r, for use in a 401 response's WWW-Authenticate header.
+func resourceMetadataURL(r *http.Request) string {
+	return schemeOf(r) + "://" + r.Host + MetadataPath
+}
+
+func schemeOf(r *http.Request) string {
+	if fp := r.Header.Get("X-Forwarded-Proto"); fp != "" {
+		return fp
+	}
+	return "https"
 }
 
 // metadataHandler serves RFC 9728 Protected Resource Metadata, building the
@@ -92,49 +194,15 @@ func metadataHandler(issuerURL string) http.Handler {
 			return
 		}
 
-		scheme := "https"
-		if fp := r.Header.Get("X-Forwarded-Proto"); fp != "" {
-			scheme = fp
-		}
-		resourceURL := scheme + "://" + r.Host + "/mcp"
+		resourceURL := schemeOf(r) + "://" + r.Host + "/mcp"
 
-		config := server.ProtectedResourceMetadataConfig{
+		metadata := oauthex.ProtectedResourceMetadata{
 			Resource:             resourceURL,
 			AuthorizationServers: []string{issuerURL},
 		}
 
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set("Cache-Control", "no-store")
-		_ = json.NewEncoder(w).Encode(config)
+		_ = json.NewEncoder(w).Encode(metadata)
 	})
-}
-
-// authMiddleware verifies the bearer token stashed into context by New's
-// HTTPContextFunc, using the same auth.Verifier as REST. Failures return an
-// MCP-shaped tool error (not an HTTP status) — MCP clients expect
-// protocol-level errors for a failed tool call, not a bare HTTP failure.
-func authMiddleware(verifier *auth.Verifier) server.ToolHandlerMiddleware {
-	return func(next server.ToolHandlerFunc) server.ToolHandlerFunc {
-		return func(ctx context.Context, req gomcp.CallToolRequest) (*gomcp.CallToolResult, error) {
-			token, _ := ctx.Value(bearerTokenKey{}).(string)
-			if token == "" {
-				return gomcp.NewToolResultError("missing or malformed authorization header"), nil
-			}
-
-			claims, err := verifier.VerifyToken(ctx, token)
-			if err != nil {
-				// Warn, not Error: an individual invalid/expired token from
-				// one client is expected traffic, not a bug - still worth a
-				// trace to spot a misconfigured client or repeated probing.
-				logpkg.FromContext(ctx).Warn("token verification failed", logpkg.Error, err)
-				return gomcp.NewToolResultError("invalid token"), nil
-			}
-
-			ctx = ctxpkg.WithUserID(ctx, claims.Subject)
-			l := logpkg.WithUserID(logpkg.FromContext(ctx), claims.Subject)
-			ctx = logpkg.WithLogger(ctx, l)
-
-			return next(ctx, req)
-		}
-	}
 }
