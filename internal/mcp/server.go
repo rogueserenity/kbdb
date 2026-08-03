@@ -74,7 +74,14 @@ func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
 
 	streamable := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return mcpServer },
-		&sdkmcp.StreamableHTTPOptions{Stateless: true},
+		&sdkmcp.StreamableHTTPOptions{
+			Stateless: true,
+			// aws-lambda-web-adapter proxies over 127.0.0.1 with the real
+			// Host header intact, which DNS-rebinding protection can't
+			// distinguish from an actual rebinding attack - safe to disable
+			// here since that attack requires a browser, not a Lambda proxy.
+			DisableLocalhostProtection: true,
+		},
 	)
 
 	return Handlers{
