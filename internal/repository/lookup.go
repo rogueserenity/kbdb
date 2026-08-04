@@ -84,6 +84,17 @@ func (l Lookup) CaseMountTypeValues() ([]CaseMountTypeValue, error) {
 	return out, nil
 }
 
+// ToAnySlice widens a typed slice (e.g. []LayoutValue) back to []any, the
+// shape Lookup.Values and the wire formats built on top of it use.
+func ToAnySlice[T any](items []T) []any {
+	out := make([]any, len(items))
+	for i, item := range items {
+		out[i] = item
+	}
+
+	return out
+}
+
 // parseObjects round-trips through encoding/json since DynamoDB unmarshals
 // object entries as map[string]any.
 func parseObjects[T any](values []any) ([]T, error) {

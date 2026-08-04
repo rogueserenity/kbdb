@@ -19,26 +19,17 @@ func LookupToMCP(l repository.Lookup) (schema.GetLookupOutput, error) {
 		if err != nil {
 			return schema.GetLookupOutput{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
-		values = toAnySlice(layouts)
+		values = repository.ToAnySlice(layouts)
 	case repository.CategoryBuildCaseMountType:
 		mountTypes, err := l.CaseMountTypeValues()
 		if err != nil {
 			return schema.GetLookupOutput{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
-		values = toAnySlice(mountTypes)
+		values = repository.ToAnySlice(mountTypes)
 	}
 
 	return schema.GetLookupOutput{
 		Category: l.Category,
 		Values:   values,
 	}, nil
-}
-
-func toAnySlice[T any](items []T) []any {
-	out := make([]any, len(items))
-	for i, item := range items {
-		out[i] = item
-	}
-
-	return out
 }

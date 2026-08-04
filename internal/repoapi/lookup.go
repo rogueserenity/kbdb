@@ -20,28 +20,19 @@ func LookupToAPI(l repository.Lookup) (api.Lookup, error) {
 		if err != nil {
 			return api.Lookup{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
-		values = toAnySlice(layouts)
+		values = repository.ToAnySlice(layouts)
 	case repository.CategoryBuildCaseMountType:
 		mountTypes, err := l.CaseMountTypeValues()
 		if err != nil {
 			return api.Lookup{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
-		values = toAnySlice(mountTypes)
+		values = repository.ToAnySlice(mountTypes)
 	}
 
 	return api.Lookup{
 		Category: l.Category,
 		Values:   values,
 	}, nil
-}
-
-func toAnySlice[T any](items []T) []any {
-	out := make([]any, len(items))
-	for i, item := range items {
-		out[i] = item
-	}
-
-	return out
 }
 
 // LookupInputToRepo maps a generated LookupInput (already schema-validated
