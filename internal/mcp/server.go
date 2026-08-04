@@ -24,6 +24,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/auth"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 // Handlers holds the HTTP handlers the router needs to mount: the MCP
@@ -66,11 +67,11 @@ const (
 // New builds the MCP server. issuerURL is the OIDC issuer MCP clients should
 // authenticate against, advertised via RFC 9728 Protected Resource Metadata.
 // version is advertised to MCP clients on connect.
-func New(verifier *auth.Verifier, issuerURL, version string) Handlers {
+func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuerURL, version string) Handlers {
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "kbdb", Version: version}, nil)
 	mcpServer.AddReceivingMiddleware(identityMiddleware())
 
-	registerTools(mcpServer)
+	registerTools(mcpServer, lookupRepo)
 
 	streamable := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return mcpServer },

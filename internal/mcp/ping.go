@@ -4,6 +4,8 @@ import (
 	"context"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 var pingTool = &mcp.Tool{
@@ -17,6 +19,6 @@ func handlePing(_ context.Context, _ *mcp.CallToolRequest, _ any) (*mcp.CallTool
 	}, nil, nil
 }
 
-func registerTools(s *mcp.Server) {
+func registerTools(s *mcp.Server, lookupRepo repository.LookupRepository) {
 	mcp.AddTool(s, pingTool, handlePing)
 }
