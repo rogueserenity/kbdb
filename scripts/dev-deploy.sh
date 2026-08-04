@@ -13,4 +13,5 @@ sam deploy --stack-name "$STACK_NAME" \
   --region "$REGION" \
   --image-repositories "ApiFunction=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}" \
   --capabilities CAPABILITY_IAM \
-  --no-fail-on-empty-changeset
+  --no-fail-on-empty-changeset \
+  --no-confirm-changeset
