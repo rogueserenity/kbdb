@@ -47,7 +47,7 @@ func (s *HandleListLookupsSuite) TestRepositoryError_ReturnsError() {
 	handler := handleListLookups(s.mockRepo)
 	_, _, err := handler(s.T().Context(), nil, schema.ListLookupsInput{})
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, "failed to list lookup categories")
 }
 
 type HandleGetLookupSuite struct {
@@ -85,7 +85,7 @@ func (s *HandleGetLookupSuite) TestNotFound_ReturnsError() {
 	handler := handleGetLookup(s.mockRepo)
 	_, _, err := handler(s.T().Context(), nil, schema.GetLookupInput{Category: "missing"})
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, `"missing" not found`)
 }
 
 func (s *HandleGetLookupSuite) TestRepositoryError_ReturnsError() {
@@ -96,7 +96,7 @@ func (s *HandleGetLookupSuite) TestRepositoryError_ReturnsError() {
 	handler := handleGetLookup(s.mockRepo)
 	_, _, err := handler(s.T().Context(), nil, schema.GetLookupInput{Category: "vendor"})
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, "failed to get lookup category")
 }
 
 func (s *HandleGetLookupSuite) TestKeyboardLayout_CorruptStoredShape_ReturnsError() {
@@ -107,5 +107,12 @@ func (s *HandleGetLookupSuite) TestKeyboardLayout_CorruptStoredShape_ReturnsErro
 	handler := handleGetLookup(s.mockRepo)
 	_, _, err := handler(s.T().Context(), nil, schema.GetLookupInput{Category: repository.CategoryKeyboardLayout})
 
-	s.Require().Error(err)
+	s.Require().ErrorContains(err, "malformed")
+}
+
+func (s *HandleGetLookupSuite) TestBlankCategory_ReturnsError() {
+	handler := handleGetLookup(s.mockRepo)
+	_, _, err := handler(s.T().Context(), nil, schema.GetLookupInput{Category: "  "})
+
+	s.Require().ErrorContains(err, "must not be blank")
 }

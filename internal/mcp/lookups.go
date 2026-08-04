@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -37,19 +38,23 @@ func handleListLookups(repo repository.LookupRepository) mcp.ToolHandlerFor[sche
 
 func handleGetLookup(repo repository.LookupRepository) mcp.ToolHandlerFor[schema.GetLookupInput, schema.GetLookupOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetLookupInput) (*mcp.CallToolResult, schema.GetLookupOutput, error) {
+		if strings.TrimSpace(in.Category) == "" {
+			return nil, schema.GetLookupOutput{}, errors.New("category must not be blank")
+		}
+
 		lookup, err := repo.GetCategory(ctx, in.Category)
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.GetLookupOutput{}, fmt.Errorf("lookup category %q not found", in.Category)
 		}
 		if err != nil {
-			log.FromContext(ctx).Error("getting lookup category", log.Error, err, log.LookupCategory, in.Category)
+			log.FromContext(ctx).Error("getting lookup category", log.LookupCategory, in.Category, log.Error, err)
 			return nil, schema.GetLookupOutput{}, errors.New("failed to get lookup category")
 		}
 
 		out, err := repomcp.LookupToMCP(*lookup)
 		if err != nil {
 			log.FromContext(ctx).Error("mapping lookup category to MCP shape", log.LookupCategory, in.Category, log.Error, err)
-			return nil, schema.GetLookupOutput{}, errors.New("failed to get lookup category")
+			return nil, schema.GetLookupOutput{}, errors.New("lookup category data is malformed")
 		}
 
 		return nil, out, nil

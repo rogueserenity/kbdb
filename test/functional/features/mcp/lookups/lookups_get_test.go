@@ -22,57 +22,78 @@ var _ = Describe("Getting a lookup category", func() {
 		category string
 	)
 
-	BeforeEach(func(ctx SpecContext) {
+	BeforeEach(func() {
 		result = nil
 		err = nil
 		category = "functional-test-category-" + uuid.NewString()
-
-		token, err := api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		Expect(db.DeleteLookupCategory(ctx, category)).To(Succeed())
 	})
 
-	Context("given the category exists", func() {
+	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
+			token, tokenErr := api.AuthToken(ctx)
+			Expect(tokenErr).NotTo(HaveOccurred())
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
 		})
 
-		When("the get_lookup tool is called with that category", func() {
+		Context("given the category exists", func() {
 			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": category})
+				Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 			})
 
-			It("succeeds and returns the category's values", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
+			When("the get_lookup tool is called with that category", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": category})
+				})
 
-				raw, err := json.Marshal(result.StructuredContent)
-				Expect(err).NotTo(HaveOccurred())
+				It("succeeds and returns the category's values", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
 
-				var out struct {
-					Category string   `json:"category"`
-					Values   []string `json:"values"`
-				}
-				Expect(json.Unmarshal(raw, &out)).To(Succeed())
-				Expect(out.Category).To(Equal(category))
-				Expect(out.Values).To(Equal([]string{"a", "b"}))
+					raw, err := json.Marshal(result.StructuredContent)
+					Expect(err).NotTo(HaveOccurred())
+
+					var out struct {
+						Category string   `json:"category"`
+						Values   []string `json:"values"`
+					}
+					Expect(json.Unmarshal(raw, &out)).To(Succeed())
+					Expect(out.Category).To(Equal(category))
+					Expect(out.Values).To(Equal([]string{"a", "b"}))
+				})
+			})
+		})
+
+		Context("given the category does not exist", func() {
+			When("the get_lookup tool is called with that category", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": "functional-test-category-missing-" + uuid.NewString()})
+				})
+
+				It("returns an MCP tool error result, not a transport failure", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
 			})
 		})
 	})
 
-	Context("given the category does not exist", func() {
-		When("the get_lookup tool is called with that category", func() {
+	Context("given no bearer token", func() {
+		BeforeEach(func() {
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
+		})
+
+		When("the get_lookup tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": "functional-test-category-missing-" + uuid.NewString()})
+				result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": category})
 			})
 
-			It("returns an MCP tool error result, not a transport failure", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeTrue())
+			It("rejects the call with a real HTTP 401", func() {
+				Expect(result).To(BeNil())
+				Expect(err).To(HaveOccurred())
 			})
 		})
 	})

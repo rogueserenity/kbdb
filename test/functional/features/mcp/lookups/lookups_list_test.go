@@ -34,8 +34,8 @@ var _ = Describe("Listing lookup categories", func() {
 
 	Context("given a valid bearer token and the lookup table has a category", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, err := api.AuthToken(ctx)
-			Expect(err).NotTo(HaveOccurred())
+			token, tokenErr := api.AuthToken(ctx)
+			Expect(tokenErr).NotTo(HaveOccurred())
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
 
 			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
