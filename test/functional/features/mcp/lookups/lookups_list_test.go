@@ -32,32 +32,36 @@ var _ = Describe("Listing lookup categories", func() {
 		Expect(db.DeleteLookupCategory(ctx, category)).To(Succeed())
 	})
 
-	Context("given a valid bearer token and the lookup table has a category", func() {
+	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
 			token, tokenErr := api.AuthToken(ctx)
 			Expect(tokenErr).NotTo(HaveOccurred())
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
-
-			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 		})
 
-		When("the list_lookups tool is called", func() {
+		Context("given the lookup table has a category", func() {
 			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "list_lookups", map[string]any{})
+				Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
 			})
 
-			It("succeeds and includes the seeded category", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
+			When("the list_lookups tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_lookups", map[string]any{})
+				})
 
-				raw, err := json.Marshal(result.StructuredContent)
-				Expect(err).NotTo(HaveOccurred())
+				It("succeeds and includes the seeded category", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
 
-				var out struct {
-					Categories []string `json:"categories"`
-				}
-				Expect(json.Unmarshal(raw, &out)).To(Succeed())
-				Expect(out.Categories).To(ContainElement(category))
+					raw, err := json.Marshal(result.StructuredContent)
+					Expect(err).NotTo(HaveOccurred())
+
+					var out struct {
+						Categories []string `json:"categories"`
+					}
+					Expect(json.Unmarshal(raw, &out)).To(Succeed())
+					Expect(out.Categories).To(ContainElement(category))
+				})
 			})
 		})
 	})
