@@ -21,4 +21,6 @@ func handlePing(_ context.Context, _ *mcp.CallToolRequest, _ any) (*mcp.CallTool
 
 func registerTools(s *mcp.Server, lookupRepo repository.LookupRepository) {
 	mcp.AddTool(s, pingTool, handlePing)
+	mcp.AddTool(s, listLookupsTool, handleListLookups(lookupRepo))
+	mcp.AddTool(s, getLookupTool, handleGetLookup(lookupRepo))
 }
