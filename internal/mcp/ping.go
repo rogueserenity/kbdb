@@ -16,7 +16,3 @@ func handlePing(_ context.Context, _ *mcp.CallToolRequest, _ any) (*mcp.CallTool
 		Content: []mcp.Content{&mcp.TextContent{Text: "ok"}},
 	}, nil, nil
 }
-
-func registerTools(s *mcp.Server) {
-	mcp.AddTool(s, pingTool, handlePing)
-}

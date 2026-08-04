@@ -107,7 +107,7 @@ func New(
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
 	// only covers the REST surface.
-	mcpHandlers := mcp.New(verifier, issuerURL, version)
+	mcpHandlers := mcp.New(verifier, lookupRepo, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

@@ -27,6 +27,17 @@ func (s *ParseLookupValuesSuite) TestStrings_NonStringEntry_Errors() {
 	s.Require().Error(err)
 }
 
+func (s *ParseLookupValuesSuite) TestToAnySlice_WidensTypedSlice() {
+	got := repository.ToAnySlice([]repository.LayoutValue{{Name: "WK", Sizes: []string{"60%"}}})
+	s.Equal([]any{repository.LayoutValue{Name: "WK", Sizes: []string{"60%"}}}, got)
+}
+
+func (s *ParseLookupValuesSuite) TestToAnySlice_Empty_ReturnsEmptySliceNotNil() {
+	got := repository.ToAnySlice([]repository.LayoutValue{})
+	s.NotNil(got)
+	s.Empty(got)
+}
+
 func (s *ParseLookupValuesSuite) TestLayoutValues_Valid_Succeeds() {
 	got, err := repository.Lookup{Values: []any{
 		map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}},
