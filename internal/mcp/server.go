@@ -93,12 +93,6 @@ func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuer
 	}
 }
 
-func registerTools(s *sdkmcp.Server, lookupRepo repository.LookupRepository) {
-	sdkmcp.AddTool(s, pingTool, handlePing)
-	sdkmcp.AddTool(s, listLookupsTool, handleListLookups(lookupRepo))
-	sdkmcp.AddTool(s, getLookupTool, handleGetLookup(lookupRepo))
-}
-
 // requireBearerToken wraps next with the SDK's bearer-token verification
 // middleware, per the MCP 2026-07-28 authorization spec's normative
 // requirement that invalid or expired tokens receive a real HTTP 401 (with
