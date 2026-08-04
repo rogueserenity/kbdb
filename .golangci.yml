@@ -30,9 +30,9 @@ linters:
     - unparam
   exclusions:
     rules:
-      # MCP errors are deliberately returned as CallToolResult{IsError: true},
-      # not a propagated Go error (which mcp-go turns into a worse JSON-RPC
-      # INTERNAL_ERROR) - nilerr doesn't know that distinction.
+      # MCP tool handlers return propagated Go errors from ToolHandlerFor;
+      # modelcontextprotocol/go-sdk automatically converts non-nil error
+      # into CallToolResult{IsError: true} (in-band, not JSON-RPC failure).
       - path: internal/mcp/
         linters:
           - nilerr
