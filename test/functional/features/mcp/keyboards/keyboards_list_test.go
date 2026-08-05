@@ -56,7 +56,15 @@ var _ = Describe("Listing keyboards over MCP", func() {
 				It("defaults to the caller's own collection and includes the private keyboard", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(idsOf(decodeListOutput(result))).To(ContainElement(keyboardID))
+
+					out := decodeListOutput(result)
+					Expect(idsOf(out)).To(ContainElement(keyboardID))
+
+					By("carrying order_status, which the summary lifts out of purchase")
+					seeded := seededBy(out, keyboardID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.OrderStatus).NotTo(BeNil())
+					Expect(*seeded.OrderStatus).To(Equal("Delivered"))
 				})
 			})
 		})

@@ -5,12 +5,9 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// KeyboardToMCP maps a repository.Keyboard to its MCP tool shape. Optional
-// fields pass through as pointers rather than being dereferenced, so a
-// recorded zero survives the round trip instead of being indistinguishable
-// from unset - the same reason repoapi.KeyboardToAPI keeps them. The nested
-// design/pcb/purchase groups collapse to nil when every field in them is
-// unset, so an all-empty group is omitted entirely.
+// KeyboardToMCP maps a repository.Keyboard to its MCP tool shape. Pointers
+// pass through undereferenced so a recorded zero survives, as
+// repoapi.KeyboardToAPI does.
 func KeyboardToMCP(kb repository.Keyboard) schema.Keyboard {
 	return schema.Keyboard{
 		ID:         kb.ID,
@@ -26,8 +23,8 @@ func KeyboardToMCP(kb repository.Keyboard) schema.Keyboard {
 	}
 }
 
-// KeyboardToMCPSummary maps a repository.Keyboard to the abbreviated shape
-// list_keyboards returns.
+// KeyboardToMCPSummary lifts order_status out of purchase, so a keyboard
+// still on order is visible while browsing a list.
 func KeyboardToMCPSummary(kb repository.Keyboard) schema.KeyboardSummary {
 	return schema.KeyboardSummary{
 		ID:          kb.ID,

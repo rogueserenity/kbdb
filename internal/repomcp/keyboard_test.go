@@ -57,8 +57,6 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 	s.Equal("public", out.Visibility)
 }
 
-// An all-unset group collapses to nil so it's omitted from the tool result
-// entirely, rather than appearing as an object of nulls.
 func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {
 	out := KeyboardToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate})
 
@@ -83,8 +81,6 @@ func (s *KeyboardToMCPSuite) TestDesignWithOnlyPlates_IsRetained() {
 	s.Equal([]string{"Brass"}, out.Design.Plates)
 }
 
-// One set part keeps design, and the unset siblings stay nil rather than
-// becoming empty objects.
 func (s *KeyboardToMCPSuite) TestDesignWithOnlyOnePart_IsRetained() {
 	material := "PC"
 

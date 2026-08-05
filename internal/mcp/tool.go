@@ -22,8 +22,6 @@ const (
 // an empty owner ID if that wiring ever changes.
 var errNoCallerIdentity = errors.New("no caller identity on context")
 
-// resolveOwnerID defaults a blank user_id to the caller's own subject, so
-// the common "my collection" case needs no argument.
 func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 	if id := strings.TrimSpace(userID); id != "" {
 		return id, nil

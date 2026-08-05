@@ -22,6 +22,21 @@ type getOutput struct {
 		Name       string  `json:"name"`
 		Size       *string `json:"size"`
 		Visibility string  `json:"visibility"`
+		Design     *struct {
+			TopCase *struct {
+				Material *string `json:"material"`
+				Color    *string `json:"color"`
+			} `json:"top_case"`
+			BottomCase *struct{} `json:"bottom_case"`
+			Plates     []string  `json:"plates"`
+		} `json:"design"`
+		PCB *struct {
+			Firmware *string `json:"firmware"`
+		} `json:"pcb"`
+		Purchase *struct {
+			Vendor      *string `json:"vendor"`
+			OrderStatus *string `json:"order_status"`
+		} `json:"purchase"`
 	} `json:"keyboard"`
 }
 
@@ -37,14 +52,16 @@ func decodeGetOutput(result *sdkmcp.CallToolResult) getOutput {
 	return out
 }
 
+type listKeyboard struct {
+	ID          string  `json:"id"`
+	Brand       string  `json:"brand"`
+	Name        string  `json:"name"`
+	OrderStatus *string `json:"order_status"`
+}
+
 type listOutput struct {
-	Keyboards []struct {
-		ID          string  `json:"id"`
-		Brand       string  `json:"brand"`
-		Name        string  `json:"name"`
-		OrderStatus *string `json:"order_status"`
-	} `json:"keyboards"`
-	NextCursor string `json:"next_cursor"`
+	Keyboards  []listKeyboard `json:"keyboards"`
+	NextCursor string         `json:"next_cursor"`
 }
 
 func decodeListOutput(result *sdkmcp.CallToolResult) listOutput {
@@ -66,4 +83,14 @@ func idsOf(out listOutput) []string {
 	}
 
 	return ids
+}
+
+func seededBy(out listOutput, id string) *listKeyboard {
+	for i := range out.Keyboards {
+		if out.Keyboards[i].ID == id {
+			return &out.Keyboards[i]
+		}
+	}
+
+	return nil
 }

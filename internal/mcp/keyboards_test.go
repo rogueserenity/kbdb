@@ -159,8 +159,6 @@ func (s *HandleGetKeyboardSuite) TestNotFound_ReturnsNotFound() {
 	s.Require().ErrorIs(err, errKeyboardNotFound)
 }
 
-// An unreadable keyboard must be indistinguishable from a missing one, so a
-// caller can't probe for the existence of another user's private items.
 func (s *HandleGetKeyboardSuite) TestOtherUsersPrivateKeyboard_ReturnsNotFound() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, otherID, "kb-1").
