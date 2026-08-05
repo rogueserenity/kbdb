@@ -12,7 +12,7 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
-var _ = Describe("Getting a switch over MCP", func() {
+var _ = Describe("Deleting a switch over MCP", func() {
 	var (
 		client   *api.MCPClient
 		result   *sdkmcp.CallToolResult
@@ -47,69 +47,46 @@ var _ = Describe("Getting a switch over MCP", func() {
 				Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
 			})
 
-			When("the get_switch tool is called with no user_id", func() {
+			When("the delete_switch tool is called", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_switch", map[string]any{"switch_id": switchID})
+					result, err = client.CallTool(ctx, "delete_switch", map[string]any{
+						"switch_id": switchID,
+					})
 				})
 
-				It("defaults to the caller's own collection and returns the switch", func() {
+				It("removes the switch", func(ctx SpecContext) {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
-					out := decodeGetOutput(result)
-					Expect(out.Switch.ID).To(Equal(switchID))
-					Expect(out.Switch.Brand).To(Equal("Gateron"))
-					Expect(out.Switch.Visibility).To(Equal("private"))
+					By("a subsequent get_switch no longer finding it")
+					check, checkErr := client.CallTool(ctx, "get_switch", map[string]any{
+						"switch_id": switchID,
+					})
+					Expect(checkErr).NotTo(HaveOccurred())
+					Expect(check.IsError).To(BeTrue())
 				})
 			})
 		})
 
 		Context("given the switch never existed", func() {
-			When("the get_switch tool is called with that id", func() {
+			When("the delete_switch tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_switch", map[string]any{"switch_id": switchID})
-				})
-
-				It("returns an MCP tool error result, not a transport failure", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.IsError).To(BeTrue())
-				})
-			})
-		})
-
-		Context("given another user owns a private switch", func() {
-			var otherID string
-
-			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
-
-				Expect(db.SeedSwitch(ctx, otherID, switchID, "private")).To(Succeed())
-			})
-
-			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteSwitch(ctx, otherID, switchID)).To(Succeed())
-			})
-
-			When("the get_switch tool is called with that user_id", func() {
-				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_switch", map[string]any{
+					result, err = client.CallTool(ctx, "delete_switch", map[string]any{
 						"switch_id": switchID,
-						"user_id":   otherID,
 					})
 				})
 
-				It("is indistinguishable from the switch not existing", func() {
+				It("succeeds, since deleting is idempotent", func() {
 					Expect(err).NotTo(HaveOccurred())
-					Expect(result.IsError).To(BeTrue())
+					Expect(result.IsError).To(BeFalse())
 				})
 			})
 		})
 
-		Context("given another user owns a public switch", func() {
+		// Writes read the owner from the token, never an argument, so this
+		// targets the caller's own (nonexistent) switch rather than the
+		// other user's.
+		Context("given another user owns the switch", func() {
 			var otherID string
 
 			BeforeEach(func(ctx SpecContext) {
@@ -126,18 +103,27 @@ var _ = Describe("Getting a switch over MCP", func() {
 				Expect(db.DeleteSwitch(ctx, otherID, switchID)).To(Succeed())
 			})
 
-			When("the get_switch tool is called with that user_id", func() {
+			When("the delete_switch tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_switch", map[string]any{
+					result, err = client.CallTool(ctx, "delete_switch", map[string]any{
 						"switch_id": switchID,
-						"user_id":   otherID,
 					})
 				})
 
-				It("returns the switch", func() {
+				It("leaves the other user's switch in place", func(ctx SpecContext) {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(decodeGetOutput(result).Switch.ID).To(Equal(switchID))
+
+					By("the other user still being able to read it")
+					otherToken, tokenErr := api.SecondUserAuthToken(ctx)
+					Expect(tokenErr).NotTo(HaveOccurred())
+					otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
+
+					check, checkErr := otherClient.CallTool(ctx, "get_switch", map[string]any{
+						"switch_id": switchID,
+					})
+					Expect(checkErr).NotTo(HaveOccurred())
+					Expect(check.IsError).To(BeFalse())
 				})
 			})
 		})
@@ -148,9 +134,11 @@ var _ = Describe("Getting a switch over MCP", func() {
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
 		})
 
-		When("the get_switch tool is called", func() {
+		When("the delete_switch tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "get_switch", map[string]any{"switch_id": switchID})
+				result, err = client.CallTool(ctx, "delete_switch", map[string]any{
+					"switch_id": switchID,
+				})
 			})
 
 			It("rejects the call with a real HTTP 401", func() {

@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -149,4 +150,56 @@ func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 	s.Equal("Gateron", out.Brand)
 	s.Equal("Oil King", out.Name)
 	s.Equal("linear", out.Type)
+}
+
+type SwitchFromMCPSuite struct {
+	suite.Suite
+}
+
+func TestSwitchFromMCPSuite(t *testing.T) {
+	suite.Run(t, new(SwitchFromMCPSuite))
+}
+
+func (s *SwitchFromMCPSuite) TestMapsAllFields() {
+	stem := "POM"
+	actuation := 50.0
+	vendor := "Divinikey"
+	price := 0.0
+
+	out := SwitchFromMCP(schema.SwitchInput{
+		Brand:      "Gateron",
+		Name:       "Oil King",
+		Type:       "linear",
+		Material:   &schema.SwitchMaterial{Stem: &stem},
+		Force:      &schema.SwitchForce{Actuation: &actuation},
+		Purchase:   &schema.SwitchPurchase{Vendor: &vendor, Price: &price},
+		Visibility: "public",
+	})
+
+	s.Equal("Gateron", out.Brand)
+	s.Equal(repository.VisibilityPublic, out.Visibility)
+	s.Require().NotNil(out.Material.Stem)
+	s.Equal("POM", *out.Material.Stem)
+	s.Require().NotNil(out.Force.Actuation)
+	s.InDelta(50.0, *out.Force.Actuation, 0.001)
+	s.Require().NotNil(out.Purchase.Price)
+	s.Zero(*out.Purchase.Price, "a recorded zero price must survive the inbound mapping too")
+}
+
+// ID and UserID are set by the caller and the repository layer
+// respectively, never by the tool argument.
+func (s *SwitchFromMCPSuite) TestLeavesIdentityUnset() {
+	out := SwitchFromMCP(schema.SwitchInput{Brand: "B", Name: "N", Type: "linear", Visibility: "private"})
+
+	s.Empty(out.ID)
+	s.Empty(out.UserID)
+}
+
+func (s *SwitchFromMCPSuite) TestNilGroups_MapToZeroValues() {
+	out := SwitchFromMCP(schema.SwitchInput{Brand: "B", Name: "N", Type: "linear", Visibility: "private"})
+
+	s.Nil(out.Material.Stem)
+	s.Nil(out.Force.Actuation)
+	s.Nil(out.Spring.Material)
+	s.Nil(out.Purchase.Vendor)
 }

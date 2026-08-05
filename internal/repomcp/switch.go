@@ -86,3 +86,71 @@ func switchPurchaseToMCP(p repository.SwitchPurchase) *schema.SwitchPurchase {
 		Quantity: p.Quantity,
 	}
 }
+
+// SwitchFromMCP maps a create_switch/update_switch tool argument to its
+// repository shape. ID and UserID are left unset: the caller sets ID (fresh
+// for a create, the target's for an update), and UserID comes from ctx in
+// the repository layer.
+func SwitchFromMCP(in schema.SwitchInput) repository.Switch {
+	return repository.Switch{
+		Brand:        in.Brand,
+		Manufacturer: in.Manufacturer,
+		Name:         in.Name,
+		Type:         in.Type,
+		Pins:         in.Pins,
+		FactoryLubed: in.FactoryLubed,
+		Material:     switchMaterialFromMCP(in.Material),
+		Force:        switchForceFromMCP(in.Force),
+		Spring:       switchSpringFromMCP(in.Spring),
+		Purchase:     switchPurchaseFromMCP(in.Purchase),
+		Notes:        in.Notes,
+		Visibility:   repository.Visibility(in.Visibility),
+	}
+}
+
+func switchMaterialFromMCP(m *schema.SwitchMaterial) repository.SwitchMaterial {
+	if m == nil {
+		return repository.SwitchMaterial{}
+	}
+
+	return repository.SwitchMaterial{
+		TopHousing:    m.TopHousing,
+		BottomHousing: m.BottomHousing,
+		Stem:          m.Stem,
+	}
+}
+
+func switchForceFromMCP(f *schema.SwitchForce) repository.SwitchForce {
+	if f == nil {
+		return repository.SwitchForce{}
+	}
+
+	return repository.SwitchForce{
+		Actuation: f.Actuation,
+		BottomOut: f.BottomOut,
+	}
+}
+
+func switchSpringFromMCP(s *schema.SwitchSpring) repository.SwitchSpring {
+	if s == nil {
+		return repository.SwitchSpring{}
+	}
+
+	return repository.SwitchSpring{
+		Material:    s.Material,
+		PreTravel:   s.PreTravel,
+		TotalTravel: s.TotalTravel,
+	}
+}
+
+func switchPurchaseFromMCP(p *schema.SwitchPurchase) repository.SwitchPurchase {
+	if p == nil {
+		return repository.SwitchPurchase{}
+	}
+
+	return repository.SwitchPurchase{
+		Vendor:   p.Vendor,
+		Price:    p.Price,
+		Quantity: p.Quantity,
+	}
+}
