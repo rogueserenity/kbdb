@@ -18,6 +18,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+// SwitchRepository is the DynamoDB-backed repository.SwitchRepository.
 type SwitchRepository struct {
 	client    dynamoAPI
 	tableName string
@@ -25,10 +26,12 @@ type SwitchRepository struct {
 
 var _ repository.SwitchRepository = (*SwitchRepository)(nil)
 
+// NewSwitchRepository returns a SwitchRepository backed by client.
 func NewSwitchRepository(client *dynamodb.Client, tableName string) *SwitchRepository {
 	return &SwitchRepository{client: client, tableName: tableName}
 }
 
+// List implements repository.SwitchRepository.
 func (r *SwitchRepository) List(
 	ctx context.Context,
 	ownerID string,
@@ -97,6 +100,7 @@ func (r *SwitchRepository) List(
 	return switches, nextCursor, nil
 }
 
+// Get implements repository.SwitchRepository.
 func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*repository.Switch, error) {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &r.tableName,
@@ -121,6 +125,7 @@ func (r *SwitchRepository) Get(ctx context.Context, ownerID, id string) (*reposi
 	return &sw, nil
 }
 
+// Create implements repository.SwitchRepository.
 func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -149,6 +154,7 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 	return &sw, nil
 }
 
+// Update implements repository.SwitchRepository.
 func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -177,6 +183,7 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 	return &sw, nil
 }
 
+// Delete implements repository.SwitchRepository.
 func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {

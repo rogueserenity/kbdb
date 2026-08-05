@@ -16,6 +16,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+// KeyboardRepository is the DynamoDB-backed repository.KeyboardRepository.
 type KeyboardRepository struct {
 	client    dynamoAPI
 	tableName string
@@ -23,10 +24,12 @@ type KeyboardRepository struct {
 
 var _ repository.KeyboardRepository = (*KeyboardRepository)(nil)
 
+// NewKeyboardRepository returns a KeyboardRepository backed by client.
 func NewKeyboardRepository(client *dynamodb.Client, tableName string) *KeyboardRepository {
 	return &KeyboardRepository{client: client, tableName: tableName}
 }
 
+// List implements repository.KeyboardRepository.
 func (r *KeyboardRepository) List(
 	ctx context.Context,
 	ownerID string,
@@ -95,6 +98,7 @@ func (r *KeyboardRepository) List(
 	return keyboards, nextCursor, nil
 }
 
+// Get implements repository.KeyboardRepository.
 func (r *KeyboardRepository) Get(ctx context.Context, ownerID, id string) (*repository.Keyboard, error) {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &r.tableName,
@@ -119,6 +123,7 @@ func (r *KeyboardRepository) Get(ctx context.Context, ownerID, id string) (*repo
 	return &kb, nil
 }
 
+// Create implements repository.KeyboardRepository.
 func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -147,6 +152,7 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 	return &kb, nil
 }
 
+// Update implements repository.KeyboardRepository.
 func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -175,6 +181,7 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 	return &kb, nil
 }
 
+// Delete implements repository.KeyboardRepository.
 func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {

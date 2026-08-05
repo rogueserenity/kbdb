@@ -1,6 +1,3 @@
-// Package repository defines, per entity, the data-model struct and the
-// interface of operations available on it. No AWS/DynamoDB SDK types here —
-// concrete implementations live in subpackages (e.g. internal/repository/dynamo).
 package repository
 
 import (
@@ -54,6 +51,8 @@ func (l Lookup) Strings() ([]string, error) {
 	return out, nil
 }
 
+// LayoutValues rejects an entry with an empty name: a category whose data
+// is missing a required field is malformed, not merely unapproved.
 func (l Lookup) LayoutValues() ([]LayoutValue, error) {
 	out, err := parseObjects[LayoutValue](l.Values)
 	if err != nil {
@@ -69,6 +68,8 @@ func (l Lookup) LayoutValues() ([]LayoutValue, error) {
 	return out, nil
 }
 
+// CaseMountTypeValues rejects an entry with an empty name, as LayoutValues
+// does.
 func (l Lookup) CaseMountTypeValues() ([]CaseMountTypeValue, error) {
 	out, err := parseObjects[CaseMountTypeValue](l.Values)
 	if err != nil {
