@@ -8,8 +8,10 @@ import (
 
 // registerTools is the single list of every tool this server exposes -
 // add a new tool here, not by editing New.
-func registerTools(s *sdkmcp.Server, lookupRepo repository.LookupRepository) {
+func registerTools(s *sdkmcp.Server, lookupRepo repository.LookupRepository, switchRepo repository.SwitchRepository) {
 	sdkmcp.AddTool(s, pingTool, handlePing)
 	sdkmcp.AddTool(s, listLookupsTool, handleListLookups(lookupRepo))
 	sdkmcp.AddTool(s, getLookupTool, handleGetLookup(lookupRepo))
+	sdkmcp.AddTool(s, listSwitchesTool, handleListSwitches(switchRepo))
+	sdkmcp.AddTool(s, getSwitchTool, handleGetSwitch(switchRepo))
 }
