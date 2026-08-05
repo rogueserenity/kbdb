@@ -8,24 +8,10 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
-
-const (
-	callerID = "caller-0001"
-	otherID  = "other-0002"
-)
-
-// callerContext mimics what identityMiddleware puts on ctx for a verified
-// caller, since these handlers run downstream of it.
-func callerContext(t *testing.T) context.Context {
-	t.Helper()
-
-	return ctxpkg.WithUserID(t.Context(), callerID)
-}
 
 type HandleListSwitchesSuite struct {
 	suite.Suite
