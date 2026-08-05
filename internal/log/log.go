@@ -16,6 +16,8 @@ const (
 	KeycapKitID    = "keycap_kit_id"
 	KeycapKitImage = "keycap_kit_image"
 	LookupCategory = "lookup_category"
+	OwnerID        = "owner_id"
+	Visibility     = "visibility"
 )
 
 type loggerKey struct{}
@@ -47,4 +49,17 @@ func FromContext(c context.Context) *slog.Logger {
 		return l
 	}
 	return slog.Default()
+}
+
+// DeniedRead records a read denied by authorization. Callers report it as
+// not-found, so this line is the only thing telling an operator the item
+// existed - without it an authz regression looks like a missing row. Info,
+// not Error: a denial is expected traffic.
+func DeniedRead(c context.Context, resource, ownerID, visibility, idKey, idValue string) {
+	FromContext(c).Info("read denied by visibility, reporting as not found",
+		"resource", resource,
+		idKey, idValue,
+		OwnerID, ownerID,
+		Visibility, visibility,
+	)
 }

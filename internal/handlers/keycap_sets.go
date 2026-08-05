@@ -73,6 +73,7 @@ func GetKeycapSet(repo repository.KeycapSetRepository, images repository.KeycapK
 		}
 
 		if !authz.CanReadVisibility(r.Context(), ownerID, ks.Visibility) {
+			log.DeniedRead(r.Context(), "keycap set", ownerID, string(ks.Visibility), log.KeycapSetID, id)
 			problem.NotFound(w, "resource not found")
 			return
 		}

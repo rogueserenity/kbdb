@@ -73,6 +73,7 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 		}
 
 		if !authz.CanReadVisibility(r.Context(), ownerID, kb.Visibility) {
+			log.DeniedRead(r.Context(), "keyboard", ownerID, string(kb.Visibility), log.KeyboardID, id)
 			problem.NotFound(w, "resource not found")
 			return
 		}

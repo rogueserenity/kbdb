@@ -94,6 +94,7 @@ func handleGetSwitch(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema
 		// not be distinguishable from one that doesn't exist, matching
 		// handlers.GetSwitch's 404-not-403.
 		if !authz.CanReadVisibility(ctx, ownerID, sw.Visibility) {
+			log.DeniedRead(ctx, "switch", ownerID, string(sw.Visibility), log.SwitchID, in.SwitchID)
 			return nil, schema.GetSwitchOutput{}, errSwitchNotFound
 		}
 
