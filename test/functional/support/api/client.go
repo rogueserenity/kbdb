@@ -1,6 +1,3 @@
-// Package api holds HTTP clients for the functional test suites: a generic
-// authenticated-request Client, plus typed clients per REST entity/MCP on
-// top of it. See ../db for the DynamoDB seed/cleanup counterpart.
 package api
 
 import (
@@ -23,12 +20,12 @@ func NewClient() *Client {
 	return &Client{}
 }
 
-// Do's returned Body is pre-buffered in memory, not a live network read -
-// Ginkgo cancels each node's context when that node's function returns
-// (see the github.com/onsi/ginkgo/v2 module's internal/suite.go, runNode),
-// and a request built with a BeforeEach's ctx used to fail decoding its
-// still-live Body from a later It node once that BeforeEach had already
-// returned.
+// Do returns a response whose Body is pre-buffered in memory, not a live
+// network read - Ginkgo cancels each node's context when that node's
+// function returns (see the github.com/onsi/ginkgo/v2 module's
+// internal/suite.go, runNode), and a request built with a BeforeEach's ctx
+// used to fail decoding its still-live Body from a later It node once that
+// BeforeEach had already returned.
 func (c *Client) Do(ctx context.Context, method, path, token string, body io.Reader) (*http.Response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, support.BaseURL()+path, body)
 	if err != nil {

@@ -1,13 +1,3 @@
-// Package mcp wires the official modelcontextprotocol/go-sdk MCP server into
-// the application, reusing the same auth.Verifier as REST rather than a
-// second verification implementation. internal/auth holds all
-// protocol-agnostic verification logic shared by this package and
-// internal/middleware (the REST-side adapter); neither adapter depends on
-// the other. Request-scoped identity (internal/ctx) and logging
-// (internal/log) are likewise independent, transport-agnostic packages this
-// one depends on directly, so MCP tool logs get the same
-// user_id/request_id correlation fields as REST without depending on the
-// middleware package at all.
 package mcp
 
 import (
@@ -59,6 +49,8 @@ type Handlers struct {
 	Metadata         http.Handler
 }
 
+// MetadataPath and RootMetadataPath serve the same RFC 9728 metadata
+// document; see Handlers for why both are served.
 const (
 	MetadataPath     = "/.well-known/oauth-protected-resource/mcp"
 	RootMetadataPath = "/.well-known/oauth-protected-resource"

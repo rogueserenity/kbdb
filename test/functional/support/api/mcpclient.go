@@ -8,6 +8,8 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
+// MCPClient speaks MCP over the streamable-HTTP transport, unlike Client's
+// plain REST requests.
 type MCPClient struct {
 	client   *mcp.Client
 	endpoint string

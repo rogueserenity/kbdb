@@ -29,6 +29,7 @@ var errEmptyKitID = errors.New("kit id must not be empty")
 // here rather than silently persisting an ambiguous duplicate.
 var errDuplicateKitID = errors.New("kit id already exists in this set")
 
+// KeycapSetRepository is the DynamoDB-backed repository.KeycapSetRepository.
 type KeycapSetRepository struct {
 	client    dynamoAPI
 	tableName string
@@ -36,10 +37,12 @@ type KeycapSetRepository struct {
 
 var _ repository.KeycapSetRepository = (*KeycapSetRepository)(nil)
 
+// NewKeycapSetRepository returns a KeycapSetRepository backed by client.
 func NewKeycapSetRepository(client *dynamodb.Client, tableName string) *KeycapSetRepository {
 	return &KeycapSetRepository{client: client, tableName: tableName}
 }
 
+// List implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) List(
 	ctx context.Context,
 	ownerID string,
@@ -108,6 +111,7 @@ func (r *KeycapSetRepository) List(
 	return sets, nextCursor, nil
 }
 
+// Get implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) Get(ctx context.Context, ownerID, id string) (*repository.KeycapSet, error) {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &r.tableName,
@@ -132,6 +136,7 @@ func (r *KeycapSetRepository) Get(ctx context.Context, ownerID, id string) (*rep
 	return &ks, nil
 }
 
+// Create implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -191,6 +196,7 @@ func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSe
 	return updated, nil
 }
 
+// Delete implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) Delete(ctx context.Context, id string) ([]repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -295,6 +301,7 @@ func (r *KeycapSetRepository) mutateSet(
 	return nil, fmt.Errorf("mutating set %q owner %q: %w", setID, ownerID, repository.ErrMutationConflict)
 }
 
+// AddKit implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
 	if kit.KitID == "" {
 		return nil, fmt.Errorf("adding kit to keycap set %q: %w", setID, errEmptyKitID)
@@ -324,6 +331,7 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 	return &updated.Kits[idx], nil
 }
 
+// UpdateKit implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
 	if kit.KitID == "" {
 		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errEmptyKitID)
@@ -351,6 +359,7 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 	return &updated.Kits[idx], nil
 }
 
+// DeleteKit implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) (*repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -377,6 +386,7 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 	return cleared, nil
 }
 
+// SetKitImagePath implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKit, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -399,6 +409,7 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID 
 	return &updated.Kits[idx], nil
 }
 
+// ClearKitImagePath implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitID string) (*repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {

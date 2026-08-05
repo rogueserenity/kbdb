@@ -14,6 +14,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+// LookupRepository is the DynamoDB-backed repository.LookupRepository.
 type LookupRepository struct {
 	client    dynamoAPI
 	tableName string
@@ -21,10 +22,12 @@ type LookupRepository struct {
 
 var _ repository.LookupRepository = (*LookupRepository)(nil)
 
+// NewLookupRepository returns a LookupRepository backed by client.
 func NewLookupRepository(client *dynamodb.Client, tableName string) *LookupRepository {
 	return &LookupRepository{client: client, tableName: tableName}
 }
 
+// ListCategories implements repository.LookupRepository.
 func (r *LookupRepository) ListCategories(ctx context.Context) ([]string, error) {
 	categories := []string{}
 
@@ -60,6 +63,7 @@ func (r *LookupRepository) ListCategories(ctx context.Context) ([]string, error)
 	return categories, nil
 }
 
+// GetCategory implements repository.LookupRepository.
 func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*repository.Lookup, error) {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &r.tableName,
@@ -83,6 +87,7 @@ func (r *LookupRepository) GetCategory(ctx context.Context, category string) (*r
 	return &lookup, nil
 }
 
+// ReplaceCategory implements repository.LookupRepository.
 func (r *LookupRepository) ReplaceCategory(ctx context.Context, lookup repository.Lookup) (*repository.Lookup, error) {
 	item, err := attributevalue.MarshalMap(lookup)
 	if err != nil {
@@ -105,6 +110,7 @@ func (r *LookupRepository) ReplaceCategory(ctx context.Context, lookup repositor
 	return &lookup, nil
 }
 
+// DeleteCategory implements repository.LookupRepository.
 func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) error {
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
@@ -119,6 +125,7 @@ func (r *LookupRepository) DeleteCategory(ctx context.Context, category string) 
 	return nil
 }
 
+// CreateCategory implements repository.LookupRepository.
 func (r *LookupRepository) CreateCategory(ctx context.Context, lookup repository.Lookup) (*repository.Lookup, error) {
 	item, err := attributevalue.MarshalMap(lookup)
 	if err != nil {
