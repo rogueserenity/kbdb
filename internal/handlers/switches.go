@@ -83,6 +83,7 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 		}
 
 		if !authz.CanReadVisibility(r.Context(), ownerID, sw.Visibility) {
+			log.DeniedRead(r.Context(), "switch", ownerID, string(sw.Visibility), log.SwitchID, id)
 			problem.NotFound(w, "resource not found")
 			return
 		}

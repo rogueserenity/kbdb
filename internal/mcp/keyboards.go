@@ -74,6 +74,7 @@ func handleGetKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[sc
 		// not be distinguishable from one that doesn't exist, matching
 		// handlers.GetKeyboard's 404-not-403.
 		if !authz.CanReadVisibility(ctx, ownerID, kb.Visibility) {
+			log.DeniedRead(ctx, "keyboard", ownerID, string(kb.Visibility), log.KeyboardID, in.KeyboardID)
 			return nil, schema.GetKeyboardOutput{}, errKeyboardNotFound
 		}
 
