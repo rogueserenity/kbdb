@@ -33,6 +33,59 @@ type GetSwitchOutput struct {
 	Switch Switch `json:"switch" jsonschema:"the requested switch"`
 }
 
+// CreateSwitchInput is the create_switch tool arguments. Writes are always
+// self-scoped, so unlike the read tools there is no user_id: a switch is
+// created in the caller's own collection.
+type CreateSwitchInput struct {
+	SwitchInput
+}
+
+// CreateSwitchOutput is the create_switch tool result.
+type CreateSwitchOutput struct {
+	Switch Switch `json:"switch" jsonschema:"the created switch, including its server-generated id"`
+}
+
+// UpdateSwitchInput is the update_switch tool arguments. Every field is
+// replaced, so omitting an optional field clears it rather than leaving the
+// stored value in place - matching the REST PUT this mirrors.
+type UpdateSwitchInput struct {
+	SwitchID string `json:"switch_id" jsonschema:"the id of the switch to replace"`
+	SwitchInput
+}
+
+// UpdateSwitchOutput is the update_switch tool result.
+type UpdateSwitchOutput struct {
+	Switch Switch `json:"switch" jsonschema:"the updated switch"`
+}
+
+// DeleteSwitchInput is the delete_switch tool arguments.
+type DeleteSwitchInput struct {
+	SwitchID string `json:"switch_id" jsonschema:"the id of the switch to delete"`
+}
+
+// DeleteSwitchOutput is the delete_switch tool result. Deleting is
+// idempotent, so this carries no payload - a missing id is not an error.
+type DeleteSwitchOutput struct{}
+
+// SwitchInput is the writable half of a switch, shared by create_switch and
+// update_switch. brand, name, type, and visibility are required, matching
+// api/openapi.yaml's SwitchInput; the rest are pointers so an omitted field
+// stays distinguishable from one explicitly set to zero.
+type SwitchInput struct {
+	Brand        string          `json:"brand" jsonschema:"the switch's brand"`
+	Manufacturer *string         `json:"manufacturer,omitempty" jsonschema:"who physically manufactures the switch, if different from the brand"`
+	Name         string          `json:"name" jsonschema:"the switch's name"`
+	Type         string          `json:"type" jsonschema:"the switch type; must be an approved switch_type lookup value"`
+	Pins         *int            `json:"pins,omitempty" jsonschema:"pin count, typically 3 or 5"`
+	FactoryLubed *bool           `json:"factory_lubed,omitempty" jsonschema:"whether the switch ships pre-lubed"`
+	Material     *SwitchMaterial `json:"material,omitempty" jsonschema:"housing and stem materials; each must be an approved switch_material lookup value"`
+	Force        *SwitchForce    `json:"force,omitempty" jsonschema:"actuation and bottom-out force, in grams"`
+	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
+	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where and how many were bought"`
+	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
+	Visibility   string          `json:"visibility" jsonschema:"who can read this switch: public, authenticated, or private"`
+}
+
 // Switch is the full switch shape. Optional fields are pointers so a
 // recorded zero (a free purchase, a 0g force) stays distinguishable from an
 // unset field, which is omitted entirely - matching what REST returns for

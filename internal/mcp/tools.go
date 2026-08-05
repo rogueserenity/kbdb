@@ -14,4 +14,7 @@ func registerTools(s *sdkmcp.Server, lookupRepo repository.LookupRepository, swi
 	sdkmcp.AddTool(s, getLookupTool, handleGetLookup(lookupRepo))
 	sdkmcp.AddTool(s, listSwitchesTool, handleListSwitches(switchRepo))
 	sdkmcp.AddTool(s, getSwitchTool, handleGetSwitch(switchRepo))
+	sdkmcp.AddTool(s, createSwitchTool, handleCreateSwitch(switchRepo, lookupRepo))
+	sdkmcp.AddTool(s, updateSwitchTool, handleUpdateSwitch(switchRepo, lookupRepo))
+	sdkmcp.AddTool(s, deleteSwitchTool, handleDeleteSwitch(switchRepo))
 }
