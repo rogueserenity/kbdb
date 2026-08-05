@@ -59,11 +59,16 @@ const (
 // New builds the MCP server. issuerURL is the OIDC issuer MCP clients should
 // authenticate against, advertised via RFC 9728 Protected Resource Metadata.
 // version is advertised to MCP clients on connect.
-func New(verifier *auth.Verifier, lookupRepo repository.LookupRepository, issuerURL, version string) Handlers {
+func New(
+	verifier *auth.Verifier,
+	lookupRepo repository.LookupRepository,
+	switchRepo repository.SwitchRepository,
+	issuerURL, version string,
+) Handlers {
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "kbdb", Version: version}, nil)
 	mcpServer.AddReceivingMiddleware(identityMiddleware())
 
-	registerTools(mcpServer, lookupRepo)
+	registerTools(mcpServer, lookupRepo, switchRepo)
 
 	streamable := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return mcpServer },
