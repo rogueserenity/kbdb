@@ -188,16 +188,21 @@ func handleDeleteSwitch(switchRepo repository.SwitchRepository) mcp.ToolHandlerF
 	}
 }
 
-// validatedSwitch maps in to its repository shape after the two checks the
-// tool's JSON schema can't express: visibility being one of the three
-// defined tiers, and the open-vocabulary fields being approved lookup
-// values. REST gets the first from api/openapi.yaml's Visibility enum via
-// the request validator and the second from handlers.validateSwitchLookups.
+// validatedSwitch checks in code what api/openapi.yaml declares for REST:
+// the SDK infers tool schemas from Go types alone, so there is no per-field
+// constraint to attach.
 func validatedSwitch(
 	ctx context.Context,
 	lookupRepo repository.LookupRepository,
 	in schema.SwitchInput,
 ) (repository.Switch, error) {
+	if strings.TrimSpace(in.Brand) == "" {
+		return repository.Switch{}, errors.New("brand must not be blank")
+	}
+	if strings.TrimSpace(in.Name) == "" {
+		return repository.Switch{}, errors.New("name must not be blank")
+	}
+
 	sw := repomcp.SwitchFromMCP(in)
 
 	if !sw.Visibility.Valid() {

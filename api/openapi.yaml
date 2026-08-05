@@ -1061,8 +1061,12 @@ components:
       properties:
         brand:
           type: string
+          minLength: 1
+          pattern: "\\S"
         name:
           type: string
+          minLength: 1
+          pattern: "\\S"
         size:
           type: string
           description: Open vocabulary — validated against the "keyboard_size" lookup at request time.
@@ -1177,10 +1181,14 @@ components:
       properties:
         brand:
           type: string
+          minLength: 1
+          pattern: "\\S"
         manufacturer:
           type: string
         name:
           type: string
+          minLength: 1
+          pattern: "\\S"
         type:
           type: string
           description: Open vocabulary — validated against the "switch_type" lookup at request time.
@@ -1241,6 +1249,8 @@ components:
       properties:
         name:
           type: string
+          minLength: 1
+          pattern: "\\S"
           description: e.g. "Base", "Extension", "Accents".
         purchase:
           $ref: "#/components/schemas/Purchase"
@@ -1292,8 +1302,12 @@ components:
       properties:
         brand:
           type: string
+          minLength: 1
+          pattern: "\\S"
         name:
           type: string
+          minLength: 1
+          pattern: "\\S"
         profile:
           type: string
           description: Open vocabulary — validated against the "keycap_profile" lookup at request time.
@@ -1397,6 +1411,8 @@ components:
       properties:
         keyboard:
           type: string
+          minLength: 1
+          pattern: "\\S"
           description: ID of a Keyboard resource.
         plate:
           type: string

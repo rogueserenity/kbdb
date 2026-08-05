@@ -115,6 +115,25 @@ var _ = Describe("Creating a switch over MCP", func() {
 			})
 		})
 
+		Context("given a required field is present but blank", func() {
+			When("the create_switch tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_switch", map[string]any{
+						"brand":      "",
+						"name":       "Yellow",
+						"type":       approvedType,
+						"visibility": "private",
+					})
+					captureCreatedID(result)
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+
 		Context("given a required field is missing", func() {
 			When("the create_switch tool is called with no brand", func() {
 				BeforeEach(func(ctx SpecContext) {

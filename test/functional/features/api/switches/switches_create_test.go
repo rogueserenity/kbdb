@@ -112,6 +112,44 @@ var _ = Describe("Creating a switch", func() {
 			})
 		})
 
+		Context("given a required field is present but blank", func() {
+			When("creating a switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"","name":"Yellow","type":"Linear","visibility":"private"}`)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusCreated {
+						captureCreatedID(resp)
+					}
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
+		Context("given a required field is whitespace only", func() {
+			When("creating a switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"   ","name":"Yellow","type":"Linear","visibility":"private"}`)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusCreated {
+						captureCreatedID(resp)
+					}
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
 		Context("given required fields are missing", func() {
 			When("creating a switch", func() {
 				BeforeEach(func(ctx SpecContext) {

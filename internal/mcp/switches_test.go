@@ -273,6 +273,28 @@ func (s *HandleCreateSwitchSuite) TestSucceeds() {
 	s.NotEmpty(out.Switch.ID, "create must assign a server-generated id")
 }
 
+func (s *HandleCreateSwitchSuite) TestBlankBrand_ReturnsError() {
+	in := validInput()
+	in.Brand = ""
+
+	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
+
+	s.Require().ErrorContains(err, "brand must not be blank")
+}
+
+// REST rejects this too, via openapi.yaml's \S pattern - minLength alone
+// counts characters without trimming.
+func (s *HandleCreateSwitchSuite) TestWhitespaceOnlyBrand_ReturnsError() {
+	in := validInput()
+	in.Brand = "   "
+
+	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
+
+	s.Require().ErrorContains(err, "brand must not be blank")
+}
+
 func (s *HandleCreateSwitchSuite) TestInvalidVisibility_ReturnsError() {
 	in := validInput()
 	in.Visibility = "everyone"
@@ -354,6 +376,19 @@ func (s *HandleUpdateSwitchSuite) TestSucceeds() {
 
 	s.Require().NoError(err)
 	s.Equal("sw-1", out.Switch.ID, "update must target the requested id")
+}
+
+func (s *HandleUpdateSwitchSuite) TestBlankName_ReturnsError() {
+	in := validInput()
+	in.Name = ""
+
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
+		SwitchID:    "sw-1",
+		SwitchInput: in,
+	})
+
+	s.Require().ErrorContains(err, "name must not be blank")
 }
 
 func (s *HandleUpdateSwitchSuite) TestBlankSwitchID_ReturnsError() {
