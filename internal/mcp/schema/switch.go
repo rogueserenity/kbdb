@@ -68,9 +68,8 @@ type DeleteSwitchInput struct {
 type DeleteSwitchOutput struct{}
 
 // SwitchInput is the writable half of a switch, shared by create_switch and
-// update_switch. brand, name, type, and visibility are required, matching
-// api/openapi.yaml's SwitchInput; the rest are pointers so an omitted field
-// stays distinguishable from one explicitly set to zero.
+// update_switch. Optional fields are pointers so an omitted field stays
+// distinguishable from one explicitly set to zero.
 type SwitchInput struct {
 	Brand        string          `json:"brand" jsonschema:"the switch's brand"`
 	Manufacturer *string         `json:"manufacturer,omitempty" jsonschema:"who physically manufactures the switch, if different from the brand"`
