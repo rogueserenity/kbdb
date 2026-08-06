@@ -95,3 +95,71 @@ func keyboardPurchaseToMCP(p repository.KeyboardPurchase) *schema.KeyboardPurcha
 		OrderStatus:  p.OrderStatus,
 	}
 }
+
+// KeyboardFromMCP maps a create_keyboard/update_keyboard tool argument to
+// its repository shape. ID and UserID are left unset: the caller sets ID,
+// and UserID comes from ctx in the repository layer.
+func KeyboardFromMCP(in schema.KeyboardInput) repository.Keyboard {
+	return repository.Keyboard{
+		Brand:      in.Brand,
+		Name:       in.Name,
+		Size:       in.Size,
+		Layout:     in.Layout,
+		Design:     keyboardDesignFromMCP(in.Design),
+		PCB:        keyboardPCBFromMCP(in.PCB),
+		Purchase:   keyboardPurchaseFromMCP(in.Purchase),
+		Notes:      in.Notes,
+		Visibility: repository.Visibility(in.Visibility),
+	}
+}
+
+func keyboardDesignFromMCP(d *schema.KeyboardDesign) repository.KeyboardDesign {
+	if d == nil {
+		return repository.KeyboardDesign{}
+	}
+
+	return repository.KeyboardDesign{
+		TopCase:    keyboardMaterialColorFromMCP(d.TopCase),
+		BottomCase: keyboardMaterialColorFromMCP(d.BottomCase),
+		Weight:     keyboardMaterialColorFromMCP(d.Weight),
+		Plates:     d.Plates,
+	}
+}
+
+func keyboardMaterialColorFromMCP(mc *schema.KeyboardMaterialColor) repository.KeyboardMaterialColor {
+	if mc == nil {
+		return repository.KeyboardMaterialColor{}
+	}
+
+	return repository.KeyboardMaterialColor{
+		Material: mc.Material,
+		Color:    mc.Color,
+	}
+}
+
+func keyboardPCBFromMCP(p *schema.KeyboardPCB) repository.KeyboardPCB {
+	if p == nil {
+		return repository.KeyboardPCB{}
+	}
+
+	return repository.KeyboardPCB{
+		Thickness:    p.Thickness,
+		Firmware:     p.Firmware,
+		Assembly:     p.Assembly,
+		Connectivity: p.Connectivity,
+	}
+}
+
+func keyboardPurchaseFromMCP(p *schema.KeyboardPurchase) repository.KeyboardPurchase {
+	if p == nil {
+		return repository.KeyboardPurchase{}
+	}
+
+	return repository.KeyboardPurchase{
+		Vendor:       p.Vendor,
+		Price:        p.Price,
+		OrderDate:    p.OrderDate,
+		DeliveryDate: p.DeliveryDate,
+		OrderStatus:  p.OrderStatus,
+	}
+}

@@ -23,4 +23,7 @@ func registerTools(
 	sdkmcp.AddTool(s, deleteSwitchTool, handleDeleteSwitch(switchRepo))
 	sdkmcp.AddTool(s, listKeyboardsTool, handleListKeyboards(keyboardRepo))
 	sdkmcp.AddTool(s, getKeyboardTool, handleGetKeyboard(keyboardRepo))
+	sdkmcp.AddTool(s, createKeyboardTool, handleCreateKeyboard(keyboardRepo, lookupRepo))
+	sdkmcp.AddTool(s, updateKeyboardTool, handleUpdateKeyboard(keyboardRepo, lookupRepo))
+	sdkmcp.AddTool(s, deleteKeyboardTool, handleDeleteKeyboard(keyboardRepo))
 }
