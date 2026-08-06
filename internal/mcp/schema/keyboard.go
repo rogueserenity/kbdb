@@ -34,6 +34,51 @@ type GetKeyboardOutput struct {
 	Keyboard Keyboard `json:"keyboard" jsonschema:"the requested keyboard"`
 }
 
+// CreateKeyboardInput is the create_keyboard tool input.
+type CreateKeyboardInput struct {
+	KeyboardInput
+}
+
+// CreateKeyboardOutput is the create_keyboard tool output.
+type CreateKeyboardOutput struct {
+	Keyboard Keyboard `json:"keyboard" jsonschema:"the created keyboard, including its server-generated id"`
+}
+
+// UpdateKeyboardInput is the update_keyboard tool input. Every field is
+// replaced, so omitting an optional field clears it.
+type UpdateKeyboardInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to replace"`
+	KeyboardInput
+}
+
+// UpdateKeyboardOutput is the update_keyboard tool output.
+type UpdateKeyboardOutput struct {
+	Keyboard Keyboard `json:"keyboard" jsonschema:"the updated keyboard"`
+}
+
+// DeleteKeyboardInput is the delete_keyboard tool input.
+type DeleteKeyboardInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to delete"`
+}
+
+// DeleteKeyboardOutput is the delete_keyboard tool output. Deleting is
+// idempotent, so there is no payload.
+type DeleteKeyboardOutput struct{}
+
+// KeyboardInput is the writable half of a keyboard, shared by
+// create_keyboard and update_keyboard.
+type KeyboardInput struct {
+	Brand      string            `json:"brand" jsonschema:"the keyboard's brand"`
+	Name       string            `json:"name" jsonschema:"the keyboard's name"`
+	Size       *string           `json:"size,omitempty" jsonschema:"the keyboard's size; must be an approved keyboard_size lookup value"`
+	Layout     *string           `json:"layout,omitempty" jsonschema:"the keyboard's layout; must be an approved keyboard_layout value whose sizes include this keyboard's size"`
+	Design     *KeyboardDesign   `json:"design,omitempty" jsonschema:"the case and plate makeup"`
+	PCB        *KeyboardPCB      `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
+	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
+	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
+}
+
 // Keyboard is the full keyboard shape. Optional fields are pointers so a
 // recorded zero stays distinguishable from an unset field, which is omitted
 // entirely - matching what REST returns for the same stored keyboard.
@@ -47,7 +92,7 @@ type Keyboard struct {
 	PCB        *KeyboardPCB      `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
 	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard: public, authenticated, or private"`
+	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
 }
 
 // KeyboardDesign is a keyboard's case and plate makeup.

@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -149,4 +150,58 @@ func (s *KeyboardToMCPSummarySuite) TestNoPurchase_LeavesOrderStatusNil() {
 	out := KeyboardToMCPSummary(repository.Keyboard{ID: "kb-1"})
 
 	s.Nil(out.OrderStatus)
+}
+
+type KeyboardFromMCPSuite struct {
+	suite.Suite
+}
+
+func TestKeyboardFromMCPSuite(t *testing.T) {
+	suite.Run(t, new(KeyboardFromMCPSuite))
+}
+
+func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
+	size := "60%"
+	material := "Aluminum"
+	firmware := "QMK/VIA"
+	price := 0.0
+
+	out := KeyboardFromMCP(schema.KeyboardInput{
+		Brand: "Mode",
+		Name:  "Sixty",
+		Size:  &size,
+		Design: &schema.KeyboardDesign{
+			TopCase: &schema.KeyboardMaterialColor{Material: &material},
+			Plates:  []string{"Brass"},
+		},
+		PCB:        &schema.KeyboardPCB{Firmware: &firmware},
+		Purchase:   &schema.KeyboardPurchase{Price: &price},
+		Visibility: "public",
+	})
+
+	s.Equal("Mode", out.Brand)
+	s.Equal(repository.VisibilityPublic, out.Visibility)
+	s.Equal("60%", *out.Size)
+	s.Equal("Aluminum", *out.Design.TopCase.Material)
+	s.Equal([]string{"Brass"}, out.Design.Plates)
+	s.Equal("QMK/VIA", *out.PCB.Firmware)
+	s.Zero(*out.Purchase.Price, "a recorded zero price must survive the inbound mapping too")
+}
+
+// ID and UserID are set by the caller and the repository layer
+// respectively, never by the tool argument.
+func (s *KeyboardFromMCPSuite) TestLeavesIdentityUnset() {
+	out := KeyboardFromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
+
+	s.Empty(out.ID)
+	s.Empty(out.UserID)
+}
+
+func (s *KeyboardFromMCPSuite) TestNilGroups_MapToZeroValues() {
+	out := KeyboardFromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
+
+	s.Nil(out.Design.TopCase.Material)
+	s.Nil(out.PCB.Firmware)
+	s.Nil(out.Purchase.Vendor)
+	s.Empty(out.Design.Plates)
 }

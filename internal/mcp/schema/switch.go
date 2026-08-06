@@ -82,7 +82,7 @@ type SwitchInput struct {
 	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
 	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where and how many were bought"`
 	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility   string          `json:"visibility" jsonschema:"who can read this switch: public, authenticated, or private"`
+	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
 }
 
 // Switch is the full switch shape. Optional fields are pointers so a
@@ -102,7 +102,7 @@ type Switch struct {
 	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
 	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where and how many were bought"`
 	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility   string          `json:"visibility" jsonschema:"who can read this switch: public, authenticated, or private"`
+	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
 }
 
 // SwitchMaterial is a switch's housing and stem materials.
