@@ -38,7 +38,7 @@ const (
 
 func TestSwitches(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Switches Suite")
+	RunSpecs(t, "REST Switches Suite")
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
