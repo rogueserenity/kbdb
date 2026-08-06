@@ -88,6 +88,12 @@ aws s3api head-bucket --endpoint-url http://localhost:4566 \
     --create-bucket-configuration LocationConstraint=us-east-2 \
     >/dev/null 2>&1
 
+if [ -f .sam-local-api.pid ] && kill -0 "$(cat .sam-local-api.pid)" 2>/dev/null; then
+  echo "sam local start-api is already running (pid $(cat .sam-local-api.pid))." >&2
+  echo "Run 'mise run func-teardown' first, or reuse the running instance." >&2
+  exit 1
+fi
+
 sam build
 nohup sam local start-api > .sam-local-api.log 2>&1 &
 echo $! > .sam-local-api.pid
