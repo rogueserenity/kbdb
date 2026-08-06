@@ -44,7 +44,7 @@ const (
 
 func TestKeyboards(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Keyboards Suite")
+	RunSpecs(t, "REST Keyboards Suite")
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {

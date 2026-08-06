@@ -9,5 +9,5 @@ import (
 
 func TestLookups(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Lookups Suite")
+	RunSpecs(t, "REST Lookups Suite")
 }

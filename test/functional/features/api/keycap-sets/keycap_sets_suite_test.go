@@ -33,7 +33,7 @@ const (
 
 func TestKeycapSets(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Keycap Sets Suite")
+	RunSpecs(t, "REST Keycap Sets Suite")
 }
 
 var _ = BeforeSuite(func(ctx SpecContext) {
