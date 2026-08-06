@@ -115,6 +115,28 @@ var _ = Describe("Creating a keyboard over MCP", func() {
 			})
 		})
 
+		// REST rejects this at the door via openapi.yaml's `format: date`;
+		// MCP has no such validator, and a stored bad date makes every later
+		// REST read of the row fail its date parse.
+		Context("given a malformed purchase date", func() {
+			When("the create_keyboard tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_keyboard", map[string]any{
+						"brand":      "Mode",
+						"name":       "Sixty",
+						"visibility": "private",
+						"purchase":   map[string]any{"order_date": "next tuesday"},
+					})
+					captureCreatedID(result)
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+
 		Context("given an invalid visibility", func() {
 			When("the create_keyboard tool is called", func() {
 				BeforeEach(func(ctx SpecContext) {

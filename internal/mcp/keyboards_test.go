@@ -294,7 +294,11 @@ func (s *HandleCreateKeyboardSuite) TestLayoutNotValidForSize_ReturnsError() {
 	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
-	s.Require().ErrorContains(err, "layout")
+	// Both values are individually approved, so the generic wording would
+	// claim the layout isn't an approved *size* - sending an agent to fix a
+	// field that's already correct.
+	s.Require().ErrorContains(err, `"WKL" is not a valid layout for size "60%"`)
+	s.Require().NotContains(err.Error(), "approved keyboard_size")
 }
 
 func (s *HandleCreateKeyboardSuite) TestLayoutValidForSize_Succeeds() {
@@ -429,4 +433,66 @@ func (s *HandleDeleteKeyboardSuite) TestRepositoryError_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
 
 	s.Require().ErrorContains(err, "failed to delete keyboard")
+}
+
+// REST rejects a malformed date via api/openapi.yaml's `format: date`. MCP
+// has no such validator, and nothing downstream re-checks: a bad date
+// reaches DynamoDB and every later REST read of that row fails its date
+// parse with a 500, unrepairable through the API.
+func (s *HandleCreateKeyboardSuite) TestMalformedOrderDate_ReturnsError() {
+	bad := "next tuesday"
+	in := validKeyboardInput()
+	in.Purchase = &schema.KeyboardPurchase{OrderDate: &bad}
+
+	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
+
+	s.Require().ErrorContains(err, "purchase.order_date")
+	s.Require().ErrorContains(err, "YYYY-MM-DD")
+}
+
+func (s *HandleCreateKeyboardSuite) TestMalformedDeliveryDate_ReturnsError() {
+	bad := "2026-13-45"
+	in := validKeyboardInput()
+	in.Purchase = &schema.KeyboardPurchase{DeliveryDate: &bad}
+
+	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
+
+	s.Require().ErrorContains(err, "purchase.delivery_date")
+}
+
+func (s *HandleCreateKeyboardSuite) TestWellFormedDates_Succeed() {
+	ordered, delivered := "2026-01-15", "2026-02-01"
+	in := validKeyboardInput()
+	in.Purchase = &schema.KeyboardPurchase{OrderDate: &ordered, DeliveryDate: &delivered}
+
+	s.mockLookups.EXPECT().
+		GetCategory(mock.Anything, mock.Anything).
+		Return(&repository.Lookup{Values: []any{"Amazon"}}, nil).
+		Maybe()
+	s.mockKeyboards.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
+			return &kb, nil
+		})
+
+	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleUpdateKeyboardSuite) TestMalformedOrderDate_ReturnsError() {
+	bad := "01/15/2026"
+	in := validKeyboardInput()
+	in.Purchase = &schema.KeyboardPurchase{OrderDate: &bad}
+
+	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockLookups)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{
+		KeyboardID:    "kb-1",
+		KeyboardInput: in,
+	})
+
+	s.Require().ErrorContains(err, "purchase.order_date")
 }

@@ -184,6 +184,12 @@ func validatedKeyboard(
 		return repository.Keyboard{}, errors.New("name must not be blank")
 	}
 
+	if in.Purchase != nil {
+		if err := validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
+			return repository.Keyboard{}, err
+		}
+	}
+
 	kb := repomcp.KeyboardFromMCP(in)
 
 	if !kb.Visibility.Valid() {
@@ -199,11 +205,24 @@ func validatedKeyboard(
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {
-			reasons[i] = fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
+			reasons[i] = keyboardFieldErrorReason(fe, in.Size)
 		}
 
 		return repository.Keyboard{}, errors.New(strings.Join(reasons, "; "))
 	}
 
 	return kb, nil
+}
+
+// ValidateKeyboard reports a layout that isn't valid for the chosen size as
+// a FieldError on "layout" carrying the *size* category, which the generic
+// wording would render as "layout is not an approved keyboard_size value" -
+// telling an agent to go fix a field that's already correct. Mirrors
+// handlers.keyboardFieldErrorToInvalidParam.
+func keyboardFieldErrorReason(fe lookup.FieldError, size *string) string {
+	if fe.Field == "layout" && fe.Category == repository.CategoryKeyboardSize && size != nil {
+		return fmt.Sprintf("layout: %q is not a valid layout for size %q", fe.Value, *size)
+	}
+
+	return fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
 }
