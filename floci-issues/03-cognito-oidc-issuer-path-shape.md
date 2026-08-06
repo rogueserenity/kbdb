@@ -1,100 +1,81 @@
-# Cognito OIDC discovery is not served at the real AWS issuer path
+# Cognito OIDC issuer: reachable by config, but not over the AWS-shaped HTTPS URL
 
-**Severity:** blocker — any OIDC client configured the way AWS documents
-fails to initialize
-**Component:** `services/cognito`
+**Severity:** low for floci — mostly a consumer configuration matter
+**Component:** `services/cognito` / docs
 **Found against:** `rogueserenity/floci` @ `fix/sam-httpapi-transform`
 
-## Symptom
+## Correction to the first version of this issue
 
-A Lambda that verifies Cognito JWTs cannot start. It resolves the issuer
-URL exactly as AWS documents, fetches the discovery document, and gets a
-404:
+The original write-up claimed floci served OIDC discovery at the wrong path
+and that a template using the AWS-documented issuer URL could not work.
+That was wrong, and it understated floci's existing support.
 
-```
-{"level":"INFO","msg":"initializing token verifier: auth: fetching OIDC provider metadata:
- 404 Not Found: {\"message\":\"User pool us-east-2_874a40c50 does not exist.\"}"}
-```
+floci already has the machinery: `FLOCI_HOSTNAME` rewrites the host in
+returned URLs (equivalent to `LOCALSTACK_HOSTNAME`), and
+`FLOCI_DNS_EXTRA_SUFFIXES` adds hostname suffixes to the embedded DNS
+resolver. Together those solve the dual-endpoint problem — one hostname
+that resolves correctly from both the host and sibling containers.
 
-The pool does exist — floci created it, and the control plane returns it:
+## What works today, with config only
 
-```
-$ aws --endpoint-url http://localhost:4566 cognito-idp describe-user-pool \
-    --user-pool-id us-east-2_874a40c50 --query UserPool.Id --output text
-us-east-2_874a40c50
-```
-
-## Root cause
-
-Real Cognito serves OIDC discovery at
+Setting `FLOCI_HOSTNAME=localhost.floci.io` makes the issuer resolvable
+from both sides — verified, 200 from each:
 
 ```
-https://cognito-idp.{region}.amazonaws.com/{poolId}/.well-known/openid-configuration
+issuer: http://localhost.floci.io:4566/us-east-2_516997a00
+
+from the HOST               discovery -> 200
+from a SIBLING container    discovery -> 200
 ```
 
-and that same URL is the `iss` claim of every token it mints. AWS's own
-docs tell you to configure clients with it, and SAM templates conventionally
-build it with
+Adding `FLOCI_DNS_EXTRA_SUFFIXES=amazonaws.com` goes further and points the
+real AWS Cognito hostname at floci, so a template hardcoding
 
 ```yaml
 OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
 ```
 
-floci serves the document only at `/{poolId}/...`:
+reaches floci rather than the internet. Confirmed by the error changing
+from a 404 to a connection attempt against floci's own IP.
+
+## The one genuine remaining gap
+
+That AWS-shaped URL is `https://`, and floci serves plain HTTP on 4566:
 
 ```
-$ curl -o /dev/null -w '%{http_code}\n' \
-    http://localhost:4566/us-east-2_874a40c50/.well-known/openid-configuration
-200
-
-$ curl -o /dev/null -w '%{http_code}\n' \
-    http://localhost:4566/cognito-idp/us-east-2_874a40c50/.well-known/openid-configuration
-404
+initializing token verifier: auth: fetching OIDC provider metadata:
+Get "https://cognito-idp.us-east-2.amazonaws.com/us-east-2_58565e500/.well-known/openid-configuration":
+dial tcp 172.18.0.3:443: connect: connection refused
 ```
 
-and advertises a correspondingly different issuer:
+So an unmodified AWS template still cannot initialize an OIDC client.
+`FLOCI_TLS_ENABLED=true` with `FLOCI_TLS_SELF_SIGNED=true` would open 443,
+but then the client has to trust a self-signed certificate — Go's
+`go-oidc`/`crypto/tls` will reject it unless the CA is installed in the
+Lambda container's trust store. That is a consumer-side problem floci
+cannot fully solve.
 
-```json
-{
-  "issuer":   "http://localhost:4566/us-east-2_874a40c50",
-  "jwks_uri": "http://localhost:4566/us-east-2_874a40c50/.well-known/jwks.json"
-}
-```
+## What would actually help
 
-## Why the shape matters, not just the host
+Not a bug fix so much as two smaller things:
 
-This is not merely "point the client somewhere else". OIDC discovery
-requires the `issuer` in the document to match the URL the client was
-configured with — `go-oidc`'s `oidc.NewProvider` enforces this, as do most
-conforming libraries. So a client cannot simply be pointed at
-`http://localhost:4566/{poolId}` while tokens carry a different `iss`, nor
-vice versa; the path shape and the advertised issuer have to agree with
-what the client was told.
+1. **Serve TLS on 443 as well as the configured port when TLS is enabled**,
+   so `https://cognito-idp.{region}.amazonaws.com/...` works without a port
+   suffix. Today TLS applies to the single configured port, so the AWS
+   hostname's implicit 443 is unreachable.
+2. **Document the combination.** `FLOCI_HOSTNAME` +
+   `FLOCI_DNS_EXTRA_SUFFIXES` is the answer to "how do I use an issuer URL
+   from both the host and a Lambda container", and neither option's docs
+   mention OIDC or the pairing. Both were found by reading
+   `EmulatorConfig.java`, not the docs.
 
-The practical consequence is that a template written for real AWS cannot be
-deployed unmodified. Every consumer has to introduce a
-floci-specific issuer override, which defeats the purpose of deploying the
-real template.
+## Consumer-side note (kbdb)
 
-## Suggested fix
+The practical fix on our side is a template parameter overriding
+`OIDC_ISSUER_URL` for local runs — which is exactly what the stashed
+`OidcIssuerBaseUrl` work did. With `FLOCI_HOSTNAME=localhost.floci.io` set,
+pointing that at `http://localhost.floci.io:4566` needs no floci change at
+all.
 
-Serve the discovery document (and JWKS) additionally at the AWS-shaped
-path:
-
-```
-/cognito-idp/{poolId}/.well-known/openid-configuration
-/cognito-idp/{poolId}/.well-known/jwks.json
-```
-
-and set `issuer` to match whichever host the request arrived on, the way
-the S3 presigned-URL support already adapts to the requesting host. That
-would let a stock `!Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}`
-template work unchanged when DNS for that host is pointed at floci — which
-is already how floci's embedded DNS handles `localhost.localstack.cloud`
-and `localhost.floci.io`.
-
-## Note
-
-This is the same class of problem as the S3 presigned-URL host issue floci
-already solves architecturally with its embedded DNS server. Applying the
-same approach to the Cognito issuer would close it consistently.
+So this is **not a floci blocker**. It is a kbdb template change plus two
+documentation/TLS improvements worth suggesting upstream.

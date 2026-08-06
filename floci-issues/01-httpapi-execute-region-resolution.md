@@ -1,8 +1,22 @@
 # HTTP API (v2) execute-api returns "Invalid API id specified" for unsigned requests
 
-**Severity:** blocker — no HTTP API can be invoked over an unsigned request
-**Component:** `services/apigateway/ApiGatewayExecuteController`
+**Status:** fixed locally on this branch, ready to upstream
+**Severity:** blocker — no HTTP API can be invoked unless it happens to live in `floci.default-region`
+**Component:** `services/apigateway/ApiGatewayExecuteController`, `services/apigatewayv2/ApiGatewayV2Service`
 **Found against:** `rogueserenity/floci` @ `fix/sam-httpapi-transform`
+
+## Confirmed on re-verification
+
+Re-tested from scratch (fresh floci, fresh `sam deploy`, region `us-east-2` vs
+`floci.default-region`'s default of `us-east-1`) after two earlier issues
+filed in this same pass (03, 04) turned out to be misdiagnoses. This one held
+up: unsigned requests reproduced 404 consistently across repeated fresh runs,
+and — critically — **so did requests carrying a real Cognito bearer JWT**,
+which is the actual shape of every request kbdb's own functional suite sends.
+The original write-up below only tested a fake SigV4-shaped header; a real
+bearer token also fails to match `RegionResolver`'s `Credential=` pattern and
+silently falls back to the default region exactly like a blank header does.
+`RegionResolver.isRegionUnresolved` (in the fix) checks for that case too.
 
 ## Symptom
 
@@ -76,16 +90,27 @@ $ curl -o /dev/null -w '%{http_code}\n' \
 502
 ```
 
-## Suggested fix
+## Fix
 
-Mirror the v1 fallback for v2: when the request is unsigned, resolve the
-region by searching for the API id across regions before concluding it
-isn't a v2 API. Something equivalent to a `resolveHttpApiRegion` alongside
-the existing `resolveRestApiRegion`.
+Implemented and verified end-to-end (full kbdb functional suite — 7 Ginkgo
+suites, 211 specs — passes against a real `sam deploy` onto this build):
 
-A narrower alternative: attempt the v2 lookup across all known regions
-rather than only the resolved one, since `apiId` is globally unique in
-practice within a single floci instance.
+1. `ApiGatewayV2Service.resolveHttpApiRegion(preferredRegion, apiId)` —
+   mirrors `ApiGatewayService#resolveRestApiRegion` exactly: try the
+   preferred region first, else scan stored keys for one ending in
+   `::apiId` (the same `region::apiId` key shape v1 already relies on).
+2. `RegionResolver.isRegionUnresolved(headers)` — the actual signal
+   `dispatch` needs is not "was this request unsigned" but "did region
+   resolution find a real region or silently fall back to the default."
+   A blank/missing `Authorization` header and a present-but-non-SigV4 one
+   (e.g. a bearer JWT) both hit the same silent fallback in
+   `resolveRegionFromAuth`, so both need the same escape hatch.
+3. `ApiGatewayExecuteController.dispatch` — uses `isRegionUnresolved` (not
+   header-blankness) to decide whether to call `resolveHttpApiRegion`
+   before the v2 `getApi` lookup, and the same flag for the existing v1
+   fallback below it (previously its own separate blank-header check).
+
+See the diff on this branch for the full change (3 files, ~50 lines).
 
 ## Why it matters
 

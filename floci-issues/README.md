@@ -1,59 +1,74 @@
 # floci issues blocking kbdb's functional suite
 
 Found by deploying kbdb's real `template.yaml` to a local floci built from
-`rogueserenity/floci` @ `fix/sam-httpapi-transform`, then attempting to run
-the Ginkgo functional suite against it.
+`rogueserenity/floci` @ `fix/sam-httpapi-transform`, then running the Ginkgo
+functional suite against it.
 
 Each file is scoped to one PR against floci.
 
-| # | issue | severity | blocks |
+| # | issue | status | blocks |
 |---|---|---|---|
-| 01 | [HTTP API execute-api region resolution](01-httpapi-execute-region-resolution.md) | blocker | every request to a deployed HTTP API |
-| 02 | [UserPoolGroup silently stubbed](02-cognito-userpoolgroup-silently-stubbed.md) | high | the 3 admin lookups specs |
-| 03 | [Cognito OIDC issuer path shape](03-cognito-oidc-issuer-path-shape.md) | blocker | Lambda cold start — the app can't build its verifier |
-| 04 | [ECR image push hostname not routed](04-ecr-image-push-hostname-not-routed.md) | medium | `sam deploy` of an image-backed function (workaround exists) |
+| 01 | [HTTP API execute-api region resolution](01-httpapi-execute-region-resolution.md) | fixed on this branch | every request whose region can't be read from a SigV4 header — includes all bearer-JWT requests |
+| 02 | [UserPoolGroup silently stubbed](02-cognito-userpoolgroup-silently-stubbed.md) | real gap, workaround in `func-setup-floci.sh` | admin-group specs, until `AWS::Cognito::UserPoolGroup` is provisioned for real |
+| 03 | [Cognito OIDC issuer over HTTPS](03-cognito-oidc-issuer-path-shape.md) | not a floci blocker | nothing — solved with `FLOCI_HOSTNAME` + a kbdb template parameter |
+| 04 | [RETRACTED — ECR push](04-ecr-image-push-hostname-not-routed.md) | n/a | not a floci bug; `sam deploy --resolve-image-repos` ignores floci's repositoryUri |
+| 05 | [UNCONFIRMED — GetTemplateSummary](05-cloudformation-gettemplatesummary-unsupported.md) | n/a | observed once, not reproducible on retest — not filed upstream |
+| 06 | [Lambda proxy Content-Type case sensitivity](06-lambda-proxy-response-content-type-case-sensitive.md) | fixed on this branch | every error response and any handler returning lowercase header names |
+
+## Current state: full functional suite passes
+
+With 01 and 06 fixed (both on this branch, both verified against a real
+`sam deploy` of kbdb's actual `template.yaml`) and 02's workaround applied in
+`scripts/func-setup-floci.sh`, kbdb's entire Ginkgo functional suite passes:
+
+```
+REST Keyboards Suite   - 36/36 specs   PASS
+REST Keycap Sets Suite - 68/68 specs   PASS
+REST Lookups Suite     - 18/18 specs   PASS
+REST Switches Suite    - 36/36 specs   PASS
+MCP Keyboards Suite    - 24/24 specs   PASS
+MCP Lookups Suite      -  6/6  specs   PASS
+MCP Switches Suite     - 23/23 specs   PASS
+```
+
+01 and 06 are genuine floci bugs worth PRs upstream. 02 is real but has a
+one-line runtime workaround (`cognito-idp create-group` after deploy) rather
+than requiring a floci code change to unblock kbdb locally. 03 was a
+misdiagnosis in its original form — no floci change needed, just a kbdb
+template parameter plus `FLOCI_HOSTNAME`. 04 and 05 were misdiagnoses,
+retracted rather than deleted.
 
 ## What already works
 
-Worth stating, because the list above is short and the rest is not:
-
-- `aws cloudformation deploy` of the SAM-transformed template succeeds —
-  the `fix/sam-httpapi-transform` branch does its job. 100+ resources
-  including 28 routes, 28 integrations, the JWT authorizer, and the
-  `$default` stage.
+- `sam deploy` (not just `aws cloudformation deploy`) against floci, image
+  push included, once `--image-repositories` + `FLOCI_SERVICES_ECR_URI_STYLE=path`
+  are used instead of `--resolve-image-repos` (issue 04's retraction).
 - DynamoDB tables, S3 bucket, ECR repo, log group, IAM role, Cognito user
   pool and client all create for real.
 - The Lambda **container image** is pulled, launched, and invoked, with the
-  `lambda-adapter` extension registering correctly.
+  `aws-lambda-web-adapter` sidecar registering and forwarding correctly.
 - S3 presigned GET/PUT support exists (`PreSignedUrlFilter`,
   `PreSignedUrlGenerator`).
+- The embedded DNS server plus `FLOCI_HOSTNAME` genuinely solve the
+  dual-endpoint problem: with `FLOCI_HOSTNAME=localhost.floci.io` the
+  Cognito issuer returns 200 from both the host and a sibling container.
 - DynamoDB `ConditionExpression`, `ConditionalCheckFailed`,
   `FilterExpression`, `ExclusiveStartKey` are all present.
+- Real Cognito admin APIs (`admin-create-user`, `admin-set-user-password`,
+  `admin-initiate-auth`) work well enough that kbdb's own
+  `scripts/ci-create-test-user.sh` runs unmodified against floci.
 
-The three issues are the entire distance between "deploys" and "functional
-suite passes".
-
-## Order to fix
-
-01 and 03 are both hard blockers and independent of each other. 02 only
-matters once requests are reaching the app. 04 has a workaround and is not
-on the critical path, but it is what stops the standard `sam deploy` flow
-from working end to end.
-
-## Reproducing
+## Reproducing (current, working setup)
 
 ```
-cd floci-fork && ./mvnw -DskipTests package && docker build -f docker/Dockerfile -t floci-local:test .
-cd kbdb && docker compose -f docker-compose.floci.yml up -d
-sam build
-aws --endpoint-url http://localhost:4566 cloudformation deploy \
-  --template-file .aws-sam/build/template.yaml \
-  --stack-name kbdb-floci --parameter-overrides SkipApiRepository=true \
-  --capabilities CAPABILITY_IAM --no-fail-on-empty-changeset
-```
+cd floci-fork
+export JAVA_HOME=/Users/jay/.local/share/mise/installs/java/25.0.1  # or: mise use java in this repo
+./mvnw -DskipTests package
+docker build -f docker/Dockerfile -t floci-local:test .
 
-`sam deploy` does reach floci — it honors `AWS_ENDPOINT_URL` (there is no
-`--endpoint-url` flag; that env var is all LocalStack's `samlocal` wrapper
-sets). It then fails pushing the container image, see issue 04. Deploying
-the built artifact with `aws cloudformation deploy` sidesteps the push,
-since floci runs an image-backed Lambda from a local tag.
+cd kbdb
+docker compose -f docker-compose.floci.yml up -d
+bash scripts/func-setup-floci.sh   # deploys, mints tokens, prints exports
+# export the printed KBDB_* vars, then:
+bash scripts/func-test.sh
+```

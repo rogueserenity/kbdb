@@ -10,6 +10,16 @@ services:
 
   floci:
     image: floci-local:test
+    environment:
+      # Both the host-side test process and the Lambda container must reach
+      # the issuer at the same name. floci's embedded DNS resolves this to
+      # its own container IP for siblings; public DNS resolves it to
+      # 127.0.0.1 for the host.
+      - FLOCI_HOSTNAME=localhost.floci.io
+      # path-style ECR URIs (localhost:5100/<acct>/<region>/<repo>) are what
+      # sam deploy --image-repositories accepts as a valid ECR URI; the
+      # default hostname style is rejected client-side. See floci-issues/04.
+      - FLOCI_SERVICES_ECR_URI_STYLE=path
     ports:
       - "4566:4566"
     volumes:

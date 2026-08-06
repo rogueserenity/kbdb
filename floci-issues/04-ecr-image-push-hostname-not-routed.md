@@ -1,117 +1,83 @@
-# `sam deploy` can't push an image: the ECR hostname isn't routed to the registry
+# RETRACTED — issue 04 was never a floci bug
 
-**Severity:** medium — blocks `sam deploy` for image-backed functions; a
-workaround exists
-**Component:** `services/ecr`
-**Found against:** `rogueserenity/floci` @ `fix/sam-httpapi-transform`
+The original version of this file claimed floci's `GetAuthorizationToken`
+returned an unreachable AWS-shaped ECR hostname, breaking `sam deploy` for
+image-backed functions. That was wrong.
 
-## Symptom
+## What was actually wrong
 
-`sam deploy` against floci authenticates to ECR, creates the repository,
-and begins pushing layers — then fails on the first blob:
-
-```
-$ AWS_ENDPOINT_URL=http://localhost:4566 sam deploy \
-    --stack-name kbdb-floci --resolve-s3 --resolve-image-repos \
-    --parameter-overrides SkipApiRepository=true
-
-Error: Unable to upload artifact apifunction:latest referenced by ImageUri
-parameter of ApiFunction resource.
-unknown: unexpected status from HEAD request to
-https://000000000000.dkr.ecr.us-east-2.amazonaws.com/v2/kbdbflocisamdeploy9720acff/apifunction51503098repo/blobs/sha256:d0e1...:
-400 Bad Request
-```
-
-The control plane worked — floci logs show the repo created and the auth
-token issued:
+floci was never the problem. `EcrRegistryManager.getProxyEndpoint()` and
+`getRepositoryUri()` both correctly return a reachable host —
+`http://localhost:5100` and (with the default `hostname` URI style)
+`{account}.dkr.ecr.{region}.localhost:5100`, which resolves to `127.0.0.1`.
+Verified directly:
 
 ```
-INFO [EcrService] Created ECR repository us-east-2/000000000000/kbdbflocisamdeploy9720acff/apifunction51503098repo
-INFO [AwsJson11Controller] AwsJson11Controller ecr action: GetAuthorizationToken
+$ aws ecr get-authorization-token --query 'authorizationData[0].proxyEndpoint' --output text
+http://localhost:5100
+
+$ aws ecr describe-repositories --query 'repositories[].repositoryUri' --output text
+000000000000.dkr.ecr.us-east-2.localhost:5100/kbdbflociecrtesta1249a8e/apifunction51503098repo
 ```
 
-## Root cause
-
-floci runs the OCI registry as a **sibling container**
-(`floci-ecr-registry`, `registry:2`), published on host port 5100:
+The actual failing request went to `.amazonaws.com`, not `.localhost:5100`.
+`sam deploy --resolve-image-repos` was diagnosed with `--debug`:
 
 ```
-$ docker ps --format '{{.Names}}\t{{.Ports}}'
-floci-ecr-registry   0.0.0.0:5100->5000/tcp
-kbdb-floci-1         0.0.0.0:4566->4566/tcp
+The push refers to repository [000000000000.dkr.ecr.us-east-2.amazonaws.com/...]
 ```
 
-The registry is healthy and reachable there:
+**`sam deploy --resolve-image-repos` fabricates the standard AWS ECR
+hostname pattern itself.** It never reads floci's `repositoryUri` from
+`CreateRepository`'s response. This is a SAM CLI behavior, not something
+floci returns or controls, and it reproduces identically regardless of
+floci's `services.ecr.uriStyle` setting (`hostname` or `path`).
+
+## What actually works
+
+Every real deploy path in this repo already avoids `--resolve-image-repos`
+in favor of an explicit `--image-repositories`
+(`scripts/dev-deploy.sh`, `.github/workflows/ci.yml`) — because real AWS
+has the same "which repo do I push to" ambiguity `--resolve-image-repos` is
+meant to paper over, just with a different failure mode there.
+
+Doing the same against floci, with `services.ecr.uriStyle: path` so the
+resulting URI passes `sam`'s own client-side ECR-URI-shape validation
+(`--image-repositories` rejects the default `hostname`-style URI as "not a
+valid ECR URI" even though it resolves and works):
 
 ```
-$ curl -o /dev/null -w '%{http_code}\n' http://localhost:5100/v2/
-200
+$ aws ecr create-repository --repository-name kbdb-floci
+$ REPO_URI=$(aws ecr describe-repositories --repository-names kbdb-floci \
+    --query 'repositories[0].repositoryUri' --output text)
+# -> localhost:5100/000000000000/us-east-2/kbdb-floci
+
+$ sam deploy --resolve-s3 --image-repositories "ApiFunction=$REPO_URI" ...
+Successfully created/updated stack - kbdb-floci-explicit in us-east-2
 ```
 
-But the main endpoint does not serve the registry API:
+Confirmed the resulting Lambda is image-backed
+(`PackageType: Image`) and the full `sam deploy` flow completes, including
+the changeset and stack update — no `aws cloudformation create-stack`
+workaround needed.
 
-```
-$ curl -o /dev/null -w '%{http_code}\n' http://localhost:4566/v2/
-404
-```
+## Why this file stays
 
-`GetAuthorizationToken` returns a `proxyEndpoint` of
-`https://{account}.dkr.ecr.{region}.amazonaws.com`, and the Docker client
-dutifully sends blob requests there. Nothing routes that hostname to
-`localhost:5100`, so the push dies on the first blob HEAD.
+Left in place, retracted rather than deleted, since a wrong finding that
+silently disappears is worse than one marked wrong - anyone who read the
+original claim (or filed it upstream) should see the correction in the
+same place.
 
-The registry logs confirm blob traffic never arrives — only the initial
-`GET /v2/` ping:
+## Consumer-side note (kbdb)
 
-```
-$ docker logs floci-ecr-registry | grep -E 'blobs|PATCH|PUT'
-(nothing)
-```
+`scripts/func-setup-floci.sh` should:
+1. set `FLOCI_SERVICES_ECR_URI_STYLE=path` on the floci container,
+2. `aws ecr create-repository` explicitly, and
+3. pass `--image-repositories` to `sam deploy` instead of
+   `--resolve-image-repos` — mirroring `dev-deploy.sh`/CI, not inventing a
+   new pattern.
 
-## Why this is a real gap
-
-The README advertises this as supported:
-
-| ECR | In-process with real registry | Repositories, **docker push / pull**, image-backed Lambda functions |
-
-Pushing works if you address `localhost:5100` directly. It does not work
-through the ECR hostname the service's own `GetAuthorizationToken` hands
-back, which is the path every standard tool takes — `sam deploy`, `docker
-push` after `aws ecr get-login-password`, and CI image builds alike.
-
-## Suggested fix
-
-Either:
-
-1. **Proxy `/v2/*` on the main endpoint** to the registry container, so the
-   advertised `proxyEndpoint` resolves somewhere real when DNS points the
-   ECR hostname at floci (the same approach the embedded DNS server already
-   takes for `localhost.localstack.cloud` and S3 presigned URLs), or
-2. **Return a reachable `proxyEndpoint`** from `GetAuthorizationToken` —
-   e.g. `localhost:5100` — so clients are told where the registry actually
-   is rather than an AWS hostname that goes nowhere.
-
-Option 2 is smaller; option 1 keeps templates and tooling unmodified, which
-is more consistent with how floci handles S3.
-
-## Workaround
-
-Skip the push. Build the image locally and deploy the SAM-built artifact
-directly with `aws cloudformation deploy` — floci runs an image-backed
-Lambda from a local tag without needing it in the registry (verified: the
-container launched and the handler executed).
-
-```
-sam build
-aws --endpoint-url http://localhost:4566 cloudformation deploy \
-  --template-file .aws-sam/build/template.yaml --stack-name kbdb-floci \
-  --parameter-overrides SkipApiRepository=true --capabilities CAPABILITY_IAM
-```
-
-## Correction to an earlier assumption
-
-`sam deploy` has no `--endpoint-url` flag, which initially looked like it
-couldn't target floci at all. That is wrong: it honors `AWS_ENDPOINT_URL`
-via botocore, which is the whole of what LocalStack's `samlocal` wrapper
-sets. `sam deploy` reaches floci fine — this issue is the next thing it
-hits.
+That also means the `aws cloudformation create-stack`/`update-stack`
+workaround adopted for floci-issues/05 can be dropped once `sam deploy`
+itself works end-to-end; issue 05 still stands on its own, since it
+reproduces with `sam deploy` too once more than one parameter is passed.
