@@ -1,0 +1,16 @@
+services:
+  mockoidc:
+    build:
+      context: .
+      dockerfile: test/functional/support/mockoidc/Dockerfile
+    environment:
+      - MOCKOIDC_ADVERTISE_ADDR=mockoidc:9999
+    ports:
+      - "9999:9999"
+
+  floci:
+    image: floci-local:test
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
