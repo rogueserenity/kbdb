@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -166,8 +167,33 @@ func validatedSwitch(
 	lookupRepo repository.LookupRepository,
 	in schema.SwitchInput,
 ) (repository.Switch, error) {
-	return validatedWrite(ctx, lookupRepo, in, in.Brand, in.Name, in.Visibility, nil,
-		repomcp.SwitchFromMCP,
-		func(sw *repository.Switch) *repository.Visibility { return &sw.Visibility },
-		lookup.ValidateSwitch, defaultFieldErrorReason)
+	if strings.TrimSpace(in.Brand) == "" {
+		return repository.Switch{}, errors.New("brand must not be blank")
+	}
+	if strings.TrimSpace(in.Name) == "" {
+		return repository.Switch{}, errors.New("name must not be blank")
+	}
+
+	sw := repomcp.SwitchFromMCP(in)
+
+	if !sw.Visibility.Valid() {
+		return repository.Switch{}, fmt.Errorf(
+			"visibility %q must be one of: public, authenticated, private", in.Visibility)
+	}
+
+	fieldErrs, err := lookup.ValidateSwitch(ctx, lookupRepo, sw)
+	if err != nil {
+		log.FromContext(ctx).Error("validating switch lookup fields", log.Error, err)
+		return repository.Switch{}, errors.New("failed to validate lookup fields")
+	}
+	if len(fieldErrs) > 0 {
+		reasons := make([]string, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			reasons[i] = fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
+		}
+
+		return repository.Switch{}, errors.New(strings.Join(reasons, "; "))
+	}
+
+	return sw, nil
 }
