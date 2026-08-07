@@ -111,3 +111,32 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetFromMCP_MapsAllFields() {
 	s.Empty(out.ID, "ID is the caller's responsibility, not this mapping's")
 	s.Nil(out.Kits, "a set write never carries kits")
 }
+
+func (s *KeycapSetToMCPSuite) TestKeycapKitFromMCP_MapsAllFields() {
+	vendor := "Amazon"
+	price := 120.0
+	orderDate := "2026-01-15"
+
+	out := KeycapKitFromMCP(schema.KeycapKitInput{
+		Name: "Base",
+		Purchase: &schema.KeycapKitPurchase{
+			Vendor:    &vendor,
+			Price:     &price,
+			OrderDate: &orderDate,
+		},
+	})
+
+	s.Equal("Base", out.Name)
+	s.Require().NotNil(out.Purchase.Vendor)
+	s.Equal("Amazon", *out.Purchase.Vendor)
+	s.Require().NotNil(out.Purchase.Price)
+	s.InEpsilon(120.0, *out.Purchase.Price, 0.001)
+	s.Empty(out.KitID, "KitID is the caller's responsibility, not this mapping's")
+	s.Nil(out.ImagePath, "a kit write never carries its image path")
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapKitFromMCP_NoPurchase_MapsToZeroValue() {
+	out := KeycapKitFromMCP(schema.KeycapKitInput{Name: "Base"})
+
+	s.Equal(repository.KeycapKitPurchase{}, out.Purchase)
+}

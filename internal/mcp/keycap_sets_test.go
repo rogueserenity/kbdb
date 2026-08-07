@@ -643,3 +643,540 @@ func (s *HandleDeleteKeycapSetSuite) TestRepositoryError_ReturnsError() {
 
 	s.Require().ErrorContains(err, "failed to delete keycap set")
 }
+
+func validKeycapKitInput() schema.KeycapKitInput {
+	return schema.KeycapKitInput{Name: "Base"}
+}
+
+type HandleCreateKeycapKitSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockKeycapSetRepository
+}
+
+func TestHandleCreateKeycapKitSuite(t *testing.T) {
+	suite.Run(t, new(HandleCreateKeycapKitSuite))
+}
+
+func (s *HandleCreateKeycapKitSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+}
+
+func (s *HandleCreateKeycapKitSuite) TestSucceeds() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks-1", mock.Anything).
+		RunAndReturn(func(_ context.Context, _ string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+			return &kit, nil
+		})
+
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().NoError(err)
+	s.Equal("Base", out.KeycapKit.Name)
+	s.NotEmpty(out.KeycapKit.KitID, "create must assign a server-generated id")
+}
+
+func (s *HandleCreateKeycapKitSuite) TestBlankKeycapSetID_ReturnsError() {
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "  ",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
+}
+
+func (s *HandleCreateKeycapKitSuite) TestBlankName_ReturnsError() {
+	in := validKeycapKitInput()
+	in.Name = " "
+
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KeycapKitInput: in,
+	})
+
+	s.Require().ErrorContains(err, "name must not be blank")
+}
+
+func (s *HandleCreateKeycapKitSuite) TestMalformedOrderDate_ReturnsError() {
+	bad := "not-a-date"
+	in := validKeycapKitInput()
+	in.Purchase = &schema.KeycapKitPurchase{OrderDate: &bad}
+
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KeycapKitInput: in,
+	})
+
+	s.Require().ErrorContains(err, "purchase.order_date")
+}
+
+func (s *HandleCreateKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "missing", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "missing",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorIs(err, errKeycapSetNotFound)
+}
+
+func (s *HandleCreateKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks-1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+}
+
+func (s *HandleCreateKeycapKitSuite) TestRepositoryError_ReturnsError() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks-1", mock.Anything).
+		Return(nil, errors.New("add kit failed"))
+
+	handler := handleCreateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorContains(err, "failed to add kit")
+}
+
+type HandleUpdateKeycapKitSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockKeycapSetRepository
+}
+
+func TestHandleUpdateKeycapKitSuite(t *testing.T) {
+	suite.Run(t, new(HandleUpdateKeycapKitSuite))
+}
+
+func (s *HandleUpdateKeycapKitSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestSucceeds() {
+	s.mockRepo.EXPECT().
+		UpdateKit(mock.Anything, "ks-1", mock.Anything).
+		RunAndReturn(func(_ context.Context, _ string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+			return &kit, nil
+		})
+
+	handler := handleUpdateKeycapKit(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KitID:          "kit-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().NoError(err)
+	s.Equal("kit-1", out.KeycapKit.KitID, "update must target the requested id")
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestBlankKeycapSetID_ReturnsError() {
+	handler := handleUpdateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
+		KeycapSetID:    " ",
+		KitID:          "kit-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestBlankKitID_ReturnsError() {
+	handler := handleUpdateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KitID:          " ",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorContains(err, "kit_id must not be blank")
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestKitNotFound_ReturnsNotFound() {
+	s.mockRepo.EXPECT().
+		UpdateKit(mock.Anything, "ks-1", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleUpdateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KitID:          "missing-kit",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorIs(err, errKeycapKitNotFound)
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockRepo.EXPECT().
+		UpdateKit(mock.Anything, "ks-1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleUpdateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KitID:          "kit-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestRepositoryError_ReturnsError() {
+	s.mockRepo.EXPECT().
+		UpdateKit(mock.Anything, "ks-1", mock.Anything).
+		Return(nil, errors.New("update kit failed"))
+
+	handler := handleUpdateKeycapKit(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
+		KeycapSetID:    "ks-1",
+		KitID:          "kit-1",
+		KeycapKitInput: validKeycapKitInput(),
+	})
+
+	s.Require().ErrorContains(err, "failed to update kit")
+}
+
+type HandleDeleteKeycapKitSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+}
+
+func TestHandleDeleteKeycapKitSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteKeycapKitSuite))
+}
+
+func (s *HandleDeleteKeycapKitSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestSucceeds() {
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, nil)
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestBlankKeycapSetID_ReturnsError() {
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: " ", KitID: "kit-1"})
+
+	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestBlankKitID_ReturnsError() {
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: " "})
+
+	s.Require().ErrorContains(err, "kit_id must not be blank")
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestKitIDNotInSet_StillSucceeds() {
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "missing-kit").Return(nil, nil)
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "missing-kit"})
+
+	s.Require().NoError(err, "delete is idempotent: a kit id not present in the set is not an error")
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "missing", "kit-1").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "missing", KitID: "kit-1"})
+
+	s.Require().ErrorIs(err, errKeycapSetNotFound)
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, repository.ErrMutationConflict)
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestImageIsCleanedUp() {
+	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestImageCleanupFailure_StillSucceeds() {
+	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().NoError(err, "the kit is already deleted by this point, so a failed best-effort image cleanup must not fail the tool call")
+}
+
+func (s *HandleDeleteKeycapKitSuite) TestRepositoryError_ReturnsError() {
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, errors.New("delete kit failed"))
+
+	handler := handleDeleteKeycapKit(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().ErrorContains(err, "failed to delete kit")
+}
+
+type HandleSetKeycapKitImageSuite struct {
+	suite.Suite
+
+	mockRepo    *mocks.MockKeycapSetRepository
+	mockLookups *mocks.MockLookupRepository
+	mockImages  *mocks.MockKeycapKitImageStore
+}
+
+func TestHandleSetKeycapKitImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleSetKeycapKitImageSuite))
+}
+
+func (s *HandleSetKeycapKitImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockLookups = mocks.NewMockLookupRepository(s.T())
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestSucceeds() {
+	s.mockLookups.EXPECT().
+		GetCategory(mock.Anything, repository.CategoryImageContentType).
+		Return(&repository.Lookup{Values: []any{"image/png"}}, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
+		Return(&repository.KeycapKit{KitID: "kit-1"}, nil)
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "kit-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/upload", out.UploadURL)
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestBlankKeycapSetID_ReturnsError() {
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: " ",
+		KitID:       "kit-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestBlankKitID_ReturnsError() {
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       " ",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "kit_id must not be blank")
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestUnapprovedContentType_ReturnsError() {
+	s.mockLookups.EXPECT().
+		GetCategory(mock.Anything, repository.CategoryImageContentType).
+		Return(&repository.Lookup{Values: []any{"image/png"}}, nil)
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "kit-1",
+		ContentType: "application/exe",
+	})
+
+	s.Require().ErrorContains(err, "content_type")
+	s.Require().ErrorContains(err, "not an approved")
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
+	s.mockLookups.EXPECT().
+		GetCategory(mock.Anything, repository.CategoryImageContentType).
+		Return(&repository.Lookup{Values: []any{"image/png"}}, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks-1", "missing-kit", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "missing-kit",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errKeycapKitNotFound)
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockLookups.EXPECT().
+		GetCategory(mock.Anything, repository.CategoryImageContentType).
+		Return(&repository.Lookup{Values: []any{"image/png"}}, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "kit-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestPresignError_ReturnsError() {
+	s.mockLookups.EXPECT().
+		GetCategory(mock.Anything, repository.CategoryImageContentType).
+		Return(&repository.Lookup{Values: []any{"image/png"}}, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("", errors.New("presign failed"))
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockLookups, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "kit-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "failed to set kit image")
+}
+
+type HandleDeleteKeycapKitImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+}
+
+func TestHandleDeleteKeycapKitImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteKeycapKitImageSuite))
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestSucceeds() {
+	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestBlankKeycapSetID_ReturnsError() {
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: " ", KitID: "kit-1"})
+
+	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestBlankKitID_ReturnsError() {
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: " "})
+
+	s.Require().ErrorContains(err, "kit_id must not be blank")
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestAlreadyCleared_StillSucceeds() {
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, nil)
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().NoError(err, "clearing an already-unset image is not an error")
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "missing-kit").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "missing-kit"})
+
+	s.Require().ErrorIs(err, errKeycapKitNotFound)
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, repository.ErrMutationConflict)
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestRepositoryError_ReturnsError() {
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, errors.New("clear failed"))
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().ErrorContains(err, "failed to delete kit image")
+}
+
+func (s *HandleDeleteKeycapKitImageSuite) TestImageDeleteFailure_ReturnsError() {
+	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().ErrorContains(err, "failed to delete kit image")
+}

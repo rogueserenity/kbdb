@@ -58,6 +58,31 @@ var deleteKeycapSetTool = &mcp.Tool{
 	Description: "Removes a keycap set from your own collection, along with any kit images. Idempotent: deleting a keycap set that isn't there succeeds.",
 }
 
+var createKeycapKitTool = &mcp.Tool{
+	Name:        "create_keycap_kit",
+	Description: "Adds a kit to a keycap set in your own collection. purchase.vendor and purchase.order_status must be approved lookup values - call list_lookups and get_lookup to see them. To set the kit's image, call set_keycap_kit_image afterward.",
+}
+
+var updateKeycapKitTool = &mcp.Tool{
+	Name:        "update_keycap_kit",
+	Description: "Replaces a kit on a keycap set in your own collection. Every field is replaced, so omitting an optional field clears it; send the full kit, not just the fields you want to change. The kit's image, if any, is preserved - manage it with the image tools instead.",
+}
+
+var deleteKeycapKitTool = &mcp.Tool{
+	Name:        "delete_keycap_kit",
+	Description: "Removes a kit from a keycap set in your own collection, along with its image if it has one. Idempotent: deleting a kit that isn't there succeeds.",
+}
+
+var setKeycapKitImageTool = &mcp.Tool{
+	Name:        "set_keycap_kit_image",
+	Description: "Mints a presigned URL to upload a kit's image to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header.",
+}
+
+var deleteKeycapKitImageTool = &mcp.Tool{
+	Name:        "delete_keycap_kit_image",
+	Description: "Removes a kit's image. Idempotent: deleting a kit's image when it doesn't have one succeeds.",
+}
+
 func handleListKeycapSets(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.ListKeycapSetsInput, schema.ListKeycapSetsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeycapSetsInput) (*mcp.CallToolResult, schema.ListKeycapSetsOutput, error) {
 		ownerID, err := resolveOwnerID(ctx, in.UserID)
@@ -261,4 +286,211 @@ func validatedKeycapSet(
 	}
 
 	return ks, nil
+}
+
+func handleCreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.CreateKeycapKitInput, schema.CreateKeycapKitOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateKeycapKitInput) (*mcp.CallToolResult, schema.CreateKeycapKitOutput, error) {
+		if strings.TrimSpace(in.KeycapSetID) == "" {
+			return nil, schema.CreateKeycapKitOutput{}, errors.New("keycap_set_id must not be blank")
+		}
+
+		kit, err := validatedKeycapKit(in.KeycapKitInput)
+		if err != nil {
+			return nil, schema.CreateKeycapKitOutput{}, err
+		}
+
+		kit.KitID = uuid.NewString()
+
+		created, err := keycapSetRepo.AddKit(ctx, in.KeycapSetID, kit)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.CreateKeycapKitOutput{}, errKeycapSetNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID)
+			return nil, schema.CreateKeycapKitOutput{}, errKeycapSetMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("adding keycap kit", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID, log.Error, err)
+			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to add kit")
+		}
+
+		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*created)}, nil
+	}
+}
+
+func handleUpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.UpdateKeycapKitInput, schema.UpdateKeycapKitOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateKeycapKitInput) (*mcp.CallToolResult, schema.UpdateKeycapKitOutput, error) {
+		if strings.TrimSpace(in.KeycapSetID) == "" {
+			return nil, schema.UpdateKeycapKitOutput{}, errors.New("keycap_set_id must not be blank")
+		}
+		if strings.TrimSpace(in.KitID) == "" {
+			return nil, schema.UpdateKeycapKitOutput{}, errors.New("kit_id must not be blank")
+		}
+
+		kit, err := validatedKeycapKit(in.KeycapKitInput)
+		if err != nil {
+			return nil, schema.UpdateKeycapKitOutput{}, err
+		}
+
+		kit.KitID = in.KitID
+
+		updated, err := keycapSetRepo.UpdateKit(ctx, in.KeycapSetID, kit)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.UpdateKeycapKitOutput{}, errKeycapKitNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
+			return nil, schema.UpdateKeycapKitOutput{}, errKeycapSetMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("updating keycap kit", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to update kit")
+		}
+
+		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*updated)}, nil
+	}
+}
+
+func handleDeleteKeycapKit(
+	keycapSetRepo repository.KeycapSetRepository,
+	images repository.KeycapKitImageStore,
+) mcp.ToolHandlerFor[schema.DeleteKeycapKitInput, schema.DeleteKeycapKitOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeycapKitInput) (*mcp.CallToolResult, schema.DeleteKeycapKitOutput, error) {
+		if strings.TrimSpace(in.KeycapSetID) == "" {
+			return nil, schema.DeleteKeycapKitOutput{}, errors.New("keycap_set_id must not be blank")
+		}
+		if strings.TrimSpace(in.KitID) == "" {
+			return nil, schema.DeleteKeycapKitOutput{}, errors.New("kit_id must not be blank")
+		}
+
+		cleared, err := keycapSetRepo.DeleteKit(ctx, in.KeycapSetID, in.KitID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteKeycapKitOutput{}, errKeycapSetNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
+			return nil, schema.DeleteKeycapKitOutput{}, errKeycapSetMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("deleting keycap kit", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.DeleteKeycapKitOutput{}, errors.New("failed to delete kit")
+		}
+
+		if cleared != nil {
+			if err := images.Delete(ctx, *cleared); err != nil {
+				log.FromContext(ctx).Warn("deleting keycap kit image object after kit delete", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.KeycapKitImage, *cleared, log.Error, err)
+			}
+		}
+
+		return nil, schema.DeleteKeycapKitOutput{}, nil
+	}
+}
+
+func handleSetKeycapKitImage(
+	keycapSetRepo repository.KeycapSetRepository,
+	lookupRepo repository.LookupRepository,
+	images repository.KeycapKitImageStore,
+) mcp.ToolHandlerFor[schema.SetKeycapKitImageInput, schema.SetKeycapKitImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.SetKeycapKitImageInput) (*mcp.CallToolResult, schema.SetKeycapKitImageOutput, error) {
+		if strings.TrimSpace(in.KeycapSetID) == "" {
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("keycap_set_id must not be blank")
+		}
+		if strings.TrimSpace(in.KitID) == "" {
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("kit_id must not be blank")
+		}
+
+		fieldErr, err := lookup.ValidateImageContentType(ctx, lookupRepo, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("validating keycap kit image content_type", log.Error, err)
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to validate content_type")
+		}
+		if fieldErr != nil {
+			return nil, schema.SetKeycapKitImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, repository.CategoryImageContentType)
+		}
+
+		key, err := repository.NewKeycapKitImageKey(ctx, in.KeycapSetID, in.KitID)
+		if err != nil {
+			log.FromContext(ctx).Error("building keycap kit image key", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		}
+
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		}
+
+		_, err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.SetKeycapKitImageOutput{}, errKeycapKitNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
+			return nil, schema.SetKeycapKitImageOutput{}, errKeycapSetMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("setting keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		}
+
+		return nil, schema.SetKeycapKitImageOutput{UploadURL: uploadURL}, nil
+	}
+}
+
+func handleDeleteKeycapKitImage(
+	keycapSetRepo repository.KeycapSetRepository,
+	images repository.KeycapKitImageStore,
+) mcp.ToolHandlerFor[schema.DeleteKeycapKitImageInput, schema.DeleteKeycapKitImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeycapKitImageInput) (*mcp.CallToolResult, schema.DeleteKeycapKitImageOutput, error) {
+		if strings.TrimSpace(in.KeycapSetID) == "" {
+			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("keycap_set_id must not be blank")
+		}
+		if strings.TrimSpace(in.KitID) == "" {
+			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("kit_id must not be blank")
+		}
+
+		cleared, err := keycapSetRepo.ClearKitImagePath(ctx, in.KeycapSetID, in.KitID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteKeycapKitImageOutput{}, errKeycapKitNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
+			return nil, schema.DeleteKeycapKitImageOutput{}, errKeycapSetMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("clearing keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
+		}
+
+		if cleared != nil {
+			if err := images.Delete(ctx, *cleared); err != nil {
+				log.FromContext(ctx).Error("deleting keycap kit image object", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+				return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
+			}
+		}
+
+		return nil, schema.DeleteKeycapKitImageOutput{}, nil
+	}
+}
+
+// validatedKeycapKit checks in code what api/openapi.yaml declares for
+// REST: the SDK infers tool schemas from Go types alone, so there is no
+// per-field constraint to attach. Unlike validatedKeycapSet, there's no
+// visibility to check - a kit has no independent visibility, only the
+// parent set's - and no lookup validation: purchase.vendor/order_status
+// have no MCP-side enum to check against here, matching
+// handlers.CreateKeycapKit/UpdateKeycapKit, which also skip lookup
+// validation on kit purchase fields.
+func validatedKeycapKit(in schema.KeycapKitInput) (repository.KeycapKit, error) {
+	if strings.TrimSpace(in.Name) == "" {
+		return repository.KeycapKit{}, errors.New("name must not be blank")
+	}
+
+	if in.Purchase != nil {
+		if err := validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
+			return repository.KeycapKit{}, err
+		}
+	}
+
+	return repomcp.KeycapKitFromMCP(in), nil
 }

@@ -124,3 +124,73 @@ type DeleteKeycapSetInput struct {
 // DeleteKeycapSetOutput is the delete_keycap_set tool output. Deleting is
 // idempotent, so there is no payload.
 type DeleteKeycapSetOutput struct{}
+
+// KeycapKitInput is the writable half of a kit, shared by create_keycap_kit
+// and update_keycap_kit. It has no HasImage/image field - a kit's image is
+// managed entirely through set_keycap_kit_image/delete_keycap_kit_image.
+type KeycapKitInput struct {
+	Name     string             `json:"name" jsonschema:"the kit's name, e.g. Base or Novelties"`
+	Purchase *KeycapKitPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+}
+
+// CreateKeycapKitInput is the create_keycap_kit tool input.
+type CreateKeycapKitInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set to add the kit to"`
+	KeycapKitInput
+}
+
+// CreateKeycapKitOutput is the create_keycap_kit tool output.
+type CreateKeycapKitOutput struct {
+	KeycapKit KeycapKit `json:"keycap_kit" jsonschema:"the created kit, including its server-generated id"`
+}
+
+// UpdateKeycapKitInput is the update_keycap_kit tool input. Every field is
+// replaced, so omitting an optional field clears it. The kit's image, if
+// any, is preserved untouched - this can't be used to set or clear it.
+type UpdateKeycapKitInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
+	KitID       string `json:"kit_id" jsonschema:"the id of the kit to replace"`
+	KeycapKitInput
+}
+
+// UpdateKeycapKitOutput is the update_keycap_kit tool output.
+type UpdateKeycapKitOutput struct {
+	KeycapKit KeycapKit `json:"keycap_kit" jsonschema:"the updated kit"`
+}
+
+// DeleteKeycapKitInput is the delete_keycap_kit tool input.
+type DeleteKeycapKitInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
+	KitID       string `json:"kit_id" jsonschema:"the id of the kit to delete"`
+}
+
+// DeleteKeycapKitOutput is the delete_keycap_kit tool output. Deleting is
+// idempotent, so there is no payload.
+type DeleteKeycapKitOutput struct{}
+
+// SetKeycapKitImageInput is the set_keycap_kit_image tool input. It doesn't
+// carry the image bytes themselves - see UploadURL on the output.
+type SetKeycapKitImageInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
+	KitID       string `json:"kit_id" jsonschema:"the id of the kit to set the image on"`
+	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+}
+
+// SetKeycapKitImageOutput is the set_keycap_kit_image tool output.
+// UploadURL is a presigned S3 PUT URL - the caller uploads the image bytes
+// directly to it, matching REST's SetKeycapKitImage; the tool call itself
+// never carries image bytes (see the design note on get_keycap_kit_image_url
+// for why images stay presigned end to end).
+type SetKeycapKitImageOutput struct {
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+}
+
+// DeleteKeycapKitImageInput is the delete_keycap_kit_image tool input.
+type DeleteKeycapKitImageInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
+	KitID       string `json:"kit_id" jsonschema:"the id of the kit to remove the image from"`
+}
+
+// DeleteKeycapKitImageOutput is the delete_keycap_kit_image tool output.
+// Deleting is idempotent, so there is no payload.
+type DeleteKeycapKitImageOutput struct{}
