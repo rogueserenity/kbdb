@@ -879,9 +879,10 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() 
 type CreateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo   *mocks.MockKeycapSetRepository
-	mockImages *mocks.MockKeycapKitImageStore
-	handler    http.HandlerFunc
+	mockRepo       *mocks.MockKeycapSetRepository
+	mockLookupRepo *mocks.MockLookupRepository
+	mockImages     *mocks.MockKeycapKitImageStore
+	handler        http.HandlerFunc
 }
 
 func TestCreateKeycapKitSuite(t *testing.T) {
@@ -890,8 +891,9 @@ func TestCreateKeycapKitSuite(t *testing.T) {
 
 func (s *CreateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapKit(s.mockRepo, s.mockImages)
+	s.handler = CreateKeycapKit(s.mockRepo, s.mockLookupRepo, s.mockImages)
 }
 
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -923,6 +925,41 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("kit1", got.KitId)
 	s.Equal("Base", got.Name)
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ValidatesOpenVocabularyFields() {
+	tests := []struct {
+		name     string
+		category string
+		body     string
+	}{
+		{"purchase.vendor", "vendor", `{"name":"Base","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", "order_status", `{"name":"Base","purchase":{"order_status":"NotApproved"}}`},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			s.SetupTest()
+
+			s.mockLookupRepo.EXPECT().
+				GetCategory(mock.Anything, tt.category).
+				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
+
+			req := s.newRequest(s.ownerCtx(), tt.body)
+			rec := httptest.NewRecorder()
+			s.handler(rec, req)
+
+			s.Equal(http.StatusBadRequest, rec.Code)
+			s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+			var got struct {
+				InvalidParams []problem.InvalidParam `json:"invalid_params"`
+			}
+			s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+			s.Require().Len(got.InvalidParams, 1)
+			s.Equal(tt.name, got.InvalidParams[0].Name)
+		})
+	}
 }
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_NotOwner_Returns404() {
@@ -996,9 +1033,10 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409()
 type UpdateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo   *mocks.MockKeycapSetRepository
-	mockImages *mocks.MockKeycapKitImageStore
-	handler    http.HandlerFunc
+	mockRepo       *mocks.MockKeycapSetRepository
+	mockLookupRepo *mocks.MockLookupRepository
+	mockImages     *mocks.MockKeycapKitImageStore
+	handler        http.HandlerFunc
 }
 
 func TestUpdateKeycapKitSuite(t *testing.T) {
@@ -1007,8 +1045,9 @@ func TestUpdateKeycapKitSuite(t *testing.T) {
 
 func (s *UpdateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapKit(s.mockRepo, s.mockImages)
+	s.handler = UpdateKeycapKit(s.mockRepo, s.mockLookupRepo, s.mockImages)
 }
 
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1041,6 +1080,41 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("kit1", got.KitId)
 	s.Equal("Extension", got.Name)
+}
+
+func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_ValidatesOpenVocabularyFields() {
+	tests := []struct {
+		name     string
+		category string
+		body     string
+	}{
+		{"purchase.vendor", "vendor", `{"name":"Extension","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", "order_status", `{"name":"Extension","purchase":{"order_status":"NotApproved"}}`},
+	}
+
+	for _, tt := range tests {
+		s.Run(tt.name, func() {
+			s.SetupTest()
+
+			s.mockLookupRepo.EXPECT().
+				GetCategory(mock.Anything, tt.category).
+				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
+
+			req := s.newRequest(s.ownerCtx(), tt.body)
+			rec := httptest.NewRecorder()
+			s.handler(rec, req)
+
+			s.Equal(http.StatusBadRequest, rec.Code)
+			s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+			var got struct {
+				InvalidParams []problem.InvalidParam `json:"invalid_params"`
+			}
+			s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+			s.Require().Len(got.InvalidParams, 1)
+			s.Equal(tt.name, got.InvalidParams[0].Name)
+		})
+	}
 }
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_NotOwner_Returns404() {

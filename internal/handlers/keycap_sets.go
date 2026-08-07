@@ -125,6 +125,30 @@ func validateKeycapSetLookups(ctx context.Context, w http.ResponseWriter, lookup
 	return true
 }
 
+// validateKeycapKitLookups writes a 400 listing every invalid field if any
+// check fails. An unset (nil) field is skipped, not treated as invalid.
+func validateKeycapKitLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, kit repository.KeycapKit) (ok bool) {
+	fieldErrs, err := lookup.ValidateKeycapKit(ctx, lookupRepo, kit)
+	if err != nil {
+		log.FromContext(ctx).Error("validating keycap kit lookup fields", log.Error, err)
+		problem.Internal(w, "failed to validate lookup fields")
+		return false
+	}
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = problem.InvalidParam{
+				Name:   fe.Field,
+				Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
+			}
+		}
+		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
+		return false
+	}
+
+	return true
+}
+
 // CreateKeycapSet reads the {userId} path value and requires an
 // authenticated caller. userId must be the caller's own subject; creating
 // in another user's collection returns 404, not 403, to avoid revealing it
@@ -271,7 +295,7 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 // authorization is entirely the parent set's ownership. userId must be the
 // caller's own subject; adding a kit to another user's set, or to a set
 // that doesn't exist, both return 404, to avoid revealing it exists.
-func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		setID := r.PathValue("keycapSetId")
@@ -288,6 +312,11 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 		}
 
 		kit := repoapi.KeycapKitToRepo(in)
+
+		if !validateKeycapKitLookups(r.Context(), w, lookupRepo, kit) {
+			return
+		}
+
 		kit.KitID = uuid.NewString()
 
 		created, err := keycapSetRepo.AddKit(r.Context(), setID, kit)
@@ -327,7 +356,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 // userId must be the caller's own subject; updating a kit on another
 // user's set, a set that doesn't exist, or a kitId that doesn't exist
 // within it, all return 404, to avoid revealing it exists.
-func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, lookupRepo repository.LookupRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		setID := r.PathValue("keycapSetId")
@@ -345,6 +374,11 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 		}
 
 		kit := repoapi.KeycapKitToRepo(in)
+
+		if !validateKeycapKitLookups(r.Context(), w, lookupRepo, kit) {
+			return
+		}
+
 		kit.KitID = kitID
 
 		updated, err := keycapSetRepo.UpdateKit(r.Context(), setID, kit)

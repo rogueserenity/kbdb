@@ -69,6 +69,31 @@ func KeycapKitToMCP(k repository.KeycapKit) schema.KeycapKit {
 	}
 }
 
+// KeycapKitFromMCP maps a create_keycap_kit/update_keycap_kit tool argument
+// to its repository shape. KitID and ImagePath are left unset: the caller
+// sets KitID (fresh on create, preserved on update), and a kit's image is
+// managed entirely through its own tools, never carried in a kit write.
+func KeycapKitFromMCP(in schema.KeycapKitInput) repository.KeycapKit {
+	return repository.KeycapKit{
+		Name:     in.Name,
+		Purchase: keycapKitPurchaseFromMCP(in.Purchase),
+	}
+}
+
+func keycapKitPurchaseFromMCP(p *schema.KeycapKitPurchase) repository.KeycapKitPurchase {
+	if p == nil {
+		return repository.KeycapKitPurchase{}
+	}
+
+	return repository.KeycapKitPurchase{
+		Vendor:       p.Vendor,
+		Price:        p.Price,
+		OrderDate:    p.OrderDate,
+		DeliveryDate: p.DeliveryDate,
+		OrderStatus:  p.OrderStatus,
+	}
+}
+
 // Dates pass through as strings, so unlike repoapi's mapping - which parses
 // them into openapi_types.Date and errors on a poisoned row - this can't
 // fail. An agent reading a malformed stored date sees it verbatim rather
