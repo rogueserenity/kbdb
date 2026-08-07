@@ -66,7 +66,8 @@ func handleGetKeycapSet(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[
 			return nil, schema.GetKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		ks, err := ownedReadableKeycapSet(ctx, repo, in.UserID, in.KeycapSetID)
+		ks, err := ownedReadable(ctx, repo.Get, func(ks repository.KeycapSet) repository.Visibility { return ks.Visibility },
+			"keycap set", errKeycapSetNotFound, log.KeycapSetID, in.UserID, in.KeycapSetID)
 		if err != nil {
 			return nil, schema.GetKeycapSetOutput{}, err
 		}
@@ -87,7 +88,8 @@ func handleGetKeycapKitImageURL(
 			return nil, schema.GetKeycapKitImageURLOutput{}, errors.New("kit_id must not be blank")
 		}
 
-		ks, err := ownedReadableKeycapSet(ctx, repo, in.UserID, in.KeycapSetID)
+		ks, err := ownedReadable(ctx, repo.Get, func(ks repository.KeycapSet) repository.Visibility { return ks.Visibility },
+			"keycap set", errKeycapSetNotFound, log.KeycapSetID, in.UserID, in.KeycapSetID)
 		if err != nil {
 			return nil, schema.GetKeycapKitImageURLOutput{}, err
 		}
@@ -110,32 +112,4 @@ func handleGetKeycapKitImageURL(
 
 		return nil, schema.GetKeycapKitImageURLOutput{URL: url}, nil
 	}
-}
-
-// ownedReadableKeycapSet resolves ownerID (defaulting to the caller) and
-// fetches its keycap set with id, returning errKeycapSetNotFound both when
-// the set genuinely doesn't exist and when the caller can't read it -
-// mirroring handlers.GetKeycapSet's 404-not-403 so a set the caller can't
-// see isn't distinguishable from a nonexistent one.
-func ownedReadableKeycapSet(ctx context.Context, repo repository.KeycapSetRepository, userID, id string) (*repository.KeycapSet, error) {
-	ownerID, err := resolveOwnerID(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-
-	ks, err := repo.Get(ctx, ownerID, id)
-	if errors.Is(err, repository.ErrNotFound) {
-		return nil, errKeycapSetNotFound
-	}
-	if err != nil {
-		log.FromContext(ctx).Error("getting keycap set", log.KeycapSetID, id, log.Error, err)
-		return nil, errors.New("failed to get keycap set")
-	}
-
-	if !authz.CanReadVisibility(ctx, ownerID, ks.Visibility) {
-		log.DeniedRead(ctx, "keycap set", ownerID, string(ks.Visibility), log.KeycapSetID, id)
-		return nil, errKeycapSetNotFound
-	}
-
-	return ks, nil
 }
