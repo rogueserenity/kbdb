@@ -288,13 +288,16 @@ func validatedKeycapSet(
 	return ks, nil
 }
 
-func handleCreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.CreateKeycapKitInput, schema.CreateKeycapKitOutput] {
+func handleCreateKeycapKit(
+	keycapSetRepo repository.KeycapSetRepository,
+	lookupRepo repository.LookupRepository,
+) mcp.ToolHandlerFor[schema.CreateKeycapKitInput, schema.CreateKeycapKitOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateKeycapKitInput) (*mcp.CallToolResult, schema.CreateKeycapKitOutput, error) {
 		if strings.TrimSpace(in.KeycapSetID) == "" {
 			return nil, schema.CreateKeycapKitOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		kit, err := validatedKeycapKit(in.KeycapKitInput)
+		kit, err := validatedKeycapKit(ctx, lookupRepo, in.KeycapKitInput)
 		if err != nil {
 			return nil, schema.CreateKeycapKitOutput{}, err
 		}
@@ -318,7 +321,10 @@ func handleCreateKeycapKit(keycapSetRepo repository.KeycapSetRepository) mcp.Too
 	}
 }
 
-func handleUpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.UpdateKeycapKitInput, schema.UpdateKeycapKitOutput] {
+func handleUpdateKeycapKit(
+	keycapSetRepo repository.KeycapSetRepository,
+	lookupRepo repository.LookupRepository,
+) mcp.ToolHandlerFor[schema.UpdateKeycapKitInput, schema.UpdateKeycapKitOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateKeycapKitInput) (*mcp.CallToolResult, schema.UpdateKeycapKitOutput, error) {
 		if strings.TrimSpace(in.KeycapSetID) == "" {
 			return nil, schema.UpdateKeycapKitOutput{}, errors.New("keycap_set_id must not be blank")
@@ -327,7 +333,7 @@ func handleUpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository) mcp.Too
 			return nil, schema.UpdateKeycapKitOutput{}, errors.New("kit_id must not be blank")
 		}
 
-		kit, err := validatedKeycapKit(in.KeycapKitInput)
+		kit, err := validatedKeycapKit(ctx, lookupRepo, in.KeycapKitInput)
 		if err != nil {
 			return nil, schema.UpdateKeycapKitOutput{}, err
 		}
@@ -477,11 +483,12 @@ func handleDeleteKeycapKitImage(
 // REST: the SDK infers tool schemas from Go types alone, so there is no
 // per-field constraint to attach. Unlike validatedKeycapSet, there's no
 // visibility to check - a kit has no independent visibility, only the
-// parent set's - and no lookup validation: purchase.vendor/order_status
-// have no MCP-side enum to check against here, matching
-// handlers.CreateKeycapKit/UpdateKeycapKit, which also skip lookup
-// validation on kit purchase fields.
-func validatedKeycapKit(in schema.KeycapKitInput) (repository.KeycapKit, error) {
+// parent set's.
+func validatedKeycapKit(
+	ctx context.Context,
+	lookupRepo repository.LookupRepository,
+	in schema.KeycapKitInput,
+) (repository.KeycapKit, error) {
 	if strings.TrimSpace(in.Name) == "" {
 		return repository.KeycapKit{}, errors.New("name must not be blank")
 	}
@@ -492,5 +499,21 @@ func validatedKeycapKit(in schema.KeycapKitInput) (repository.KeycapKit, error) 
 		}
 	}
 
-	return repomcp.KeycapKitFromMCP(in), nil
+	kit := repomcp.KeycapKitFromMCP(in)
+
+	fieldErrs, err := lookup.ValidateKeycapKit(ctx, lookupRepo, kit)
+	if err != nil {
+		log.FromContext(ctx).Error("validating keycap kit lookup fields", log.Error, err)
+		return repository.KeycapKit{}, errors.New("failed to validate lookup fields")
+	}
+	if len(fieldErrs) > 0 {
+		reasons := make([]string, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			reasons[i] = fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
+		}
+
+		return repository.KeycapKit{}, errors.New(strings.Join(reasons, "; "))
+	}
+
+	return kit, nil
 }

@@ -93,9 +93,9 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo, lookupRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo, lookupRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
