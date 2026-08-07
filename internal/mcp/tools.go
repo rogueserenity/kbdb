@@ -13,6 +13,8 @@ func registerTools(
 	lookupRepo repository.LookupRepository,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+	imageStore repository.KeycapKitImageStore,
 ) {
 	sdkmcp.AddTool(s, listLookupsTool, handleListLookups(lookupRepo))
 	sdkmcp.AddTool(s, getLookupTool, handleGetLookup(lookupRepo))
@@ -26,4 +28,7 @@ func registerTools(
 	sdkmcp.AddTool(s, createKeyboardTool, handleCreateKeyboard(keyboardRepo, lookupRepo))
 	sdkmcp.AddTool(s, updateKeyboardTool, handleUpdateKeyboard(keyboardRepo, lookupRepo))
 	sdkmcp.AddTool(s, deleteKeyboardTool, handleDeleteKeyboard(keyboardRepo))
+	sdkmcp.AddTool(s, listKeycapSetsTool, handleListKeycapSets(keycapSetRepo))
+	sdkmcp.AddTool(s, getKeycapSetTool, handleGetKeycapSet(keycapSetRepo))
+	sdkmcp.AddTool(s, getKeycapKitImageURLTool, handleGetKeycapKitImageURL(keycapSetRepo, imageStore))
 }
