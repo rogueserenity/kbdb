@@ -161,41 +161,19 @@ func validatedKeyboard(
 	lookupRepo repository.LookupRepository,
 	in schema.KeyboardInput,
 ) (repository.Keyboard, error) {
-	if strings.TrimSpace(in.Brand) == "" {
-		return repository.Keyboard{}, errors.New("brand must not be blank")
-	}
-	if strings.TrimSpace(in.Name) == "" {
-		return repository.Keyboard{}, errors.New("name must not be blank")
-	}
-
-	if in.Purchase != nil {
-		if err := validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
-			return repository.Keyboard{}, err
-		}
-	}
-
-	kb := repomcp.KeyboardFromMCP(in)
-
-	if !kb.Visibility.Valid() {
-		return repository.Keyboard{}, fmt.Errorf(
-			"visibility %q must be one of: public, authenticated, private", in.Visibility)
-	}
-
-	fieldErrs, err := lookup.ValidateKeyboard(ctx, lookupRepo, kb)
-	if err != nil {
-		log.FromContext(ctx).Error("validating keyboard lookup fields", log.Error, err)
-		return repository.Keyboard{}, errors.New("failed to validate lookup fields")
-	}
-	if len(fieldErrs) > 0 {
-		reasons := make([]string, len(fieldErrs))
-		for i, fe := range fieldErrs {
-			reasons[i] = keyboardFieldErrorReason(fe, in.Size)
+	extra := func() error {
+		if in.Purchase == nil {
+			return nil
 		}
 
-		return repository.Keyboard{}, errors.New(strings.Join(reasons, "; "))
+		return validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate)
 	}
 
-	return kb, nil
+	return validatedWrite(ctx, lookupRepo, in, in.Brand, in.Name, in.Visibility, extra,
+		repomcp.KeyboardFromMCP,
+		func(kb *repository.Keyboard) *repository.Visibility { return &kb.Visibility },
+		lookup.ValidateKeyboard,
+		func(fe lookup.FieldError) string { return keyboardFieldErrorReason(fe, in.Size) })
 }
 
 // ValidateKeyboard reports a layout that isn't valid for the chosen size as

@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"fmt"
 	"slices"
 	"strings"
 
@@ -232,33 +231,8 @@ func validatedKeycapSet(
 	lookupRepo repository.LookupRepository,
 	in schema.KeycapSetInput,
 ) (repository.KeycapSet, error) {
-	if strings.TrimSpace(in.Brand) == "" {
-		return repository.KeycapSet{}, errors.New("brand must not be blank")
-	}
-	if strings.TrimSpace(in.Name) == "" {
-		return repository.KeycapSet{}, errors.New("name must not be blank")
-	}
-
-	ks := repomcp.KeycapSetFromMCP(in)
-
-	if !ks.Visibility.Valid() {
-		return repository.KeycapSet{}, fmt.Errorf(
-			"visibility %q must be one of: public, authenticated, private", in.Visibility)
-	}
-
-	fieldErrs, err := lookup.ValidateKeycapSet(ctx, lookupRepo, ks)
-	if err != nil {
-		log.FromContext(ctx).Error("validating keycap set lookup fields", log.Error, err)
-		return repository.KeycapSet{}, errors.New("failed to validate lookup fields")
-	}
-	if len(fieldErrs) > 0 {
-		reasons := make([]string, len(fieldErrs))
-		for i, fe := range fieldErrs {
-			reasons[i] = fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
-		}
-
-		return repository.KeycapSet{}, errors.New(strings.Join(reasons, "; "))
-	}
-
-	return ks, nil
+	return validatedWrite(ctx, lookupRepo, in, in.Brand, in.Name, in.Visibility, nil,
+		repomcp.KeycapSetFromMCP,
+		func(ks *repository.KeycapSet) *repository.Visibility { return &ks.Visibility },
+		lookup.ValidateKeycapSet, defaultFieldErrorReason)
 }
