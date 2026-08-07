@@ -77,26 +77,10 @@ func handleGetKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[sc
 			return nil, schema.GetKeyboardOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		kb, err := ownedReadable(ctx, repo.Get, func(k repository.Keyboard) repository.Visibility { return k.Visibility },
+			"keyboard", errKeyboardNotFound, log.KeyboardID, in.UserID, in.KeyboardID)
 		if err != nil {
 			return nil, schema.GetKeyboardOutput{}, err
-		}
-
-		kb, err := repo.Get(ctx, ownerID, in.KeyboardID)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.GetKeyboardOutput{}, errKeyboardNotFound
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("getting keyboard", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.GetKeyboardOutput{}, errors.New("failed to get keyboard")
-		}
-
-		// Same error as a genuine miss: a keyboard the caller can't read must
-		// not be distinguishable from one that doesn't exist, matching
-		// handlers.GetKeyboard's 404-not-403.
-		if !authz.CanReadVisibility(ctx, ownerID, kb.Visibility) {
-			log.DeniedRead(ctx, "keyboard", ownerID, string(kb.Visibility), log.KeyboardID, in.KeyboardID)
-			return nil, schema.GetKeyboardOutput{}, errKeyboardNotFound
 		}
 
 		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*kb)}, nil

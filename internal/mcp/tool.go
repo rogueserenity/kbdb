@@ -5,8 +5,10 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/rogueserenity/kbdb/internal/authz"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 // REST gets these bounds from api/openapi.yaml's Limit param, applied by
@@ -34,6 +36,44 @@ func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 	}
 
 	return subject, nil
+}
+
+// ownedReadable resolves ownerID (defaulting to the caller when userID is
+// blank), fetches the entity with id via get, and enforces the 404-not-403
+// convention shared by every get_* MCP tool: notFoundErr both when the
+// entity genuinely doesn't exist and when the caller can't read it, so a
+// visibility-denied entity isn't distinguishable from a nonexistent one.
+// Mirrors the equivalent per-handler logic in each entity's REST handler
+// (e.g. handlers.GetKeyboard).
+func ownedReadable[T any](
+	ctx context.Context,
+	get func(ctx context.Context, ownerID, id string) (*T, error),
+	visibilityOf func(T) repository.Visibility,
+	entityName string,
+	notFoundErr error,
+	idLogField string,
+	userID, id string,
+) (*T, error) {
+	ownerID, err := resolveOwnerID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	item, err := get(ctx, ownerID, id)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, notFoundErr
+	}
+	if err != nil {
+		log.FromContext(ctx).Error("getting "+entityName, idLogField, id, log.Error, err)
+		return nil, errors.New("failed to get " + entityName)
+	}
+
+	if !authz.CanReadVisibility(ctx, ownerID, visibilityOf(*item)) {
+		log.DeniedRead(ctx, entityName, ownerID, string(visibilityOf(*item)), idLogField, id)
+		return nil, notFoundErr
+	}
+
+	return item, nil
 }
 
 func clampListLimit(limit int) int {

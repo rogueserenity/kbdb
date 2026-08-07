@@ -76,26 +76,10 @@ func handleGetSwitch(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema
 			return nil, schema.GetSwitchOutput{}, errors.New("switch_id must not be blank")
 		}
 
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		sw, err := ownedReadable(ctx, repo.Get, func(sw repository.Switch) repository.Visibility { return sw.Visibility },
+			"switch", errSwitchNotFound, log.SwitchID, in.UserID, in.SwitchID)
 		if err != nil {
 			return nil, schema.GetSwitchOutput{}, err
-		}
-
-		sw, err := repo.Get(ctx, ownerID, in.SwitchID)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.GetSwitchOutput{}, errSwitchNotFound
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("getting switch", log.SwitchID, in.SwitchID, log.Error, err)
-			return nil, schema.GetSwitchOutput{}, errors.New("failed to get switch")
-		}
-
-		// Same error as a genuine miss: a switch the caller can't read must
-		// not be distinguishable from one that doesn't exist, matching
-		// handlers.GetSwitch's 404-not-403.
-		if !authz.CanReadVisibility(ctx, ownerID, sw.Visibility) {
-			log.DeniedRead(ctx, "switch", ownerID, string(sw.Visibility), log.SwitchID, in.SwitchID)
-			return nil, schema.GetSwitchOutput{}, errSwitchNotFound
 		}
 
 		return nil, schema.GetSwitchOutput{Switch: repomcp.SwitchToMCP(*sw)}, nil
