@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
+	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -86,4 +87,27 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NoPurchaseFields_OmitsPurchase(
 	s.Equal("kit-1", out.KitID)
 	s.False(out.HasImage)
 	s.Nil(out.Purchase)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetFromMCP_MapsAllFields() {
+	profile := "Cherry"
+	material := "ABS"
+	notes := "grail set"
+
+	out := KeycapSetFromMCP(schema.KeycapSetInput{
+		Brand:      "GMK",
+		Name:       "Olivia",
+		Profile:    &profile,
+		Material:   &material,
+		Notes:      &notes,
+		Visibility: "public",
+	})
+
+	s.Equal("GMK", out.Brand)
+	s.Equal("Olivia", out.Name)
+	s.Require().NotNil(out.Profile)
+	s.Equal("Cherry", *out.Profile)
+	s.Equal(repository.VisibilityPublic, out.Visibility)
+	s.Empty(out.ID, "ID is the caller's responsibility, not this mapping's")
+	s.Nil(out.Kits, "a set write never carries kits")
 }

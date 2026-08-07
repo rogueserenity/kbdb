@@ -79,3 +79,48 @@ type GetKeycapKitImageURLInput struct {
 type GetKeycapKitImageURLOutput struct {
 	URL string `json:"url" jsonschema:"a freshly-minted, short-lived presigned URL to fetch the image; do not cache or persist it, it expires within minutes"`
 }
+
+// KeycapSetInput is the writable half of a keycap set, shared by
+// create_keycap_set and update_keycap_set. It has no Kits field - kits are
+// managed one at a time via their own tools, never resent as part of a set
+// edit.
+type KeycapSetInput struct {
+	Brand      string  `json:"brand" jsonschema:"the keycap set's brand"`
+	Name       string  `json:"name" jsonschema:"the keycap set's name"`
+	Profile    *string `json:"profile,omitempty" jsonschema:"the keycap set's profile; must be an approved keycap_profile lookup value"`
+	Material   *string `json:"material,omitempty" jsonschema:"what the keycaps are made of; must be an approved keycap_material lookup value"`
+	Notes      *string `json:"notes,omitempty" jsonschema:"free-form notes"`
+	Visibility string  `json:"visibility" jsonschema:"who can read this keycap set; one of \"public\", \"authenticated\", \"private\""`
+}
+
+// CreateKeycapSetInput is the create_keycap_set tool input.
+type CreateKeycapSetInput struct {
+	KeycapSetInput
+}
+
+// CreateKeycapSetOutput is the create_keycap_set tool output.
+type CreateKeycapSetOutput struct {
+	KeycapSet KeycapSet `json:"keycap_set" jsonschema:"the created keycap set, including its server-generated id"`
+}
+
+// UpdateKeycapSetInput is the update_keycap_set tool input. Every field is
+// replaced, so omitting an optional field clears it. Kits are preserved
+// untouched - this can't be used to add, remove, or edit a kit.
+type UpdateKeycapSetInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set to replace"`
+	KeycapSetInput
+}
+
+// UpdateKeycapSetOutput is the update_keycap_set tool output.
+type UpdateKeycapSetOutput struct {
+	KeycapSet KeycapSet `json:"keycap_set" jsonschema:"the updated keycap set"`
+}
+
+// DeleteKeycapSetInput is the delete_keycap_set tool input.
+type DeleteKeycapSetInput struct {
+	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set to delete"`
+}
+
+// DeleteKeycapSetOutput is the delete_keycap_set tool output. Deleting is
+// idempotent, so there is no payload.
+type DeleteKeycapSetOutput struct{}

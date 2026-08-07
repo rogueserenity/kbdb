@@ -43,6 +43,22 @@ func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
 	}
 }
 
+// KeycapSetFromMCP maps a create_keycap_set/update_keycap_set tool argument
+// to its repository shape. ID and UserID are left unset: the caller sets
+// ID, and UserID comes from ctx in the repository layer. Kits are left
+// unset too - a set write never carries kits, which are managed one at a
+// time via their own tools.
+func KeycapSetFromMCP(in schema.KeycapSetInput) repository.KeycapSet {
+	return repository.KeycapSet{
+		Brand:      in.Brand,
+		Name:       in.Name,
+		Profile:    in.Profile,
+		Material:   in.Material,
+		Notes:      in.Notes,
+		Visibility: repository.Visibility(in.Visibility),
+	}
+}
+
 // KeycapKitToMCP maps a repository.KeycapKit to its MCP tool shape.
 func KeycapKitToMCP(k repository.KeycapKit) schema.KeycapKit {
 	return schema.KeycapKit{
