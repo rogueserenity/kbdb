@@ -60,6 +60,8 @@ func KeycapSetFromMCP(in schema.KeycapSetInput) repository.KeycapSet {
 }
 
 // KeycapKitToMCP maps a repository.KeycapKit to its MCP tool shape.
+// ImagePath collapses to the HasImage bool, never a URL - see
+// schema.KeycapKit for why.
 func KeycapKitToMCP(k repository.KeycapKit) schema.KeycapKit {
 	return schema.KeycapKit{
 		KitID:    k.KitID,
