@@ -18,10 +18,8 @@ func TestLookupToMCPSuite(t *testing.T) {
 	suite.Run(t, new(LookupToMCPSuite))
 }
 
-// mustGetCategory looks up a real, catalog-sourced Lookup - LookupToMCP's
-// contract is that it's only ever called with values from
-// lookup.GetCategory, never a hand-built Lookup, so tests exercise it the
-// same way.
+// mustGetCategory looks up a real, catalog-sourced Lookup - LookupToMCP
+// requires one, not a hand-built Lookup.
 func (s *LookupToMCPSuite) mustGetCategory(category lookup.Category) lookup.Lookup {
 	l, ok := lookup.GetCategory(context.Background(), category)
 	s.Require().True(ok, "category %q not found", category)

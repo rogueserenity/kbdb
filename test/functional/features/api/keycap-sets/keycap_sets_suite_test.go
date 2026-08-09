@@ -8,9 +8,7 @@ import (
 )
 
 // approvedProfile/approvedMaterial/approvedImageContentType are real values
-// from internal/lookup/data/ - specs testing the "approved value" path use
-// these; specs testing the "unapproved value" path use any string not in
-// this fixed set (e.g. "NotApproved").
+// from internal/lookup/data/.
 const (
 	approvedProfile          = "Cherry/CYL"
 	approvedMaterial         = "DyeSub PBT"

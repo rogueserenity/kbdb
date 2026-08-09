@@ -17,12 +17,6 @@ func TestCatalogSuite(t *testing.T) {
 	suite.Run(t, new(CatalogSuite))
 }
 
-// TestEveryCategory_DecodesViaItsExpectedAccessor loops every category
-// init() loaded and confirms it decodes cleanly via whichever accessor
-// its shape expects - the same check validateShape already runs at init
-// (so a bad data file already fails the build), but doing it again here
-// as an ordinary test assertion means a failure reads as a normal test
-// failure naming the category, not an init-time panic.
 func (s *CatalogSuite) TestEveryCategory_DecodesViaItsExpectedAccessor() {
 	ctx := context.Background()
 
@@ -55,10 +49,6 @@ func (s *CatalogSuite) TestListCategoryNames_MatchesListCategoriesWidened() {
 	}
 }
 
-// TestListCategoryNames_MutatingResult_DoesNotAffectLaterCalls proves
-// ListCategoryNames returns a clone, not the package's cached slice - a
-// caller mutating what it got back must not corrupt what the next caller
-// sees.
 func (s *CatalogSuite) TestListCategoryNames_MutatingResult_DoesNotAffectLaterCalls() {
 	ctx := context.Background()
 
@@ -70,9 +60,6 @@ func (s *CatalogSuite) TestListCategoryNames_MutatingResult_DoesNotAffectLaterCa
 	s.Equal(original, second[0])
 }
 
-// TestGetCategory_MutatingValues_DoesNotAffectLaterCalls is
-// TestListCategoryNames_MutatingResult_DoesNotAffectLaterCalls's
-// equivalent for GetCategory's Lookup.Values.
 func (s *CatalogSuite) TestGetCategory_MutatingValues_DoesNotAffectLaterCalls() {
 	ctx := context.Background()
 
@@ -86,9 +73,6 @@ func (s *CatalogSuite) TestGetCategory_MutatingValues_DoesNotAffectLaterCalls() 
 	s.Equal(original, second.Values[0])
 }
 
-// TestStrings_MutatingResult_DoesNotAffectLaterCalls is
-// TestListCategoryNames_MutatingResult_DoesNotAffectLaterCalls's
-// equivalent for Lookup.Strings' cached decode.
 func (s *CatalogSuite) TestStrings_MutatingResult_DoesNotAffectLaterCalls() {
 	ctx := context.Background()
 

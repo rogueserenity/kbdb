@@ -73,10 +73,8 @@ func validateKeyboardLayout(ctx context.Context, size *string, layout string) *F
 		return &FieldError{Field: "layout", Value: layout, Category: category}
 	}
 
-	// LayoutValues can't actually fail here: catalog.go's init() already
-	// shape-checked every category's data via validateShape, so a
-	// CategoryKeyboardLayout entry reaching this point is guaranteed to
-	// decode. The panic is a backstop, not a real runtime path.
+	// Can't actually fail: init() already shape-checked this category.
+	// Backstop, not a real runtime path.
 	values, err := l.LayoutValues()
 	if err != nil {
 		panic(err)

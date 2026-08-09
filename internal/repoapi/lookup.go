@@ -11,10 +11,8 @@ import (
 // CategoryKeyboardLayout/CategoryBuildCaseMountType into their typed shape
 // first so a mismatch in stored data errors here instead of silently
 // serializing whatever was actually stored. l must come from
-// lookup.GetCategory - LayoutValues/CaseMountTypeValues read from a cache
-// keyed by l.Category, populated once at package init from the real
-// catalog data, not from l.Values itself, so a hand-built Lookup with
-// fabricated Values decodes as the real category's data instead.
+// lookup.GetCategory: LayoutValues/CaseMountTypeValues decode by category
+// against the catalog, not l.Values itself.
 func LookupToAPI(l lookup.Lookup) (api.Lookup, error) {
 	values := l.Values
 

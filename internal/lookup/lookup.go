@@ -50,13 +50,9 @@ func validateFields(ctx context.Context, checks []fieldCheck) []FieldError {
 
 		strs, err := l.Strings()
 		if err != nil {
-			// catalog.go's init() already shape-checks every category's
-			// data (so this isn't a bad-data path), which means reaching
-			// here means a fieldCheck named an object-shaped category (e.g.
-			// keyboard_layout) that validateFields doesn't handle - those
-			// go through a dedicated caller like validateKeyboardLayout
-			// instead. That's a caller bug, not a runtime condition to
-			// recover from.
+			// Only reachable if a fieldCheck names an object-shaped
+			// category (e.g. keyboard_layout) instead of routing through a
+			// dedicated caller like validateKeyboardLayout - a caller bug.
 			panic(err)
 		}
 		values[c.Category] = strs

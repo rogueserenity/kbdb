@@ -8,9 +8,7 @@ import (
 )
 
 // approvedType/approvedStem/approvedSpringMaterial/approvedVendor are real
-// values from internal/lookup/data/ - specs testing the "approved value"
-// path use these; specs testing the "unapproved value" path use any string
-// not in the seeded set (e.g. "NotApproved").
+// values from internal/lookup/data/.
 const (
 	approvedType           = "Linear"
 	approvedStem           = "POM"
