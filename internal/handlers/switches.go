@@ -108,13 +108,8 @@ func decodeSwitchInput(w http.ResponseWriter, r *http.Request) (sw repository.Sw
 
 // validateSwitchLookups writes a 400 listing every invalid field if any
 // check fails. An unset (nil) field is skipped, not treated as invalid.
-func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, sw repository.Switch) (ok bool) {
-	fieldErrs, err := lookup.ValidateSwitch(ctx, lookupRepo, sw)
-	if err != nil {
-		log.FromContext(ctx).Error("validating switch lookup fields", log.Error, err)
-		problem.Internal(w, "failed to validate lookup fields")
-		return false
-	}
+func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, sw repository.Switch) (ok bool) {
+	fieldErrs := lookup.ValidateSwitch(ctx, sw)
 	if len(fieldErrs) > 0 {
 		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
 		for i, fe := range fieldErrs {
@@ -133,7 +128,7 @@ func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, lookupRep
 // CreateSwitch reads the {userId} path value and requires an authenticated
 // caller. userId must be the caller's own subject; creating in another
 // user's collection returns 404, not 403, to avoid revealing it exists.
-func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+func CreateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -147,7 +142,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 			return
 		}
 
-		if !validateSwitchLookups(r.Context(), w, lookupRepo, sw) {
+		if !validateSwitchLookups(r.Context(), w, sw) {
 			return
 		}
 
@@ -157,7 +152,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			// Practically unreachable - ID is a fresh UUID, not caller
 			// input - but Create's ConditionExpression guards a collision
-			// regardless, so surface it the same way CreateLookup does.
+			// regardless.
 			problem.Conflict(w, "switch already exists")
 			return
 		}
@@ -177,7 +172,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's switch, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
-func UpdateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("switchId")
@@ -192,7 +187,7 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, lookupRepo repository.
 			return
 		}
 
-		if !validateSwitchLookups(r.Context(), w, lookupRepo, sw) {
+		if !validateSwitchLookups(r.Context(), w, sw) {
 			return
 		}
 

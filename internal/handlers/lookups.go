@@ -3,136 +3,30 @@ package handlers
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
-	"slices"
-	"strings"
 
-	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
-	"github.com/rogueserenity/kbdb/internal/repository"
 )
-
-// requireNonBlankCategory writes a 400 and returns false if category is
-// empty or whitespace-only. Not schema-enforceable: net/http's own
-// {category} routing already collapses a whitespace-only path segment to
-// an empty PathValue before the OpenAPI validator ever sees it.
-func requireNonBlankCategory(w http.ResponseWriter, category string) bool {
-	if strings.TrimSpace(category) == "" {
-		problem.BadRequest(w, "category must not be blank")
-		return false
-	}
-	return true
-}
-
-// decodeValues reads the request body into a []any. Shape/required-field
-// validation (values present and non-empty) already happened in the
-// OpenAPI request validator (internal/router.restOpenAPIValidator) before
-// this handler ran.
-func decodeValues(w http.ResponseWriter, r *http.Request) (values []any, ok bool) {
-	var in api.LookupInput
-	if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
-		problem.BadRequest(w, "invalid request body")
-		return nil, false
-	}
-
-	return repoapi.LookupInputToRepo(in), true
-}
-
-// validateLookupValues checks that candidate.Values is shaped the way
-// candidate.Category requires, writing a 400 and returning false if not.
-func validateLookupValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, candidate repository.Lookup) (ok bool) {
-	switch candidate.Category {
-	case repository.CategoryKeyboardLayout:
-		return validateKeyboardLayoutValues(ctx, w, repo, candidate)
-	case repository.CategoryBuildCaseMountType:
-		if _, err := candidate.CaseMountTypeValues(); err != nil {
-			problem.BadRequest(w, fmt.Sprintf("values: %s", err))
-			return false
-		}
-	default:
-		if _, err := candidate.Strings(); err != nil {
-			problem.BadRequest(w, fmt.Sprintf("values: %s", err))
-			return false
-		}
-	}
-
-	return true
-}
-
-// validateKeyboardLayoutValues also cross-checks each entry's sizes against
-// CategoryKeyboardSize, so a keyboard can't later pass its layout-vs-size
-// check against a size that was never itself approved.
-func validateKeyboardLayoutValues(ctx context.Context, w http.ResponseWriter, repo repository.LookupRepository, candidate repository.Lookup) (ok bool) {
-	layouts, err := candidate.LayoutValues()
-	if err != nil {
-		problem.BadRequest(w, fmt.Sprintf("values: %s", err))
-		return false
-	}
-
-	sizeLookup, err := repo.GetCategory(ctx, repository.CategoryKeyboardSize)
-	var approvedSizes []string
-	switch {
-	case errors.Is(err, repository.ErrNotFound):
-		// approvedSizes stays nil - every non-empty sizes list fails below.
-	case err != nil:
-		log.FromContext(ctx).Error("fetching keyboard_size for keyboard_layout validation", log.Error, err)
-		problem.Internal(w, "failed to validate values")
-		return false
-	default:
-		approvedSizes, err = sizeLookup.Strings()
-		if err != nil {
-			log.FromContext(ctx).Error("parsing keyboard_size values", log.Error, err)
-			problem.Internal(w, "failed to validate values")
-			return false
-		}
-	}
-
-	var invalidParams []problem.InvalidParam
-	for _, l := range layouts {
-		for _, size := range l.Sizes {
-			if !slices.Contains(approvedSizes, size) {
-				invalidParams = append(invalidParams, problem.InvalidParam{
-					Name:   fmt.Sprintf("values[%s].sizes", l.Name),
-					Reason: fmt.Sprintf("%q is not an approved keyboard_size value", size),
-				})
-			}
-		}
-	}
-	if len(invalidParams) > 0 {
-		problem.ValidationFailed(w, "one or more layout sizes are not approved keyboard_size values", invalidParams)
-		return false
-	}
-
-	return true
-}
 
 // ListLookups reads no path values and requires no auth. Returns category
 // names only, not their values (see GetLookup for that).
-func ListLookups(repo repository.LookupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		categories, err := repo.ListCategories(r.Context())
-		if err != nil {
-			log.FromContext(r.Context()).Error("listing lookup categories", log.Error, err)
-			problem.Internal(w, "failed to list lookup categories")
-			return
-		}
+func ListLookups(w http.ResponseWriter, r *http.Request) {
+	names := lookup.ListCategoryNames(r.Context())
 
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(categories)
-	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(names)
 }
 
-// writeLookup writes lookup as the response body, or a 500 if its stored
-// values don't match the shape its category expects.
-func writeLookup(ctx context.Context, w http.ResponseWriter, status int, lookup repository.Lookup) {
-	out, err := repoapi.LookupToAPI(lookup)
+// writeLookup writes l as the response body, or a 500 if its stored values
+// don't match the shape its category expects.
+func writeLookup(ctx context.Context, w http.ResponseWriter, status int, l lookup.Lookup) {
+	out, err := repoapi.LookupToAPI(l)
 	if err != nil {
-		log.FromContext(ctx).Error("mapping lookup category to API shape", log.LookupCategory, lookup.Category, log.Error, err)
+		log.FromContext(ctx).Error("mapping lookup category to API shape", log.LookupCategory, string(l.Category), log.Error, err)
 		problem.Internal(w, "failed to read lookup category")
 		return
 	}
@@ -143,108 +37,14 @@ func writeLookup(ctx context.Context, w http.ResponseWriter, status int, lookup 
 }
 
 // GetLookup reads the {category} path value and requires no auth.
-func GetLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		category := r.PathValue("category")
+func GetLookup(w http.ResponseWriter, r *http.Request) {
+	category := r.PathValue("category")
 
-		lookup, err := repo.GetCategory(r.Context(), category)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("getting lookup category", log.Error, err, log.LookupCategory, category)
-			problem.Internal(w, "failed to get lookup category")
-			return
-		}
-
-		writeLookup(r.Context(), w, http.StatusOK, *lookup)
+	l, ok := lookup.GetCategory(r.Context(), lookup.Category(category))
+	if !ok {
+		problem.NotFound(w, "resource not found")
+		return
 	}
-}
 
-// CreateLookup reads the {category} path value and requires an admin
-// caller.
-func CreateLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		category := r.PathValue("category")
-		if !requireNonBlankCategory(w, category) {
-			return
-		}
-
-		values, ok := decodeValues(w, r)
-		if !ok {
-			return
-		}
-		candidate := repository.Lookup{Category: category, Values: values}
-
-		if !validateLookupValues(r.Context(), w, repo, candidate) {
-			return
-		}
-
-		lookup, err := repo.CreateCategory(r.Context(), candidate)
-		if errors.Is(err, repository.ErrAlreadyExists) {
-			problem.Conflict(w, "category already exists")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("creating lookup category", log.Error, err, log.LookupCategory, category)
-			problem.Internal(w, "failed to create lookup category")
-			return
-		}
-
-		writeLookup(r.Context(), w, http.StatusCreated, *lookup)
-	}
-}
-
-// ReplaceLookup reads the {category} path value and requires an admin
-// caller.
-func ReplaceLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		category := r.PathValue("category")
-		if !requireNonBlankCategory(w, category) {
-			return
-		}
-
-		values, ok := decodeValues(w, r)
-		if !ok {
-			return
-		}
-		candidate := repository.Lookup{Category: category, Values: values}
-
-		if !validateLookupValues(r.Context(), w, repo, candidate) {
-			return
-		}
-
-		lookup, err := repo.ReplaceCategory(r.Context(), candidate)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("replacing lookup category", log.Error, err, log.LookupCategory, category)
-			problem.Internal(w, "failed to replace lookup category")
-			return
-		}
-
-		writeLookup(r.Context(), w, http.StatusOK, *lookup)
-	}
-}
-
-// DeleteLookup reads the {category} path value and requires an admin
-// caller. Idempotent: returns 204 whether or not the category existed.
-func DeleteLookup(repo repository.LookupRepository) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		category := r.PathValue("category")
-		if !requireNonBlankCategory(w, category) {
-			return
-		}
-
-		if err := repo.DeleteCategory(r.Context(), category); err != nil {
-			log.FromContext(r.Context()).Error("deleting lookup category", log.Error, err, log.LookupCategory, category)
-			problem.Internal(w, "failed to delete lookup category")
-			return
-		}
-
-		w.WriteHeader(http.StatusNoContent)
-	}
+	writeLookup(r.Context(), w, http.StatusOK, l)
 }

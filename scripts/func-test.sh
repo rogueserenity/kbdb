@@ -2,7 +2,6 @@
 set -euo pipefail
 # Defaults for local runs against LocalStack; ci.yml sets these itself for
 # a real deployed stack, so don't override an already-set value.
-export KBDB_LOOKUP_TABLE_NAME="${KBDB_LOOKUP_TABLE_NAME:-kbdb-local-lookup}"
 export KBDB_SWITCH_TABLE_NAME="${KBDB_SWITCH_TABLE_NAME:-kbdb-local-switch}"
 export KBDB_KEYBOARD_TABLE_NAME="${KBDB_KEYBOARD_TABLE_NAME:-kbdb-local-keyboard}"
 export KBDB_KEYCAP_SET_TABLE_NAME="${KBDB_KEYCAP_SET_TABLE_NAME:-kbdb-local-keycap-set}"

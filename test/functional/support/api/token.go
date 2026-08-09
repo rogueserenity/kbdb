@@ -136,7 +136,7 @@ func MintToken(ctx context.Context, issuerURL, clientID, clientSecret string) (s
 // TokenSubject returns the "sub" claim of an ID token, decoded without
 // signature verification. Fine for functional tests: the caller already
 // obtained this token from a trusted issuer (mockoidc or, in CI, real
-// Cognito) via AuthToken/AdminAuthToken/SecondUserAuthToken - this just
+// Cognito) via AuthToken/SecondUserAuthToken - this just
 // reads its subject back out. Needed because CI's real-Cognito-token path
 // mints a real Cognito-generated subject, not the fixed
 // fixtures.TestUserSubject-style constants mockoidc uses - specs that need
@@ -185,15 +185,6 @@ func authToken(ctx context.Context, envOverride, subject string, groups []string
 // user. See authToken for the KBDB_AUTH_TOKEN override behavior.
 func AuthToken(ctx context.Context) (string, error) {
 	return authToken(ctx, "KBDB_AUTH_TOKEN", fixtures.TestUserSubject, nil)
-}
-
-// AdminAuthToken returns a valid bearer token for a user in the "admins"
-// Cognito group (see template.yaml's AdminsGroup and
-// internal/auth.Claims.Groups) - for exercising the write-gated lookup
-// routes (PUT/POST/DELETE /v1/lookups/{category}). See authToken for the
-// KBDB_ADMIN_AUTH_TOKEN override behavior.
-func AdminAuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_ADMIN_AUTH_TOKEN", fixtures.AdminUserSubject, fixtures.AdminGroups)
 }
 
 // SecondUserAuthToken returns a valid bearer token for a second, unrelated

@@ -764,71 +764,6 @@ paths:
           $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
-    put:
-      tags: [lookups]
-      summary: Replace a lookup category's approved values (admin only)
-      operationId: replaceLookup
-      security:
-        - CognitoAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LookupInput"
-      responses:
-        "200":
-          description: The updated lookup category.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Lookup"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "404":
-          $ref: "#/components/responses/NotFoundResponse"
-        default:
-          $ref: "#/components/responses/ProblemResponse"
-    post:
-      tags: [lookups]
-      summary: Create a new lookup category (admin only)
-      operationId: createLookup
-      security:
-        - CognitoAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: "#/components/schemas/LookupInput"
-      responses:
-        "201":
-          description: The created lookup category.
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/Lookup"
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
-        default:
-          $ref: "#/components/responses/ProblemResponse"
-    delete:
-      tags: [lookups]
-      summary: Delete a lookup category (admin only)
-      operationId: deleteLookup
-      description: >
-        Idempotent - returns 204 whether or not the category existed.
-      security:
-        - CognitoAuth: []
-      responses:
-        "204":
-          description: Deleted (or already absent).
-        "403":
-          $ref: "#/components/responses/ForbiddenResponse"
-        default:
-          $ref: "#/components/responses/ProblemResponse"
 
 components:
   securitySchemes:
@@ -1511,7 +1446,7 @@ components:
         A lookup category's approved values. "values" is plain strings
         except for "keyboard_layout" and "build_case_mount_type", whose
         entries are objects - see the examples below and
-        model/lookup_seed.json.
+        internal/lookup/data/.
       required: [category, values]
       properties:
         category:
@@ -1524,12 +1459,3 @@ components:
             - ["Amazon", "CannonKeys"]
             - [{ name: "WK", sizes: ["60%", "65%"] }]
             - [{ name: "Gasket Mount", supports_durometer: true }]
-
-    LookupInput:
-      type: object
-      required: [values]
-      properties:
-        values:
-          type: array
-          minItems: 1
-          items: {}
