@@ -4,41 +4,37 @@ import (
 	"fmt"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
-	"github.com/rogueserenity/kbdb/internal/repository"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 )
 
-// LookupToAPI maps a repository.Lookup to its wire representation, decoding
+// LookupToAPI maps a lookup.Lookup to its wire representation, decoding
 // CategoryKeyboardLayout/CategoryBuildCaseMountType into their typed shape
 // first so a mismatch in stored data errors here instead of silently
-// serializing whatever was actually stored.
-func LookupToAPI(l repository.Lookup) (api.Lookup, error) {
+// serializing whatever was actually stored. l must come from
+// lookup.GetCategory - LayoutValues/CaseMountTypeValues read from a cache
+// keyed by l.Category, populated once at package init from the real
+// catalog data, not from l.Values itself, so a hand-built Lookup with
+// fabricated Values decodes as the real category's data instead.
+func LookupToAPI(l lookup.Lookup) (api.Lookup, error) {
 	values := l.Values
 
 	switch l.Category {
-	case repository.CategoryKeyboardLayout:
+	case lookup.CategoryKeyboardLayout:
 		layouts, err := l.LayoutValues()
 		if err != nil {
 			return api.Lookup{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
-		values = repository.ToAnySlice(layouts)
-	case repository.CategoryBuildCaseMountType:
+		values = lookup.ToAnySlice(layouts)
+	case lookup.CategoryBuildCaseMountType:
 		mountTypes, err := l.CaseMountTypeValues()
 		if err != nil {
 			return api.Lookup{}, fmt.Errorf("decoding %s values: %w", l.Category, err)
 		}
-		values = repository.ToAnySlice(mountTypes)
+		values = lookup.ToAnySlice(mountTypes)
 	}
 
 	return api.Lookup{
-		Category: l.Category,
+		Category: string(l.Category),
 		Values:   values,
 	}, nil
-}
-
-// LookupInputToRepo maps a generated LookupInput (already schema-validated
-// by the OpenAPI request validator) to the Values a repository.Lookup needs.
-// Category is a path parameter, not part of the request body, so the caller
-// builds the rest of the Lookup itself.
-func LookupInputToRepo(in api.LookupInput) []any {
-	return in.Values
 }

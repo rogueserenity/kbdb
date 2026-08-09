@@ -55,7 +55,6 @@ func main() {
 			o.BaseEndpoint = &cfg.DynamoDBEndpointURL
 		}
 	})
-	lookupRepo := dynamo.NewLookupRepository(dynamoClient, cfg.LookupTableName)
 	switchRepo := dynamo.NewSwitchRepository(dynamoClient, cfg.SwitchTableName)
 	keyboardRepo := dynamo.NewKeyboardRepository(dynamoClient, cfg.KeyboardTableName)
 	keycapSetRepo := dynamo.NewKeycapSetRepository(dynamoClient, cfg.KeycapSetTableName)
@@ -71,7 +70,7 @@ func main() {
 	})
 	imageStore := imagestore.NewImageStore(s3Client, s3.NewPresignClient(s3Client), cfg.ImagesBucketName)
 
-	handler := router.New(verifier, lookupRepo, switchRepo, keyboardRepo, keycapSetRepo, imageStore, cfg.OIDCIssuerURL, Version)
+	handler := router.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, cfg.OIDCIssuerURL, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

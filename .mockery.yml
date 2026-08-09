@@ -14,9 +14,6 @@ packages:
       filename: 'mock_{{.InterfaceName}}.go'
       pkgname: 'mocks'
     interfaces:
-      LookupRepository:
-        config:
-          structname: 'MockLookupRepository'
       SwitchRepository:
         config:
           structname: 'MockSwitchRepository'

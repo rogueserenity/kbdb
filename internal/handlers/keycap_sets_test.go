@@ -296,7 +296,6 @@ type CreateKeycapSetSuite struct {
 	suite.Suite
 
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
-	mockLookupRepo    *mocks.MockLookupRepository
 	mockImages        *mocks.MockKeycapKitImageStore
 	handler           http.HandlerFunc
 }
@@ -307,9 +306,8 @@ func TestCreateKeycapSetSuite(t *testing.T) {
 
 func (s *CreateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo, s.mockImages)
+	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, s.mockImages)
 }
 
 func (s *CreateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -357,21 +355,16 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_Visibility_Preserved() {
 
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_ValidatesOpenVocabularyFields() {
 	tests := []struct {
-		name     string
-		category string
-		body     string
+		name string
+		body string
 	}{
-		{"profile", "keycap_profile", `{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved"}`},
-		{"material", "keycap_material", `{"brand":"GMK","name":"Laser","visibility":"private","material":"NotApproved"}`},
+		{"profile", `{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved"}`},
+		{"material", `{"brand":"GMK","name":"Laser","visibility":"private","material":"NotApproved"}`},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.SetupTest()
-
-			s.mockLookupRepo.EXPECT().
-				GetCategory(mock.Anything, tt.category).
-				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
 
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
@@ -393,13 +386,6 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_ValidatesOpenVocabularyFields
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_MultipleInvalidFields_NamesAll() {
 	// profile and material are both invalid here - the response must
 	// report both via invalid_params, not just the first one checked.
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(&repository.Lookup{Category: "keycap_profile", Values: []any{"Cherry"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_material").
-		Return(&repository.Lookup{Category: "keycap_material", Values: []any{"ABS"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved",`+
 			`"material":"AlsoNotApproved"}`)
@@ -449,51 +435,6 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_InvalidBody_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *CreateKeycapSetSuite) TestCreateKeycapSet_NonStringLookupValue_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(&repository.Lookup{
-			Category: "keycap_profile",
-			Values:   []any{map[string]any{"name": "Cherry"}, "OEM"},
-		}, nil)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateKeycapSetSuite) TestCreateKeycapSet_LookupCategoryMissing_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateKeycapSetSuite) TestCreateKeycapSet_LookupRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *CreateKeycapSetSuite) TestCreateKeycapSet_AlreadyExists_Returns409() {
 	s.mockKeycapSetRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
@@ -524,7 +465,6 @@ type UpdateKeycapSetSuite struct {
 	suite.Suite
 
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
-	mockLookupRepo    *mocks.MockLookupRepository
 	mockImages        *mocks.MockKeycapKitImageStore
 	handler           http.HandlerFunc
 }
@@ -535,9 +475,8 @@ func TestUpdateKeycapSetSuite(t *testing.T) {
 
 func (s *UpdateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, s.mockLookupRepo, s.mockImages)
+	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, s.mockImages)
 }
 
 func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -586,21 +525,16 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_Visibility_Preserved() {
 
 func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_ValidatesOpenVocabularyFields() {
 	tests := []struct {
-		name     string
-		category string
-		body     string
+		name string
+		body string
 	}{
-		{"profile", "keycap_profile", `{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved"}`},
-		{"material", "keycap_material", `{"brand":"GMK","name":"Laser","visibility":"private","material":"NotApproved"}`},
+		{"profile", `{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved"}`},
+		{"material", `{"brand":"GMK","name":"Laser","visibility":"private","material":"NotApproved"}`},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.SetupTest()
-
-			s.mockLookupRepo.EXPECT().
-				GetCategory(mock.Anything, tt.category).
-				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
 
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
@@ -622,13 +556,6 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_ValidatesOpenVocabularyFields
 func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MultipleInvalidFields_NamesAll() {
 	// profile and material are both invalid here - the response must
 	// report both via invalid_params, not just the first one checked.
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(&repository.Lookup{Category: "keycap_profile", Values: []any{"Cherry"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_material").
-		Return(&repository.Lookup{Category: "keycap_material", Values: []any{"ABS"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"NotApproved",`+
 			`"material":"AlsoNotApproved"}`)
@@ -675,51 +602,6 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_InvalidBody_Returns400() {
 	s.handler(rec, req)
 
 	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_NonStringLookupValue_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(&repository.Lookup{
-			Category: "keycap_profile",
-			Values:   []any{map[string]any{"name": "Cherry"}, "OEM"},
-		}, nil)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_LookupCategoryMissing_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_LookupRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keycap_profile").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"GMK","name":"Laser","visibility":"private","profile":"Cherry"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
@@ -879,10 +761,9 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() 
 type CreateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo       *mocks.MockKeycapSetRepository
-	mockLookupRepo *mocks.MockLookupRepository
-	mockImages     *mocks.MockKeycapKitImageStore
-	handler        http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestCreateKeycapKitSuite(t *testing.T) {
@@ -891,9 +772,8 @@ func TestCreateKeycapKitSuite(t *testing.T) {
 
 func (s *CreateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapKit(s.mockRepo, s.mockLookupRepo, s.mockImages)
+	s.handler = CreateKeycapKit(s.mockRepo, s.mockImages)
 }
 
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -929,21 +809,16 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ValidatesOpenVocabularyFields() {
 	tests := []struct {
-		name     string
-		category string
-		body     string
+		name string
+		body string
 	}{
-		{"purchase.vendor", "vendor", `{"name":"Base","purchase":{"vendor":"NotApproved"}}`},
-		{"purchase.order_status", "order_status", `{"name":"Base","purchase":{"order_status":"NotApproved"}}`},
+		{"purchase.vendor", `{"name":"Base","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"name":"Base","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.SetupTest()
-
-			s.mockLookupRepo.EXPECT().
-				GetCategory(mock.Anything, tt.category).
-				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
 
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
@@ -1033,10 +908,9 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409()
 type UpdateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo       *mocks.MockKeycapSetRepository
-	mockLookupRepo *mocks.MockLookupRepository
-	mockImages     *mocks.MockKeycapKitImageStore
-	handler        http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestUpdateKeycapKitSuite(t *testing.T) {
@@ -1045,9 +919,8 @@ func TestUpdateKeycapKitSuite(t *testing.T) {
 
 func (s *UpdateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapKit(s.mockRepo, s.mockLookupRepo, s.mockImages)
+	s.handler = UpdateKeycapKit(s.mockRepo, s.mockImages)
 }
 
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1084,21 +957,16 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Succeeds() {
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_ValidatesOpenVocabularyFields() {
 	tests := []struct {
-		name     string
-		category string
-		body     string
+		name string
+		body string
 	}{
-		{"purchase.vendor", "vendor", `{"name":"Extension","purchase":{"vendor":"NotApproved"}}`},
-		{"purchase.order_status", "order_status", `{"name":"Extension","purchase":{"order_status":"NotApproved"}}`},
+		{"purchase.vendor", `{"name":"Extension","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"name":"Extension","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.SetupTest()
-
-			s.mockLookupRepo.EXPECT().
-				GetCategory(mock.Anything, tt.category).
-				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
 
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
@@ -1321,10 +1189,9 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_MutationConflict_Returns409()
 type SetKeycapKitImageSuite struct {
 	suite.Suite
 
-	mockRepo       *mocks.MockKeycapSetRepository
-	mockLookupRepo *mocks.MockLookupRepository
-	mockImages     *mocks.MockKeycapKitImageStore
-	handler        http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestSetKeycapKitImageSuite(t *testing.T) {
@@ -1333,9 +1200,8 @@ func TestSetKeycapKitImageSuite(t *testing.T) {
 
 func (s *SetKeycapKitImageSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = SetKeycapKitImage(s.mockRepo, s.mockLookupRepo, s.mockImages)
+	s.handler = SetKeycapKitImage(s.mockRepo, s.mockImages)
 }
 
 func (s *SetKeycapKitImageSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1350,16 +1216,9 @@ func (s *SetKeycapKitImageSuite) ownerCtx() context.Context {
 	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
-func (s *SetKeycapKitImageSuite) approveContentType() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "image_content_type").
-		Return(&repository.Lookup{Category: "image_content_type", Values: []any{"image/png"}}, nil)
-}
-
 const setKeycapKitImageTestKey = repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
-	s.approveContentType()
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
@@ -1411,10 +1270,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_InvalidBody_Returns400() 
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "image_content_type").
-		Return(&repository.Lookup{Category: "image_content_type", Values: []any{"image/png"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"application/pdf"}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
@@ -1430,21 +1285,7 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Ret
 	s.Equal("content_type", got.InvalidParams[0].Name)
 }
 
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_ValidatingContentTypeRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "image_content_type").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
-	s.approveContentType()
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1458,7 +1299,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500()
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
-	s.approveContentType()
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
@@ -1475,7 +1315,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
-	s.approveContentType()
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
@@ -1492,7 +1331,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
-	s.approveContentType()
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)

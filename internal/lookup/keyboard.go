@@ -2,7 +2,6 @@ package lookup
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 
@@ -17,40 +16,37 @@ import (
 // sizes: that check would always fail too, reporting a second, misleading
 // error blaming a perfectly valid layout instead of the real problem (size
 // itself).
-func ValidateKeyboard(ctx context.Context, repo repository.LookupRepository, kb repository.Keyboard) ([]FieldError, error) {
+func ValidateKeyboard(ctx context.Context, kb repository.Keyboard) []FieldError {
 	var checks []fieldCheck
-	add := func(field string, value *string, category string) {
+	add := func(field string, value *string, category Category) {
 		if value == nil {
 			return
 		}
 		checks = append(checks, fieldCheck{Field: field, Value: *value, Category: category})
 	}
 
-	add("size", kb.Size, repository.CategoryKeyboardSize)
-	add("design.top_case.material", kb.Design.TopCase.Material, repository.CategoryKeyboardCaseMaterial)
-	add("design.bottom_case.material", kb.Design.BottomCase.Material, repository.CategoryKeyboardCaseMaterial)
-	add("design.weight.material", kb.Design.Weight.Material, repository.CategoryKeyboardWeightMaterial)
-	add("pcb.firmware", kb.PCB.Firmware, repository.CategoryKeyboardPCBFirmware)
-	add("pcb.assembly", kb.PCB.Assembly, repository.CategoryKeyboardPCBAssemblyType)
-	add("pcb.connectivity", kb.PCB.Connectivity, repository.CategoryKeyboardPCBConnectivityType)
-	add("purchase.vendor", kb.Purchase.Vendor, repository.CategoryVendor)
-	add("purchase.order_status", kb.Purchase.OrderStatus, repository.CategoryOrderStatus)
+	add("size", kb.Size, CategoryKeyboardSize)
+	add("design.top_case.material", kb.Design.TopCase.Material, CategoryKeyboardCaseMaterial)
+	add("design.bottom_case.material", kb.Design.BottomCase.Material, CategoryKeyboardCaseMaterial)
+	add("design.weight.material", kb.Design.Weight.Material, CategoryKeyboardWeightMaterial)
+	add("pcb.firmware", kb.PCB.Firmware, CategoryKeyboardPCBFirmware)
+	add("pcb.assembly", kb.PCB.Assembly, CategoryKeyboardPCBAssemblyType)
+	add("pcb.connectivity", kb.PCB.Connectivity, CategoryKeyboardPCBConnectivityType)
+	add("purchase.vendor", kb.Purchase.Vendor, CategoryVendor)
+	add("purchase.order_status", kb.Purchase.OrderStatus, CategoryOrderStatus)
 
 	for i, material := range kb.Design.Plates {
 		checks = append(checks, fieldCheck{
 			Field:    fmt.Sprintf("design.plates[%d]", i),
 			Value:    material,
-			Category: repository.CategoryKeyboardPlateMaterial,
+			Category: CategoryKeyboardPlateMaterial,
 		})
 	}
 
-	fieldErrs, err := validateFields(ctx, repo, checks)
-	if err != nil {
-		return nil, err
-	}
+	fieldErrs := validateFields(ctx, checks)
 
 	if kb.Layout == nil {
-		return fieldErrs, nil
+		return fieldErrs
 	}
 
 	sizeInvalid := slices.ContainsFunc(fieldErrs, func(fe FieldError) bool { return fe.Field == "size" })
@@ -59,44 +55,41 @@ func ValidateKeyboard(ctx context.Context, repo repository.LookupRepository, kb 
 		size = nil
 	}
 
-	layoutErr, err := validateKeyboardLayout(ctx, repo, size, *kb.Layout)
-	if err != nil {
-		return nil, err
-	}
-	if layoutErr != nil {
+	if layoutErr := validateKeyboardLayout(ctx, size, *kb.Layout); layoutErr != nil {
 		fieldErrs = append(fieldErrs, *layoutErr)
 	}
 
-	return fieldErrs, nil
+	return fieldErrs
 }
 
 // validateKeyboardLayout also cross-checks layout's sizes against
 // CategoryKeyboardSize, so a keyboard can't pass its layout-vs-size check
 // against a size that was never itself approved.
-func validateKeyboardLayout(ctx context.Context, repo repository.LookupRepository, size *string, layout string) (*FieldError, error) {
-	category := repository.CategoryKeyboardLayout
+func validateKeyboardLayout(ctx context.Context, size *string, layout string) *FieldError {
+	category := CategoryKeyboardLayout
 
-	lookupCategory, err := repo.GetCategory(ctx, category)
-	if errors.Is(err, repository.ErrNotFound) {
-		return &FieldError{Field: "layout", Value: layout, Category: category}, nil
+	l, ok := GetCategory(ctx, category)
+	if !ok {
+		return &FieldError{Field: "layout", Value: layout, Category: category}
 	}
+
+	// LayoutValues can't actually fail here: catalog.go's init() already
+	// shape-checked every category's data via validateShape, so a
+	// CategoryKeyboardLayout entry reaching this point is guaranteed to
+	// decode. The panic is a backstop, not a real runtime path.
+	values, err := l.LayoutValues()
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	values, err := lookupCategory.LayoutValues()
-	if err != nil {
-		return nil, err
-	}
-
-	idx := slices.IndexFunc(values, func(v repository.LayoutValue) bool { return v.Name == layout })
+	idx := slices.IndexFunc(values, func(v LayoutValue) bool { return v.Name == layout })
 	if idx == -1 {
-		return &FieldError{Field: "layout", Value: layout, Category: category}, nil
+		return &FieldError{Field: "layout", Value: layout, Category: category}
 	}
 
 	if size != nil && !slices.Contains(values[idx].Sizes, *size) {
-		return &FieldError{Field: "layout", Value: layout, Category: repository.CategoryKeyboardSize}, nil
+		return &FieldError{Field: "layout", Value: layout, Category: CategoryKeyboardSize}
 	}
 
-	return nil, nil //nolint:nilnil // no problem found is a valid, expected result
+	return nil
 }

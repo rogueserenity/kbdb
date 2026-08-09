@@ -1,0 +1,38 @@
+[
+  {
+    "name": "Top Mount",
+    "supports_durometer": false
+  },
+  {
+    "name": "Bottom Mount",
+    "supports_durometer": false
+  },
+  {
+    "name": "Tray Mount",
+    "supports_durometer": false
+  },
+  {
+    "name": "Gasket Mount",
+    "supports_durometer": true
+  },
+  {
+    "name": "Sandwich Mount",
+    "supports_durometer": false
+  },
+  {
+    "name": "Integrated Plate Mount",
+    "supports_durometer": false
+  },
+  {
+    "name": "Plateless",
+    "supports_durometer": false
+  },
+  {
+    "name": "O-Ring",
+    "supports_durometer": true
+  },
+  {
+    "name": "Tadpole",
+    "supports_durometer": true
+  }
+]

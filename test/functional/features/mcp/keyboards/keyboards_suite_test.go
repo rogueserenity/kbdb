@@ -8,8 +8,6 @@ import (
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
-
-	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
 func TestKeyboards(t *testing.T) {
@@ -17,42 +15,18 @@ func TestKeyboards(t *testing.T) {
 	RunSpecs(t, "MCP Keyboards Suite")
 }
 
-// The lookup categories create_keyboard/update_keyboard validate against,
-// seeded once for the whole suite - the functional lookup table is empty
-// otherwise. approvedLayout is valid only for approvedSize, so
-// approvedOtherSize lets a spec send a size that passes the plain
-// keyboard_size check but is wrong for the layout, isolating the
+// approvedSize/approvedLayout/approvedCaseMaterial/approvedVendor are real
+// values from internal/lookup/data/. approvedLayout is valid only for
+// approvedSize, so approvedOtherSize lets a spec send a size that passes
+// the plain keyboard_size check but is wrong for the layout, isolating the
 // cross-field rule from the plain membership check.
 const (
-	keyboardSizeCategory         = "keyboard_size"
-	keyboardLayoutCategory       = "keyboard_layout"
-	keyboardCaseMaterialCategory = "keyboard_case_material"
-	vendorCategory               = "vendor"
-)
-
-const (
 	approvedSize         = "60%"
-	approvedOtherSize    = "65%"
+	approvedOtherSize    = "40%"
 	approvedLayout       = "WK"
 	approvedCaseMaterial = "Aluminum"
 	approvedVendor       = "Amazon"
 )
-
-var _ = BeforeSuite(func(ctx SpecContext) {
-	Expect(db.SeedLookupCategory(ctx, keyboardSizeCategory, []any{approvedSize, approvedOtherSize})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, keyboardLayoutCategory, []any{
-		map[string]any{"name": approvedLayout, "sizes": []any{approvedSize}},
-	})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, keyboardCaseMaterialCategory, []any{approvedCaseMaterial})).To(Succeed())
-	Expect(db.SeedLookupCategory(ctx, vendorCategory, []any{approvedVendor})).To(Succeed())
-})
-
-var _ = AfterSuite(func(ctx SpecContext) {
-	Expect(db.DeleteLookupCategory(ctx, keyboardSizeCategory)).To(Succeed())
-	Expect(db.DeleteLookupCategory(ctx, keyboardLayoutCategory)).To(Succeed())
-	Expect(db.DeleteLookupCategory(ctx, keyboardCaseMaterialCategory)).To(Succeed())
-	Expect(db.DeleteLookupCategory(ctx, vendorCategory)).To(Succeed())
-})
 
 type getOutput struct {
 	Keyboard struct {

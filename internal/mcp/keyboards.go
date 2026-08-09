@@ -89,10 +89,9 @@ func handleGetKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[sc
 
 func handleCreateKeyboard(
 	keyboardRepo repository.KeyboardRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.CreateKeyboardInput, schema.CreateKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateKeyboardInput) (*mcp.CallToolResult, schema.CreateKeyboardOutput, error) {
-		kb, err := validatedKeyboard(ctx, lookupRepo, in.KeyboardInput)
+		kb, err := validatedKeyboard(ctx, in.KeyboardInput)
 		if err != nil {
 			return nil, schema.CreateKeyboardOutput{}, err
 		}
@@ -114,14 +113,13 @@ func handleCreateKeyboard(
 
 func handleUpdateKeyboard(
 	keyboardRepo repository.KeyboardRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.UpdateKeyboardInput, schema.UpdateKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateKeyboardInput) (*mcp.CallToolResult, schema.UpdateKeyboardOutput, error) {
 		if strings.TrimSpace(in.KeyboardID) == "" {
 			return nil, schema.UpdateKeyboardOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
-		kb, err := validatedKeyboard(ctx, lookupRepo, in.KeyboardInput)
+		kb, err := validatedKeyboard(ctx, in.KeyboardInput)
 		if err != nil {
 			return nil, schema.UpdateKeyboardOutput{}, err
 		}
@@ -158,7 +156,6 @@ func handleDeleteKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor
 
 func validatedKeyboard(
 	ctx context.Context,
-	lookupRepo repository.LookupRepository,
 	in schema.KeyboardInput,
 ) (repository.Keyboard, error) {
 	if strings.TrimSpace(in.Brand) == "" {
@@ -181,11 +178,7 @@ func validatedKeyboard(
 			"visibility %q must be one of: public, authenticated, private", in.Visibility)
 	}
 
-	fieldErrs, err := lookup.ValidateKeyboard(ctx, lookupRepo, kb)
-	if err != nil {
-		log.FromContext(ctx).Error("validating keyboard lookup fields", log.Error, err)
-		return repository.Keyboard{}, errors.New("failed to validate lookup fields")
-	}
+	fieldErrs := lookup.ValidateKeyboard(ctx, kb)
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {
@@ -204,7 +197,7 @@ func validatedKeyboard(
 // telling an agent to go fix a field that's already correct. Mirrors
 // handlers.keyboardFieldErrorToInvalidParam.
 func keyboardFieldErrorReason(fe lookup.FieldError, size *string) string {
-	if fe.Field == "layout" && fe.Category == repository.CategoryKeyboardSize && size != nil {
+	if fe.Field == "layout" && fe.Category == lookup.CategoryKeyboardSize && size != nil {
 		return fmt.Sprintf("layout: %q is not a valid layout for size %q", fe.Value, *size)
 	}
 

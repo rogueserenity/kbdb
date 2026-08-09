@@ -31,7 +31,6 @@ import (
 // advertised to MCP clients in the server's initialize handshake.
 func New(
 	verifier *auth.Verifier,
-	lookupRepo repository.LookupRepository,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -42,17 +41,11 @@ func New(
 
 	mux := http.NewServeMux()
 
-	// No middleware.Auth: security: [] in api/openapi.yaml.
-	mux.Handle("GET /v1/lookups", validate(handlers.ListLookups(lookupRepo)))
-	mux.Handle("GET /v1/lookups/{category}", validate(handlers.GetLookup(lookupRepo)))
-
-	// Lookup Modification endpoints require admin access
-	mux.Handle("POST /v1/lookups/{category}",
-		middleware.Auth(verifier)(middleware.RequireAdmin(validate(handlers.CreateLookup(lookupRepo)))))
-	mux.Handle("PUT /v1/lookups/{category}",
-		middleware.Auth(verifier)(middleware.RequireAdmin(validate(handlers.ReplaceLookup(lookupRepo)))))
-	mux.Handle("DELETE /v1/lookups/{category}",
-		middleware.Auth(verifier)(middleware.RequireAdmin(validate(handlers.DeleteLookup(lookupRepo)))))
+	// No middleware.Auth: security: [] in api/openapi.yaml. No PUT/DELETE:
+	// lookup categories are static, deploy-time data (internal/lookup),
+	// not writable at runtime.
+	mux.Handle("GET /v1/lookups", validate(http.HandlerFunc(handlers.ListLookups)))
+	mux.Handle("GET /v1/lookups/{category}", validate(http.HandlerFunc(handlers.GetLookup)))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public switches (see internal/authz.ReadableVisibilities).
@@ -61,9 +54,9 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
-		middleware.Auth(verifier)(validate(handlers.CreateSwitch(switchRepo, lookupRepo))))
+		middleware.Auth(verifier)(validate(handlers.CreateSwitch(switchRepo))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateSwitch(switchRepo, lookupRepo))))
+		middleware.Auth(verifier)(validate(handlers.UpdateSwitch(switchRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo))))
 
@@ -74,9 +67,9 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
-		middleware.Auth(verifier)(validate(handlers.CreateKeyboard(keyboardRepo, lookupRepo))))
+		middleware.Auth(verifier)(validate(handlers.CreateKeyboard(keyboardRepo))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo, lookupRepo))))
+		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeyboard(keyboardRepo))))
 
@@ -87,26 +80,26 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, lookupRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, lookupRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo, lookupRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo, lookupRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
-		middleware.Auth(verifier)(validate(handlers.SetKeycapKitImage(keycapSetRepo, lookupRepo, imageStore))))
+		middleware.Auth(verifier)(validate(handlers.SetKeycapKitImage(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
 	// only covers the REST surface.
-	mcpHandlers := mcp.New(verifier, lookupRepo, switchRepo, keyboardRepo, keycapSetRepo, imageStore, issuerURL, version)
+	mcpHandlers := mcp.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

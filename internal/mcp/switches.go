@@ -88,10 +88,9 @@ func handleGetSwitch(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema
 
 func handleCreateSwitch(
 	switchRepo repository.SwitchRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.CreateSwitchInput, schema.CreateSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateSwitchInput) (*mcp.CallToolResult, schema.CreateSwitchOutput, error) {
-		sw, err := validatedSwitch(ctx, lookupRepo, in.SwitchInput)
+		sw, err := validatedSwitch(ctx, in.SwitchInput)
 		if err != nil {
 			return nil, schema.CreateSwitchOutput{}, err
 		}
@@ -117,14 +116,13 @@ func handleCreateSwitch(
 
 func handleUpdateSwitch(
 	switchRepo repository.SwitchRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.UpdateSwitchInput, schema.UpdateSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateSwitchInput) (*mcp.CallToolResult, schema.UpdateSwitchOutput, error) {
 		if strings.TrimSpace(in.SwitchID) == "" {
 			return nil, schema.UpdateSwitchOutput{}, errors.New("switch_id must not be blank")
 		}
 
-		sw, err := validatedSwitch(ctx, lookupRepo, in.SwitchInput)
+		sw, err := validatedSwitch(ctx, in.SwitchInput)
 		if err != nil {
 			return nil, schema.UpdateSwitchOutput{}, err
 		}
@@ -164,7 +162,6 @@ func handleDeleteSwitch(switchRepo repository.SwitchRepository) mcp.ToolHandlerF
 // constraint to attach.
 func validatedSwitch(
 	ctx context.Context,
-	lookupRepo repository.LookupRepository,
 	in schema.SwitchInput,
 ) (repository.Switch, error) {
 	if strings.TrimSpace(in.Brand) == "" {
@@ -181,11 +178,7 @@ func validatedSwitch(
 			"visibility %q must be one of: public, authenticated, private", in.Visibility)
 	}
 
-	fieldErrs, err := lookup.ValidateSwitch(ctx, lookupRepo, sw)
-	if err != nil {
-		log.FromContext(ctx).Error("validating switch lookup fields", log.Error, err)
-		return repository.Switch{}, errors.New("failed to validate lookup fields")
-	}
+	fieldErrs := lookup.ValidateSwitch(ctx, sw)
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {

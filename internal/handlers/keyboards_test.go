@@ -263,7 +263,6 @@ type CreateKeyboardSuite struct {
 	suite.Suite
 
 	mockKeyboardRepo *mocks.MockKeyboardRepository
-	mockLookupRepo   *mocks.MockLookupRepository
 	handler          http.HandlerFunc
 }
 
@@ -273,8 +272,7 @@ func TestCreateKeyboardSuite(t *testing.T) {
 
 func (s *CreateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
-	s.handler = CreateKeyboard(s.mockKeyboardRepo, s.mockLookupRepo)
+	s.handler = CreateKeyboard(s.mockKeyboardRepo)
 }
 
 func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -322,28 +320,23 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_Visibility_Preserved() {
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesOpenVocabularyFields() {
 	tests := []struct {
-		name     string
-		category string
-		body     string
+		name string
+		body string
 	}{
-		{"size", "keyboard_size", `{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved"}`},
-		{"design.top_case.material", "keyboard_case_material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"top_case":{"material":"NotApproved"}}}`},
-		{"design.bottom_case.material", "keyboard_case_material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"bottom_case":{"material":"NotApproved"}}}`},
-		{"design.weight.material", "keyboard_weight_material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"weight":{"material":"NotApproved"}}}`},
-		{"pcb.firmware", "keyboard_pcb_firmware", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"firmware":"NotApproved"}}`},
-		{"pcb.assembly", "keyboard_pcb_assembly_type", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"assembly":"NotApproved"}}`},
-		{"pcb.connectivity", "keyboard_pcb_connectivity_type", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"connectivity":"NotApproved"}}`},
-		{"purchase.vendor", "vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
-		{"purchase.order_status", "order_status", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
+		{"size", `{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved"}`},
+		{"design.top_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"top_case":{"material":"NotApproved"}}}`},
+		{"design.bottom_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"bottom_case":{"material":"NotApproved"}}}`},
+		{"design.weight.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"weight":{"material":"NotApproved"}}}`},
+		{"pcb.firmware", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"firmware":"NotApproved"}}`},
+		{"pcb.assembly", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"assembly":"NotApproved"}}`},
+		{"pcb.connectivity", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"connectivity":"NotApproved"}}`},
+		{"purchase.vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.SetupTest()
-
-			s.mockLookupRepo.EXPECT().
-				GetCategory(mock.Anything, tt.category).
-				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
 
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
@@ -356,10 +349,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesOpenVocabularyFields()
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesPlateMaterials() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_plate_material").
-		Return(&repository.Lookup{Category: "keyboard_plate_material", Values: []any{"FR4"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","design":{"plates":["NotApproved"]}}`)
 	rec := httptest.NewRecorder()
@@ -376,15 +365,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesPlateMaterials() {
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutValidForSize_Succeeds() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%", "65%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}},
-		}, nil)
 	s.mockKeyboardRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(&repository.Keyboard{UserID: "alice", ID: "generated-id"}, nil)
@@ -398,16 +378,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutValidForSize_Succeeds() {
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutInvalidForSize_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"40%", "60%", "65%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}},
-		}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"40%","layout":"WK"}`)
 	rec := httptest.NewRecorder()
@@ -425,13 +395,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutInvalidForSize_Returns400
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_UnrecognizedLayout_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
-		}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"NotALayout"}`)
 	rec := httptest.NewRecorder()
@@ -442,12 +405,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_UnrecognizedLayout_Returns400()
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutWithoutSize_SkipsSizeCheck() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
-		}, nil)
 	s.mockKeyboardRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(&repository.Keyboard{UserID: "alice", ID: "generated-id"}, nil)
@@ -460,44 +417,9 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutWithoutSize_SkipsSizeChec
 	s.Equal(http.StatusCreated, rec.Code)
 }
 
-func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutCategoryMissing_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"WK"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutLookupRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"WK"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *CreateKeyboardSuite) TestCreateKeyboard_MultipleInvalidFields_NamesAll() {
 	// size and pcb.firmware are both invalid here - the response must
 	// report both via invalid_params, not just the first one checked.
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_pcb_firmware").
-		Return(&repository.Lookup{Category: "keyboard_pcb_firmware", Values: []any{"QMK/VIA"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved",`+
 			`"pcb":{"firmware":"AlsoNotApproved"}}`)
@@ -519,16 +441,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_MultipleInvalidFields_NamesAll(
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_InvalidSize_DoesNotCascadeIntoLayoutError() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
-		}, nil)
-
 	// layout ("WK") is genuinely valid despite size being invalid.
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved","layout":"WK"}`)
@@ -574,51 +486,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_InvalidBody_Returns400() {
 	s.handler(rec, req)
 
 	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_NonStringLookupValue_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "vendor").
-		Return(&repository.Lookup{
-			Category: "vendor",
-			Values:   []any{map[string]any{"name": "Amazon"}, "CannonKeys"},
-		}, nil)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"CannonKeys"}}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_LookupCategoryMissing_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "vendor").
-		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"Amazon"}}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_LookupRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "vendor").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"Amazon"}}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
@@ -670,7 +537,6 @@ type UpdateKeyboardSuite struct {
 	suite.Suite
 
 	mockKeyboardRepo *mocks.MockKeyboardRepository
-	mockLookupRepo   *mocks.MockLookupRepository
 	handler          http.HandlerFunc
 }
 
@@ -680,8 +546,7 @@ func TestUpdateKeyboardSuite(t *testing.T) {
 
 func (s *UpdateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.mockLookupRepo = mocks.NewMockLookupRepository(s.T())
-	s.handler = UpdateKeyboard(s.mockKeyboardRepo, s.mockLookupRepo)
+	s.handler = UpdateKeyboard(s.mockKeyboardRepo)
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -730,28 +595,23 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_Visibility_Preserved() {
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesOpenVocabularyFields() {
 	tests := []struct {
-		name     string
-		category string
-		body     string
+		name string
+		body string
 	}{
-		{"size", "keyboard_size", `{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved"}`},
-		{"design.top_case.material", "keyboard_case_material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"top_case":{"material":"NotApproved"}}}`},
-		{"design.bottom_case.material", "keyboard_case_material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"bottom_case":{"material":"NotApproved"}}}`},
-		{"design.weight.material", "keyboard_weight_material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"weight":{"material":"NotApproved"}}}`},
-		{"pcb.firmware", "keyboard_pcb_firmware", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"firmware":"NotApproved"}}`},
-		{"pcb.assembly", "keyboard_pcb_assembly_type", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"assembly":"NotApproved"}}`},
-		{"pcb.connectivity", "keyboard_pcb_connectivity_type", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"connectivity":"NotApproved"}}`},
-		{"purchase.vendor", "vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
-		{"purchase.order_status", "order_status", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
+		{"size", `{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved"}`},
+		{"design.top_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"top_case":{"material":"NotApproved"}}}`},
+		{"design.bottom_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"bottom_case":{"material":"NotApproved"}}}`},
+		{"design.weight.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"weight":{"material":"NotApproved"}}}`},
+		{"pcb.firmware", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"firmware":"NotApproved"}}`},
+		{"pcb.assembly", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"assembly":"NotApproved"}}`},
+		{"pcb.connectivity", `{"brand":"Keychron","name":"Q1","visibility":"private","pcb":{"connectivity":"NotApproved"}}`},
+		{"purchase.vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
 		s.Run(tt.name, func() {
 			s.SetupTest()
-
-			s.mockLookupRepo.EXPECT().
-				GetCategory(mock.Anything, tt.category).
-				Return(&repository.Lookup{Category: tt.category, Values: []any{"Approved"}}, nil)
 
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
@@ -764,10 +624,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesOpenVocabularyFields()
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesPlateMaterials() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_plate_material").
-		Return(&repository.Lookup{Category: "keyboard_plate_material", Values: []any{"FR4"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","design":{"plates":["NotApproved"]}}`)
 	rec := httptest.NewRecorder()
@@ -784,15 +640,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesPlateMaterials() {
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutValidForSize_Succeeds() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%", "65%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}},
-		}, nil)
 	s.mockKeyboardRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1"}, nil)
@@ -806,16 +653,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutValidForSize_Succeeds() {
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutInvalidForSize_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"40%", "60%", "65%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%", "65%"}}},
-		}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"40%","layout":"WK"}`)
 	rec := httptest.NewRecorder()
@@ -833,13 +670,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutInvalidForSize_Returns400
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_UnrecognizedLayout_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
-		}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"NotALayout"}`)
 	rec := httptest.NewRecorder()
@@ -850,12 +680,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_UnrecognizedLayout_Returns400()
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutWithoutSize_SkipsSizeCheck() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
-		}, nil)
 	s.mockKeyboardRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1"}, nil)
@@ -868,44 +692,9 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutWithoutSize_SkipsSizeChec
 	s.Equal(http.StatusOK, rec.Code)
 }
 
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutCategoryMissing_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"WK"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutLookupRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","layout":"WK"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MultipleInvalidFields_NamesAll() {
 	// size and pcb.firmware are both invalid here - the response must
 	// report both via invalid_params, not just the first one checked.
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_pcb_firmware").
-		Return(&repository.Lookup{Category: "keyboard_pcb_firmware", Values: []any{"QMK/VIA"}}, nil)
-
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved",`+
 			`"pcb":{"firmware":"AlsoNotApproved"}}`)
@@ -927,16 +716,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MultipleInvalidFields_NamesAll(
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_InvalidSize_DoesNotCascadeIntoLayoutError() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_size").
-		Return(&repository.Lookup{Category: "keyboard_size", Values: []any{"60%"}}, nil)
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "keyboard_layout").
-		Return(&repository.Lookup{
-			Category: "keyboard_layout",
-			Values:   []any{map[string]any{"name": "WK", "sizes": []any{"60%"}}},
-		}, nil)
-
 	// layout ("WK") is genuinely valid despite size being invalid.
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved","layout":"WK"}`)
@@ -982,51 +761,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_InvalidBody_Returns400() {
 	s.handler(rec, req)
 
 	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_NonStringLookupValue_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "vendor").
-		Return(&repository.Lookup{
-			Category: "vendor",
-			Values:   []any{map[string]any{"name": "Amazon"}, "CannonKeys"},
-		}, nil)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"CannonKeys"}}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LookupCategoryMissing_Returns400() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "vendor").
-		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"Amazon"}}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LookupRepositoryError_Returns500() {
-	s.mockLookupRepo.EXPECT().
-		GetCategory(mock.Anything, "vendor").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"Amazon"}}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

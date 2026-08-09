@@ -11,25 +11,18 @@ import (
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
-	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
 var _ = Describe("Getting a lookup category", func() {
 	var (
-		client   *api.MCPClient
-		result   *sdkmcp.CallToolResult
-		err      error
-		category string
+		client *api.MCPClient
+		result *sdkmcp.CallToolResult
+		err    error
 	)
 
 	BeforeEach(func() {
 		result = nil
 		err = nil
-		category = "functional-test-category-" + uuid.NewString()
-	})
-
-	AfterEach(func(ctx SpecContext) {
-		Expect(db.DeleteLookupCategory(ctx, category)).To(Succeed())
 	})
 
 	Context("given a valid bearer token", func() {
@@ -40,13 +33,9 @@ var _ = Describe("Getting a lookup category", func() {
 		})
 
 		Context("given the category exists", func() {
-			BeforeEach(func(ctx SpecContext) {
-				Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
-			})
-
 			When("the get_lookup tool is called with that category", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": category})
+					result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": "vendor"})
 				})
 
 				It("succeeds and returns the category's values", func() {
@@ -61,8 +50,8 @@ var _ = Describe("Getting a lookup category", func() {
 						Values   []string `json:"values"`
 					}
 					Expect(json.Unmarshal(raw, &out)).To(Succeed())
-					Expect(out.Category).To(Equal(category))
-					Expect(out.Values).To(Equal([]string{"a", "b"}))
+					Expect(out.Category).To(Equal("vendor"))
+					Expect(out.Values).To(ContainElement("Amazon"))
 				})
 			})
 		})
@@ -88,7 +77,7 @@ var _ = Describe("Getting a lookup category", func() {
 
 		When("the get_lookup tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": category})
+				result, err = client.CallTool(ctx, "get_lookup", map[string]any{"category": "vendor"})
 			})
 
 			It("rejects the call with a real HTTP 401", func() {

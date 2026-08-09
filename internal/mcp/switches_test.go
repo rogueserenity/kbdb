@@ -213,7 +213,7 @@ func validInput() schema.SwitchInput {
 	return schema.SwitchInput{
 		Brand:      "Gateron",
 		Name:       "Oil King",
-		Type:       "linear",
+		Type:       "Linear",
 		Visibility: "private",
 	}
 }
@@ -222,7 +222,6 @@ type HandleCreateSwitchSuite struct {
 	suite.Suite
 
 	mockSwitches *mocks.MockSwitchRepository
-	mockLookups  *mocks.MockLookupRepository
 }
 
 func TestHandleCreateSwitchSuite(t *testing.T) {
@@ -231,27 +230,16 @@ func TestHandleCreateSwitchSuite(t *testing.T) {
 
 func (s *HandleCreateSwitchSuite) SetupTest() {
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
-	s.mockLookups = mocks.NewMockLookupRepository(s.T())
-}
-
-// approvesEverything makes every lookup category return the values the
-// input under test uses, so lookup validation passes.
-func (s *HandleCreateSwitchSuite) approvesEverything() {
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, mock.Anything).
-		Return(&repository.Lookup{Values: []any{"linear"}}, nil).
-		Maybe()
 }
 
 func (s *HandleCreateSwitchSuite) TestSucceeds() {
-	s.approvesEverything()
 	s.mockSwitches.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, sw repository.Switch) (*repository.Switch, error) {
 			return &sw, nil
 		})
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleCreateSwitch(s.mockSwitches)
 	_, out, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
 	s.Require().NoError(err)
@@ -263,7 +251,7 @@ func (s *HandleCreateSwitchSuite) TestBlankBrand_ReturnsError() {
 	in := validInput()
 	in.Brand = ""
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleCreateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "brand must not be blank")
@@ -275,7 +263,7 @@ func (s *HandleCreateSwitchSuite) TestWhitespaceOnlyBrand_ReturnsError() {
 	in := validInput()
 	in.Brand = "   "
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleCreateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "brand must not be blank")
@@ -285,43 +273,40 @@ func (s *HandleCreateSwitchSuite) TestInvalidVisibility_ReturnsError() {
 	in := validInput()
 	in.Visibility = "everyone"
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleCreateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "visibility")
 }
 
 func (s *HandleCreateSwitchSuite) TestUnapprovedLookupValue_ReturnsError() {
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, repository.CategorySwitchType).
-		Return(&repository.Lookup{Values: []any{"tactile"}}, nil)
+	in := validInput()
+	in.Type = "NotAType"
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
-	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
+	handler := handleCreateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "not an approved")
 	s.Require().ErrorContains(err, "type")
 }
 
 func (s *HandleCreateSwitchSuite) TestAlreadyExists_ReturnsAlreadyExists() {
-	s.approvesEverything()
 	s.mockSwitches.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrAlreadyExists)
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleCreateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
 	s.Require().ErrorIs(err, errSwitchAlreadyExists)
 }
 
 func (s *HandleCreateSwitchSuite) TestRepositoryError_ReturnsError() {
-	s.approvesEverything()
 	s.mockSwitches.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("put failed"))
 
-	handler := handleCreateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleCreateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
 	s.Require().ErrorContains(err, "failed to create switch")
@@ -331,7 +316,6 @@ type HandleUpdateSwitchSuite struct {
 	suite.Suite
 
 	mockSwitches *mocks.MockSwitchRepository
-	mockLookups  *mocks.MockLookupRepository
 }
 
 func TestHandleUpdateSwitchSuite(t *testing.T) {
@@ -340,21 +324,16 @@ func TestHandleUpdateSwitchSuite(t *testing.T) {
 
 func (s *HandleUpdateSwitchSuite) SetupTest() {
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
-	s.mockLookups = mocks.NewMockLookupRepository(s.T())
 }
 
 func (s *HandleUpdateSwitchSuite) TestSucceeds() {
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, mock.Anything).
-		Return(&repository.Lookup{Values: []any{"linear"}}, nil).
-		Maybe()
 	s.mockSwitches.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, sw repository.Switch) (*repository.Switch, error) {
 			return &sw, nil
 		})
 
-	handler := handleUpdateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleUpdateSwitch(s.mockSwitches)
 	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "sw-1",
 		SwitchInput: validInput(),
@@ -368,7 +347,7 @@ func (s *HandleUpdateSwitchSuite) TestBlankName_ReturnsError() {
 	in := validInput()
 	in.Name = ""
 
-	handler := handleUpdateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleUpdateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "sw-1",
 		SwitchInput: in,
@@ -378,7 +357,7 @@ func (s *HandleUpdateSwitchSuite) TestBlankName_ReturnsError() {
 }
 
 func (s *HandleUpdateSwitchSuite) TestBlankSwitchID_ReturnsError() {
-	handler := handleUpdateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleUpdateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "  ",
 		SwitchInput: validInput(),
@@ -388,15 +367,11 @@ func (s *HandleUpdateSwitchSuite) TestBlankSwitchID_ReturnsError() {
 }
 
 func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, mock.Anything).
-		Return(&repository.Lookup{Values: []any{"linear"}}, nil).
-		Maybe()
 	s.mockSwitches.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleUpdateSwitch(s.mockSwitches, s.mockLookups)
+	handler := handleUpdateSwitch(s.mockSwitches)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "missing",
 		SwitchInput: validInput(),

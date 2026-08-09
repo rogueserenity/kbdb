@@ -137,8 +137,8 @@ Resources:
               - dynamodb:TagResource
               - dynamodb:PutItem
               - dynamodb:DeleteItem
-            # template.yaml's LookupTable. Mirrors
-            # bootstrap/ci-oidc-role.yaml's equivalent statement.
+            # template.yaml's SwitchTable/KeyboardTable/KeycapSetTable.
+            # Mirrors bootstrap/ci-oidc-role.yaml's equivalent statement.
             Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/kbdb-dev-*
           - Sid: EcrAuth
             Effect: Allow

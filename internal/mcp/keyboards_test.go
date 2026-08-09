@@ -210,7 +210,6 @@ type HandleCreateKeyboardSuite struct {
 	suite.Suite
 
 	mockKeyboards *mocks.MockKeyboardRepository
-	mockLookups   *mocks.MockLookupRepository
 }
 
 func TestHandleCreateKeyboardSuite(t *testing.T) {
@@ -219,7 +218,6 @@ func TestHandleCreateKeyboardSuite(t *testing.T) {
 
 func (s *HandleCreateKeyboardSuite) SetupTest() {
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
-	s.mockLookups = mocks.NewMockLookupRepository(s.T())
 }
 
 func (s *HandleCreateKeyboardSuite) TestSucceeds() {
@@ -229,7 +227,7 @@ func (s *HandleCreateKeyboardSuite) TestSucceeds() {
 			return &kb, nil
 		})
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: validKeyboardInput()})
 
 	s.Require().NoError(err)
@@ -241,7 +239,7 @@ func (s *HandleCreateKeyboardSuite) TestBlankBrand_ReturnsError() {
 	in := validKeyboardInput()
 	in.Brand = "   "
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().ErrorContains(err, "brand must not be blank")
@@ -251,7 +249,7 @@ func (s *HandleCreateKeyboardSuite) TestInvalidVisibility_ReturnsError() {
 	in := validKeyboardInput()
 	in.Visibility = "everyone"
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().ErrorContains(err, "visibility")
@@ -262,11 +260,7 @@ func (s *HandleCreateKeyboardSuite) TestUnapprovedSize_ReturnsError() {
 	in := validKeyboardInput()
 	in.Size = &size
 
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, repository.CategoryKeyboardSize).
-		Return(&repository.Lookup{Values: []any{"60%"}}, nil)
-
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().ErrorContains(err, "size")
@@ -277,27 +271,18 @@ func (s *HandleCreateKeyboardSuite) TestUnapprovedSize_ReturnsError() {
 // layout doesn't list this size among the ones it supports.
 func (s *HandleCreateKeyboardSuite) TestLayoutNotValidForSize_ReturnsError() {
 	size := "60%"
-	layout := "WKL"
+	layout := "MIT"
 	in := validKeyboardInput()
 	in.Size = &size
 	in.Layout = &layout
 
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, repository.CategoryKeyboardSize).
-		Return(&repository.Lookup{Values: []any{"60%"}}, nil)
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, repository.CategoryKeyboardLayout).
-		Return(&repository.Lookup{Values: []any{
-			map[string]any{"name": "WKL", "sizes": []any{"TKL"}},
-		}}, nil)
-
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	// Both values are individually approved, so the generic wording would
 	// claim the layout isn't an approved *size* - sending an agent to fix a
 	// field that's already correct.
-	s.Require().ErrorContains(err, `"WKL" is not a valid layout for size "60%"`)
+	s.Require().ErrorContains(err, `"MIT" is not a valid layout for size "60%"`)
 	s.Require().NotContains(err.Error(), "approved keyboard_size")
 }
 
@@ -308,21 +293,13 @@ func (s *HandleCreateKeyboardSuite) TestLayoutValidForSize_Succeeds() {
 	in.Size = &size
 	in.Layout = &layout
 
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, repository.CategoryKeyboardSize).
-		Return(&repository.Lookup{Values: []any{"60%"}}, nil)
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, repository.CategoryKeyboardLayout).
-		Return(&repository.Lookup{Values: []any{
-			map[string]any{"name": "WKL", "sizes": []any{"60%", "TKL"}},
-		}}, nil)
 	s.mockKeyboards.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 			return &kb, nil
 		})
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().NoError(err)
@@ -333,7 +310,7 @@ func (s *HandleCreateKeyboardSuite) TestAlreadyExists_ReturnsAlreadyExists() {
 		Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrAlreadyExists)
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: validKeyboardInput()})
 
 	s.Require().ErrorIs(err, errKeyboardAlreadyExists)
@@ -343,7 +320,6 @@ type HandleUpdateKeyboardSuite struct {
 	suite.Suite
 
 	mockKeyboards *mocks.MockKeyboardRepository
-	mockLookups   *mocks.MockLookupRepository
 }
 
 func TestHandleUpdateKeyboardSuite(t *testing.T) {
@@ -352,7 +328,6 @@ func TestHandleUpdateKeyboardSuite(t *testing.T) {
 
 func (s *HandleUpdateKeyboardSuite) SetupTest() {
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
-	s.mockLookups = mocks.NewMockLookupRepository(s.T())
 }
 
 func (s *HandleUpdateKeyboardSuite) TestSucceeds() {
@@ -362,7 +337,7 @@ func (s *HandleUpdateKeyboardSuite) TestSucceeds() {
 			return &kb, nil
 		})
 
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleUpdateKeyboard(s.mockKeyboards)
 	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{
 		KeyboardID:    "kb-1",
 		KeyboardInput: validKeyboardInput(),
@@ -373,7 +348,7 @@ func (s *HandleUpdateKeyboardSuite) TestSucceeds() {
 }
 
 func (s *HandleUpdateKeyboardSuite) TestBlankKeyboardID_ReturnsError() {
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleUpdateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{
 		KeyboardID:    "  ",
 		KeyboardInput: validKeyboardInput(),
@@ -387,7 +362,7 @@ func (s *HandleUpdateKeyboardSuite) TestNotFound_ReturnsNotFound() {
 		Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleUpdateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{
 		KeyboardID:    "missing",
 		KeyboardInput: validKeyboardInput(),
@@ -444,7 +419,7 @@ func (s *HandleCreateKeyboardSuite) TestMalformedOrderDate_ReturnsError() {
 	in := validKeyboardInput()
 	in.Purchase = &schema.KeyboardPurchase{OrderDate: &bad}
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().ErrorContains(err, "purchase.order_date")
@@ -456,7 +431,7 @@ func (s *HandleCreateKeyboardSuite) TestMalformedDeliveryDate_ReturnsError() {
 	in := validKeyboardInput()
 	in.Purchase = &schema.KeyboardPurchase{DeliveryDate: &bad}
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().ErrorContains(err, "purchase.delivery_date")
@@ -467,17 +442,13 @@ func (s *HandleCreateKeyboardSuite) TestWellFormedDates_Succeed() {
 	in := validKeyboardInput()
 	in.Purchase = &schema.KeyboardPurchase{OrderDate: &ordered, DeliveryDate: &delivered}
 
-	s.mockLookups.EXPECT().
-		GetCategory(mock.Anything, mock.Anything).
-		Return(&repository.Lookup{Values: []any{"Amazon"}}, nil).
-		Maybe()
 	s.mockKeyboards.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 			return &kb, nil
 		})
 
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleCreateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
 
 	s.Require().NoError(err)
@@ -488,7 +459,7 @@ func (s *HandleUpdateKeyboardSuite) TestMalformedOrderDate_ReturnsError() {
 	in := validKeyboardInput()
 	in.Purchase = &schema.KeyboardPurchase{OrderDate: &bad}
 
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockLookups)
+	handler := handleUpdateKeyboard(s.mockKeyboards)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{
 		KeyboardID:    "kb-1",
 		KeyboardInput: in,

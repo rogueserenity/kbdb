@@ -9,36 +9,24 @@ import (
 	. "github.com/onsi/gomega"
 
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
-	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
 var _ = Describe("Getting a category", func() {
 	var (
-		resp     *http.Response
-		client   *api.LookupsClient
-		category string
+		resp   *http.Response
+		client *api.LookupsClient
 	)
 
 	BeforeEach(func() {
 		resp = nil
 		client = api.NewLookupsClient()
-
-		category = "functional-test-category-" + uuid.NewString()
-	})
-
-	AfterEach(func(ctx SpecContext) {
-		Expect(db.DeleteLookupCategory(ctx, category)).To(Succeed())
 	})
 
 	Context("given the category exists", func() {
-		BeforeEach(func(ctx SpecContext) {
-			Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
-		})
-
 		When("getting the category", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.GetCategory(ctx, category)
+				resp, err = client.GetCategory(ctx, "vendor")
 				Expect(err).NotTo(HaveOccurred())
 			})
 
@@ -52,8 +40,8 @@ var _ = Describe("Getting a category", func() {
 					Values   []string `json:"values"`
 				}
 				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
-				Expect(got.Category).To(Equal(category))
-				Expect(got.Values).To(Equal([]string{"a", "b"}))
+				Expect(got.Category).To(Equal("vendor"))
+				Expect(got.Values).To(ContainElement("Amazon"))
 			})
 		})
 	})

@@ -2,64 +2,62 @@ package lookup
 
 import (
 	"context"
-	"errors"
 	"slices"
-
-	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 // fieldCheck is one entity field to validate against a lookup category.
 type fieldCheck struct {
 	Field    string
 	Value    string
-	Category string
+	Category Category
 }
 
 // FieldError reports that Field's Value isn't an approved Category value.
 type FieldError struct {
 	Field    string
 	Value    string
-	Category string
+	Category Category
 }
 
 // ValidateImageContentType reports whether contentType is an approved
 // CategoryImageContentType value. It returns a FieldError, not an error,
 // when it isn't - that's an expected validation outcome, not a failure.
-func ValidateImageContentType(ctx context.Context, repo repository.LookupRepository, contentType string) (*FieldError, error) {
-	errs, err := validateFields(ctx, repo, []fieldCheck{
-		{Field: "content_type", Value: contentType, Category: repository.CategoryImageContentType},
+func ValidateImageContentType(ctx context.Context, contentType string) *FieldError {
+	errs := validateFields(ctx, []fieldCheck{
+		{Field: "content_type", Value: contentType, Category: CategoryImageContentType},
 	})
-	if err != nil {
-		return nil, err
-	}
 	if len(errs) == 0 {
-		return nil, nil //nolint:nilnil // no problem found is a valid, expected result
+		return nil
 	}
-	return &errs[0], nil
+	return &errs[0]
 }
 
 // validateFields fetches each distinct category at most once and returns
 // every invalid field, not just the first.
-func validateFields(ctx context.Context, repo repository.LookupRepository, checks []fieldCheck) ([]FieldError, error) {
-	values := make(map[string][]string, len(checks))
+func validateFields(ctx context.Context, checks []fieldCheck) []FieldError {
+	values := make(map[Category][]string, len(checks))
 
 	for _, c := range checks {
 		if _, ok := values[c.Category]; ok {
 			continue
 		}
 
-		lookup, err := repo.GetCategory(ctx, c.Category)
-		if errors.Is(err, repository.ErrNotFound) {
+		l, ok := GetCategory(ctx, c.Category)
+		if !ok {
 			values[c.Category] = nil
 			continue
 		}
-		if err != nil {
-			return nil, err
-		}
 
-		strs, err := lookup.Strings()
+		strs, err := l.Strings()
 		if err != nil {
-			return nil, err
+			// catalog.go's init() already shape-checks every category's
+			// data (so this isn't a bad-data path), which means reaching
+			// here means a fieldCheck named an object-shaped category (e.g.
+			// keyboard_layout) that validateFields doesn't handle - those
+			// go through a dedicated caller like validateKeyboardLayout
+			// instead. That's a caller bug, not a runtime condition to
+			// recover from.
+			panic(err)
 		}
 		values[c.Category] = strs
 	}
@@ -71,5 +69,5 @@ func validateFields(ctx context.Context, repo repository.LookupRepository, check
 		}
 	}
 
-	return errs, nil
+	return errs
 }

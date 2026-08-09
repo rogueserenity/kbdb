@@ -3,7 +3,6 @@ package lookups_test
 import (
 	"encoding/json"
 
-	"github.com/google/uuid"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -11,25 +10,18 @@ import (
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
-	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
 var _ = Describe("Listing lookup categories", func() {
 	var (
-		client   *api.MCPClient
-		result   *sdkmcp.CallToolResult
-		err      error
-		category string
+		client *api.MCPClient
+		result *sdkmcp.CallToolResult
+		err    error
 	)
 
 	BeforeEach(func() {
 		result = nil
 		err = nil
-		category = "functional-test-category-" + uuid.NewString()
-	})
-
-	AfterEach(func(ctx SpecContext) {
-		Expect(db.DeleteLookupCategory(ctx, category)).To(Succeed())
 	})
 
 	Context("given a valid bearer token", func() {
@@ -39,29 +31,45 @@ var _ = Describe("Listing lookup categories", func() {
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
 		})
 
-		Context("given the lookup table has a category", func() {
+		When("the list_lookups tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				Expect(db.SeedLookupCategory(ctx, category, []any{"a", "b"})).To(Succeed())
+				result, err = client.CallTool(ctx, "list_lookups", map[string]any{})
 			})
 
-			When("the list_lookups tool is called", func() {
-				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "list_lookups", map[string]any{})
-				})
+			It("succeeds and returns exactly the known categories", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.IsError).To(BeFalse())
 
-				It("succeeds and includes the seeded category", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.IsError).To(BeFalse())
+				raw, err := json.Marshal(result.StructuredContent)
+				Expect(err).NotTo(HaveOccurred())
 
-					raw, err := json.Marshal(result.StructuredContent)
-					Expect(err).NotTo(HaveOccurred())
-
-					var out struct {
-						Categories []string `json:"categories"`
-					}
-					Expect(json.Unmarshal(raw, &out)).To(Succeed())
-					Expect(out.Categories).To(ContainElement(category))
-				})
+				var out struct {
+					Categories []string `json:"categories"`
+				}
+				Expect(json.Unmarshal(raw, &out)).To(Succeed())
+				Expect(out.Categories).To(ConsistOf(
+					"build_case_mount_type",
+					"build_durometer",
+					"build_stabilizer",
+					"build_stabilizer_mount_type",
+					"image_content_type",
+					"keyboard_case_material",
+					"keyboard_layout",
+					"keyboard_pcb_assembly_type",
+					"keyboard_pcb_connectivity_type",
+					"keyboard_pcb_firmware",
+					"keyboard_plate_material",
+					"keyboard_size",
+					"keyboard_weight_material",
+					"keycap_material",
+					"keycap_profile",
+					"order_status",
+					"switch_material",
+					"switch_spring_material",
+					"switch_type",
+					"vendor",
+					"visibility",
+				))
 			})
 		})
 	})

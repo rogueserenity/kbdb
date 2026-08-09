@@ -9,19 +9,19 @@ import (
 // ValidateKeycapSet returns every field on ks that isn't an approved value
 // for its lookup category. An unset field is skipped, not treated as
 // invalid.
-func ValidateKeycapSet(ctx context.Context, repo repository.LookupRepository, ks repository.KeycapSet) ([]FieldError, error) {
+func ValidateKeycapSet(ctx context.Context, ks repository.KeycapSet) []FieldError {
 	var checks []fieldCheck
-	add := func(field string, value *string, category string) {
+	add := func(field string, value *string, category Category) {
 		if value == nil {
 			return
 		}
 		checks = append(checks, fieldCheck{Field: field, Value: *value, Category: category})
 	}
 
-	add("profile", ks.Profile, repository.CategoryKeycapProfile)
-	add("material", ks.Material, repository.CategoryKeycapMaterial)
+	add("profile", ks.Profile, CategoryKeycapProfile)
+	add("material", ks.Material, CategoryKeycapMaterial)
 
-	return validateFields(ctx, repo, checks)
+	return validateFields(ctx, checks)
 }
 
 // ValidateKeycapKit returns every field on k that isn't an approved value
@@ -29,17 +29,17 @@ func ValidateKeycapSet(ctx context.Context, repo repository.LookupRepository, ks
 // invalid. Mirrors ValidateSwitch/ValidateKeyboard's purchase.vendor and
 // purchase.order_status checks - a kit's purchase is structurally the same
 // shape as a keyboard's or switch's.
-func ValidateKeycapKit(ctx context.Context, repo repository.LookupRepository, k repository.KeycapKit) ([]FieldError, error) {
+func ValidateKeycapKit(ctx context.Context, k repository.KeycapKit) []FieldError {
 	var checks []fieldCheck
-	add := func(field string, value *string, category string) {
+	add := func(field string, value *string, category Category) {
 		if value == nil {
 			return
 		}
 		checks = append(checks, fieldCheck{Field: field, Value: *value, Category: category})
 	}
 
-	add("purchase.vendor", k.Purchase.Vendor, repository.CategoryVendor)
-	add("purchase.order_status", k.Purchase.OrderStatus, repository.CategoryOrderStatus)
+	add("purchase.vendor", k.Purchase.Vendor, CategoryVendor)
+	add("purchase.order_status", k.Purchase.OrderStatus, CategoryOrderStatus)
 
-	return validateFields(ctx, repo, checks)
+	return validateFields(ctx, checks)
 }

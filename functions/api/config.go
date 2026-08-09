@@ -8,7 +8,6 @@ type Config struct {
 	OIDCIssuerURL      string `env:"OIDC_ISSUER_URL" required:""`
 	OIDCAudience       string `env:"OIDC_AUDIENCE" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
-	LookupTableName    string `env:"LOOKUP_TABLE_NAME" required:""`
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
 	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`
 	KeycapSetTableName string `env:"KEYCAP_SET_TABLE_NAME" required:""`

@@ -87,23 +87,6 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
-  # Global, non-user-owned reference data (approved values for enum-like
-  # fields). category is the partition key, no sort key - see
-  # model/lookup.json. scripts/func-setup.sh hand-creates an equivalent
-  # table against LocalStack (sam local start-api doesn't run a real
-  # CloudFormation deploy) - keep that script's schema in sync with this
-  # resource.
-  LookupTable:
-    Type: AWS::DynamoDB::Table
-    Properties:
-      BillingMode: PAY_PER_REQUEST
-      AttributeDefinitions:
-        - AttributeName: category
-          AttributeType: S
-      KeySchema:
-        - AttributeName: category
-          KeyType: HASH
-
   # User-owned switches. user_id (Cognito subject, the owner) is the
   # partition key, id the sort key - every real access pattern is scoped to
   # an already-known user_id (see README's DynamoDB rationale), so no GSI is
@@ -186,7 +169,6 @@ Resources:
           OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
           OIDC_AUDIENCE: !Ref UserPoolClient
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
-          LOOKUP_TABLE_NAME: !Ref LookupTable
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
           KEYCAP_SET_TABLE_NAME: !Ref KeycapSetTable
@@ -213,13 +195,6 @@ Resources:
               Resource: !Sub "${ImagesBucket.Arn}/*"
             - Effect: Allow
               Action:
-                - dynamodb:Scan
-                - dynamodb:GetItem
-                - dynamodb:PutItem
-                - dynamodb:DeleteItem
-              Resource: !GetAtt LookupTable.Arn
-            - Effect: Allow
-              Action:
                 - dynamodb:Query
                 - dynamodb:GetItem
                 - dynamodb:PutItem
@@ -240,7 +215,9 @@ Resources:
                 - dynamodb:DeleteItem
               Resource: !GetAtt KeycapSetTable.Arn
       Events:
-        # No auth: security: [] in api/openapi.yaml.
+        # No auth: security: [] in api/openapi.yaml. Lookup categories are
+        # static, deploy-time data (internal/lookup) - GET only, no write
+        # routes.
         LookupsEvent:
           Type: HttpApi
           Properties:
@@ -258,33 +235,6 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
-        # api/openapi.yaml) - admin membership is checked at the app layer
-        # by middleware.RequireAdmin, not by API Gateway.
-        CreateLookupEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /v1/lookups/{category}
-            Method: post
-        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
-        # api/openapi.yaml) - admin membership is checked at the app layer
-        # by middleware.RequireAdmin, not by API Gateway.
-        ReplaceLookupEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /v1/lookups/{category}
-            Method: put
-        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
-        # api/openapi.yaml) - admin membership is checked at the app layer
-        # by middleware.RequireAdmin, not by API Gateway.
-        DeleteLookupEvent:
-          Type: HttpApi
-          Properties:
-            ApiId: !Ref HttpApi
-            Path: /v1/lookups/{category}
-            Method: delete
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and
@@ -549,16 +499,6 @@ Resources:
         - ALLOW_ADMIN_USER_PASSWORD_AUTH
         - ALLOW_REFRESH_TOKEN_AUTH
 
-  # Grants admin access for lookup-category writes (see
-  # internal/auth.Claims.Groups). Add members via Cognito console/CLI -
-  # no self-service admin-grant endpoint.
-  AdminsGroup:
-    Type: AWS::Cognito::UserPoolGroup
-    Properties:
-      GroupName: admins
-      UserPoolId: !Ref UserPool
-      Description: Members can create/update/delete lookup categories (PUT/POST/DELETE /v1/lookups/{category}).
-
   UserPoolDomain:
     Type: AWS::Cognito::UserPoolDomain
     Properties:
@@ -613,9 +553,6 @@ Outputs:
   ImagesBucketName:
     Description: S3 bucket holding user-uploaded images (build photos, keycap kit renders)
     Value: !Ref ImagesBucket
-  LookupTableName:
-    Description: DynamoDB table backing GET /v1/lookups
-    Value: !Ref LookupTable
   SwitchTableName:
     Description: DynamoDB table backing GET /users/{userId}/switches
     Value: !Ref SwitchTable

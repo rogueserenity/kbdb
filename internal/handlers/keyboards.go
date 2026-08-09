@@ -105,13 +105,8 @@ func decodeKeyboardInput(w http.ResponseWriter, r *http.Request) (kb repository.
 
 // validateKeyboardLookups writes a 400 listing every invalid field if any
 // check fails. An unset (nil) field is skipped, not treated as invalid.
-func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupRepo repository.LookupRepository, kb repository.Keyboard) (ok bool) {
-	fieldErrs, err := lookup.ValidateKeyboard(ctx, lookupRepo, kb)
-	if err != nil {
-		log.FromContext(ctx).Error("validating keyboard lookup fields", log.Error, err)
-		problem.Internal(w, "failed to validate lookup fields")
-		return false
-	}
+func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, kb repository.Keyboard) (ok bool) {
+	fieldErrs := lookup.ValidateKeyboard(ctx, kb)
 	if len(fieldErrs) > 0 {
 		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
 		for i, fe := range fieldErrs {
@@ -128,7 +123,7 @@ func validateKeyboardLookups(ctx context.Context, w http.ResponseWriter, lookupR
 // (lookup.ValidateKeyboard reports it as a FieldError with Field "layout"
 // and Category CategoryKeyboardSize) to keep its more specific message.
 func keyboardFieldErrorToInvalidParam(fe lookup.FieldError, size *string) problem.InvalidParam {
-	if fe.Field == "layout" && fe.Category == repository.CategoryKeyboardSize {
+	if fe.Field == "layout" && fe.Category == lookup.CategoryKeyboardSize {
 		return problem.InvalidParam{
 			Name:   fe.Field,
 			Reason: fmt.Sprintf("%q is not a valid layout for size %q", fe.Value, *size),
@@ -144,7 +139,7 @@ func keyboardFieldErrorToInvalidParam(fe lookup.FieldError, size *string) proble
 // authenticated caller. userId must be the caller's own subject; creating
 // in another user's collection returns 404, not 403, to avoid revealing it
 // exists.
-func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+func CreateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -158,7 +153,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 			return
 		}
 
-		if !validateKeyboardLookups(r.Context(), w, lookupRepo, kb) {
+		if !validateKeyboardLookups(r.Context(), w, kb) {
 			return
 		}
 
@@ -195,7 +190,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's keyboard, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
-func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repository.LookupRepository) http.HandlerFunc {
+func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keyboardId")
@@ -210,7 +205,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, lookupRepo repos
 			return
 		}
 
-		if !validateKeyboardLookups(r.Context(), w, lookupRepo, kb) {
+		if !validateKeyboardLookups(r.Context(), w, kb) {
 			return
 		}
 

@@ -163,10 +163,9 @@ func handleGetKeycapKitImageURL(
 
 func handleCreateKeycapSet(
 	keycapSetRepo repository.KeycapSetRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.CreateKeycapSetInput, schema.CreateKeycapSetOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateKeycapSetInput) (*mcp.CallToolResult, schema.CreateKeycapSetOutput, error) {
-		ks, err := validatedKeycapSet(ctx, lookupRepo, in.KeycapSetInput)
+		ks, err := validatedKeycapSet(ctx, in.KeycapSetInput)
 		if err != nil {
 			return nil, schema.CreateKeycapSetOutput{}, err
 		}
@@ -188,14 +187,13 @@ func handleCreateKeycapSet(
 
 func handleUpdateKeycapSet(
 	keycapSetRepo repository.KeycapSetRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.UpdateKeycapSetInput, schema.UpdateKeycapSetOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateKeycapSetInput) (*mcp.CallToolResult, schema.UpdateKeycapSetOutput, error) {
 		if strings.TrimSpace(in.KeycapSetID) == "" {
 			return nil, schema.UpdateKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		ks, err := validatedKeycapSet(ctx, lookupRepo, in.KeycapSetInput)
+		ks, err := validatedKeycapSet(ctx, in.KeycapSetInput)
 		if err != nil {
 			return nil, schema.UpdateKeycapSetOutput{}, err
 		}
@@ -254,7 +252,6 @@ func handleDeleteKeycapSet(
 // per-field constraint to attach.
 func validatedKeycapSet(
 	ctx context.Context,
-	lookupRepo repository.LookupRepository,
 	in schema.KeycapSetInput,
 ) (repository.KeycapSet, error) {
 	if strings.TrimSpace(in.Brand) == "" {
@@ -271,11 +268,7 @@ func validatedKeycapSet(
 			"visibility %q must be one of: public, authenticated, private", in.Visibility)
 	}
 
-	fieldErrs, err := lookup.ValidateKeycapSet(ctx, lookupRepo, ks)
-	if err != nil {
-		log.FromContext(ctx).Error("validating keycap set lookup fields", log.Error, err)
-		return repository.KeycapSet{}, errors.New("failed to validate lookup fields")
-	}
+	fieldErrs := lookup.ValidateKeycapSet(ctx, ks)
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {
@@ -290,14 +283,13 @@ func validatedKeycapSet(
 
 func handleCreateKeycapKit(
 	keycapSetRepo repository.KeycapSetRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.CreateKeycapKitInput, schema.CreateKeycapKitOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateKeycapKitInput) (*mcp.CallToolResult, schema.CreateKeycapKitOutput, error) {
 		if strings.TrimSpace(in.KeycapSetID) == "" {
 			return nil, schema.CreateKeycapKitOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		kit, err := validatedKeycapKit(ctx, lookupRepo, in.KeycapKitInput)
+		kit, err := validatedKeycapKit(ctx, in.KeycapKitInput)
 		if err != nil {
 			return nil, schema.CreateKeycapKitOutput{}, err
 		}
@@ -323,7 +315,6 @@ func handleCreateKeycapKit(
 
 func handleUpdateKeycapKit(
 	keycapSetRepo repository.KeycapSetRepository,
-	lookupRepo repository.LookupRepository,
 ) mcp.ToolHandlerFor[schema.UpdateKeycapKitInput, schema.UpdateKeycapKitOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateKeycapKitInput) (*mcp.CallToolResult, schema.UpdateKeycapKitOutput, error) {
 		if strings.TrimSpace(in.KeycapSetID) == "" {
@@ -333,7 +324,7 @@ func handleUpdateKeycapKit(
 			return nil, schema.UpdateKeycapKitOutput{}, errors.New("kit_id must not be blank")
 		}
 
-		kit, err := validatedKeycapKit(ctx, lookupRepo, in.KeycapKitInput)
+		kit, err := validatedKeycapKit(ctx, in.KeycapKitInput)
 		if err != nil {
 			return nil, schema.UpdateKeycapKitOutput{}, err
 		}
@@ -394,7 +385,6 @@ func handleDeleteKeycapKit(
 
 func handleSetKeycapKitImage(
 	keycapSetRepo repository.KeycapSetRepository,
-	lookupRepo repository.LookupRepository,
 	images repository.KeycapKitImageStore,
 ) mcp.ToolHandlerFor[schema.SetKeycapKitImageInput, schema.SetKeycapKitImageOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.SetKeycapKitImageInput) (*mcp.CallToolResult, schema.SetKeycapKitImageOutput, error) {
@@ -405,13 +395,8 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("kit_id must not be blank")
 		}
 
-		fieldErr, err := lookup.ValidateImageContentType(ctx, lookupRepo, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("validating keycap kit image content_type", log.Error, err)
-			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to validate content_type")
-		}
-		if fieldErr != nil {
-			return nil, schema.SetKeycapKitImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, repository.CategoryImageContentType)
+		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
+			return nil, schema.SetKeycapKitImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
 		key, err := repository.NewKeycapKitImageKey(ctx, in.KeycapSetID, in.KitID)
@@ -486,7 +471,6 @@ func handleDeleteKeycapKitImage(
 // parent set's.
 func validatedKeycapKit(
 	ctx context.Context,
-	lookupRepo repository.LookupRepository,
 	in schema.KeycapKitInput,
 ) (repository.KeycapKit, error) {
 	if strings.TrimSpace(in.Name) == "" {
@@ -501,11 +485,7 @@ func validatedKeycapKit(
 
 	kit := repomcp.KeycapKitFromMCP(in)
 
-	fieldErrs, err := lookup.ValidateKeycapKit(ctx, lookupRepo, kit)
-	if err != nil {
-		log.FromContext(ctx).Error("validating keycap kit lookup fields", log.Error, err)
-		return repository.KeycapKit{}, errors.New("failed to validate lookup fields")
-	}
+	fieldErrs := lookup.ValidateKeycapKit(ctx, kit)
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {

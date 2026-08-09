@@ -61,7 +61,6 @@ const (
 // version is advertised to MCP clients on connect.
 func New(
 	verifier *auth.Verifier,
-	lookupRepo repository.LookupRepository,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -71,7 +70,7 @@ func New(
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "kbdb", Version: version}, nil)
 	mcpServer.AddReceivingMiddleware(identityMiddleware())
 
-	registerTools(mcpServer, lookupRepo, switchRepo, keyboardRepo, keycapSetRepo, imageStore)
+	registerTools(mcpServer, switchRepo, keyboardRepo, keycapSetRepo, imageStore)
 
 	streamable := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return mcpServer },
