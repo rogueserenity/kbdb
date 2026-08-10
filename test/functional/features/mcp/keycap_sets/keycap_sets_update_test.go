@@ -83,12 +83,15 @@ var _ = Describe("Updating a keycap set over MCP", func() {
 						})
 					})
 
-					It("makes the keycap set visible to an anonymous caller", func(ctx SpecContext) {
+					It("makes the keycap set visible to another authenticated user", func(ctx SpecContext) {
 						Expect(err).NotTo(HaveOccurred())
 						Expect(result.IsError).To(BeFalse())
 
-						anonClient := api.NewMCPClient(support.BaseURL()+"/mcp", "")
-						check, checkErr := anonClient.CallTool(ctx, "get_keycap_set", map[string]any{
+						otherToken, tokenErr := api.SecondUserAuthToken(ctx)
+						Expect(tokenErr).NotTo(HaveOccurred())
+						otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
+
+						check, checkErr := otherClient.CallTool(ctx, "get_keycap_set", map[string]any{
 							"keycap_set_id": keycapSetID,
 							"user_id":       ownerID,
 						})
