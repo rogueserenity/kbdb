@@ -92,6 +92,19 @@ var _ = Describe("Listing switches over MCP", func() {
 					Expect(idsOf(decodeListOutput(result))).To(ContainElement(switchID))
 				})
 			})
+
+			DescribeTable("given an out-of-range limit",
+				func(ctx SpecContext, limit int) {
+					result, err = client.CallTool(ctx, "list_switches", map[string]any{"limit": limit})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("clamping rather than rejecting the call")
+					Expect(result.IsError).To(BeFalse())
+					Expect(idsOf(decodeListOutput(result))).To(ContainElement(switchID))
+				},
+				Entry("below the minimum", 0),
+				Entry("above the maximum", 101),
+			)
 		})
 
 		Context("given another user owns a private switch", func() {

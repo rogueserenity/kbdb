@@ -67,6 +67,19 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					Expect(*seeded.OrderStatus).To(Equal("Delivered"))
 				})
 			})
+
+			DescribeTable("given an out-of-range limit",
+				func(ctx SpecContext, limit int) {
+					result, err = client.CallTool(ctx, "list_keyboards", map[string]any{"limit": limit})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("clamping rather than rejecting the call")
+					Expect(result.IsError).To(BeFalse())
+					Expect(idsOf(decodeListOutput(result))).To(ContainElement(keyboardID))
+				},
+				Entry("below the minimum", 0),
+				Entry("above the maximum", 101),
+			)
 		})
 
 		Context("given another user owns a private keyboard", func() {
