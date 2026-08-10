@@ -8,7 +8,6 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
@@ -41,12 +40,6 @@ func handleGetLookup() mcp.ToolHandlerFor[schema.GetLookupInput, schema.GetLooku
 			return nil, schema.GetLookupOutput{}, fmt.Errorf("lookup category %q not found", in.Category)
 		}
 
-		out, err := repomcp.LookupToMCP(l)
-		if err != nil {
-			log.FromContext(ctx).Error("mapping lookup category to MCP shape", log.LookupCategory, in.Category, log.Error, err)
-			return nil, schema.GetLookupOutput{}, errors.New("lookup category data is malformed")
-		}
-
-		return nil, out, nil
+		return nil, repomcp.LookupToMCP(l), nil
 	}
 }

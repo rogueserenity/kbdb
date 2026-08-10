@@ -48,14 +48,7 @@ func validateFields(ctx context.Context, checks []fieldCheck) []FieldError {
 			continue
 		}
 
-		strs, err := l.Strings()
-		if err != nil {
-			// Only reachable if a fieldCheck names an object-shaped
-			// category (e.g. keyboard_layout) instead of routing through a
-			// dedicated caller like validateKeyboardLayout - a caller bug.
-			panic(err)
-		}
-		values[c.Category] = strs
+		values[c.Category] = l.Strings()
 	}
 
 	var errs []FieldError

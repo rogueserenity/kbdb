@@ -73,12 +73,7 @@ func validateKeyboardLayout(ctx context.Context, size *string, layout string) *F
 		return &FieldError{Field: "layout", Value: layout, Category: category}
 	}
 
-	// Can't actually fail: init() already shape-checked this category.
-	// Backstop, not a real runtime path.
-	values, err := l.LayoutValues()
-	if err != nil {
-		panic(err)
-	}
+	values := l.LayoutValues()
 
 	idx := slices.IndexFunc(values, func(v LayoutValue) bool { return v.Name == layout })
 	if idx == -1 {
