@@ -68,6 +68,21 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 					Expect(ids).To(ContainElements(publicID, authenticatedID, privateID))
 				})
 			})
+
+			DescribeTable("given an out-of-range limit",
+				func(ctx SpecContext, limit int) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{"limit": limit})
+					Expect(err).NotTo(HaveOccurred())
+
+					By("clamping rather than rejecting the call")
+					Expect(result.IsError).To(BeFalse())
+
+					ids := idsOf(decodeListOutput(result))
+					Expect(ids).To(ContainElements(publicID, authenticatedID, privateID))
+				},
+				Entry("below the minimum", 0),
+				Entry("above the maximum", 101),
+			)
 		})
 
 		Context("given another user owns keycap sets at every visibility tier", func() {
