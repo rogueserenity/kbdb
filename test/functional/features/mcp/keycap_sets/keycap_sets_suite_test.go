@@ -91,7 +91,7 @@ type listedKeycapSet struct {
 
 type listOutput struct {
 	KeycapSets []listedKeycapSet `json:"keycap_sets"`
-	NextCursor string             `json:"next_cursor"`
+	NextCursor string            `json:"next_cursor"`
 }
 
 func decodeListOutput(result *sdkmcp.CallToolResult) listOutput {
