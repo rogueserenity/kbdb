@@ -28,9 +28,8 @@ func (s *LookupToAPISuite) mustGetCategory(category lookup.Category) lookup.Look
 func (s *LookupToAPISuite) TestPlainStringCategory_PassesThrough() {
 	l := s.mustGetCategory(lookup.CategoryVendor)
 
-	got, err := LookupToAPI(l)
+	got := LookupToAPI(l)
 
-	s.Require().NoError(err)
 	s.Equal("vendor", got.Category)
 	s.Contains(got.Values, "Amazon")
 }
@@ -38,9 +37,8 @@ func (s *LookupToAPISuite) TestPlainStringCategory_PassesThrough() {
 func (s *LookupToAPISuite) TestKeyboardLayout_DecodesTyped() {
 	l := s.mustGetCategory(lookup.CategoryKeyboardLayout)
 
-	got, err := LookupToAPI(l)
+	got := LookupToAPI(l)
 
-	s.Require().NoError(err)
 	s.NotEmpty(got.Values)
 	s.IsType(lookup.LayoutValue{}, got.Values[0])
 }
@@ -48,9 +46,8 @@ func (s *LookupToAPISuite) TestKeyboardLayout_DecodesTyped() {
 func (s *LookupToAPISuite) TestBuildCaseMountType_DecodesTyped() {
 	l := s.mustGetCategory(lookup.CategoryBuildCaseMountType)
 
-	got, err := LookupToAPI(l)
+	got := LookupToAPI(l)
 
-	s.Require().NoError(err)
 	s.NotEmpty(got.Values)
 	s.IsType(lookup.CaseMountTypeValue{}, got.Values[0])
 }

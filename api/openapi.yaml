@@ -28,7 +28,7 @@ tags:
   - name: builds
     description: Builds combining a keyboard, switches, and keycap kits, in a user's collection or shared with the caller.
   - name: lookups
-    description: Approved value lists for enum-like fields (vendors, materials, profiles, etc.) — non-sensitive global reference data, not owned by any user. Reads require no authentication at all; writes require admin access.
+    description: Approved value lists for enum-like fields (vendors, materials, profiles, etc.) — non-sensitive global reference data, not owned by any user. Reads require no authentication at all; there are no write routes.
 
 paths:
   /v1/users/{userId}/keyboards:
@@ -771,19 +771,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >
-        Cognito-issued JWT (Authorization: Bearer <token>), enforced by API
-        Gateway's Cognito JWT authorizer (see template.yaml's HttpApi/
-        CognitoAuthorizer resource). Not modeled as type: openIdConnect
-        here because each deployed stack (kbdb-dev, per-PR CI stacks, a
-        future prod) has its own separate Cognito User Pool and therefore
-        its own discovery URL — there is no single fixed
-        openIdConnectUrl this checked-in, environment-agnostic spec file
-        could correctly declare. Per-stack values (UserPoolId, issuer
-        URL) are template.yaml Outputs, not spec-level constants. The
-        "admin" scope corresponds to membership in the Cognito User
-        Pool's "admins" group (surfaced as the cognito:groups claim),
-        required for lookup write operations.
+      description: Cognito-issued JWT (Authorization Bearer <token>).
 
   parameters:
     UserId:
@@ -858,12 +846,6 @@ components:
             $ref: "#/components/schemas/Problem"
     NotFoundResponse:
       description: The requested resource does not exist, or does not belong to the authenticated user.
-      content:
-        application/problem+json:
-          schema:
-            $ref: "#/components/schemas/Problem"
-    ForbiddenResponse:
-      description: The authenticated user lacks permission to perform this operation (e.g. admin access required).
       content:
         application/problem+json:
           schema:
@@ -1445,8 +1427,7 @@ components:
       description: >
         A lookup category's approved values. "values" is plain strings
         except for "keyboard_layout" and "build_case_mount_type", whose
-        entries are objects - see the examples below and
-        internal/lookup/data/.
+        entries are objects - see the examples below.
       required: [category, values]
       properties:
         category:
