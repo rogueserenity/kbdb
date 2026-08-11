@@ -424,6 +424,20 @@ func (s *HandleUpdateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
 	s.Require().ErrorContains(err, "purchase.order_date")
 }
 
+func (s *HandleUpdateSwitchSuite) TestMalformedDeliveryDate_ReturnsError() {
+	bad := "2026-13-45"
+	in := validInput()
+	in.Purchase = &schema.SwitchPurchase{DeliveryDate: &bad}
+
+	handler := handleUpdateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
+		SwitchID:    "sw-1",
+		SwitchInput: in,
+	})
+
+	s.Require().ErrorContains(err, "purchase.delivery_date")
+}
+
 func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {
 	s.mockSwitches.EXPECT().
 		Update(mock.Anything, mock.Anything).
