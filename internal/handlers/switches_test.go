@@ -329,6 +329,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_ValidatesOpenVocabularyFields() {
 		{"material.stem", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"NotApproved"}}`},
 		{"spring.material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","spring":{"material":"NotApproved"}}`},
 		{"purchase.vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
@@ -538,6 +539,7 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_ValidatesOpenVocabularyFields() {
 		{"material.stem", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"NotApproved"}}`},
 		{"spring.material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","spring":{"material":"NotApproved"}}`},
 		{"purchase.vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
