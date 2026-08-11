@@ -242,6 +242,23 @@ func (s *GetSwitchSuite) TestGetSwitch_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *GetSwitchSuite) TestGetSwitch_MalformedStoredDate_Returns500NotPanic() {
+	malformedDate := "not-a-date"
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			ID:         "sw1",
+			Visibility: repository.VisibilityPublic,
+			Purchase:   repository.SwitchPurchase{OrderDate: &malformedDate},
+		}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type CreateSwitchSuite struct {
 	suite.Suite
 
@@ -312,6 +329,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_ValidatesOpenVocabularyFields() {
 		{"material.stem", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"NotApproved"}}`},
 		{"spring.material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","spring":{"material":"NotApproved"}}`},
 		{"purchase.vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
@@ -432,6 +450,24 @@ func (s *CreateSwitchSuite) TestCreateSwitch_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *CreateSwitchSuite) TestCreateSwitch_MalformedStoredDate_Returns500NotPanic() {
+	malformedDate := "not-a-date"
+	s.mockSwitchRepo.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(&repository.Switch{
+			ID:         "sw1",
+			Visibility: repository.VisibilityPrivate,
+			Purchase:   repository.SwitchPurchase{OrderDate: &malformedDate},
+		}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type UpdateSwitchSuite struct {
 	suite.Suite
 
@@ -503,6 +539,7 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_ValidatesOpenVocabularyFields() {
 		{"material.stem", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","material":{"stem":"NotApproved"}}`},
 		{"spring.material", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","spring":{"material":"NotApproved"}}`},
 		{"purchase.vendor", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
+		{"purchase.order_status", `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
 	}
 
 	for _, tt := range tests {
@@ -614,6 +651,24 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_RepositoryError_Returns500() {
 	s.mockSwitchRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
 		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_MalformedStoredDate_Returns500NotPanic() {
+	malformedDate := "not-a-date"
+	s.mockSwitchRepo.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(&repository.Switch{
+			ID:         "sw1",
+			Visibility: repository.VisibilityPrivate,
+			Purchase:   repository.SwitchPurchase{OrderDate: &malformedDate},
+		}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
 	rec := httptest.NewRecorder()

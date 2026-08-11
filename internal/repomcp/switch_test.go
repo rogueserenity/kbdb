@@ -27,6 +27,9 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 	springMaterial := "steel"
 	vendor := "Divinikey"
 	price := 65.0
+	orderDate := "2026-01-15"
+	deliveryDate := "2026-01-22"
+	status := "Delivered"
 	quantity := 90
 	notes := "smooth"
 
@@ -41,7 +44,11 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 		Material:     repository.SwitchMaterial{Stem: &stem},
 		Force:        repository.SwitchForce{Actuation: &actuation},
 		Spring:       repository.SwitchSpring{Material: &springMaterial},
-		Purchase:     repository.SwitchPurchase{Vendor: &vendor, Price: &price, Quantity: &quantity},
+		Purchase: repository.SwitchPurchase{
+			Vendor: &vendor, Price: &price,
+			OrderDate: &orderDate, DeliveryDate: &deliveryDate, OrderStatus: &status,
+			Quantity: &quantity,
+		},
 		Notes:        &notes,
 		Visibility:   repository.VisibilityPublic,
 	}
@@ -63,6 +70,12 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 	s.Equal("steel", *out.Spring.Material)
 	s.Require().NotNil(out.Purchase)
 	s.Equal(90, *out.Purchase.Quantity)
+	s.Require().NotNil(out.Purchase.OrderDate)
+	s.Equal("2026-01-15", *out.Purchase.OrderDate)
+	s.Require().NotNil(out.Purchase.DeliveryDate)
+	s.Equal("2026-01-22", *out.Purchase.DeliveryDate)
+	s.Require().NotNil(out.Purchase.OrderStatus)
+	s.Equal("Delivered", *out.Purchase.OrderStatus)
 	s.Require().NotNil(out.Notes)
 	s.Equal("smooth", *out.Notes)
 	s.Equal("public", out.Visibility)
@@ -165,14 +178,20 @@ func (s *SwitchFromMCPSuite) TestMapsAllFields() {
 	actuation := 50.0
 	vendor := "Divinikey"
 	price := 0.0
+	orderDate := "2026-01-15"
+	deliveryDate := "2026-01-22"
+	status := "Delivered"
 
 	out := SwitchFromMCP(schema.SwitchInput{
-		Brand:      "Gateron",
-		Name:       "Oil King",
-		Type:       "linear",
-		Material:   &schema.SwitchMaterial{Stem: &stem},
-		Force:      &schema.SwitchForce{Actuation: &actuation},
-		Purchase:   &schema.SwitchPurchase{Vendor: &vendor, Price: &price},
+		Brand:    "Gateron",
+		Name:     "Oil King",
+		Type:     "linear",
+		Material: &schema.SwitchMaterial{Stem: &stem},
+		Force:    &schema.SwitchForce{Actuation: &actuation},
+		Purchase: &schema.SwitchPurchase{
+			Vendor: &vendor, Price: &price,
+			OrderDate: &orderDate, DeliveryDate: &deliveryDate, OrderStatus: &status,
+		},
 		Visibility: "public",
 	})
 
@@ -184,6 +203,12 @@ func (s *SwitchFromMCPSuite) TestMapsAllFields() {
 	s.InDelta(50.0, *out.Force.Actuation, 0.001)
 	s.Require().NotNil(out.Purchase.Price)
 	s.Zero(*out.Purchase.Price, "a recorded zero price must survive the inbound mapping too")
+	s.Require().NotNil(out.Purchase.OrderDate)
+	s.Equal("2026-01-15", *out.Purchase.OrderDate)
+	s.Require().NotNil(out.Purchase.DeliveryDate)
+	s.Equal("2026-01-22", *out.Purchase.DeliveryDate)
+	s.Require().NotNil(out.Purchase.OrderStatus)
+	s.Equal("Delivered", *out.Purchase.OrderStatus)
 }
 
 // ID and UserID are set by the caller and the repository layer
@@ -202,4 +227,7 @@ func (s *SwitchFromMCPSuite) TestNilGroups_MapToZeroValues() {
 	s.Nil(out.Force.Actuation)
 	s.Nil(out.Spring.Material)
 	s.Nil(out.Purchase.Vendor)
+	s.Nil(out.Purchase.OrderDate)
+	s.Nil(out.Purchase.DeliveryDate)
+	s.Nil(out.Purchase.OrderStatus)
 }

@@ -1082,13 +1082,24 @@ components:
 
     SwitchPurchase:
       type: object
-      description: Simpler purchase shape than Purchase — switches aren't tracked with order/delivery dates.
+      description: >
+        Same purchase-lifecycle tracking as Purchase, plus a quantity
+        field since switches are bought in bulk.
       properties:
         vendor:
           type: string
           description: Open vocabulary — validated against the "vendor" lookup at request time.
         price:
           $ref: "#/components/schemas/Money"
+        order_date:
+          type: string
+          format: date
+        delivery_date:
+          type: string
+          format: date
+        order_status:
+          type: string
+          description: Open vocabulary — validated against the "order_status" lookup at request time.
         quantity:
           type: integer
 

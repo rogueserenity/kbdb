@@ -2,7 +2,9 @@ package repoapi
 
 import (
 	"testing"
+	"time"
 
+	openapi_types "github.com/oapi-codegen/runtime/types"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -44,9 +46,12 @@ func fullRepoSwitch() repository.Switch {
 			TotalTravel: floatPtr(4),
 		},
 		Purchase: repository.SwitchPurchase{
-			Vendor:   strPtr("CannonKeys"),
-			Price:    floatPtr(0.35),
-			Quantity: intPtr(90),
+			Vendor:       strPtr("CannonKeys"),
+			Price:        floatPtr(0.35),
+			OrderDate:    strPtr("2026-01-15"),
+			DeliveryDate: strPtr("2026-01-22"),
+			OrderStatus:  strPtr("Delivered"),
+			Quantity:     intPtr(90),
 		},
 		Notes:      strPtr("smooth"),
 		Visibility: repository.VisibilityPrivate,
@@ -63,7 +68,8 @@ func TestSwitchToAPISuite(t *testing.T) {
 
 func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	sw := fullRepoSwitch()
-	out := SwitchToAPI(sw)
+	out, err := SwitchToAPI(sw)
+	s.Require().NoError(err)
 
 	s.Equal(sw.ID, out.Id)
 	s.Equal(sw.Brand, out.Brand)
@@ -92,14 +98,20 @@ func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	if s.NotNil(out.Purchase) {
 		s.Equal(sw.Purchase.Vendor, out.Purchase.Vendor)
 		s.Equal(sw.Purchase.Price, out.Purchase.Price)
+		s.Equal(sw.Purchase.OrderStatus, out.Purchase.OrderStatus)
 		s.Equal(sw.Purchase.Quantity, out.Purchase.Quantity)
+		s.Require().NotNil(out.Purchase.OrderDate)
+		s.Equal(*sw.Purchase.OrderDate, out.Purchase.OrderDate.Format(dateLayout))
+		s.Require().NotNil(out.Purchase.DeliveryDate)
+		s.Equal(*sw.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
 	}
 }
 
 func (s *SwitchToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	sw := repository.Switch{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate}
 
-	out := SwitchToAPI(sw)
+	out, err := SwitchToAPI(sw)
+	s.Require().NoError(err)
 
 	s.Nil(out.Manufacturer)
 	s.Nil(out.Pins)
@@ -117,13 +129,25 @@ func (s *SwitchToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 		Material: repository.SwitchMaterial{Stem: strPtr("POM")},
 	}
 
-	out := SwitchToAPI(sw)
+	out, err := SwitchToAPI(sw)
+	s.Require().NoError(err)
 
 	if s.NotNil(out.Material) {
 		s.Nil(out.Material.TopHousing)
 		s.Nil(out.Material.BottomHousing)
 		s.Equal(strPtr("POM"), out.Material.Stem)
 	}
+}
+
+func (s *SwitchToAPISuite) TestMalformedStoredDate_ReturnsError() {
+	sw := repository.Switch{
+		ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate,
+		Purchase: repository.SwitchPurchase{OrderDate: strPtr("not-a-date")},
+	}
+
+	_, err := SwitchToAPI(sw)
+
+	s.Require().Error(err)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
@@ -146,6 +170,8 @@ func TestSwitchToRepoSuite(t *testing.T) {
 }
 
 func (s *SwitchToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
+	orderDate := openapi_types.Date{Time: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)}
+	deliveryDate := openapi_types.Date{Time: time.Date(2026, 1, 22, 0, 0, 0, 0, time.UTC)}
 	in := api.SwitchInput{
 		Brand:        "Gateron",
 		Manufacturer: strPtr("Gateron Inc"),
@@ -168,9 +194,12 @@ func (s *SwitchToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 			TotalTravel: floatPtr(4),
 		},
 		Purchase: &api.SwitchPurchase{
-			Vendor:   strPtr("CannonKeys"),
-			Price:    floatPtr(0.35),
-			Quantity: intPtr(90),
+			Vendor:       strPtr("CannonKeys"),
+			Price:        floatPtr(0.35),
+			OrderDate:    &orderDate,
+			DeliveryDate: &deliveryDate,
+			OrderStatus:  strPtr("Delivered"),
+			Quantity:     intPtr(90),
 		},
 		Notes:      strPtr("smooth"),
 		Visibility: api.Private,
@@ -199,7 +228,12 @@ func (s *SwitchToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(in.Spring.TotalTravel, sw.Spring.TotalTravel)
 	s.Equal(in.Purchase.Vendor, sw.Purchase.Vendor)
 	s.Equal(in.Purchase.Price, sw.Purchase.Price)
+	s.Equal(in.Purchase.OrderStatus, sw.Purchase.OrderStatus)
 	s.Equal(in.Purchase.Quantity, sw.Purchase.Quantity)
+	s.Require().NotNil(sw.Purchase.OrderDate)
+	s.Equal(in.Purchase.OrderDate.Format(dateLayout), *sw.Purchase.OrderDate)
+	s.Require().NotNil(sw.Purchase.DeliveryDate)
+	s.Equal(in.Purchase.DeliveryDate.Format(dateLayout), *sw.Purchase.DeliveryDate)
 }
 
 func (s *SwitchToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {

@@ -33,7 +33,7 @@ var getSwitchTool = &mcp.Tool{
 
 var createSwitchTool = &mcp.Tool{
 	Name:        "create_switch",
-	Description: "Adds a switch to your own collection. type, material, spring.material, and purchase.vendor must be approved lookup values - call list_lookups and get_lookup to see them.",
+	Description: "Adds a switch to your own collection. type, material, spring.material, and purchase vendor/status must be approved lookup values - call list_lookups and get_lookup to see them.",
 }
 
 var updateSwitchTool = &mcp.Tool{
@@ -169,6 +169,12 @@ func validatedSwitch(
 	}
 	if strings.TrimSpace(in.Name) == "" {
 		return repository.Switch{}, errors.New("name must not be blank")
+	}
+
+	if in.Purchase != nil {
+		if err := validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
+			return repository.Switch{}, err
+		}
 	}
 
 	sw := repomcp.SwitchFromMCP(in)

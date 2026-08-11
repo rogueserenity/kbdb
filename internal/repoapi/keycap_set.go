@@ -9,11 +9,8 @@ import (
 )
 
 // KeycapSetToAPI maps a repository.KeycapSet to its wire representation.
-// Returns an error if a stored kit's Purchase date is malformed - the
-// layout is enforced on write, but a row can still be poisoned by
-// something outside that path (e.g. a manual DynamoDB edit or a restored
-// backup), same rationale as KeyboardToAPI - or if a kit has an ImagePath
-// and images.PresignGet fails.
+// Returns an error if a stored kit's Purchase date doesn't match dateLayout,
+// or if a kit has an ImagePath and images.PresignGet fails.
 func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore) (api.KeycapSet, error) {
 	var kits *[]api.KeycapKit
 	if ks.Kits != nil {

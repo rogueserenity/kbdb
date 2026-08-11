@@ -43,3 +43,16 @@ func (s *ValidateSwitchSuite) TestInvalidType_ReturnsFieldError() {
 		{Field: "type", Value: "NotAType", Category: lookup.CategorySwitchType},
 	}, errs)
 }
+
+func (s *ValidateSwitchSuite) TestInvalidOrderStatus_ReturnsFieldError() {
+	status := "NotAStatus"
+	sw := repository.Switch{
+		Type:     "Linear",
+		Purchase: repository.SwitchPurchase{OrderStatus: &status},
+	}
+
+	errs := lookup.ValidateSwitch(s.T().Context(), sw)
+	s.Equal([]lookup.FieldError{
+		{Field: "purchase.order_status", Value: "NotAStatus", Category: lookup.CategoryOrderStatus},
+	}, errs)
+}

@@ -1,12 +1,20 @@
 package repoapi
 
 import (
+	"fmt"
+
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// SwitchToAPI maps a repository.Switch to its wire representation.
-func SwitchToAPI(sw repository.Switch) api.Switch {
+// SwitchToAPI maps a repository.Switch to its wire representation. Returns
+// an error if a stored Purchase date doesn't match dateLayout.
+func SwitchToAPI(sw repository.Switch) (api.Switch, error) {
+	purchase, err := switchPurchaseToAPI(sw.Purchase)
+	if err != nil {
+		return api.Switch{}, err
+	}
+
 	return api.Switch{
 		Id:           sw.ID,
 		Brand:        sw.Brand,
@@ -18,10 +26,10 @@ func SwitchToAPI(sw repository.Switch) api.Switch {
 		Material:     switchMaterialToAPI(sw.Material),
 		Force:        switchForceToAPI(sw.Force),
 		Spring:       switchSpringToAPI(sw.Spring),
-		Purchase:     switchPurchaseToAPI(sw.Purchase),
+		Purchase:     purchase,
 		Notes:        sw.Notes,
 		Visibility:   api.Visibility(sw.Visibility),
-	}
+	}, nil
 }
 
 // SwitchToRepo maps a generated SwitchInput (already schema-validated by the
@@ -126,16 +134,34 @@ func switchSpringToRepo(s *api.SwitchSpring) repository.SwitchSpring {
 	}
 }
 
-func switchPurchaseToAPI(p repository.SwitchPurchase) *api.SwitchPurchase {
-	if p.Vendor == nil && p.Price == nil && p.Quantity == nil {
-		return nil
+func switchPurchaseToAPI(p repository.SwitchPurchase) (*api.SwitchPurchase, error) {
+	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil &&
+		p.OrderStatus == nil && p.Quantity == nil {
+		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
 
-	return &api.SwitchPurchase{
-		Vendor:   p.Vendor,
-		Price:    p.Price,
-		Quantity: p.Quantity,
+	out := &api.SwitchPurchase{
+		Vendor:      p.Vendor,
+		Price:       p.Price,
+		OrderStatus: p.OrderStatus,
+		Quantity:    p.Quantity,
 	}
+	if p.OrderDate != nil {
+		d, err := parseAPIDate(*p.OrderDate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing order_date: %w", err)
+		}
+		out.OrderDate = d
+	}
+	if p.DeliveryDate != nil {
+		d, err := parseAPIDate(*p.DeliveryDate)
+		if err != nil {
+			return nil, fmt.Errorf("parsing delivery_date: %w", err)
+		}
+		out.DeliveryDate = d
+	}
+
+	return out, nil
 }
 
 func switchPurchaseToRepo(p *api.SwitchPurchase) repository.SwitchPurchase {
@@ -143,9 +169,20 @@ func switchPurchaseToRepo(p *api.SwitchPurchase) repository.SwitchPurchase {
 		return repository.SwitchPurchase{}
 	}
 
-	return repository.SwitchPurchase{
-		Vendor:   p.Vendor,
-		Price:    p.Price,
-		Quantity: p.Quantity,
+	out := repository.SwitchPurchase{
+		Vendor:      p.Vendor,
+		Price:       p.Price,
+		OrderStatus: p.OrderStatus,
+		Quantity:    p.Quantity,
 	}
+	if p.OrderDate != nil {
+		s := p.OrderDate.Format(dateLayout)
+		out.OrderDate = &s
+	}
+	if p.DeliveryDate != nil {
+		s := p.DeliveryDate.Format(dateLayout)
+		out.DeliveryDate = &s
+	}
+
+	return out
 }

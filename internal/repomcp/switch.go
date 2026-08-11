@@ -75,15 +75,21 @@ func switchSpringToMCP(s repository.SwitchSpring) *schema.SwitchSpring {
 	}
 }
 
+// Dates pass through as strings, unlike repoapi.SwitchToAPI, so this can't
+// fail on a malformed one.
 func switchPurchaseToMCP(p repository.SwitchPurchase) *schema.SwitchPurchase {
-	if p.Vendor == nil && p.Price == nil && p.Quantity == nil {
+	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
+		p.DeliveryDate == nil && p.OrderStatus == nil && p.Quantity == nil {
 		return nil
 	}
 
 	return &schema.SwitchPurchase{
-		Vendor:   p.Vendor,
-		Price:    p.Price,
-		Quantity: p.Quantity,
+		Vendor:       p.Vendor,
+		Price:        p.Price,
+		OrderDate:    p.OrderDate,
+		DeliveryDate: p.DeliveryDate,
+		OrderStatus:  p.OrderStatus,
+		Quantity:     p.Quantity,
 	}
 }
 
@@ -149,8 +155,11 @@ func switchPurchaseFromMCP(p *schema.SwitchPurchase) repository.SwitchPurchase {
 	}
 
 	return repository.SwitchPurchase{
-		Vendor:   p.Vendor,
-		Price:    p.Price,
-		Quantity: p.Quantity,
+		Vendor:       p.Vendor,
+		Price:        p.Price,
+		OrderDate:    p.OrderDate,
+		DeliveryDate: p.DeliveryDate,
+		OrderStatus:  p.OrderStatus,
+		Quantity:     p.Quantity,
 	}
 }

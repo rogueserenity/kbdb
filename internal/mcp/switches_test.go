@@ -312,6 +312,50 @@ func (s *HandleCreateSwitchSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorContains(err, "failed to create switch")
 }
 
+// REST rejects a malformed date via api/openapi.yaml's `format: date`. MCP
+// has no such validator, and nothing downstream re-checks: a bad date
+// reaches DynamoDB and every later REST read of that row fails its date
+// parse with a 500, unrepairable through the API.
+func (s *HandleCreateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
+	bad := "next tuesday"
+	in := validInput()
+	in.Purchase = &schema.SwitchPurchase{OrderDate: &bad}
+
+	handler := handleCreateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
+
+	s.Require().ErrorContains(err, "purchase.order_date")
+	s.Require().ErrorContains(err, "YYYY-MM-DD")
+}
+
+func (s *HandleCreateSwitchSuite) TestMalformedDeliveryDate_ReturnsError() {
+	bad := "2026-13-45"
+	in := validInput()
+	in.Purchase = &schema.SwitchPurchase{DeliveryDate: &bad}
+
+	handler := handleCreateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
+
+	s.Require().ErrorContains(err, "purchase.delivery_date")
+}
+
+func (s *HandleCreateSwitchSuite) TestWellFormedDates_Succeed() {
+	ordered, delivered := "2026-01-15", "2026-02-01"
+	in := validInput()
+	in.Purchase = &schema.SwitchPurchase{OrderDate: &ordered, DeliveryDate: &delivered}
+
+	s.mockSwitches.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, sw repository.Switch) (*repository.Switch, error) {
+			return &sw, nil
+		})
+
+	handler := handleCreateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
+
+	s.Require().NoError(err)
+}
+
 type HandleUpdateSwitchSuite struct {
 	suite.Suite
 
@@ -364,6 +408,34 @@ func (s *HandleUpdateSwitchSuite) TestBlankSwitchID_ReturnsError() {
 	})
 
 	s.Require().ErrorContains(err, "switch_id must not be blank")
+}
+
+func (s *HandleUpdateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
+	bad := "01/15/2026"
+	in := validInput()
+	in.Purchase = &schema.SwitchPurchase{OrderDate: &bad}
+
+	handler := handleUpdateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
+		SwitchID:    "sw-1",
+		SwitchInput: in,
+	})
+
+	s.Require().ErrorContains(err, "purchase.order_date")
+}
+
+func (s *HandleUpdateSwitchSuite) TestMalformedDeliveryDate_ReturnsError() {
+	bad := "2026-13-45"
+	in := validInput()
+	in.Purchase = &schema.SwitchPurchase{DeliveryDate: &bad}
+
+	handler := handleUpdateSwitch(s.mockSwitches)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
+		SwitchID:    "sw-1",
+		SwitchInput: in,
+	})
+
+	s.Require().ErrorContains(err, "purchase.delivery_date")
 }
 
 func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {

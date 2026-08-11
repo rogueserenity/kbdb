@@ -80,7 +80,7 @@ type SwitchInput struct {
 	Material     *SwitchMaterial `json:"material,omitempty" jsonschema:"housing and stem materials; each must be an approved switch_material lookup value"`
 	Force        *SwitchForce    `json:"force,omitempty" jsonschema:"actuation and bottom-out force, in grams"`
 	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
-	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where and how many were bought"`
+	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
 }
@@ -100,7 +100,7 @@ type Switch struct {
 	Material     *SwitchMaterial `json:"material,omitempty" jsonschema:"housing and stem materials"`
 	Force        *SwitchForce    `json:"force,omitempty" jsonschema:"actuation and bottom-out force, in grams"`
 	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
-	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where and how many were bought"`
+	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
 }
@@ -125,9 +125,14 @@ type SwitchSpring struct {
 	TotalTravel *float64 `json:"total_travel,omitempty" jsonschema:"total travel distance in mm"`
 }
 
-// SwitchPurchase is where, for how much, and how many of a switch were bought.
+// SwitchPurchase is a switch's purchase and order lifecycle, plus how many
+// were bought. Dates are strings, not a date type - see
+// repomcp.switchPurchaseToMCP.
 type SwitchPurchase struct {
-	Vendor   *string  `json:"vendor,omitempty" jsonschema:"where the switches were bought"`
-	Price    *float64 `json:"price,omitempty" jsonschema:"price paid"`
-	Quantity *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the switches were bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
+	Quantity     *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
 }

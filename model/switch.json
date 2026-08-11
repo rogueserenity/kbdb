@@ -22,6 +22,9 @@
   "purchase": {
     "vendor": "",
     "price": 123.45,
+    "order_date": "2026-01-24",
+    "delivery_date": "2026-03-24",
+    "order_status": "",
     "quantity": 90
   },
   "notes": "",

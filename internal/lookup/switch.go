@@ -23,6 +23,7 @@ func ValidateSwitch(ctx context.Context, sw repository.Switch) []FieldError {
 	add("material.stem", sw.Material.Stem, CategorySwitchMaterial)
 	add("spring.material", sw.Spring.Material, CategorySwitchSpringMaterial)
 	add("purchase.vendor", sw.Purchase.Vendor, CategoryVendor)
+	add("purchase.order_status", sw.Purchase.OrderStatus, CategoryOrderStatus)
 
 	return validateFields(ctx, checks)
 }
