@@ -11,9 +11,7 @@ import (
 )
 
 // KeyboardToAPI maps a repository.Keyboard to its wire representation.
-// Returns an error if a stored Purchase date is malformed - the layout is
-// enforced on write, but a row can still be poisoned by something outside
-// that path (e.g. a manual DynamoDB edit or a restored backup).
+// Returns an error if a stored Purchase date doesn't match dateLayout.
 func KeyboardToAPI(kb repository.Keyboard) (api.Keyboard, error) {
 	purchase, err := keyboardPurchaseToAPI(kb.Purchase)
 	if err != nil {

@@ -125,9 +125,14 @@ type SwitchSpring struct {
 	TotalTravel *float64 `json:"total_travel,omitempty" jsonschema:"total travel distance in mm"`
 }
 
-// SwitchPurchase is where, for how much, and how many of a switch were bought.
+// SwitchPurchase is a switch's purchase and order lifecycle, plus how many
+// were bought. Dates are strings, not a date type - see
+// repomcp.switchPurchaseToMCP.
 type SwitchPurchase struct {
-	Vendor   *string  `json:"vendor,omitempty" jsonschema:"where the switches were bought"`
-	Price    *float64 `json:"price,omitempty" jsonschema:"price paid"`
-	Quantity *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the switches were bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
+	Quantity     *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
 }

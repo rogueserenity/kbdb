@@ -22,13 +22,16 @@ type SwitchSpring struct {
 	TotalTravel *float64 `dynamodbav:"total_travel,omitempty" json:"total_travel,omitempty"`
 }
 
-// SwitchPurchase is where/how much/how many of a switch were bought.
-// Simpler than Build's purchase shape — switches aren't tracked with
-// order/delivery dates.
+// SwitchPurchase is where/how much/how many of a switch were bought, plus
+// its order lifecycle. Same shape as KeyboardPurchase, plus Quantity since
+// switches are bought in bulk.
 type SwitchPurchase struct {
-	Vendor   *string  `dynamodbav:"vendor,omitempty" json:"vendor,omitempty"`
-	Price    *float64 `dynamodbav:"price,omitempty" json:"price,omitempty"`
-	Quantity *int     `dynamodbav:"quantity,omitempty" json:"quantity,omitempty"`
+	Vendor       *string  `dynamodbav:"vendor,omitempty" json:"vendor,omitempty"`
+	Price        *float64 `dynamodbav:"price,omitempty" json:"price,omitempty"`
+	OrderDate    *string  `dynamodbav:"order_date,omitempty" json:"order_date,omitempty"`
+	DeliveryDate *string  `dynamodbav:"delivery_date,omitempty" json:"delivery_date,omitempty"`
+	OrderStatus  *string  `dynamodbav:"order_status,omitempty" json:"order_status,omitempty"`
+	Quantity     *int     `dynamodbav:"quantity,omitempty" json:"quantity,omitempty"`
 }
 
 // Switch is a mechanical keyboard switch in a user's collection, or shared

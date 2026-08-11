@@ -88,9 +88,16 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
+		out, err := repoapi.SwitchToAPI(*sw)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to get switch")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*sw))
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 
@@ -162,9 +169,16 @@ func CreateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
+		out, err := repoapi.SwitchToAPI(*created)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, created.ID)
+			problem.Internal(w, "failed to create switch")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*created))
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 
@@ -204,9 +218,16 @@ func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
+		out, err := repoapi.SwitchToAPI(*updated)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, updated.ID)
+			problem.Internal(w, "failed to update switch")
+			return
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(repoapi.SwitchToAPI(*updated))
+		_ = json.NewEncoder(w).Encode(out)
 	}
 }
 

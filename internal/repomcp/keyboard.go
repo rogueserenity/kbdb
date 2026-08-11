@@ -77,10 +77,8 @@ func keyboardPCBToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
 	}
 }
 
-// Dates pass through as strings, so unlike repoapi.KeyboardToAPI - which
-// parses them into openapi_types.Date and errors on a poisoned row - this
-// can't fail. An agent reading a malformed stored date sees it verbatim
-// rather than getting nothing at all.
+// Dates pass through as strings, unlike repoapi.KeyboardToAPI, so this can't
+// fail on a malformed one.
 func keyboardPurchaseToMCP(p repository.KeyboardPurchase) *schema.KeyboardPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {

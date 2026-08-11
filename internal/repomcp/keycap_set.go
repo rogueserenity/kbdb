@@ -96,10 +96,8 @@ func keycapKitPurchaseFromMCP(p *schema.KeycapKitPurchase) repository.KeycapKitP
 	}
 }
 
-// Dates pass through as strings, so unlike repoapi's mapping - which parses
-// them into openapi_types.Date and errors on a poisoned row - this can't
-// fail. An agent reading a malformed stored date sees it verbatim rather
-// than getting nothing at all. Mirrors keyboardPurchaseToMCP.
+// Dates pass through as strings, unlike repoapi's mapping, so this can't
+// fail on a malformed one. Mirrors keyboardPurchaseToMCP.
 func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase) *schema.KeycapKitPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
