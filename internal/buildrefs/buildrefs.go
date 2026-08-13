@@ -74,21 +74,38 @@ func ValidateReferences(
 		}
 	}
 
+	keycapSets := make(map[string]*repository.KeycapSet)
+	notFoundKeycapSets := make(map[string]bool)
+
 	for i, entry := range b.KeycapKits {
 		if entry.KeycapSet == "" {
 			continue
 		}
 
-		ks, err := keycapSetRepo.Get(ctx, ownerID, entry.KeycapSet)
-		if errors.Is(err, repository.ErrNotFound) {
-			fieldErrs = append(fieldErrs, FieldError{
-				Field: fmt.Sprintf("keycap_kits[%d].keycap_set", i), Value: entry.KeycapSet,
-				Reason: "does not reference a keycap set in your collection",
-			})
-			continue
-		}
-		if err != nil {
-			return nil, fmt.Errorf("checking keycap set %q: %w", entry.KeycapSet, err)
+		ks, ok := keycapSets[entry.KeycapSet]
+		if !ok {
+			if notFoundKeycapSets[entry.KeycapSet] {
+				fieldErrs = append(fieldErrs, FieldError{
+					Field: fmt.Sprintf("keycap_kits[%d].keycap_set", i), Value: entry.KeycapSet,
+					Reason: "does not reference a keycap set in your collection",
+				})
+				continue
+			}
+
+			var err error
+			ks, err = keycapSetRepo.Get(ctx, ownerID, entry.KeycapSet)
+			if errors.Is(err, repository.ErrNotFound) {
+				notFoundKeycapSets[entry.KeycapSet] = true
+				fieldErrs = append(fieldErrs, FieldError{
+					Field: fmt.Sprintf("keycap_kits[%d].keycap_set", i), Value: entry.KeycapSet,
+					Reason: "does not reference a keycap set in your collection",
+				})
+				continue
+			}
+			if err != nil {
+				return nil, fmt.Errorf("checking keycap set %q: %w", entry.KeycapSet, err)
+			}
+			keycapSets[entry.KeycapSet] = ks
 		}
 
 		if entry.Kit == "" {
