@@ -26,6 +26,12 @@ packages:
       KeycapKitImageStore:
         config:
           structname: 'MockKeycapKitImageStore'
+      BuildRepository:
+        config:
+          structname: 'MockBuildRepository'
+      BuildImageStore:
+        config:
+          structname: 'MockBuildImageStore'
   github.com/rogueserenity/kbdb/internal/repository/dynamo:
     config:
       dir: '{{.InterfaceDir}}/mocks'

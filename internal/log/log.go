@@ -15,6 +15,7 @@ const (
 	KeycapSetID    = "keycap_set_id"
 	KeycapKitID    = "keycap_kit_id"
 	KeycapKitImage = "keycap_kit_image"
+	BuildID        = "build_id"
 	LookupCategory = "lookup_category"
 	OwnerID        = "owner_id"
 	Visibility     = "visibility"

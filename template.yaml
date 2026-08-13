@@ -145,6 +145,21 @@ Resources:
         - AttributeName: id
           KeyType: RANGE
 
+  BuildTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+        - AttributeName: id
+          KeyType: RANGE
+
   # Matches ApiFunction's explicit FunctionName below so Lambda writes here
   # instead of auto-creating an unmanaged, never-expiring log group.
   ApiFunctionLogGroup:
@@ -172,6 +187,7 @@ Resources:
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
           KEYCAP_SET_TABLE_NAME: !Ref KeycapSetTable
+          BUILD_TABLE_NAME: !Ref BuildTable
           # Empty in real deployments; sam local's --env-vars override
           # (env.local.json) can only override a var declared here.
           DYNAMODB_ENDPOINT_URL: ""
@@ -214,6 +230,13 @@ Resources:
                 - dynamodb:PutItem
                 - dynamodb:DeleteItem
               Resource: !GetAtt KeycapSetTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+              Resource: !GetAtt BuildTable.Arn
       Events:
         # No auth: security: [] in api/openapi.yaml. Lookup categories are
         # static, deploy-time data (internal/lookup) - GET only, no write
@@ -562,3 +585,6 @@ Outputs:
   KeycapSetTableName:
     Description: DynamoDB table backing GET /users/{userId}/keycap-sets
     Value: !Ref KeycapSetTable
+  BuildTableName:
+    Description: DynamoDB table backing GET /users/{userId}/builds
+    Value: !Ref BuildTable
