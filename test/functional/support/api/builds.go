@@ -24,3 +24,10 @@ func NewBuildsClient() *BuildsClient {
 func (c *BuildsClient) Create(ctx context.Context, ownerID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/builds", token, bytes.NewBufferString(body))
 }
+
+// Get calls GET /v1/users/{ownerID}/builds/{buildId} with the given bearer
+// token (empty for an anonymous request). The caller owns closing
+// resp.Body.
+func (c *BuildsClient) Get(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodGet, "/v1/users/"+ownerID+"/builds/"+id, token, nil)
+}

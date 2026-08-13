@@ -77,3 +77,14 @@ type CreateBuildInput struct {
 type CreateBuildOutput struct {
 	Build Build `json:"build" jsonschema:"the created build, including its server-generated id"`
 }
+
+// GetBuildInput is the get_build tool input.
+type GetBuildInput struct {
+	BuildID string `json:"build_id" jsonschema:"the build's unique id"`
+	UserID  string `json:"user_id,omitempty" jsonschema:"whose collection to read from; omit for your own"`
+}
+
+// GetBuildOutput is the get_build tool output.
+type GetBuildOutput struct {
+	Build Build `json:"build" jsonschema:"the requested build"`
+}
