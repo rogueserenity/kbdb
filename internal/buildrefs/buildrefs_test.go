@@ -180,6 +180,49 @@ func (s *ValidateReferencesSuite) TestKeycapSetRepositoryError_ReturnsError() {
 	s.Nil(fieldErrs)
 }
 
+func (s *ValidateReferencesSuite) TestRepeatedKeycapSet_FetchedOnce() {
+	s.mockKeyboards.EXPECT().Get(mock.Anything, "alice", "kb1").Return(&repository.Keyboard{ID: "kb1"}, nil)
+	s.mockKeycaps.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1",
+			Kits: []repository.KeycapKit{{KitID: "kit1"}, {KitID: "kit2"}},
+		}, nil).
+		Once()
+
+	fieldErrs, err := s.validate(repository.Build{
+		Keyboard: "kb1",
+		KeycapKits: []repository.BuildKeycapKitEntry{
+			{KeycapSet: "ks1", Kit: "kit1"},
+			{KeycapSet: "ks1", Kit: "kit2"},
+		},
+	})
+
+	s.Require().NoError(err)
+	s.Empty(fieldErrs)
+}
+
+func (s *ValidateReferencesSuite) TestRepeatedMissingKeycapSet_FetchedOnceButErrorsForEachEntry() {
+	s.mockKeyboards.EXPECT().Get(mock.Anything, "alice", "kb1").Return(&repository.Keyboard{ID: "kb1"}, nil)
+	s.mockKeycaps.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(nil, repository.ErrNotFound).
+		Once()
+
+	fieldErrs, err := s.validate(repository.Build{
+		Keyboard: "kb1",
+		KeycapKits: []repository.BuildKeycapKitEntry{
+			{KeycapSet: "ks1", Kit: "kit1"},
+			{KeycapSet: "ks1", Kit: "kit2"},
+		},
+	})
+
+	s.Require().NoError(err)
+	s.Require().Len(fieldErrs, 2)
+	s.Equal("keycap_kits[0].keycap_set", fieldErrs[0].Field)
+	s.Equal("keycap_kits[1].keycap_set", fieldErrs[1].Field)
+}
+
 func (s *ValidateReferencesSuite) TestMultipleInvalidReferences_ReturnsAll() {
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
