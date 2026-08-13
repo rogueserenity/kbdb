@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -94,7 +95,7 @@ func ValidateReferences(
 			continue
 		}
 
-		if !hasKit(ks.Kits, entry.Kit) {
+		if !slices.ContainsFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == entry.Kit }) {
 			fieldErrs = append(fieldErrs, FieldError{
 				Field: fmt.Sprintf("keycap_kits[%d].kit", i), Value: entry.Kit,
 				Reason: fmt.Sprintf("does not reference a kit in keycap set %q", entry.KeycapSet),
@@ -103,13 +104,4 @@ func ValidateReferences(
 	}
 
 	return fieldErrs, nil
-}
-
-func hasKit(kits []repository.KeycapKit, kitID string) bool {
-	for _, k := range kits {
-		if k.KitID == kitID {
-			return true
-		}
-	}
-	return false
 }

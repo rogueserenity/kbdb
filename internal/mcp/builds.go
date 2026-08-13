@@ -91,6 +91,12 @@ func validatedBuild(ctx context.Context, in schema.BuildInput) (repository.Build
 		}
 	}
 
+	for i, entry := range in.Switches {
+		if entry.Count < 1 {
+			return repository.Build{}, fmt.Errorf("switches[%d].count: %d must be at least 1", i, entry.Count)
+		}
+	}
+
 	b := repomcp.BuildFromMCP(in)
 
 	if !b.Visibility.Valid() {

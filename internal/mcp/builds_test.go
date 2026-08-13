@@ -103,6 +103,16 @@ func (s *HandleCreateBuildSuite) TestMalformedBuildDate_ReturnsError() {
 	s.Require().ErrorContains(err, "build_date")
 }
 
+func (s *HandleCreateBuildSuite) TestNonPositiveSwitchCount_ReturnsError() {
+	in := validBuildInput()
+	in.Switches = []schema.BuildSwitchEntry{{Switch: "sw-1", Count: 0}}
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: in})
+
+	s.Require().ErrorContains(err, "switches[0].count")
+}
+
 func (s *HandleCreateBuildSuite) TestUnapprovedStabsName_ReturnsError() {
 	in := validBuildInput()
 	in.Stabs = &schema.BuildStabs{Name: strPtrMCP("NotApproved")}
