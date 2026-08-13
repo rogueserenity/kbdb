@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/rogueserenity/kbdb/internal/buildrefs"
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -19,18 +21,45 @@ import (
 
 var errBuildAlreadyExists = errors.New("build already exists")
 
+// errNoCaller mirrors errNoTokenInfo's fail-closed shape: unreachable in
+// practice since identityMiddleware always sets a caller ID before a tool
+// handler runs, but this fails closed rather than validating references
+// against an empty ownerID if that wiring is ever broken.
+var errNoCaller = errors.New("no caller identity on context")
+
 var createBuildTool = &mcp.Tool{
 	Name:        "create_build",
-	Description: "Adds a build to your own collection, recording an actual keyboard you've assembled from a keyboard, switches, keycap kit(s), and stabilizer/mount/foam details. keyboard must be the id of a Keyboard resource - this is not currently verified to exist or belong to you, so double-check the id before calling. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images aren't set here - a future tool adds them afterward.",
+	Description: "Adds a build to your own collection, recording an actual keyboard you've assembled from a keyboard, switches, keycap kit(s), and stabilizer/mount/foam details. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images aren't set here - a future tool adds them afterward.",
 }
 
 func handleCreateBuild(
 	buildRepo repository.BuildRepository,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
 ) mcp.ToolHandlerFor[schema.CreateBuildInput, schema.CreateBuildOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateBuildInput) (*mcp.CallToolResult, schema.CreateBuildOutput, error) {
 		b, err := validatedBuild(ctx, in.BuildInput)
 		if err != nil {
 			return nil, schema.CreateBuildOutput{}, err
+		}
+
+		ownerID, ok := kbdbctx.UserID(ctx)
+		if !ok {
+			return nil, schema.CreateBuildOutput{}, errNoCaller
+		}
+
+		fieldErrs, err := buildrefs.ValidateReferences(ctx, ownerID, b, keyboardRepo, switchRepo, keycapSetRepo)
+		if err != nil {
+			log.FromContext(ctx).Error("validating build references", log.Error, err)
+			return nil, schema.CreateBuildOutput{}, errors.New("failed to validate build")
+		}
+		if len(fieldErrs) > 0 {
+			reasons := make([]string, len(fieldErrs))
+			for i, fe := range fieldErrs {
+				reasons[i] = fmt.Sprintf("%s: %q %s", fe.Field, fe.Value, fe.Reason)
+			}
+			return nil, schema.CreateBuildOutput{}, errors.New(strings.Join(reasons, "; "))
 		}
 
 		b.ID = uuid.NewString()

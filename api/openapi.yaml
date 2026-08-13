@@ -1292,9 +1292,12 @@ components:
       properties:
         switch:
           type: string
+          minLength: 1
+          pattern: "\\S"
           description: ID of a Switch resource.
         count:
           type: integer
+          minimum: 1
 
     BuildKeycapKitEntry:
       type: object
@@ -1302,9 +1305,13 @@ components:
       properties:
         keycap_set:
           type: string
+          minLength: 1
+          pattern: "\\S"
           description: ID of a KeycapSet resource.
         kit:
           type: string
+          minLength: 1
+          pattern: "\\S"
           description: kit_id of one of that keycap set's kits (see KeycapKit.kit_id).
 
     BuildStabs:

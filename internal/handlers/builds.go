@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/buildrefs"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
@@ -37,10 +38,44 @@ func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b reposito
 	return true
 }
 
+// validateBuildReferences writes a 400 listing every invalid reference if
+// any check fails (a repository error instead writes a 500). Matches
+// validateBuildLookups' signature/shape so CreateBuild can call both the
+// same way.
+func validateBuildReferences(
+	ctx context.Context, w http.ResponseWriter, ownerID string, b repository.Build,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+) (ok bool) {
+	fieldErrs, err := buildrefs.ValidateReferences(ctx, ownerID, b, keyboardRepo, switchRepo, keycapSetRepo)
+	if err != nil {
+		log.FromContext(ctx).Error("validating build references", log.Error, err)
+		problem.Internal(w, "failed to validate build")
+		return false
+	}
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = problem.InvalidParam{Name: fe.Field, Reason: fe.Reason}
+		}
+		problem.ValidationFailed(w, "one or more fields do not reference resources in your collection", invalidParams)
+		return false
+	}
+
+	return true
+}
+
 // CreateBuild reads the {userId} path value and requires an authenticated
 // caller. userId must be the caller's own subject; creating in another
 // user's collection returns 404, not 403, to avoid revealing it exists.
-func CreateBuild(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+func CreateBuild(
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -58,6 +93,10 @@ func CreateBuild(buildRepo repository.BuildRepository, images repository.BuildIm
 		b := repoapi.BuildToRepo(in)
 
 		if !validateBuildLookups(r.Context(), w, b) {
+			return
+		}
+
+		if !validateBuildReferences(r.Context(), w, ownerID, b, keyboardRepo, switchRepo, keycapSetRepo) {
 			return
 		}
 

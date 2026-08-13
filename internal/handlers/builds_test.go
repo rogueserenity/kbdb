@@ -22,9 +22,12 @@ import (
 type CreateBuildSuite struct {
 	suite.Suite
 
-	mockBuildRepo *mocks.MockBuildRepository
-	mockImages    *mocks.MockBuildImageStore
-	handler       http.HandlerFunc
+	mockBuildRepo     *mocks.MockBuildRepository
+	mockImages        *mocks.MockBuildImageStore
+	mockKeyboardRepo  *mocks.MockKeyboardRepository
+	mockSwitchRepo    *mocks.MockSwitchRepository
+	mockKeycapSetRepo *mocks.MockKeycapSetRepository
+	handler           http.HandlerFunc
 }
 
 func TestCreateBuildSuite(t *testing.T) {
@@ -34,7 +37,21 @@ func TestCreateBuildSuite(t *testing.T) {
 func (s *CreateBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
-	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages)
+	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+}
+
+// stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing
+// and owned by alice - the default reference-validation outcome most tests
+// below want, so the create path under test can proceed to the behavior
+// they're actually asserting on.
+func (s *CreateBuildSuite) stubOwnedKeyboard() {
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1"}, nil).
+		Maybe()
 }
 
 func (s *CreateBuildSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -48,6 +65,7 @@ func (s *CreateBuildSuite) ownerCtx() context.Context {
 }
 
 func (s *CreateBuildSuite) TestCreateBuild_Succeeds() {
+	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(b repository.Build) bool {
 			return b.ID != "" && b.Keyboard == "kb1" && b.Visibility == repository.VisibilityPrivate
@@ -67,6 +85,7 @@ func (s *CreateBuildSuite) TestCreateBuild_Succeeds() {
 }
 
 func (s *CreateBuildSuite) TestCreateBuild_Visibility_Preserved() {
+	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
 		Create(mock.Anything, mock.MatchedBy(func(b repository.Build) bool {
 			return b.Visibility == repository.VisibilityPublic
@@ -95,6 +114,9 @@ func (s *CreateBuildSuite) TestCreateBuild_ValidatesOpenVocabularyFields() {
 		s.Run(tt.name, func() {
 			s.SetupTest()
 
+			// Lookup validation runs (and short-circuits) before reference
+			// validation, so keyboardRepo is never consulted here - no stub
+			// needed/expected.
 			req := s.newRequest(s.ownerCtx(), tt.body)
 			rec := httptest.NewRecorder()
 			s.handler(rec, req)
@@ -163,6 +185,7 @@ func (s *CreateBuildSuite) TestCreateBuild_InvalidBody_Returns400() {
 }
 
 func (s *CreateBuildSuite) TestCreateBuild_AlreadyExists_Returns409() {
+	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrAlreadyExists)
@@ -176,9 +199,134 @@ func (s *CreateBuildSuite) TestCreateBuild_AlreadyExists_Returns409() {
 }
 
 func (s *CreateBuildSuite) TestCreateBuild_RepositoryError_Returns500() {
+	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_MissingKeyboard_Returns400() {
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("keyboard", got.InvalidParams[0].Name)
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_MissingSwitch_Returns400() {
+	s.stubOwnedKeyboard()
+	s.mockSwitchRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"keyboard":"kb1","visibility":"private","switches":[{"switch":"sw1","count":4}]}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("switches[0].switch", got.InvalidParams[0].Name)
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_MissingKeycapSet_Returns400() {
+	s.stubOwnedKeyboard()
+	s.mockKeycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"keyboard":"kb1","visibility":"private","keycap_kits":[{"keycap_set":"ks1","kit":"kit1"}]}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("keycap_kits[0].keycap_set", got.InvalidParams[0].Name)
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_KeycapSetFoundButKitMissing_Returns400() {
+	s.stubOwnedKeyboard()
+	s.mockKeycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1",
+			Kits: []repository.KeycapKit{{KitID: "other-kit"}},
+		}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"keyboard":"kb1","visibility":"private","keycap_kits":[{"keycap_set":"ks1","kit":"kit1"}]}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("keycap_kits[0].kit", got.InvalidParams[0].Name)
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_ValidReferences_Succeeds() {
+	s.stubOwnedKeyboard()
+	s.mockSwitchRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1"}, nil)
+	s.mockKeycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1",
+			Kits: []repository.KeycapKit{{KitID: "kit1"}},
+		}, nil)
+	s.mockBuildRepo.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(&repository.Build{UserID: "alice", ID: "generated-id", Keyboard: "kb1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(),
+		`{"keyboard":"kb1","visibility":"private",`+
+			`"switches":[{"switch":"sw1","count":4}],`+
+			`"keycap_kits":[{"keycap_set":"ks1","kit":"kit1"}]}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_ReferenceCheckRepositoryError_Returns500() {
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(nil, errors.New("dynamo unavailable"))
 
 	req := s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`)
 	rec := httptest.NewRecorder()

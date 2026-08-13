@@ -161,6 +161,74 @@ var _ = Describe("Creating a build over MCP", func() {
 				})
 			})
 		})
+
+		Context("given the build references a keyboard that doesn't exist", func() {
+			When("the create_build tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_build", map[string]any{
+						"keyboard":   "does-not-exist-" + uuid.NewString(),
+						"visibility": "private",
+					})
+					captureCreatedID(result)
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+
+		Context("given the build references a switch that doesn't exist", func() {
+			When("the create_build tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_build", map[string]any{
+						"keyboard":   keyboardID,
+						"visibility": "private",
+						"switches": []map[string]any{
+							{"switch": "does-not-exist-" + uuid.NewString(), "count": 1},
+						},
+					})
+					captureCreatedID(result)
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+
+		Context("given the build references a keycap set that exists but not the kit", func() {
+			var keycapSetID string
+
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "build-fixture-keycap-set-" + uuid.NewString()
+				Expect(db.SeedKeycapSet(ctx, ownerID, keycapSetID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the create_build tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_build", map[string]any{
+						"keyboard":   keyboardID,
+						"visibility": "private",
+						"keycap_kits": []map[string]any{
+							{"keycap_set": keycapSetID, "kit": "does-not-exist"},
+						},
+					})
+					captureCreatedID(result)
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
 	})
 
 	Context("given no bearer token", func() {

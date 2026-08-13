@@ -133,6 +133,120 @@ var _ = Describe("Creating a build", func() {
 				})
 			})
 		})
+
+		Context("given the build references a keyboard that doesn't exist", func() {
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"does-not-exist-`+uuid.NewString()+`","visibility":"private"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
+		Context("given the build references a switch that doesn't exist", func() {
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private",`+
+							`"switches":[{"switch":"does-not-exist-`+uuid.NewString()+`","count":1}]}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
+		Context("given the build references a keycap set that doesn't exist", func() {
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private",`+
+							`"keycap_kits":[{"keycap_set":"does-not-exist-`+uuid.NewString()+`","kit":"kit1"}]}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
+		Context("given the build references a keycap set that exists but not the kit", func() {
+			var keycapSetID string
+
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "build-fixture-keycap-set-" + uuid.NewString()
+				Expect(db.SeedKeycapSet(ctx, ownerID, keycapSetID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private",`+
+							`"keycap_kits":[{"keycap_set":"`+keycapSetID+`","kit":"does-not-exist"}]}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
+		Context("given the build references a switch owned by another user", func() {
+			var (
+				otherOwnerID string
+				switchID     string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherToken, err := api.SecondUserAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+				otherOwnerID, err = api.TokenSubject(otherToken)
+				Expect(err).NotTo(HaveOccurred())
+
+				switchID = "build-fixture-switch-" + uuid.NewString()
+				Expect(db.SeedSwitch(ctx, otherOwnerID, switchID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, otherOwnerID, switchID)).To(Succeed())
+			})
+
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private",`+
+							`"switches":[{"switch":"`+switchID+`","count":1}]}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400, treating another user's switch the same as one that doesn't exist", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
 	})
 
 	Context("given the caller is anonymous", func() {
