@@ -5,6 +5,7 @@ set -euo pipefail
 export KBDB_SWITCH_TABLE_NAME="${KBDB_SWITCH_TABLE_NAME:-kbdb-local-switch}"
 export KBDB_KEYBOARD_TABLE_NAME="${KBDB_KEYBOARD_TABLE_NAME:-kbdb-local-keyboard}"
 export KBDB_KEYCAP_SET_TABLE_NAME="${KBDB_KEYCAP_SET_TABLE_NAME:-kbdb-local-keycap-set}"
+export KBDB_BUILD_TABLE_NAME="${KBDB_BUILD_TABLE_NAME:-kbdb-local-build}"
 export KBDB_DYNAMODB_ENDPOINT_URL="${KBDB_DYNAMODB_ENDPOINT_URL-http://localhost:4566}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"

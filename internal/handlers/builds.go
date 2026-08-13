@@ -1,0 +1,91 @@
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+
+	"github.com/google/uuid"
+
+	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
+	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
+	"github.com/rogueserenity/kbdb/internal/repository"
+)
+
+// validateBuildLookups writes a 400 listing every invalid field if any check
+// fails. An unset (nil) field is skipped, not treated as invalid.
+func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b repository.Build) (ok bool) {
+	fieldErrs := lookup.ValidateBuild(ctx, b)
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = problem.InvalidParam{
+				Name:   fe.Field,
+				Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
+			}
+		}
+		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
+		return false
+	}
+
+	return true
+}
+
+// CreateBuild reads the {userId} path value and requires an authenticated
+// caller. userId must be the caller's own subject; creating in another
+// user's collection returns 404, not 403, to avoid revealing it exists.
+func CreateBuild(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.BuildInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		b := repoapi.BuildToRepo(in)
+
+		if !validateBuildLookups(r.Context(), w, b) {
+			return
+		}
+
+		b.ID = uuid.NewString()
+
+		created, err := buildRepo.Create(r.Context(), b)
+		if errors.Is(err, repository.ErrAlreadyExists) {
+			// Practically unreachable - ID is a fresh UUID, not caller
+			// input - but Create's ConditionExpression guards a collision
+			// regardless, so surface it the same way CreateKeycapSet does.
+			problem.Conflict(w, "build already exists")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("creating build", log.Error, err, log.BuildID, b.ID)
+			problem.Internal(w, "failed to create build")
+			return
+		}
+
+		out, err := repoapi.BuildToAPI(r.Context(), *created, images)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, created.ID)
+			problem.Internal(w, "failed to create build")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}
