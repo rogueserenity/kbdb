@@ -66,6 +66,44 @@ func validateBuildReferences(
 	return true
 }
 
+// GetBuild reads the {userId} and {buildId} path values. Anonymous callers
+// are allowed; a build that exists but isn't readable by the caller returns
+// 404, not 403, to avoid revealing it exists.
+func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("buildId")
+
+		b, err := repo.Get(r.Context(), ownerID, id)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting build", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to get build")
+			return
+		}
+
+		if !authz.CanReadVisibility(r.Context(), ownerID, b.Visibility) {
+			log.DeniedRead(r.Context(), "build", ownerID, string(b.Visibility), log.BuildID, id)
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		out, err := repoapi.BuildToAPI(r.Context(), *b, images)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to get build")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
 // CreateBuild reads the {userId} path value and requires an authenticated
 // caller. userId must be the caller's own subject; creating in another
 // user's collection returns 404, not 403, to avoid revealing it exists.

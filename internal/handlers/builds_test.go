@@ -335,3 +335,101 @@ func (s *CreateBuildSuite) TestCreateBuild_ReferenceCheckRepositoryError_Returns
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type GetBuildSuite struct {
+	suite.Suite
+
+	mockBuildRepo *mocks.MockBuildRepository
+	mockImages    *mocks.MockBuildImageStore
+	handler       http.HandlerFunc
+}
+
+func TestGetBuildSuite(t *testing.T) {
+	suite.Run(t, new(GetBuildSuite))
+}
+
+func (s *GetBuildSuite) SetupTest() {
+	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.handler = GetBuild(s.mockBuildRepo, s.mockImages)
+}
+
+func (s *GetBuildSuite) newRequest(ctx context.Context, buildID string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/builds/"+buildID, nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("buildId", buildID)
+	return req
+}
+
+func (s *GetBuildSuite) TestGetBuild_Found_ReturnsBuild() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}, nil)
+
+	req := s.newRequest(s.T().Context(), "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("build1", got.Id)
+}
+
+func (s *GetBuildSuite) TestGetBuild_NotFound_Returns404() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "no-such-build").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.T().Context(), "no-such-build")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *GetBuildSuite) TestGetBuild_NotOwnedAndNotShared_Returns404() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{UserID: "alice", ID: "build1", Visibility: repository.VisibilityPrivate}, nil)
+
+	req := s.newRequest(s.T().Context(), "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *GetBuildSuite) TestGetBuild_SharedVisibility_ReturnsBuild() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{UserID: "alice", ID: "build1", Visibility: repository.VisibilityAuthenticated}, nil)
+
+	req := s.newRequest(ctx, "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("build1", got.Id)
+}
+
+func (s *GetBuildSuite) TestGetBuild_RepositoryError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(nil, errors.New("dynamo unavailable"))
+
+	req := s.newRequest(s.T().Context(), "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

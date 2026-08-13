@@ -252,3 +252,75 @@ func (s *HandleCreateBuildSuite) TestReferenceCheckRepositoryError_ReturnsError(
 }
 
 func strPtrMCP(s string) *string { return &s }
+
+type HandleGetBuildSuite struct {
+	suite.Suite
+
+	mockBuilds *mocks.MockBuildRepository
+}
+
+func TestHandleGetBuildSuite(t *testing.T) {
+	suite.Run(t, new(HandleGetBuildSuite))
+}
+
+func (s *HandleGetBuildSuite) SetupTest() {
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+}
+
+func (s *HandleGetBuildSuite) TestSucceeds() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, callerID, "build-1").
+		Return(&repository.Build{
+			ID:         "build-1",
+			Keyboard:   "kb-1",
+			Visibility: repository.VisibilityPrivate,
+		}, nil)
+
+	handler := handleGetBuild(s.mockBuilds)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
+
+	s.Require().NoError(err)
+	s.Equal("build-1", out.Build.ID)
+	s.Equal("kb-1", out.Build.Keyboard)
+}
+
+func (s *HandleGetBuildSuite) TestBlankBuildID_ReturnsError() {
+	handler := handleGetBuild(s.mockBuilds)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "  "})
+
+	s.Require().ErrorContains(err, "build_id must not be blank")
+}
+
+func (s *HandleGetBuildSuite) TestNotFound_ReturnsNotFound() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "missing").
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleGetBuild(s.mockBuilds)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "missing"})
+
+	s.Require().ErrorIs(err, errBuildNotFound)
+}
+
+func (s *HandleGetBuildSuite) TestOtherUsersPrivateBuild_ReturnsNotFound() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, otherID, "build-1").
+		Return(&repository.Build{ID: "build-1", Visibility: repository.VisibilityPrivate}, nil)
+
+	handler := handleGetBuild(s.mockBuilds)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
+
+	s.Require().ErrorIs(err, errBuildNotFound)
+}
+
+func (s *HandleGetBuildSuite) TestOtherUsersSharedVisibilityBuild_Succeeds() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, otherID, "build-1").
+		Return(&repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityAuthenticated}, nil)
+
+	handler := handleGetBuild(s.mockBuilds)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Equal("build-1", out.Build.ID)
+}

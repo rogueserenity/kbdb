@@ -101,6 +101,9 @@ func New(
 	// Default CognitoAuthorizer applies - same rationale as CreateKeyboardEvent.
 	mux.Handle("POST /v1/users/{userId}/builds",
 		middleware.Auth(verifier)(validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+	// Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
+	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
+		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
