@@ -35,6 +35,8 @@ func New(
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
 	imageStore repository.KeycapKitImageStore,
+	buildRepo repository.BuildRepository,
+	buildImageStore repository.BuildImageStore,
 	issuerURL, version string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
@@ -96,10 +98,14 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore))))
 
+	// Default CognitoAuthorizer applies - same rationale as CreateKeyboardEvent.
+	mux.Handle("POST /v1/users/{userId}/builds",
+		middleware.Auth(verifier)(validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
 	// only covers the REST surface.
-	mcpHandlers := mcp.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, issuerURL, version)
+	mcpHandlers := mcp.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

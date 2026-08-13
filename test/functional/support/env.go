@@ -59,6 +59,12 @@ func KeycapSetTableName() string {
 	return os.Getenv("KBDB_KEYCAP_SET_TABLE_NAME")
 }
 
+// BuildTableName returns the DynamoDB table name backing
+// POST /users/{userId}/builds, so specs can clean up fixture rows directly.
+func BuildTableName() string {
+	return os.Getenv("KBDB_BUILD_TABLE_NAME")
+}
+
 // DynamoDBEndpointURL returns the DynamoDB endpoint specs should talk to.
 // Empty uses default AWS endpoint resolution.
 func DynamoDBEndpointURL() string {
