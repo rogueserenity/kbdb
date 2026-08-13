@@ -253,6 +253,119 @@ func (s *HandleCreateBuildSuite) TestReferenceCheckRepositoryError_ReturnsError(
 
 func strPtrMCP(s string) *string { return &s }
 
+type HandleListBuildsSuite struct {
+	suite.Suite
+
+	mockBuilds    *mocks.MockBuildRepository
+	mockKeyboards *mocks.MockKeyboardRepository
+}
+
+func TestHandleListBuildsSuite(t *testing.T) {
+	suite.Run(t, new(HandleListBuildsSuite))
+}
+
+func (s *HandleListBuildsSuite) SetupTest() {
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+}
+
+func (s *HandleListBuildsSuite) handler() mcp.ToolHandlerFor[schema.ListBuildsInput, schema.ListBuildsOutput] {
+	return handleListBuilds(s.mockBuilds, s.mockKeyboards)
+}
+
+func (s *HandleListBuildsSuite) TestEmpty_ReturnsEmptyList() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 20, "").
+		Return([]repository.Build{}, "", nil)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
+
+	s.Require().NoError(err)
+	s.Empty(out.Builds)
+}
+
+func (s *HandleListBuildsSuite) TestSingleBuild_ResolvableKeyboard_DenormalizesBrandAndName() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 20, "").
+		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}}, "", nil)
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(&repository.Keyboard{ID: "kb-1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Builds, 1)
+	s.Require().NotNil(out.Builds[0].Keyboard)
+	s.Equal("Keychron", out.Builds[0].Keyboard.Brand)
+	s.Equal("Q1", out.Builds[0].Keyboard.Name)
+}
+
+func (s *HandleListBuildsSuite) TestBuildWithKeyboardNotFound_OmitsKeyboard() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 20, "").
+		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPrivate}}, "", nil)
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, callerID, "deleted-kb").
+		Return(nil, repository.ErrNotFound)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Builds, 1)
+	s.Nil(out.Builds[0].Keyboard)
+}
+
+func (s *HandleListBuildsSuite) TestKeyboardRepositoryError_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 20, "").
+		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}}, "", nil)
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(nil, errors.New("dynamo unavailable"))
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
+
+	s.Require().ErrorContains(err, "failed to list builds")
+}
+
+func (s *HandleListBuildsSuite) TestPassesLimitAndCursor() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 5, "abc").
+		Return([]repository.Build{}, "", nil)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{Limit: 5, Cursor: "abc"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleListBuildsSuite) TestOtherUserID_ListsThatUsersCollection() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, otherID, mock.Anything, 20, "").
+		Return([]repository.Build{}, "", nil)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{UserID: otherID})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleListBuildsSuite) TestRepositoryError_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 20, "").
+		Return(nil, "", errors.New("query failed"))
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
+
+	s.Require().ErrorContains(err, "failed to list builds")
+}
+
 type HandleGetBuildSuite struct {
 	suite.Suite
 

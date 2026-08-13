@@ -66,6 +66,47 @@ func validateBuildReferences(
 	return true
 }
 
+// ListBuilds reads the {userId} path value and lists that owner's builds.
+// Anonymous callers are allowed; visibility is scoped to what the caller (if
+// any) may read, per internal/authz.
+func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+
+		limit := parseListLimit(r)
+		cursor := r.URL.Query().Get("cursor")
+
+		visibilities := authz.ReadableVisibilities(r.Context(), ownerID)
+
+		builds, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
+		if err != nil {
+			log.FromContext(r.Context()).Error("listing builds", log.Error, err)
+			problem.Internal(w, "failed to list builds")
+			return
+		}
+
+		items := make([]api.BuildSummary, len(builds))
+		for i, b := range builds {
+			summary, err := repoapi.BuildToAPISummary(r.Context(), b, keyboardRepo, images)
+			if err != nil {
+				log.FromContext(r.Context()).Error("mapping build to API summary", log.Error, err, log.BuildID, b.ID)
+				problem.Internal(w, "failed to list builds")
+				return
+			}
+			items[i] = summary
+		}
+
+		page := api.BuildListPage{Items: &items}
+		if nextCursor != "" {
+			page.NextCursor = &nextCursor
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(page)
+	}
+}
+
 // GetBuild reads the {userId} and {buildId} path values. Anonymous callers
 // are allowed; a build that exists but isn't readable by the caller returns
 // 404, not 403, to avoid revealing it exists.

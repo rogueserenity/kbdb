@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"net/url"
+	"strconv"
 )
 
 // BuildsClient calls the /v1/users/{userId}/builds routes. Built on Client
@@ -30,4 +32,18 @@ func (c *BuildsClient) Create(ctx context.Context, ownerID, token, body string) 
 // resp.Body.
 func (c *BuildsClient) Get(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodGet, "/v1/users/"+ownerID+"/builds/"+id, token, nil)
+}
+
+// List calls GET /v1/users/{ownerID}/builds with the given bearer token
+// (empty for an anonymous request). limit, if >= 0, is sent as the limit
+// query parameter; a negative limit omits it entirely, letting the server
+// apply its default. The caller owns closing resp.Body.
+func (c *BuildsClient) List(ctx context.Context, ownerID, token string, limit int) (*http.Response, error) {
+	path := "/v1/users/" + ownerID + "/builds"
+	if limit >= 0 {
+		query := url.Values{"limit": []string{strconv.Itoa(limit)}}
+		path += "?" + query.Encode()
+	}
+
+	return c.client.Do(ctx, http.MethodGet, path, token, nil)
 }

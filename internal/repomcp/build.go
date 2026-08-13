@@ -1,6 +1,8 @@
 package repomcp
 
 import (
+	"context"
+
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -44,6 +46,32 @@ func BuildFromMCP(in schema.BuildInput) repository.Build {
 		Notes:         in.Notes,
 		Visibility:    repository.Visibility(in.Visibility),
 	}
+}
+
+// BuildToMCPSummary maps a repository.Build to the list_builds tool's
+// reduced BuildSummary shape. Mirrors repoapi.BuildToAPISummary's
+// keyboardRepo.Get denormalization strategy (a per-item fetch - see that
+// function's doc comment for why this isn't batched) but reports HasImage
+// rather than a presigned URL, matching schema.Build's HasImages design. If
+// the referenced keyboard can't be resolved (e.g. deleted after the build
+// was created), Keyboard is left nil rather than failing the whole list
+// call over one bad denormalization.
+func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
+	summary := schema.BuildSummary{
+		ID:        b.ID,
+		BuildDate: b.BuildDate,
+		HasImage:  len(b.Images) > 0,
+	}
+
+	kb, ok, err := repository.ResolveBuildSummaryKeyboard(ctx, b, keyboardRepo)
+	if err != nil {
+		return schema.BuildSummary{}, err
+	}
+	if ok {
+		summary.Keyboard = &schema.BuildSummaryKeyboard{Brand: kb.Brand, Name: kb.Name}
+	}
+
+	return summary, nil
 }
 
 func buildCaseMountTypeToMCP(cmt *repository.BuildCaseMountType) *schema.BuildCaseMountType {

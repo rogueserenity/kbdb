@@ -426,6 +426,15 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image
             Method: delete
+        # Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
+        ListBuildsEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/builds
+            Method: get
+            Auth:
+              Authorizer: NONE
         # Default CognitoAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateBuildEvent:

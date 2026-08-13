@@ -1,12 +1,16 @@
 package repomcp
 
 import (
+	"context"
+	"errors"
 	"testing"
 
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
+	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
 
 type BuildToMCPSuite struct {
@@ -137,4 +141,75 @@ func (s *BuildToMCPSuite) TestBuildFromMCP_AllOptionalFieldsNil_MapsToNil() {
 	s.Nil(out.KeycapKits)
 	s.Nil(out.BuildDate)
 	s.Nil(out.Notes)
+}
+
+type BuildToMCPSummarySuite struct {
+	suite.Suite
+}
+
+func TestBuildToMCPSummarySuite(t *testing.T) {
+	suite.Run(t, new(BuildToMCPSummarySuite))
+}
+
+func (s *BuildToMCPSummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName() {
+	buildDate := "2026-01-15"
+	b := repository.Build{UserID: "alice", ID: "build-1", Keyboard: "kb-1", BuildDate: &buildDate}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	s.Require().NoError(err)
+
+	s.Equal("build-1", out.ID)
+	s.Equal(&buildDate, out.BuildDate)
+	s.False(out.HasImage)
+	s.Require().NotNil(out.Keyboard)
+	s.Equal("Keychron", out.Keyboard.Brand)
+	s.Equal("Q1", out.Keyboard.Name)
+}
+
+func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFailing() {
+	b := repository.Build{UserID: "alice", ID: "build-1", Keyboard: "kb-1"}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(nil, repository.ErrNotFound)
+
+	out, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	s.Require().NoError(err)
+
+	s.Nil(out.Keyboard)
+}
+
+func (s *BuildToMCPSummarySuite) TestKeyboardRepositoryError_ReturnsError() {
+	b := repository.Build{UserID: "alice", ID: "build-1", Keyboard: "kb-1"}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(nil, errors.New("dynamo unavailable"))
+
+	_, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	s.Require().Error(err)
+}
+
+func (s *BuildToMCPSummarySuite) TestHasImages_ReportsTrue() {
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Images: []repository.BuildImage{{ImageID: "img-1"}},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	out, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	s.Require().NoError(err)
+
+	s.True(out.HasImage)
 }

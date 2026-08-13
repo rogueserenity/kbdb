@@ -61,6 +61,52 @@ func BuildToRepo(in api.BuildInput) repository.Build {
 	}
 }
 
+// BuildToAPISummary maps a repository.Build to the BuildSummary schema
+// returned by the list endpoint. Unlike every other entity's summary
+// mapping, this denormalizes the referenced Keyboard's brand/name via a
+// per-item keyboardRepo.Get call - there's no batch-get precedent in this
+// codebase, and a list page is capped at 100 items, so an O(n) fetch here is
+// the simplest correct approach; revisit only if this proves to be a real
+// bottleneck. If the keyboard can't be resolved (e.g. it was deleted after
+// the build was created - builds are validated to reference an existing
+// keyboard at create/update time via internal/buildrefs, so this should be
+// rare in practice), Keyboard is left nil rather than failing the whole
+// list request over one bad denormalization.
+func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) (api.BuildSummary, error) {
+	buildDate, err := buildDateToAPI(b.BuildDate)
+	if err != nil {
+		return api.BuildSummary{}, err
+	}
+
+	var image *api.BuildImage
+	if len(b.Images) > 0 {
+		url, err := images.PresignGetBuildImage(ctx, b.Images[0].Path)
+		if err != nil {
+			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", b.Images[0].ImageID, err)
+		}
+		image = &api.BuildImage{ImageId: b.Images[0].ImageID, Url: url}
+	}
+
+	summary := api.BuildSummary{
+		Id:        &b.ID,
+		BuildDate: buildDate,
+		Image:     image,
+	}
+
+	kb, ok, err := repository.ResolveBuildSummaryKeyboard(ctx, b, keyboardRepo)
+	if err != nil {
+		return api.BuildSummary{}, err
+	}
+	if ok {
+		summary.Keyboard = &struct {
+			Brand *string `json:"brand,omitempty"`
+			Name  *string `json:"name,omitempty"`
+		}{Brand: &kb.Brand, Name: &kb.Name}
+	}
+
+	return summary, nil
+}
+
 func buildDateToAPI(s *string) (*openapi_types.Date, error) {
 	if s == nil {
 		return nil, nil //nolint:nilnil // no build date is a valid, expected result

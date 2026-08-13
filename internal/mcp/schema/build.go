@@ -88,3 +88,34 @@ type GetBuildInput struct {
 type GetBuildOutput struct {
 	Build Build `json:"build" jsonschema:"the requested build"`
 }
+
+// ListBuildsInput is the list_builds tool input.
+type ListBuildsInput struct {
+	UserID string `json:"user_id,omitempty" jsonschema:"whose collection to list; omit for your own"`
+	Limit  int    `json:"limit,omitempty" jsonschema:"maximum number of builds to return (1-100, default 20)"`
+	Cursor string `json:"cursor,omitempty" jsonschema:"resume from a previous call's next_cursor"`
+}
+
+// ListBuildsOutput is the list_builds tool output.
+type ListBuildsOutput struct {
+	Builds     []BuildSummary `json:"builds" jsonschema:"the builds in this page"`
+	NextCursor string         `json:"next_cursor,omitempty" jsonschema:"pass as cursor to fetch the next page; empty when there are no more"`
+}
+
+// BuildSummary is the reduced build shape list_builds returns. Unlike
+// KeycapSetSummary, it denormalizes the referenced keyboard's brand/name so
+// a build is recognizable in a list view without a follow-up call, matching
+// REST's BuildSummary. HasImage reports whether the build has any images on
+// file, without minting a URL - mirrors Build.HasImages.
+type BuildSummary struct {
+	ID        string                `json:"id" jsonschema:"the build's unique id"`
+	BuildDate *string               `json:"build_date,omitempty" jsonschema:"when the build was assembled (YYYY-MM-DD)"`
+	HasImage  bool                  `json:"has_image" jsonschema:"whether this build has any images on file"`
+	Keyboard  *BuildSummaryKeyboard `json:"keyboard,omitempty" jsonschema:"the build's keyboard, denormalized for display; omitted if the referenced keyboard no longer exists"`
+}
+
+// BuildSummaryKeyboard is BuildSummary's denormalized keyboard reference.
+type BuildSummaryKeyboard struct {
+	Brand string `json:"brand" jsonschema:"the referenced keyboard's brand"`
+	Name  string `json:"name" jsonschema:"the referenced keyboard's name"`
+}

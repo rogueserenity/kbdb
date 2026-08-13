@@ -219,3 +219,107 @@ func (s *BuildToRepoSuite) TestAllOptionalFieldsNil_MapsToNil() {
 	s.Nil(out.BuildDate)
 	s.Nil(out.Notes)
 }
+
+type BuildToAPISummarySuite struct {
+	suite.Suite
+}
+
+func TestBuildToAPISummarySuite(t *testing.T) {
+	suite.Run(t, new(BuildToAPISummarySuite))
+}
+
+func (s *BuildToAPISummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName() {
+	b := fullRepoBuild()
+
+	images := mocks.NewMockBuildImageStore(s.T())
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := BuildToAPISummary(context.Background(), b, keyboards, images)
+	s.Require().NoError(err)
+
+	s.Equal(&b.ID, out.Id)
+	s.Require().NotNil(out.Keyboard)
+	s.Require().NotNil(out.Keyboard.Brand)
+	s.Equal("Keychron", *out.Keyboard.Brand)
+	s.Require().NotNil(out.Keyboard.Name)
+	s.Equal("Q1", *out.Keyboard.Name)
+}
+
+func (s *BuildToAPISummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFailing() {
+	b := fullRepoBuild()
+
+	images := mocks.NewMockBuildImageStore(s.T())
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(nil, repository.ErrNotFound)
+
+	out, err := BuildToAPISummary(context.Background(), b, keyboards, images)
+	s.Require().NoError(err)
+
+	s.Nil(out.Keyboard)
+}
+
+func (s *BuildToAPISummarySuite) TestKeyboardRepositoryError_ReturnsError() {
+	b := fullRepoBuild()
+
+	images := mocks.NewMockBuildImageStore(s.T())
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(nil, errors.New("dynamo unavailable"))
+
+	_, err := BuildToAPISummary(context.Background(), b, keyboards, images)
+	s.Require().Error(err)
+}
+
+func (s *BuildToAPISummarySuite) TestNoImages_ImageNil() {
+	b := fullRepoBuild()
+
+	images := mocks.NewMockBuildImageStore(s.T())
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := BuildToAPISummary(context.Background(), b, keyboards, images)
+	s.Require().NoError(err)
+
+	s.Nil(out.Image)
+}
+
+func (s *BuildToAPISummarySuite) TestImagesPresent_UsesFirstImageOnly() {
+	b := fullRepoBuild()
+	b.Images = []repository.BuildImage{
+		{ImageID: "img1", Path: repository.BuildImageKey("builds/alice/build1/images/img1")},
+		{ImageID: "img2", Path: repository.BuildImageKey("builds/alice/build1/images/img2")},
+	}
+
+	images := mocks.NewMockBuildImageStore(s.T())
+	images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("https://example.com/img1", nil)
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := BuildToAPISummary(context.Background(), b, keyboards, images)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Image)
+	s.Equal("img1", out.Image.ImageId)
+	s.Equal("https://example.com/img1", out.Image.Url)
+}
+
+func (s *BuildToAPISummarySuite) TestMalformedBuildDate_ReturnsError() {
+	b := fullRepoBuild()
+	b.BuildDate = strPtr("not-a-date")
+
+	images := mocks.NewMockBuildImageStore(s.T())
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+
+	_, err := BuildToAPISummary(context.Background(), b, keyboards, images)
+	s.Require().Error(err)
+}
