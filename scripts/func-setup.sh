@@ -61,6 +61,21 @@ for _ in $(seq 1 15); do
   sleep 1
 done
 
+# KEEP THIS IN SYNC with template.yaml's BuildTable resource - same caveat
+# as the SwitchTable block above.
+for _ in $(seq 1 15); do
+  aws dynamodb describe-table --endpoint-url http://localhost:4566 \
+    --table-name kbdb-local-build >/dev/null 2>&1 && break
+  aws dynamodb create-table \
+    --endpoint-url http://localhost:4566 \
+    --table-name kbdb-local-build \
+    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S \
+    --key-schema AttributeName=user_id,KeyType=HASH AttributeName=id,KeyType=RANGE \
+    --billing-mode PAY_PER_REQUEST \
+    >/dev/null 2>&1 && break
+  sleep 1
+done
+
 # KEEP THIS IN SYNC with template.yaml's ImagesBucket resource name
 # (kbdb-local-images is a fixed local-only stand-in, since ImagesBucket's
 # real name is account/stack-suffixed) - same caveat as the SwitchTable

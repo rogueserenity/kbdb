@@ -11,6 +11,7 @@ type Config struct {
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
 	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`
 	KeycapSetTableName string `env:"KEYCAP_SET_TABLE_NAME" required:""`
+	BuildTableName     string `env:"BUILD_TABLE_NAME" required:""`
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`

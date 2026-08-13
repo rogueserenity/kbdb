@@ -99,3 +99,73 @@ func (s *ImageStoreSuite) TestDelete_SDKError_Propagates() {
 
 	s.Require().ErrorContains(err, "s3: access denied")
 }
+
+func (s *ImageStoreSuite) TestPresignGetBuildImage_Succeeds() {
+	s.mockPresign.EXPECT().
+		PresignGetObject(mock.Anything, mock.MatchedBy(func(in *s3.GetObjectInput) bool {
+			return *in.Bucket == "images-bucket" && *in.Key == "builds/alice/b1/images/img1"
+		})).
+		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
+
+	url, err := s.store.PresignGetBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/presigned-get", url)
+}
+
+func (s *ImageStoreSuite) TestPresignGetBuildImage_SDKError_Propagates() {
+	s.mockPresign.EXPECT().
+		PresignGetObject(mock.Anything, mock.Anything).
+		Return(nil, errors.New("s3: access denied"))
+
+	url, err := s.store.PresignGetBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+
+	s.Require().ErrorContains(err, "s3: access denied")
+	s.Empty(url)
+}
+
+func (s *ImageStoreSuite) TestPresignPutBuildImage_Succeeds() {
+	s.mockPresign.EXPECT().
+		PresignPutObject(mock.Anything, mock.MatchedBy(func(in *s3.PutObjectInput) bool {
+			return *in.Bucket == "images-bucket" && *in.Key == "builds/alice/b1/images/img1" && *in.ContentType == "image/png"
+		})).
+		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-put"}, nil)
+
+	url, err := s.store.PresignPutBuildImage(s.T().Context(), "builds/alice/b1/images/img1", "image/png")
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/presigned-put", url)
+}
+
+func (s *ImageStoreSuite) TestPresignPutBuildImage_SDKError_Propagates() {
+	s.mockPresign.EXPECT().
+		PresignPutObject(mock.Anything, mock.Anything).
+		Return(nil, errors.New("s3: access denied"))
+
+	url, err := s.store.PresignPutBuildImage(s.T().Context(), "builds/alice/b1/images/img1", "image/png")
+
+	s.Require().ErrorContains(err, "s3: access denied")
+	s.Empty(url)
+}
+
+func (s *ImageStoreSuite) TestDeleteBuildImage_Succeeds() {
+	s.mockClient.EXPECT().
+		DeleteObject(mock.Anything, mock.MatchedBy(func(in *s3.DeleteObjectInput) bool {
+			return *in.Bucket == "images-bucket" && *in.Key == "builds/alice/b1/images/img1"
+		})).
+		Return(&s3.DeleteObjectOutput{}, nil)
+
+	err := s.store.DeleteBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+
+	s.Require().NoError(err)
+}
+
+func (s *ImageStoreSuite) TestDeleteBuildImage_SDKError_Propagates() {
+	s.mockClient.EXPECT().
+		DeleteObject(mock.Anything, mock.Anything).
+		Return(nil, errors.New("s3: access denied"))
+
+	err := s.store.DeleteBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+
+	s.Require().ErrorContains(err, "s3: access denied")
+}
