@@ -55,7 +55,7 @@ var _ = Describe("Deleting a build over MCP", func() {
 
 			AfterEach(func(ctx SpecContext) {
 				if !deleted {
-					Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+					Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 				}
 			})
 
@@ -106,7 +106,7 @@ var _ = Describe("Deleting a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
 			})
 
 			When("the delete_build tool is called with that id", func() {

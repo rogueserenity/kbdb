@@ -52,7 +52,7 @@ var _ = Describe("Getting a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 			})
 
 			When("the get_build tool is called with no user_id", func() {
@@ -99,7 +99,7 @@ var _ = Describe("Getting a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
 			})
 
 			When("the get_build tool is called with that user_id", func() {
@@ -131,7 +131,7 @@ var _ = Describe("Getting a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
 			})
 
 			When("the get_build tool is called with that user_id", func() {

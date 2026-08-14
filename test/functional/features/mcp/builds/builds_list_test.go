@@ -58,9 +58,9 @@ var _ = Describe("Listing builds over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, ownerID, publicID)).To(Succeed())
-				Expect(db.DeleteBuild(ctx, ownerID, authenticatedID)).To(Succeed())
-				Expect(db.DeleteBuild(ctx, ownerID, privateID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, publicID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, authenticatedID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, privateID, keyboardID)).To(Succeed())
 			})
 
 			When("the list_builds tool is called with no user_id", func() {
@@ -124,9 +124,9 @@ var _ = Describe("Listing builds over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, publicID)).To(Succeed())
-				Expect(db.DeleteBuild(ctx, otherID, authenticatedID)).To(Succeed())
-				Expect(db.DeleteBuild(ctx, otherID, privateID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, publicID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, authenticatedID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, privateID, keyboardID)).To(Succeed())
 			})
 
 			When("the list_builds tool is called with that user_id", func() {

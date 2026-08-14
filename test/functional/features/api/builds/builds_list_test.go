@@ -92,9 +92,9 @@ var _ = Describe("Listing builds", func() {
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteBuild(ctx, ownerID, publicID)).To(Succeed())
-			Expect(db.DeleteBuild(ctx, ownerID, authenticatedID)).To(Succeed())
-			Expect(db.DeleteBuild(ctx, ownerID, privateID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, publicID, keyboardID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, authenticatedID, keyboardID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, privateID, keyboardID)).To(Succeed())
 		})
 
 		Context("given the caller is the owner", func() {

@@ -58,7 +58,7 @@ var _ = Describe("Deleting an image from a build", func() {
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 		})
 
 		Context("given the caller is the owner", func() {

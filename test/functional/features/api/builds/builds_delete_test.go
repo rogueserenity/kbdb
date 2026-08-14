@@ -50,7 +50,7 @@ var _ = Describe("Deleting a build", func() {
 
 		AfterEach(func(ctx SpecContext) {
 			if !deleted {
-				Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 			}
 		})
 

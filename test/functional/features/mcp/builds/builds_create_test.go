@@ -37,7 +37,7 @@ var _ = Describe("Creating a build over MCP", func() {
 
 	AfterEach(func(ctx SpecContext) {
 		if createdID != "" {
-			Expect(db.DeleteBuild(ctx, ownerID, createdID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, createdID, keyboardID)).To(Succeed())
 		}
 		if keyboardID != "" {
 			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())

@@ -42,7 +42,7 @@ var _ = Describe("Creating a build", func() {
 
 	AfterEach(func(ctx SpecContext) {
 		if createdID != "" {
-			Expect(db.DeleteBuild(ctx, ownerID, createdID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, createdID, keyboardID)).To(Succeed())
 		}
 		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})

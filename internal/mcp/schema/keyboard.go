@@ -56,14 +56,22 @@ type UpdateKeyboardOutput struct {
 	Keyboard Keyboard `json:"keyboard" jsonschema:"the updated keyboard"`
 }
 
-// DeleteKeyboardInput is the delete_keyboard tool input.
+// DeleteKeyboardInput is the delete_keyboard tool input. OnDelete controls
+// what happens if the keyboard is still referenced by a build: "block"
+// (the default when omitted) fails the call; "cascade" deletes the
+// keyboard and every referencing build; "detach" deletes the keyboard
+// regardless, leaving referencing builds with a dangling keyboard_id.
 type DeleteKeyboardInput struct {
 	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to delete"`
+	OnDelete   string `json:"on_delete,omitempty" jsonschema:"how to handle a keyboard still referenced by a build: block (default), cascade, or detach"`
 }
 
-// DeleteKeyboardOutput is the delete_keyboard tool output. Deleting is
-// idempotent, so there is no payload.
-type DeleteKeyboardOutput struct{}
+// DeleteKeyboardOutput is the delete_keyboard tool output. DeletedBuildIDs
+// is populated only when on_delete was "cascade" and at least one build
+// referenced the keyboard.
+type DeleteKeyboardOutput struct {
+	DeletedBuildIDs []string `json:"deleted_build_ids,omitempty" jsonschema:"ids of builds also deleted, when on_delete was cascade"`
+}
 
 // KeyboardInput is the writable half of a keyboard, shared by
 // create_keyboard and update_keyboard.
