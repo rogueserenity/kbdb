@@ -908,3 +908,164 @@ func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryError_Returns500() {
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type AddBuildImageSuite struct {
+	suite.Suite
+
+	mockBuildRepo *mocks.MockBuildRepository
+	mockImages    *mocks.MockBuildImageStore
+	handler       http.HandlerFunc
+}
+
+func TestAddBuildImageSuite(t *testing.T) {
+	suite.Run(t, new(AddBuildImageSuite))
+}
+
+func (s *AddBuildImageSuite) SetupTest() {
+	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.handler = AddBuildImage(s.mockBuildRepo, s.mockImages)
+}
+
+func (s *AddBuildImageSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/builds/build1/images", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("buildId", "build1")
+	return req
+}
+
+func (s *AddBuildImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_Succeeds() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockBuildRepo.EXPECT().
+		AddImage(mock.Anything, "build1", mock.MatchedBy(func(img repository.BuildImage) bool {
+			return img.ImageID != ""
+		})).
+		Return(&repository.BuildImage{ImageID: "img1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		ImageID   string `json:"image_id"`
+		UploadURL string `json:"upload_url"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.NotEmpty(got.ImageID)
+	s.Equal("https://example.com/presigned-put", got.UploadURL)
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	req := s.newRequest(ctx, `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_Anonymous_Returns404() {
+	req := s.newRequest(s.T().Context(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_UnapprovedContentType_Returns400() {
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"application/pdf"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("content_type", got.InvalidParams[0].Name)
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_PresignError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_NotFound_Returns404() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockBuildRepo.EXPECT().
+		AddImage(mock.Anything, "build1", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_RepositoryError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockBuildRepo.EXPECT().
+		AddImage(mock.Anything, "build1", mock.Anything).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddBuildImageSuite) TestAddBuildImage_MutationConflict_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockBuildRepo.EXPECT().
+		AddImage(mock.Anything, "build1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

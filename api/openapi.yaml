@@ -677,15 +677,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                required: [image_id, upload_url]
-                properties:
-                  image_id:
-                    type: string
-                  upload_url:
-                    type: string
-                    format: uri
-                    description: Presigned S3 PUT URL. Short-lived — upload promptly.
+                $ref: "#/components/schemas/BuildImageUpload"
         "400":
           $ref: "#/components/responses/ProblemResponse"
         "404":
@@ -1390,6 +1382,19 @@ components:
             A freshly-minted, short-lived presigned S3 GET URL. Generated
             new on every fetch of the build — do not cache or persist this
             value, it expires.
+
+    BuildImageUpload:
+      type: object
+      required: [image_id, upload_url]
+      properties:
+        image_id:
+          type: string
+          description: Server-generated identifier for the newly-created image.
+        upload_url:
+          type: string
+          format: uri
+          description: >
+            Presigned S3 PUT URL. Short-lived — upload promptly.
 
     BuildSummaryKeyboard:
       type: object

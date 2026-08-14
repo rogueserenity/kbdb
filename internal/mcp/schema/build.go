@@ -126,3 +126,19 @@ type BuildSummaryKeyboard struct {
 	Brand string `json:"brand" jsonschema:"the referenced keyboard's brand"`
 	Name  string `json:"name" jsonschema:"the referenced keyboard's name"`
 }
+
+// AddBuildImageInput is the add_build_image tool's input. It doesn't carry
+// the image bytes themselves - see UploadURL on the output.
+type AddBuildImageInput struct {
+	BuildID     string `json:"build_id" jsonschema:"the id of the build to add an image to"`
+	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+}
+
+// AddBuildImageOutput is the add_build_image tool's output. UploadURL is a
+// presigned S3 PUT URL - the caller uploads the image bytes directly to it,
+// matching REST's AddBuildImage; the tool call itself never carries image
+// bytes.
+type AddBuildImageOutput struct {
+	ImageID   string `json:"image_id" jsonschema:"the newly-created image's id"`
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+}

@@ -628,3 +628,126 @@ func (s *HandleDeleteBuildSuite) TestRepositoryError_ReturnsError() {
 
 	s.Require().ErrorContains(err, "failed to delete build")
 }
+
+type HandleAddBuildImageSuite struct {
+	suite.Suite
+
+	mockBuilds *mocks.MockBuildRepository
+	mockImages *mocks.MockBuildImageStore
+}
+
+func TestHandleAddBuildImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleAddBuildImageSuite))
+}
+
+func (s *HandleAddBuildImageSuite) SetupTest() {
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+}
+
+func (s *HandleAddBuildImageSuite) TestSucceeds() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockBuilds.EXPECT().
+		AddImage(mock.Anything, "build-1", mock.MatchedBy(func(img repository.BuildImage) bool {
+			return img.ImageID != ""
+		})).
+		Return(&repository.BuildImage{ImageID: "img-1"}, nil)
+
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().NoError(err)
+	s.NotEmpty(out.ImageID)
+	s.Equal("https://example.com/upload", out.UploadURL)
+}
+
+func (s *HandleAddBuildImageSuite) TestBlankBuildID_ReturnsError() {
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     " ",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "build_id must not be blank")
+}
+
+func (s *HandleAddBuildImageSuite) TestUnapprovedContentType_ReturnsError() {
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "application/exe",
+	})
+
+	s.Require().ErrorContains(err, "content_type")
+	s.Require().ErrorContains(err, "not an approved")
+}
+
+func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockBuilds.EXPECT().
+		AddImage(mock.Anything, "missing", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "missing",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errBuildNotFound)
+}
+
+func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockBuilds.EXPECT().
+		AddImage(mock.Anything, "build-1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errBuildMutationConflict)
+}
+
+func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "failed to add build image")
+}
+
+func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockBuilds.EXPECT().
+		AddImage(mock.Anything, "build-1", mock.Anything).
+		Return(nil, errors.New("put item failed"))
+
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "failed to add build image")
+}

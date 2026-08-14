@@ -10,10 +10,11 @@ import (
 // approvedStabilizer/approvedStabilizerMountType/approvedCaseMountType/
 // approvedDurometer are real values from internal/lookup/data/.
 const (
-	approvedStabilizer      = "Durock v3"
-	approvedStabilizerMount = "Screw-in"
-	approvedCaseMountType   = "Gasket Mount"
-	approvedDurometer       = "70A"
+	approvedStabilizer       = "Durock v3"
+	approvedStabilizerMount  = "Screw-in"
+	approvedCaseMountType    = "Gasket Mount"
+	approvedDurometer        = "70A"
+	approvedImageContentType = "image/png"
 )
 
 func TestBuilds(t *testing.T) {

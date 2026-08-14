@@ -269,6 +269,72 @@ func UpdateBuild(
 	}
 }
 
+// AddBuildImage reads the {userId} and {buildId} path values and requires
+// an authenticated caller. userId must be the caller's own subject; adding
+// an image to another user's build, or one that doesn't exist, both return
+// 404. Doesn't upload the image itself - the response is a presigned S3 PUT
+// URL the client uploads directly to.
+func AddBuildImage(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		buildID := r.PathValue("buildId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.CreateBuildImageJSONRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(r.Context(), in.ContentType); fieldErr != nil {
+			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
+				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)},
+			})
+			return
+		}
+
+		imageID := uuid.NewString()
+
+		key, err := repository.NewBuildImageKey(r.Context(), buildID, imageID)
+		if err != nil {
+			log.FromContext(r.Context()).Error("building build image key", log.Error, err, log.BuildID, buildID)
+			problem.Internal(w, "failed to add build image")
+			return
+		}
+
+		uploadURL, err := images.PresignPutBuildImage(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning build image upload", log.Error, err, log.BuildID, buildID)
+			problem.Internal(w, "failed to add build image")
+			return
+		}
+
+		_, err = buildRepo.AddImage(r.Context(), buildID, repository.BuildImage{ImageID: imageID, Path: key})
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("build mutation conflict", log.BuildID, buildID)
+			problem.Conflict(w, "the build is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("adding build image", log.Error, err, log.BuildID, buildID)
+			problem.Internal(w, "failed to add build image")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(api.BuildImageUpload{ImageId: imageID, UploadUrl: uploadURL})
+	}
+}
+
 // DeleteBuild reads the {userId} and {buildId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's build always returns 404. Deleting is idempotent: a build
