@@ -98,6 +98,10 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
 		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore))))
 
+	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// only public builds (see internal/authz.ReadableVisibilities).
+	mux.Handle("GET /v1/users/{userId}/builds",
+		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, buildImageStore))))
 	// Default CognitoAuthorizer applies - same rationale as CreateKeyboardEvent.
 	mux.Handle("POST /v1/users/{userId}/builds",
 		middleware.Auth(verifier)(validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))

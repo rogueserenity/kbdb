@@ -1,14 +1,17 @@
 package repomcp
 
 import (
+	"context"
+	"errors"
+	"fmt"
+
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// BuildToMCP maps a repository.Build to its MCP tool shape. Unlike
-// repoapi.BuildToAPI, this never presigns a GET URL for an image - it
-// reports only HasImages, so mapping a build can't fail the way the REST
-// mapping can on a presign error.
+// BuildToMCP never presigns an image URL, unlike
+// [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPI] - it reports
+// only HasImages, so this can't fail on a presign error.
 func BuildToMCP(b repository.Build) schema.Build {
 	return schema.Build{
 		ID:            b.ID,
@@ -26,10 +29,9 @@ func BuildToMCP(b repository.Build) schema.Build {
 	}
 }
 
-// BuildFromMCP maps a create_build tool argument to its repository shape.
-// ID and UserID are left unset: the caller sets ID, and UserID comes from
-// ctx in the repository layer. Images are left unset too - a build write
-// never carries images, which are managed one at a time via their own
+// BuildFromMCP leaves ID and UserID unset: the caller sets ID, and UserID
+// comes from ctx in the repository layer. Images are left unset too -
+// never carried in a build write, managed one at a time via their own
 // tools.
 func BuildFromMCP(in schema.BuildInput) repository.Build {
 	return repository.Build{
@@ -44,6 +46,29 @@ func BuildFromMCP(in schema.BuildInput) repository.Build {
 		Notes:         in.Notes,
 		Visibility:    repository.Visibility(in.Visibility),
 	}
+}
+
+// BuildToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPISummary]'s
+// keyboardRepo.Get denormalization but reports HasImage rather than a
+// presigned URL.
+func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
+	summary := schema.BuildSummary{
+		ID:        b.ID,
+		BuildDate: b.BuildDate,
+		HasImage:  len(b.Images) > 0,
+	}
+
+	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
+	if err != nil {
+		if !errors.Is(err, repository.ErrNotFound) {
+			return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
+		}
+		// Leave summary.Keyboard nil.
+	} else {
+		summary.Keyboard = &schema.BuildSummaryKeyboard{Brand: kb.Brand, Name: kb.Name}
+	}
+
+	return summary, nil
 }
 
 func buildCaseMountTypeToMCP(cmt *repository.BuildCaseMountType) *schema.BuildCaseMountType {

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"context"
 	"net/http"
+	"net/url"
+	"strconv"
 )
 
 // BuildsClient calls the /v1/users/{userId}/builds routes. Built on Client
@@ -17,17 +19,24 @@ func NewBuildsClient() *BuildsClient {
 	return &BuildsClient{client: NewClient()}
 }
 
-// Create calls POST /v1/users/{ownerID}/builds with body as the raw JSON
-// request body and the given bearer token (empty to omit the Authorization
-// header entirely, e.g. for an unauthenticated-request spec). The caller
-// owns closing resp.Body.
+// Create calls POST /v1/users/{ownerID}/builds.
 func (c *BuildsClient) Create(ctx context.Context, ownerID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/builds", token, bytes.NewBufferString(body))
 }
 
-// Get calls GET /v1/users/{ownerID}/builds/{buildId} with the given bearer
-// token (empty for an anonymous request). The caller owns closing
-// resp.Body.
+// Get calls GET /v1/users/{ownerID}/builds/{id}.
 func (c *BuildsClient) Get(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodGet, "/v1/users/"+ownerID+"/builds/"+id, token, nil)
+}
+
+// List sends limit as the query parameter when >= 0; a negative limit
+// omits it, letting the server apply its default.
+func (c *BuildsClient) List(ctx context.Context, ownerID, token string, limit int) (*http.Response, error) {
+	path := "/v1/users/" + ownerID + "/builds"
+	if limit >= 0 {
+		query := url.Values{"limit": []string{strconv.Itoa(limit)}}
+		path += "?" + query.Encode()
+	}
+
+	return c.client.Do(ctx, http.MethodGet, path, token, nil)
 }

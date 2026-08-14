@@ -47,3 +47,39 @@ func decodeBuildOutput(result *sdkmcp.CallToolResult) createOutput {
 
 	return out
 }
+
+type listedBuildKeyboard struct {
+	Brand string `json:"brand"`
+	Name  string `json:"name"`
+}
+
+type listedBuild struct {
+	ID       string               `json:"id"`
+	Keyboard *listedBuildKeyboard `json:"keyboard"`
+}
+
+type listBuildsOutput struct {
+	Builds     []listedBuild `json:"builds"`
+	NextCursor string        `json:"next_cursor"`
+}
+
+func decodeListBuildsOutput(result *sdkmcp.CallToolResult) listBuildsOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out listBuildsOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}
+
+func buildIDsOf(out listBuildsOutput) []string {
+	ids := make([]string, 0, len(out.Builds))
+	for _, b := range out.Builds {
+		ids = append(ids, b.ID)
+	}
+
+	return ids
+}

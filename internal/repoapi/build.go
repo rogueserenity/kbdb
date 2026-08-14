@@ -2,6 +2,7 @@ package repoapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -59,6 +60,47 @@ func BuildToRepo(in api.BuildInput) repository.Build {
 		Notes:         in.Notes,
 		Visibility:    repository.Visibility(in.Visibility),
 	}
+}
+
+// BuildToAPISummary denormalizes the referenced Keyboard's brand/name via
+// a per-item keyboardRepo.Get call - no batch-get precedent exists, and a
+// list page is capped at 100 items, so this O(n) fetch is the simplest
+// correct approach for now. If the keyboard can't be resolved
+// (repository.ErrNotFound - e.g. deleted after the build was created, see
+// https://github.com/rogueserenity/kbdb/issues/172), Keyboard is left nil
+// rather than failing the whole request; any other error still fails it.
+func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) (api.BuildSummary, error) {
+	buildDate, err := buildDateToAPI(b.BuildDate)
+	if err != nil {
+		return api.BuildSummary{}, err
+	}
+
+	var image *api.BuildImage
+	if len(b.Images) > 0 {
+		url, err := images.PresignGetBuildImage(ctx, b.Images[0].Path)
+		if err != nil {
+			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", b.Images[0].ImageID, err)
+		}
+		image = &api.BuildImage{ImageId: b.Images[0].ImageID, Url: url}
+	}
+
+	summary := api.BuildSummary{
+		Id:        &b.ID,
+		BuildDate: buildDate,
+		Image:     image,
+	}
+
+	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
+	if err != nil {
+		if !errors.Is(err, repository.ErrNotFound) {
+			return api.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
+		}
+		// Leave summary.Keyboard nil.
+	} else {
+		summary.Keyboard = &api.BuildSummaryKeyboard{Brand: &kb.Brand, Name: &kb.Name}
+	}
+
+	return summary, nil
 }
 
 func buildDateToAPI(s *string) (*openapi_types.Date, error) {
@@ -182,7 +224,7 @@ func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repositor
 }
 
 // buildImagesToAPI mints a fresh presigned GET URL per image, per request -
-// never persisted, mirroring KeycapKitToAPI's handling of a kit's image.
+// never persisted, mirroring [KeycapKitToAPI]'s handling of a kit's image.
 func buildImagesToAPI(ctx context.Context, images []repository.BuildImage, store repository.BuildImageStore) (*[]api.BuildImage, error) {
 	if images == nil {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result

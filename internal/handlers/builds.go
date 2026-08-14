@@ -19,8 +19,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// validateBuildLookups writes a 400 listing every invalid field if any check
-// fails. An unset (nil) field is skipped, not treated as invalid.
+// An unset (nil) field is skipped, not treated as invalid.
 func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b repository.Build) (ok bool) {
 	fieldErrs := lookup.ValidateBuild(ctx, b)
 	if len(fieldErrs) > 0 {
@@ -38,10 +37,7 @@ func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b reposito
 	return true
 }
 
-// validateBuildReferences writes a 400 listing every invalid reference if
-// any check fails (a repository error instead writes a 500). Matches
-// validateBuildLookups' signature/shape so CreateBuild can call both the
-// same way.
+// A repository error writes a 500 rather than a 400.
 func validateBuildReferences(
 	ctx context.Context, w http.ResponseWriter, ownerID string, b repository.Build,
 	keyboardRepo repository.KeyboardRepository,
@@ -66,9 +62,47 @@ func validateBuildReferences(
 	return true
 }
 
-// GetBuild reads the {userId} and {buildId} path values. Anonymous callers
-// are allowed; a build that exists but isn't readable by the caller returns
-// 404, not 403, to avoid revealing it exists.
+// ListBuilds handles GET /v1/users/{userId}/builds.
+func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+
+		limit := parseListLimit(r)
+		cursor := r.URL.Query().Get("cursor")
+
+		visibilities := authz.ReadableVisibilities(r.Context(), ownerID)
+
+		builds, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
+		if err != nil {
+			log.FromContext(r.Context()).Error("listing builds", log.Error, err)
+			problem.Internal(w, "failed to list builds")
+			return
+		}
+
+		items := make([]api.BuildSummary, len(builds))
+		for i, b := range builds {
+			summary, err := repoapi.BuildToAPISummary(r.Context(), b, keyboardRepo, images)
+			if err != nil {
+				log.FromContext(r.Context()).Error("mapping build to API summary", log.Error, err, log.BuildID, b.ID)
+				problem.Internal(w, "failed to list builds")
+				return
+			}
+			items[i] = summary
+		}
+
+		page := api.BuildListPage{Items: &items}
+		if nextCursor != "" {
+			page.NextCursor = &nextCursor
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(page)
+	}
+}
+
+// GetBuild returns 404, not 403, for a build that exists but isn't
+// readable by the caller, to avoid revealing it exists.
 func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -104,9 +138,8 @@ func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore
 	}
 }
 
-// CreateBuild reads the {userId} path value and requires an authenticated
-// caller. userId must be the caller's own subject; creating in another
-// user's collection returns 404, not 403, to avoid revealing it exists.
+// CreateBuild returns 404, not 403, when creating in another user's
+// collection, to avoid revealing it exists.
 func CreateBuild(
 	buildRepo repository.BuildRepository,
 	images repository.BuildImageStore,

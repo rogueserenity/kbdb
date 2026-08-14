@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/buildrefs"
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
@@ -23,8 +24,8 @@ var errBuildAlreadyExists = errors.New("build already exists")
 
 var errBuildNotFound = errors.New("build not found")
 
-// errNoCaller mirrors errNoTokenInfo's fail-closed shape: unreachable in
-// practice since identityMiddleware always sets a caller ID before a tool
+// errNoCaller mirrors [errNoTokenInfo]'s fail-closed shape: unreachable in
+// practice since [identityMiddleware] always sets a caller ID before a tool
 // handler runs, but this fails closed rather than validating references
 // against an empty ownerID if that wiring is ever broken.
 var errNoCaller = errors.New("no caller identity on context")
@@ -37,6 +38,43 @@ var createBuildTool = &mcp.Tool{
 var getBuildTool = &mcp.Tool{
 	Name:        "get_build",
 	Description: "Returns the full details of one build. Images are reported via has_images rather than URLs - a future tool fetches them on demand. Omit user_id to read from your own collection.",
+}
+
+var listBuildsTool = &mcp.Tool{
+	Name:        "list_builds",
+	Description: "Lists builds in a user's collection, most useful for browsing. Returns an abbreviated shape, including the referenced keyboard's brand/name; call get_build for a single build's full details. Omit user_id to list your own builds.",
+}
+
+func handleListBuilds(
+	buildRepo repository.BuildRepository,
+	keyboardRepo repository.KeyboardRepository,
+) mcp.ToolHandlerFor[schema.ListBuildsInput, schema.ListBuildsOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListBuildsInput) (*mcp.CallToolResult, schema.ListBuildsOutput, error) {
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		if err != nil {
+			return nil, schema.ListBuildsOutput{}, err
+		}
+
+		visibilities := authz.ReadableVisibilities(ctx, ownerID)
+
+		builds, nextCursor, err := buildRepo.List(ctx, ownerID, visibilities, clampListLimit(in.Limit), in.Cursor)
+		if err != nil {
+			log.FromContext(ctx).Error("listing builds", log.Error, err)
+			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
+		}
+
+		items := make([]schema.BuildSummary, len(builds))
+		for i, b := range builds {
+			summary, err := repomcp.BuildToMCPSummary(ctx, b, keyboardRepo)
+			if err != nil {
+				log.FromContext(ctx).Error("mapping build to MCP summary", log.BuildID, b.ID, log.Error, err)
+				return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
+			}
+			items[i] = summary
+		}
+
+		return nil, schema.ListBuildsOutput{Builds: items, NextCursor: nextCursor}, nil
+	}
 }
 
 func handleGetBuild(repo repository.BuildRepository) mcp.ToolHandlerFor[schema.GetBuildInput, schema.GetBuildOutput] {

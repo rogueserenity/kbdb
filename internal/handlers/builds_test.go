@@ -336,6 +336,182 @@ func (s *CreateBuildSuite) TestCreateBuild_ReferenceCheckRepositoryError_Returns
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+type ListBuildsSuite struct {
+	suite.Suite
+
+	mockBuildRepo    *mocks.MockBuildRepository
+	mockKeyboardRepo *mocks.MockKeyboardRepository
+	mockImages       *mocks.MockBuildImageStore
+	handler          http.HandlerFunc
+}
+
+func TestListBuildsSuite(t *testing.T) {
+	suite.Run(t, new(ListBuildsSuite))
+}
+
+func (s *ListBuildsSuite) SetupTest() {
+	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
+	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.handler = ListBuilds(s.mockBuildRepo, s.mockKeyboardRepo, s.mockImages)
+}
+
+func (s *ListBuildsSuite) newRequest(ctx context.Context, query string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/builds?"+query, nil)
+	req.SetPathValue("userId", "alice")
+	return req
+}
+
+func (s *ListBuildsSuite) TestListBuilds_Empty_ReturnsEmptyItems() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{}, "", nil)
+
+	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "alice"), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Empty(*got.Items)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_DenormalizesBrandName() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	item := (*got.Items)[0]
+	s.Require().NotNil(item.Keyboard)
+	s.Require().NotNil(item.Keyboard.Brand)
+	s.Equal("Keychron", *item.Keyboard.Brand)
+	s.Require().NotNil(item.Keyboard.Name)
+	s.Equal("Q1", *item.Keyboard.Name)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPublic}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "deleted-kb").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Nil((*got.Items)[0].Keyboard)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_KeyboardRepositoryError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(nil, errors.New("dynamo unavailable"))
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *ListBuildsSuite) TestListBuilds_PassesLimitAndCursor() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 5, "abc").
+		Return([]repository.Build{}, "", nil)
+
+	req := s.newRequest(s.T().Context(), "limit=5&cursor=abc")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_ReturnsNextCursor_WhenPresent() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{}, "next-page-token", nil)
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.NextCursor)
+	s.Equal("next-page-token", *got.NextCursor)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_Anonymous_RequestsPublicOnly() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, 20, "").
+		Return([]repository.Build{}, "", nil)
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_OtherUser_RequestsPublicAndAuthenticated() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
+			return len(vis) == 2
+		}), 20, "").
+		Return([]repository.Build{}, "", nil)
+
+	req := s.newRequest(ctx, "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_RepositoryError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return(nil, "", errors.New("query failed"))
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type GetBuildSuite struct {
 	suite.Suite
 
