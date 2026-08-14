@@ -455,7 +455,9 @@ func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {
 type HandleDeleteSwitchSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockSwitchRepository
+	mockSwitches *mocks.MockSwitchRepository
+	mockBuilds   *mocks.MockBuildRepository
+	mockImages   *mocks.MockBuildImageStore
 }
 
 func TestHandleDeleteSwitchSuite(t *testing.T) {
@@ -463,29 +465,85 @@ func TestHandleDeleteSwitchSuite(t *testing.T) {
 }
 
 func (s *HandleDeleteSwitchSuite) SetupTest() {
-	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 }
 
 func (s *HandleDeleteSwitchSuite) TestSucceeds() {
-	s.mockRepo.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
+		Return(nil, nil)
+	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
 
-	handler := handleDeleteSwitch(s.mockRepo)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1"})
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1"})
 
 	s.Require().NoError(err)
+	s.Empty(out.DeletedBuildIDs)
 }
 
 func (s *HandleDeleteSwitchSuite) TestBlankSwitchID_ReturnsError() {
-	handler := handleDeleteSwitch(s.mockRepo)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: ""})
 
 	s.Require().ErrorContains(err, "switch_id must not be blank")
 }
 
-func (s *HandleDeleteSwitchSuite) TestRepositoryError_ReturnsError() {
-	s.mockRepo.EXPECT().Delete(mock.Anything, mock.Anything).Return(errors.New("delete failed"))
+func (s *HandleDeleteSwitchSuite) TestInvalidOnDelete_ReturnsError() {
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "bogus"})
 
-	handler := handleDeleteSwitch(s.mockRepo)
+	s.Require().Error(err)
+}
+
+func (s *HandleDeleteSwitchSuite) TestBlock_Referenced_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
+		Return([]string{"build-1"}, nil)
+
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "block"})
+
+	s.Require().ErrorContains(err, "build-1")
+}
+
+func (s *HandleDeleteSwitchSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
+	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
+
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "detach"})
+
+	s.Require().NoError(err)
+	s.Empty(out.DeletedBuildIDs)
+}
+
+func (s *HandleDeleteSwitchSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
+		Return([]string{"build-1"}, nil)
+	s.mockBuilds.EXPECT().
+		Delete(mock.Anything, "build-1").
+		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
+	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
+
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "cascade"})
+
+	s.Require().NoError(err)
+	s.Equal([]string{"build-1"}, out.DeletedBuildIDs)
+}
+
+func (s *HandleDeleteSwitchSuite) TestRepositoryError_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
+		Return(nil, nil)
+	s.mockSwitches.EXPECT().Delete(mock.Anything, mock.Anything).Return(errors.New("delete failed"))
+
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1"})
 
 	s.Require().ErrorContains(err, "failed to delete switch")

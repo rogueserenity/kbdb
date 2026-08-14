@@ -17,6 +17,15 @@ func keyboardRefMarkerSortKey(keyboardID, buildID string) string {
 	return fmt.Sprintf("REF#keyboard#%s#%s", keyboardID, buildID)
 }
 
+// switchRefMarkerSortKey mirrors the marker item sort key format
+// [github.com/rogueserenity/kbdb/internal/repository/dynamo] writes for a
+// switch reference, so seeded builds are discoverable via
+// [github.com/rogueserenity/kbdb/internal/repository.BuildRepository.FindBuildsReferencingSwitch]
+// without needing a real Create call.
+func switchRefMarkerSortKey(switchID, buildID string) string {
+	return fmt.Sprintf("REF#switch#%s#%s", switchID, buildID)
+}
+
 // SeedBuild writes directly to the table, bypassing buildrefs' existence
 // check - keyboardID isn't validated against a real keyboard.
 func SeedBuild(ctx context.Context, ownerID, id, keyboardID, visibility string) error {
@@ -55,6 +64,45 @@ func DeleteBuild(ctx context.Context, ownerID, id, keyboardID string) error {
 	markerErr := table.DeleteItem(ctx, map[string]string{
 		"user_id": ownerID,
 		"id":      keyboardRefMarkerSortKey(keyboardID, id),
+	})
+
+	return errors.Join(buildErr, markerErr)
+}
+
+// SeedBuildWithSwitch writes directly to the table, bypassing buildrefs'
+// existence check - switchID isn't validated against a real switch.
+func SeedBuildWithSwitch(ctx context.Context, ownerID, id, switchID, visibility string) error {
+	table := NewDynamoTable(ctx, support.BuildTableName())
+	if err := table.PutItem(ctx, map[string]any{
+		"user_id":    ownerID,
+		"id":         id,
+		"switches":   []map[string]any{{"switch": switchID, "count": 1}},
+		"visibility": visibility,
+		"version":    0,
+	}); err != nil {
+		return err
+	}
+
+	return table.PutItem(ctx, map[string]any{
+		"user_id":   ownerID,
+		"id":        switchRefMarkerSortKey(switchID, id),
+		"item_type": "build_ref_marker",
+		"ref_type":  "switch",
+		"ref_id":    switchID,
+		"build_id":  id,
+	})
+}
+
+// DeleteBuildWithSwitch removes the build with id, and its switch
+// reverse-reference marker, from the table. Both deletes are attempted even
+// if the first fails - see DeleteBuild's doc comment for why.
+func DeleteBuildWithSwitch(ctx context.Context, ownerID, id, switchID string) error {
+	table := NewDynamoTable(ctx, support.BuildTableName())
+
+	buildErr := table.DeleteItem(ctx, map[string]string{"user_id": ownerID, "id": id})
+	markerErr := table.DeleteItem(ctx, map[string]string{
+		"user_id": ownerID,
+		"id":      switchRefMarkerSortKey(switchID, id),
 	})
 
 	return errors.Join(buildErr, markerErr)

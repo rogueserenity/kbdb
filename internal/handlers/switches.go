@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
@@ -234,7 +235,13 @@ func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 // DeleteSwitch reads the {userId} and {switchId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's switch returns 404, not 403, to avoid revealing it exists.
-func DeleteSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
+// The on_delete query param (default "block") controls what happens if a
+// build still references this switch: see [cascadedelete.DeleteSwitch].
+func DeleteSwitch(
+	switchRepo repository.SwitchRepository,
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("switchId")
@@ -244,9 +251,27 @@ func DeleteSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
-		if err := switchRepo.Delete(r.Context(), id); err != nil {
+		onDelete, ok := cascadedelete.ParseOnDelete(r.URL.Query().Get("on_delete"))
+		if !ok {
+			problem.BadRequest(w, "on_delete must be one of: block, cascade, detach")
+			return
+		}
+
+		result, err := cascadedelete.DeleteSwitch(r.Context(), switchRepo, buildRepo, images, ownerID, id, onDelete)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
+			problem.StillReferenced(w, "switch is still referenced by one or more builds", blocked.BuildIDs)
+			return
+		}
+		if err != nil {
 			log.FromContext(r.Context()).Error("deleting switch", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to delete switch")
+			return
+		}
+
+		if onDelete == cascadedelete.OnDeleteCascade {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(api.CascadeDeleteResult{DeletedBuildIds: result.DeletedBuildIDs})
 			return
 		}
 

@@ -10,6 +10,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -43,7 +44,7 @@ var updateSwitchTool = &mcp.Tool{
 
 var deleteSwitchTool = &mcp.Tool{
 	Name:        "delete_switch",
-	Description: "Removes a switch from your own collection. Idempotent: deleting a switch that isn't there succeeds.",
+	Description: "Removes a switch from your own collection. Idempotent: deleting a switch that isn't there succeeds. on_delete controls what happens if a build still references this switch: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the switch and every referencing build; \"detach\" deletes the switch regardless, leaving referencing builds with a dangling switches[].switch id.",
 }
 
 func handleListSwitches(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema.ListSwitchesInput, schema.ListSwitchesOutput] {
@@ -142,18 +143,36 @@ func handleUpdateSwitch(
 	}
 }
 
-func handleDeleteSwitch(switchRepo repository.SwitchRepository) mcp.ToolHandlerFor[schema.DeleteSwitchInput, schema.DeleteSwitchOutput] {
+func handleDeleteSwitch(
+	switchRepo repository.SwitchRepository,
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) mcp.ToolHandlerFor[schema.DeleteSwitchInput, schema.DeleteSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteSwitchInput) (*mcp.CallToolResult, schema.DeleteSwitchOutput, error) {
 		if strings.TrimSpace(in.SwitchID) == "" {
 			return nil, schema.DeleteSwitchOutput{}, errors.New("switch_id must not be blank")
 		}
 
-		if err := switchRepo.Delete(ctx, in.SwitchID); err != nil {
+		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
+		if !ok {
+			return nil, schema.DeleteSwitchOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+		}
+
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteSwitchOutput{}, err
+		}
+
+		result, err := cascadedelete.DeleteSwitch(ctx, switchRepo, buildRepo, images, ownerID, in.SwitchID, onDelete)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
+			return nil, schema.DeleteSwitchOutput{}, fmt.Errorf("switch is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
+		}
+		if err != nil {
 			log.FromContext(ctx).Error("deleting switch", log.SwitchID, in.SwitchID, log.Error, err)
 			return nil, schema.DeleteSwitchOutput{}, errors.New("failed to delete switch")
 		}
 
-		return nil, schema.DeleteSwitchOutput{}, nil
+		return nil, schema.DeleteSwitchOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
 	}
 }
 
