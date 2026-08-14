@@ -38,6 +38,52 @@ func (_m *MockKeycapKitImageStore) EXPECT() *MockKeycapKitImageStore_Expecter {
 	return &MockKeycapKitImageStore_Expecter{mock: &_m.Mock}
 }
 
+// BestEffortDelete provides a mock function for the type MockKeycapKitImageStore
+func (_mock *MockKeycapKitImageStore) BestEffortDelete(ctx context.Context, keys []repository.KeycapKitImageKey) {
+	_mock.Called(ctx, keys)
+	return
+}
+
+// MockKeycapKitImageStore_BestEffortDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BestEffortDelete'
+type MockKeycapKitImageStore_BestEffortDelete_Call struct {
+	*mock.Call
+}
+
+// BestEffortDelete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keys []repository.KeycapKitImageKey
+func (_e *MockKeycapKitImageStore_Expecter) BestEffortDelete(ctx any, keys any) *MockKeycapKitImageStore_BestEffortDelete_Call {
+	return &MockKeycapKitImageStore_BestEffortDelete_Call{Call: _e.mock.On("BestEffortDelete", ctx, keys)}
+}
+
+func (_c *MockKeycapKitImageStore_BestEffortDelete_Call) Run(run func(ctx context.Context, keys []repository.KeycapKitImageKey)) *MockKeycapKitImageStore_BestEffortDelete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []repository.KeycapKitImageKey
+		if args[1] != nil {
+			arg1 = args[1].([]repository.KeycapKitImageKey)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeycapKitImageStore_BestEffortDelete_Call) Return() *MockKeycapKitImageStore_BestEffortDelete_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockKeycapKitImageStore_BestEffortDelete_Call) RunAndReturn(run func(ctx context.Context, keys []repository.KeycapKitImageKey)) *MockKeycapKitImageStore_BestEffortDelete_Call {
+	_c.Run(run)
+	return _c
+}
+
 // Delete provides a mock function for the type MockKeycapKitImageStore
 func (_mock *MockKeycapKitImageStore) Delete(ctx context.Context, key repository.KeycapKitImageKey) error {
 	ret := _mock.Called(ctx, key)

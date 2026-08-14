@@ -52,6 +52,11 @@ var updateBuildTool = &mcp.Tool{
 	Description: "Replaces every field of one of your own builds - fields omitted from the call are cleared, not left unchanged. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images are managed separately and are unaffected by this call.",
 }
 
+var deleteBuildTool = &mcp.Tool{
+	Name:        "delete_build",
+	Description: "Removes a build from your own collection, along with any images. Idempotent: deleting a build that isn't there succeeds.",
+}
+
 func handleListBuilds(
 	buildRepo repository.BuildRepository,
 	keyboardRepo repository.KeyboardRepository,
@@ -238,4 +243,25 @@ func validatedBuild(ctx context.Context, in schema.BuildInput) (repository.Build
 	}
 
 	return b, nil
+}
+
+func handleDeleteBuild(
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) mcp.ToolHandlerFor[schema.DeleteBuildInput, schema.DeleteBuildOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteBuildInput) (*mcp.CallToolResult, schema.DeleteBuildOutput, error) {
+		if strings.TrimSpace(in.BuildID) == "" {
+			return nil, schema.DeleteBuildOutput{}, errors.New("build_id must not be blank")
+		}
+
+		imageKeys, err := buildRepo.Delete(ctx, in.BuildID)
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
+			log.FromContext(ctx).Error("deleting build", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
+		}
+
+		images.BestEffortDelete(ctx, imageKeys)
+
+		return nil, schema.DeleteBuildOutput{}, nil
+	}
 }

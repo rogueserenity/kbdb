@@ -270,11 +270,7 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		for _, key := range imageKeys {
-			if err := images.Delete(r.Context(), key); err != nil {
-				log.FromContext(r.Context()).Warn("deleting keycap kit image object after set delete", log.Error, err, log.KeycapSetID, id, log.KeycapKitImage, key)
-			}
-		}
+		images.BestEffortDelete(r.Context(), imageKeys)
 
 		w.WriteHeader(http.StatusNoContent)
 	}

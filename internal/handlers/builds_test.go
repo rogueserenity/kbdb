@@ -806,3 +806,105 @@ func (s *GetBuildSuite) TestGetBuild_RepositoryError_Returns500() {
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteBuildSuite struct {
+	suite.Suite
+
+	mockBuildRepo *mocks.MockBuildRepository
+	mockImages    *mocks.MockBuildImageStore
+	handler       http.HandlerFunc
+}
+
+func TestDeleteBuildSuite(t *testing.T) {
+	suite.Run(t, new(DeleteBuildSuite))
+}
+
+func (s *DeleteBuildSuite) SetupTest() {
+	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.handler = DeleteBuild(s.mockBuildRepo, s.mockImages)
+}
+
+func (s *DeleteBuildSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/builds/build1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("buildId", "build1")
+	return req
+}
+
+func (s *DeleteBuildSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_Owner_Succeeds() {
+	s.mockBuildRepo.EXPECT().
+		Delete(mock.Anything, "build1").
+		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).
+		Return()
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_ImagesPresent_BestEffortDeletesThem() {
+	keys := []repository.BuildImageKey{"builds/alice/build1/images/img1", "builds/alice/build1/images/img2"}
+	s.mockBuildRepo.EXPECT().
+		Delete(mock.Anything, "build1").
+		Return(keys, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, keys).
+		Return()
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryNotFound_StillReturns204() {
+	s.mockBuildRepo.EXPECT().
+		Delete(mock.Anything, "build1").
+		Return(nil, repository.ErrNotFound)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).
+		Return()
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_Anonymous_Returns404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		Delete(mock.Anything, "build1").
+		Return(nil, errors.New("delete item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

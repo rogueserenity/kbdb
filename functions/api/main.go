@@ -69,14 +69,12 @@ func main() {
 			o.UsePathStyle = true
 		}
 	})
-	// One ImageStore instance satisfies both repository.KeycapKitImageStore
-	// and repository.BuildImageStore, since both entities' images currently
-	// live in the same bucket. Passed twice below deliberately, not a
-	// copy-paste slip - if builds ever move to their own bucket/store, both
-	// call sites need updating together.
-	imageStore := imagestore.NewImageStore(s3Client, s3.NewPresignClient(s3Client), cfg.ImagesBucketName)
+	// Both entities' images currently live in the same bucket.
+	presignClient := s3.NewPresignClient(s3Client)
+	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName)
+	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 
-	handler := router.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, imageStore, cfg.OIDCIssuerURL, Version)
+	handler := router.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, cfg.OIDCIssuerURL, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.
