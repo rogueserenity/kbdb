@@ -142,3 +142,13 @@ type AddBuildImageOutput struct {
 	ImageID   string `json:"image_id" jsonschema:"the newly-created image's id"`
 	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
 }
+
+// DeleteBuildImageInput is the delete_build_image tool's input.
+type DeleteBuildImageInput struct {
+	BuildID string `json:"build_id" jsonschema:"the id of the build the image belongs to"`
+	ImageID string `json:"image_id" jsonschema:"the id of the image to remove, as returned by add_build_image"`
+}
+
+// DeleteBuildImageOutput is the delete_build_image tool's output. Deleting
+// is idempotent, so there is no payload.
+type DeleteBuildImageOutput struct{}

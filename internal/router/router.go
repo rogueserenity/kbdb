@@ -114,6 +114,8 @@ func New(
 		middleware.Auth(verifier)(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds/{buildId}/images",
 		middleware.Auth(verifier)(validate(handlers.AddBuildImage(buildRepo, buildImageStore))))
+	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}/images/{imageId}",
+		middleware.Auth(verifier)(validate(handlers.DeleteBuildImage(buildRepo, buildImageStore))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml

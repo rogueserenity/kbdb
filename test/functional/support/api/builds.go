@@ -55,3 +55,8 @@ func (c *BuildsClient) List(ctx context.Context, ownerID, token string, limit in
 func (c *BuildsClient) AddImage(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/builds/"+id+"/images", token, bytes.NewBufferString(body))
 }
+
+// DeleteImage calls DELETE /v1/users/{ownerID}/builds/{id}/images/{imageID}.
+func (c *BuildsClient) DeleteImage(ctx context.Context, ownerID, id, imageID, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/builds/"+id+"/images/"+imageID, token, nil)
+}

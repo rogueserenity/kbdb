@@ -15,9 +15,7 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
-const approvedImageContentType = "image/png"
-
-var _ = Describe("Adding an image to a build over MCP", func() {
+var _ = Describe("Deleting an image from a build over MCP", func() {
 	var (
 		client     *api.MCPClient
 		result     *sdkmcp.CallToolResult
@@ -51,60 +49,46 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 		})
 
-		Context("given the caller owns the build", func() {
+		Context("given the caller owns the build with an image on it", func() {
+			var imageID string
+
 			BeforeEach(func(ctx SpecContext) {
 				Expect(db.SeedBuild(ctx, ownerID, buildID, keyboardID, "private")).To(Succeed())
+
+				addResult, addErr := client.CallTool(ctx, "add_build_image", map[string]any{
+					"build_id":     buildID,
+					"content_type": approvedImageContentType,
+				})
+				Expect(addErr).NotTo(HaveOccurred())
+				Expect(addResult.IsError).To(BeFalse())
+				out := decodeAddImageOutput(addResult)
+				imageID = out.ImageID
+
+				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes-for-testing")))
+				Expect(putErr).NotTo(HaveOccurred())
+				Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 			})
 
 			AfterEach(func(ctx SpecContext) {
 				Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
 			})
 
-			Context("given an approved content_type", func() {
-				When("the add_build_image tool is called", func() {
-					BeforeEach(func(ctx SpecContext) {
-						result, err = client.CallTool(ctx, "add_build_image", map[string]any{
-							"build_id":     buildID,
-							"content_type": approvedImageContentType,
-						})
-					})
-
-					It("mints an image_id and upload_url that a real PUT round-trip actually works against", func(ctx SpecContext) {
-						By("returning an image_id and upload_url")
-						Expect(err).NotTo(HaveOccurred())
-						Expect(result.IsError).To(BeFalse())
-						out := decodeAddImageOutput(result)
-						Expect(out.ImageID).NotTo(BeEmpty())
-						Expect(out.UploadURL).NotTo(BeEmpty())
-
-						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
-						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
-						Expect(putErr).NotTo(HaveOccurred())
-						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
-
-						By("has_images reflecting it on a follow-up get_build")
-						check, checkErr := client.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})
-						Expect(checkErr).NotTo(HaveOccurred())
-						Expect(check.IsError).To(BeFalse())
-						Expect(decodeBuildOutput(check).Build.HasImages).To(BeTrue())
+			When("the delete_build_image tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "delete_build_image", map[string]any{
+						"build_id": buildID,
+						"image_id": imageID,
 					})
 				})
-			})
 
-			Context("given an unapproved content_type", func() {
-				When("the add_build_image tool is called", func() {
-					BeforeEach(func(ctx SpecContext) {
-						result, err = client.CallTool(ctx, "add_build_image", map[string]any{
-							"build_id":     buildID,
-							"content_type": "application/x-not-an-image",
-						})
-					})
+				It("succeeds and has_images reflects it on a follow-up get_build", func(ctx SpecContext) {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
 
-					It("returns an MCP tool error result", func() {
-						Expect(err).NotTo(HaveOccurred())
-						Expect(result.IsError).To(BeTrue())
-					})
+					check, checkErr := client.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})
+					Expect(checkErr).NotTo(HaveOccurred())
+					Expect(check.IsError).To(BeFalse())
+					Expect(decodeBuildOutput(check).Build.HasImages).To(BeFalse())
 				})
 			})
 		})
@@ -126,11 +110,11 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 				Expect(db.DeleteBuild(ctx, otherID, buildID)).To(Succeed())
 			})
 
-			When("the add_build_image tool is called with that build_id", func() {
+			When("the delete_build_image tool is called with that build_id", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "add_build_image", map[string]any{
-						"build_id":     buildID,
-						"content_type": approvedImageContentType,
+					result, err = client.CallTool(ctx, "delete_build_image", map[string]any{
+						"build_id": buildID,
+						"image_id": "irrelevant-image",
 					})
 				})
 
@@ -142,11 +126,11 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 		})
 
 		Context("given the build does not exist", func() {
-			When("the add_build_image tool is called", func() {
+			When("the delete_build_image tool is called", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "add_build_image", map[string]any{
-						"build_id":     "no-such-build-" + uuid.NewString(),
-						"content_type": approvedImageContentType,
+					result, err = client.CallTool(ctx, "delete_build_image", map[string]any{
+						"build_id": "no-such-build-" + uuid.NewString(),
+						"image_id": "irrelevant-image",
 					})
 				})
 
@@ -163,11 +147,11 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
 		})
 
-		When("the add_build_image tool is called", func() {
+		When("the delete_build_image tool is called", func() {
 			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "add_build_image", map[string]any{
-					"build_id":     "irrelevant-" + uuid.NewString(),
-					"content_type": approvedImageContentType,
+				result, err = client.CallTool(ctx, "delete_build_image", map[string]any{
+					"build_id": "irrelevant-" + uuid.NewString(),
+					"image_id": "irrelevant-image",
 				})
 			})
 
