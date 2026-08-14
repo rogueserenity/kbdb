@@ -60,7 +60,7 @@ func New(
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateSwitch(switchRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo))))
+		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see internal/authz.ReadableVisibilities).

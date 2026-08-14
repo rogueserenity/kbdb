@@ -269,12 +269,35 @@ paths:
       operationId: deleteSwitch
       description: >
         userId must be the caller's own subject; deleting another user's switch always returns 404.
-        Idempotent for the caller's own switches - returns 204 whether or not id existed.
+        on_delete controls what happens if the switch is still referenced by a build: "block" (the
+        default) fails with 409 and lists the blocking build ids; "cascade" deletes the switch and
+        every build that references it, returning their ids; "detach" deletes the switch regardless,
+        leaving referencing builds with a dangling switches[].switch id.
+      parameters:
+        - name: on_delete
+          in: query
+          schema:
+            type: string
+            enum: [block, cascade, detach]
+            default: block
+          description: How to handle a switch still referenced by one or more builds.
       responses:
+        "200":
+          description: Deleted via cascade; lists the builds that were also deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted (or already absent).
+          description: Deleted (block with no references, or detach).
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: Blocked by one or more referencing builds (on_delete=block, the default).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         default:
           $ref: "#/components/responses/ProblemResponse"
 

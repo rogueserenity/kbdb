@@ -58,14 +58,22 @@ type UpdateSwitchOutput struct {
 	Switch Switch `json:"switch" jsonschema:"the updated switch"`
 }
 
-// DeleteSwitchInput is the delete_switch tool arguments.
+// DeleteSwitchInput is the delete_switch tool input. OnDelete controls what
+// happens if the switch is still referenced by a build: "block" (the
+// default when omitted) fails the call; "cascade" deletes the switch and
+// every referencing build; "detach" deletes the switch regardless, leaving
+// referencing builds with a dangling switches[].switch id.
 type DeleteSwitchInput struct {
 	SwitchID string `json:"switch_id" jsonschema:"the id of the switch to delete"`
+	OnDelete string `json:"on_delete,omitempty" jsonschema:"how to handle a switch still referenced by a build: block (default), cascade, or detach"`
 }
 
-// DeleteSwitchOutput is the delete_switch tool result. Deleting is
-// idempotent, so this carries no payload - a missing id is not an error.
-type DeleteSwitchOutput struct{}
+// DeleteSwitchOutput is the delete_switch tool output. DeletedBuildIDs is
+// populated only when on_delete was "cascade" and at least one build
+// referenced the switch.
+type DeleteSwitchOutput struct {
+	DeletedBuildIDs []string `json:"deleted_build_ids,omitempty" jsonschema:"ids of builds also deleted, when on_delete was cascade"`
+}
 
 // SwitchInput is the writable half of a switch, shared by create_switch and
 // update_switch. Optional fields are pointers so an omitted field stays

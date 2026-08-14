@@ -71,3 +71,13 @@ func (c *SwitchesClient) Update(ctx context.Context, ownerID, id, token, body st
 func (c *SwitchesClient) Delete(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/switches/"+id, token, nil)
 }
+
+// DeleteWithOnDelete is Delete, but appends an on_delete query parameter.
+// The caller owns closing resp.Body.
+func (c *SwitchesClient) DeleteWithOnDelete(ctx context.Context, ownerID, id, token, onDelete string) (*http.Response, error) {
+	path := "/v1/users/" + ownerID + "/switches/" + id
+	if onDelete != "" {
+		path += "?" + url.Values{"on_delete": []string{onDelete}}.Encode()
+	}
+	return c.client.Do(ctx, http.MethodDelete, path, token, nil)
+}
