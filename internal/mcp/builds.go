@@ -62,6 +62,11 @@ var addBuildImageTool = &mcp.Tool{
 	Description: "Mints a presigned URL to upload a new image to one of your own builds. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header. A build may have any number of images; this always adds a new one rather than replacing an existing image.",
 }
 
+var deleteBuildImageTool = &mcp.Tool{
+	Name:        "delete_build_image",
+	Description: "Removes one image from one of your own builds, along with the underlying image object. Idempotent: deleting an image that isn't there succeeds.",
+}
+
 func handleListBuilds(
 	buildRepo repository.BuildRepository,
 	keyboardRepo repository.KeyboardRepository,
@@ -312,5 +317,41 @@ func handleAddBuildImage(
 		}
 
 		return nil, schema.AddBuildImageOutput{ImageID: imageID, UploadURL: uploadURL}, nil
+	}
+}
+
+func handleDeleteBuildImage(
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) mcp.ToolHandlerFor[schema.DeleteBuildImageInput, schema.DeleteBuildImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteBuildImageInput) (*mcp.CallToolResult, schema.DeleteBuildImageOutput, error) {
+		if strings.TrimSpace(in.BuildID) == "" {
+			return nil, schema.DeleteBuildImageOutput{}, errors.New("build_id must not be blank")
+		}
+		if strings.TrimSpace(in.ImageID) == "" {
+			return nil, schema.DeleteBuildImageOutput{}, errors.New("image_id must not be blank")
+		}
+
+		removed, err := buildRepo.DeleteImage(ctx, in.BuildID, in.ImageID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteBuildImageOutput{}, errBuildNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("build mutation conflict", log.BuildID, in.BuildID)
+			return nil, schema.DeleteBuildImageOutput{}, errBuildMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("deleting build image", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.DeleteBuildImageOutput{}, errors.New("failed to delete build image")
+		}
+
+		if removed != nil {
+			if err := images.DeleteBuildImage(ctx, *removed); err != nil {
+				log.FromContext(ctx).Error("deleting build image object", log.BuildID, in.BuildID, log.Error, err)
+				return nil, schema.DeleteBuildImageOutput{}, errors.New("failed to delete build image")
+			}
+		}
+
+		return nil, schema.DeleteBuildImageOutput{}, nil
 	}
 }

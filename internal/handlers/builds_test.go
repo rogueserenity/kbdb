@@ -1069,3 +1069,129 @@ func (s *AddBuildImageSuite) TestAddBuildImage_MutationConflict_Returns409() {
 	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
+
+type DeleteBuildImageSuite struct {
+	suite.Suite
+
+	mockBuildRepo *mocks.MockBuildRepository
+	mockImages    *mocks.MockBuildImageStore
+	handler       http.HandlerFunc
+}
+
+func TestDeleteBuildImageSuite(t *testing.T) {
+	suite.Run(t, new(DeleteBuildImageSuite))
+}
+
+func (s *DeleteBuildImageSuite) SetupTest() {
+	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.handler = DeleteBuildImage(s.mockBuildRepo, s.mockImages)
+}
+
+func (s *DeleteBuildImageSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/builds/build1/images/img1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("buildId", "build1")
+	req.SetPathValue("imageId", "img1")
+	return req
+}
+
+func (s *DeleteBuildImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+var deleteBuildImageTestKey = repository.BuildImageKey("builds/alice/build1/images/img1")
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Succeeds() {
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(&deleteBuildImageTestKey, nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_AlreadyAbsent_SucceedsWithoutS3Call() {
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(nil, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Anonymous_Returns404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotFound_Returns404() {
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_MutationConflict_Returns409() {
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(nil, repository.ErrMutationConflict)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_RepositoryError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(nil, errors.New("get item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_S3DeleteError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(&deleteBuildImageTestKey, nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
+		Return(errors.New("s3: access denied"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

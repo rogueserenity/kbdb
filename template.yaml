@@ -476,6 +476,14 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images
             Method: post
+        # Default CognitoAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        DeleteBuildImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/builds/{buildId}/images/{imageId}
+            Method: delete
         # Authorizer: NONE is deliberate on all three MCP routes below -
         # internal/mcp handles auth itself and needs the request to reach it.
         McpEvent:

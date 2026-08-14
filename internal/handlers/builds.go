@@ -335,6 +335,49 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 	}
 }
 
+// DeleteBuildImage reads the {userId}, {buildId}, and {imageId} path values
+// and requires an authenticated caller. userId must be the caller's own
+// subject; removing an image from another user's build always returns 404.
+// Idempotent: an imageId not present on the build is not an error.
+func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		buildID := r.PathValue("buildId")
+		imageID := r.PathValue("imageId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		removed, err := buildRepo.DeleteImage(r.Context(), buildID, imageID)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("build mutation conflict", log.BuildID, buildID)
+			problem.Conflict(w, "the build is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("deleting build image", log.Error, err, log.BuildID, buildID)
+			problem.Internal(w, "failed to delete build image")
+			return
+		}
+
+		if removed != nil {
+			if err := images.DeleteBuildImage(r.Context(), *removed); err != nil {
+				log.FromContext(r.Context()).Error("deleting build image object", log.Error, err, log.BuildID, buildID)
+				problem.Internal(w, "failed to delete build image")
+				return
+			}
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
 // DeleteBuild reads the {userId} and {buildId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's build always returns 404. Deleting is idempotent: a build
