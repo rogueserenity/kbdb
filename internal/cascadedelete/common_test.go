@@ -44,3 +44,15 @@ func (s *ParseOnDeleteSuite) TestUnknown_ReturnsFalse() {
 	_, ok := cascadedelete.ParseOnDelete("bogus")
 	s.False(ok)
 }
+
+func (s *ParseOnDeleteSuite) TestSurroundingWhitespace_Trimmed() {
+	got, ok := cascadedelete.ParseOnDelete("  cascade\n")
+	s.True(ok)
+	s.Equal(cascadedelete.OnDeleteCascade, got)
+}
+
+func (s *ParseOnDeleteSuite) TestOnlyWhitespace_DefaultsToBlock() {
+	got, ok := cascadedelete.ParseOnDelete("   ")
+	s.True(ok)
+	s.Equal(cascadedelete.OnDeleteBlock, got)
+}

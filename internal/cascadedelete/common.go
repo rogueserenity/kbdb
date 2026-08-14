@@ -29,14 +29,16 @@ const (
 )
 
 // ParseOnDelete maps a raw on_delete value (a REST query param or MCP tool
-// input field) to an OnDelete. An empty raw defaults to OnDeleteBlock. ok is
-// false if raw is non-empty and isn't one of block/cascade/detach.
+// input field) to an OnDelete. Surrounding whitespace is trimmed first; an
+// empty result defaults to OnDeleteBlock. ok is false if raw is non-empty
+// and isn't one of block/cascade/detach.
 func ParseOnDelete(raw string) (onDelete OnDelete, ok bool) {
-	switch OnDelete(raw) {
+	trimmed := OnDelete(strings.TrimSpace(raw))
+	switch trimmed {
 	case "":
 		return OnDeleteBlock, true
 	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
-		return OnDelete(raw), true
+		return trimmed, true
 	default:
 		return "", false
 	}
