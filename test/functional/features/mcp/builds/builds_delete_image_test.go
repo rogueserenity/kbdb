@@ -2,7 +2,6 @@ package builds_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -15,21 +14,6 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
-
-func decodeDeleteImageTestAddImageOutput(r *sdkmcp.CallToolResult) struct {
-	ImageID   string `json:"image_id"`
-	UploadURL string `json:"upload_url"`
-} {
-	GinkgoHelper()
-	var out struct {
-		ImageID   string `json:"image_id"`
-		UploadURL string `json:"upload_url"`
-	}
-	raw, err := json.Marshal(r.StructuredContent)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(json.Unmarshal(raw, &out)).To(Succeed())
-	return out
-}
 
 var _ = Describe("Deleting an image from a build over MCP", func() {
 	var (
@@ -77,7 +61,7 @@ var _ = Describe("Deleting an image from a build over MCP", func() {
 				})
 				Expect(addErr).NotTo(HaveOccurred())
 				Expect(addResult.IsError).To(BeFalse())
-				out := decodeDeleteImageTestAddImageOutput(addResult)
+				out := decodeAddImageOutput(addResult)
 				imageID = out.ImageID
 
 				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes-for-testing")))

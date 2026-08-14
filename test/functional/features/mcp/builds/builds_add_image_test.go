@@ -2,7 +2,6 @@ package builds_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -27,21 +26,6 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 		keyboardID string
 		buildID    string
 	)
-
-	decodeAddImageOutput := func(r *sdkmcp.CallToolResult) struct {
-		ImageID   string `json:"image_id"`
-		UploadURL string `json:"upload_url"`
-	} {
-		GinkgoHelper()
-		var out struct {
-			ImageID   string `json:"image_id"`
-			UploadURL string `json:"upload_url"`
-		}
-		raw, marshalErr := json.Marshal(r.StructuredContent)
-		Expect(marshalErr).NotTo(HaveOccurred())
-		Expect(json.Unmarshal(raw, &out)).To(Succeed())
-		return out
-	}
 
 	BeforeEach(func() {
 		result = nil

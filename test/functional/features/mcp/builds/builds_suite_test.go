@@ -75,6 +75,23 @@ func decodeListBuildsOutput(result *sdkmcp.CallToolResult) listBuildsOutput {
 	return out
 }
 
+type addImageOutput struct {
+	ImageID   string `json:"image_id"`
+	UploadURL string `json:"upload_url"`
+}
+
+func decodeAddImageOutput(result *sdkmcp.CallToolResult) addImageOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out addImageOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}
+
 func buildIDsOf(out listBuildsOutput) []string {
 	ids := make([]string, 0, len(out.Builds))
 	for _, b := range out.Builds {
