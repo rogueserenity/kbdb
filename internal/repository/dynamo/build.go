@@ -229,44 +229,68 @@ func (r *BuildRepository) Update(ctx context.Context, b repository.Build) (*repo
 // (rather than a plain DeleteItem with ReturnValues: ALL_OLD) because a
 // TransactWriteItems Delete has no ReturnValues equivalent, and the deleted
 // build's Images/references must be known up front to also delete its
-// refMarkers in the same transaction.
+// refMarkers in the same transaction. The base item's delete is
+// CAS-conditioned on the version this Get saw: without that, a concurrent
+// Update landing between the Get and the transact-write could change the
+// build's references out from under this call, leaving a refMarker
+// orphaned - deleted for a reference that's no longer current, or never
+// deleted for a reference the concurrent Update just added. On a lost race,
+// retry from a fresh Get, mirroring mutateBuild's CAS loop.
 func (r *BuildRepository) Delete(ctx context.Context, id string) ([]repository.BuildImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("deleting build %q: %w", id, repository.ErrNoUserID)
 	}
 
-	existing, err := r.Get(ctx, ownerID, id)
-	if err != nil {
-		return nil, err
-	}
+	for range maxBuildMutationAttempts {
+		existing, err := r.Get(ctx, ownerID, id)
+		if err != nil {
+			return nil, err
+		}
 
-	transactItems := []types.TransactWriteItem{
-		{
-			Delete: &types.Delete{
-				TableName: &r.tableName,
-				Key: map[string]types.AttributeValue{
-					"user_id": &types.AttributeValueMemberS{Value: ownerID},
-					"id":      &types.AttributeValueMemberS{Value: id},
+		expr, err := expression.NewBuilder().
+			WithCondition(expression.Name("version").Equal(expression.Value(existing.Version))).
+			Build()
+		if err != nil {
+			return nil, fmt.Errorf("building build delete condition for build %q: %w", id, err)
+		}
+
+		transactItems := []types.TransactWriteItem{
+			{
+				Delete: &types.Delete{
+					TableName: &r.tableName,
+					Key: map[string]types.AttributeValue{
+						"user_id": &types.AttributeValueMemberS{Value: ownerID},
+						"id":      &types.AttributeValueMemberS{Value: id},
+					},
+					ConditionExpression:       expr.Condition(),
+					ExpressionAttributeNames:  expr.Names(),
+					ExpressionAttributeValues: expr.Values(),
 				},
 			},
-		},
-	}
-	for _, m := range deriveRefMarkers(ownerID, *existing) {
-		transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
+		}
+		for _, m := range deriveRefMarkers(ownerID, *existing) {
+			transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
+		}
+
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
+		if err == nil {
+			imageKeys := make([]repository.BuildImageKey, len(existing.Images))
+			for i, image := range existing.Images {
+				imageKeys[i] = image.Path
+			}
+			return imageKeys, nil
+		}
+
+		if !isConditionalCheckFailed(err) {
+			return nil, fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
+		}
+		// Lost the CAS race - another writer updated Version first. Loop
+		// and retry from a fresh Get.
+		log.FromContext(ctx).Warn("build delete CAS retry", log.BuildID, id, "attempted_version", existing.Version)
 	}
 
-	_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
-	if err != nil {
-		return nil, fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
-	}
-
-	imageKeys := make([]repository.BuildImageKey, len(existing.Images))
-	for i, image := range existing.Images {
-		imageKeys[i] = image.Path
-	}
-
-	return imageKeys, nil
+	return nil, fmt.Errorf("deleting build %q owner %q: %w", id, ownerID, repository.ErrMutationConflict)
 }
 
 const maxBuildMutationAttempts = 3

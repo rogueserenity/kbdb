@@ -456,8 +456,11 @@ func (s *BuildRepositorySuite) TestDelete_Succeeds() {
 		Return(s.getItemOutput(0), nil)
 	s.mockClient.EXPECT().
 		// One item for the base Build, one marker delete for its keyboard.
+		// The base item's delete is CAS-conditioned on the version this Get
+		// just saw, so a concurrent Update can't leave an orphaned marker.
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			return len(in.TransactItems) == 2 && in.TransactItems[0].Delete != nil
+			return len(in.TransactItems) == 2 && in.TransactItems[0].Delete != nil &&
+				in.TransactItems[0].Delete.ConditionExpression != nil
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
@@ -466,6 +469,60 @@ func (s *BuildRepositorySuite) TestDelete_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Empty(imageKeys)
+}
+
+func (s *BuildRepositorySuite) TestDelete_ConcurrentUpdate_RetriesThenSucceeds() {
+	// The second Get sees a build referencing kb2 instead of kb1 - proves
+	// the retry recomputes markers from fresh state (kb2's marker deleted,
+	// not kb1's stale one) rather than reusing the first Get's snapshot.
+	firstGet := s.getItemOutput(0)
+	secondGet := s.getItemOutput(1)
+	secondGet.Item["keyboard"] = &types.AttributeValueMemberS{Value: "kb2"}
+
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(firstGet, nil).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
+		}).Once()
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(secondGet, nil).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			if len(in.TransactItems) != 2 || in.TransactItems[1].Delete == nil {
+				return false
+			}
+			id, ok := in.TransactItems[1].Delete.Key["id"].(*types.AttributeValueMemberS)
+			return ok && id.Value == "REF#keyboard#kb2#b1"
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	imageKeys, err := s.repo.Delete(ctx, "b1")
+
+	s.Require().NoError(err)
+	s.Empty(imageKeys)
+}
+
+func (s *BuildRepositorySuite) TestDelete_CASConflictExhausted_ReturnsError() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutput(0), nil).Times(maxBuildMutationAttempts)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
+		}).Times(maxBuildMutationAttempts)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	imageKeys, err := s.repo.Delete(ctx, "b1")
+
+	s.Require().Error(err)
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(imageKeys)
 }
 
 func (s *BuildRepositorySuite) TestDelete_ImagesPresent_ReturnsTheirImageKeys() {

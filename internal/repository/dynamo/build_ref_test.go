@@ -140,13 +140,14 @@ func (s *BuildRefSuite) TestDeleteMarkerTransactItem_HasExpectedKeyAndTable() {
 	s.Equal("REF#keyboard#kb1#b1", id.Value)
 }
 
-func (s *BuildRefSuite) TestFindReferencingBuilds_QueriesGSIByOwnerAndRefID() {
+func (s *BuildRefSuite) TestFindBuildsReferencingKeyboard_QueriesGSIByOwnerAndKeyboardID() {
 	mockClient := mocks.NewMockDynamoAPI(s.T())
 	repo := &BuildRepository{client: mockClient, tableName: "build-table"}
 
 	mockClient.EXPECT().
 		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
-			return *in.TableName == "build-table" && *in.IndexName == "BuildRefIndex"
+			return *in.TableName == "build-table" && *in.IndexName == "BuildRefIndex" &&
+				in.ExpressionAttributeValues[":1"].(*types.AttributeValueMemberS).Value == "kb1"
 		})).
 		Return(&dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{
@@ -155,13 +156,51 @@ func (s *BuildRefSuite) TestFindReferencingBuilds_QueriesGSIByOwnerAndRefID() {
 			},
 		}, nil)
 
-	buildIDs, err := repo.findReferencingBuilds(s.T().Context(), "alice", "keyboard", "kb1")
+	buildIDs, err := repo.FindBuildsReferencingKeyboard(s.T().Context(), "alice", "kb1")
 
 	s.Require().NoError(err)
 	s.ElementsMatch([]string{"b1", "b2"}, buildIDs)
 }
 
-func (s *BuildRefSuite) TestFindReferencingBuilds_KeycapKit_UsesBeginsWithPrefix() {
+func (s *BuildRefSuite) TestFindBuildsReferencingSwitch_QueriesGSIByOwnerAndSwitchID() {
+	mockClient := mocks.NewMockDynamoAPI(s.T())
+	repo := &BuildRepository{client: mockClient, tableName: "build-table"}
+
+	mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return *in.TableName == "build-table" && *in.IndexName == "BuildRefIndex" &&
+				in.ExpressionAttributeValues[":1"].(*types.AttributeValueMemberS).Value == "sw1"
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{{"build_id": &types.AttributeValueMemberS{Value: "b1"}}},
+		}, nil)
+
+	buildIDs, err := repo.FindBuildsReferencingSwitch(s.T().Context(), "alice", "sw1")
+
+	s.Require().NoError(err)
+	s.Equal([]string{"b1"}, buildIDs)
+}
+
+func (s *BuildRefSuite) TestFindBuildsReferencingKeycapKit_QueriesGSIByOwnerAndCompositeRefID() {
+	mockClient := mocks.NewMockDynamoAPI(s.T())
+	repo := &BuildRepository{client: mockClient, tableName: "build-table"}
+
+	mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return *in.TableName == "build-table" && *in.IndexName == "BuildRefIndex" &&
+				in.ExpressionAttributeValues[":1"].(*types.AttributeValueMemberS).Value == "ks1#kit1"
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{{"build_id": &types.AttributeValueMemberS{Value: "b1"}}},
+		}, nil)
+
+	buildIDs, err := repo.FindBuildsReferencingKeycapKit(s.T().Context(), "alice", "ks1", "kit1")
+
+	s.Require().NoError(err)
+	s.Equal([]string{"b1"}, buildIDs)
+}
+
+func (s *BuildRefSuite) TestFindBuildsReferencingKeycapSet_UsesBeginsWithPrefix() {
 	mockClient := mocks.NewMockDynamoAPI(s.T())
 	repo := &BuildRepository{client: mockClient, tableName: "build-table"}
 
@@ -169,12 +208,14 @@ func (s *BuildRefSuite) TestFindReferencingBuilds_KeycapKit_UsesBeginsWithPrefix
 		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
 			// begins_with queries can't also equality-match ref_id, so this
 			// must be recognizable as a prefix query, not an exact match.
-			return *in.TableName == "build-table" && *in.IndexName == "BuildRefIndex"
+			return *in.TableName == "build-table" && *in.IndexName == "BuildRefIndex" &&
+				in.ExpressionAttributeValues[":1"].(*types.AttributeValueMemberS).Value == "ks1#"
 		})).
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
 
-	_, err := repo.findReferencingBuildsByPrefix(s.T().Context(), "alice", "keycap_kit", "ks1#")
+	buildIDs, err := repo.FindBuildsReferencingKeycapSet(s.T().Context(), "alice", "ks1")
 
 	s.Require().NoError(err)
+	s.Empty(buildIDs)
 }
 

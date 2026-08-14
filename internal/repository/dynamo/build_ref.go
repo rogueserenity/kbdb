@@ -24,7 +24,7 @@ const buildRefIndexName = "BuildRefIndex"
 // [deriveRefMarkers] for how a Build's reference fields become markers.
 type refMarker struct {
 	ownerID string
-	refType string
+	refType repository.RefType
 	refID   string
 	buildID string
 }
@@ -46,16 +46,16 @@ func deriveRefMarkers(ownerID string, b repository.Build) []refMarker {
 	var markers []refMarker
 
 	if b.Keyboard != "" {
-		markers = append(markers, refMarker{ownerID: ownerID, refType: "keyboard", refID: b.Keyboard, buildID: b.ID})
+		markers = append(markers, refMarker{ownerID: ownerID, refType: repository.RefTypeKeyboard, refID: b.Keyboard, buildID: b.ID})
 	}
 
 	for _, entry := range b.Switches {
-		markers = append(markers, refMarker{ownerID: ownerID, refType: "switch", refID: entry.Switch, buildID: b.ID})
+		markers = append(markers, refMarker{ownerID: ownerID, refType: repository.RefTypeSwitch, refID: entry.Switch, buildID: b.ID})
 	}
 
 	for _, entry := range b.KeycapKits {
 		refID := fmt.Sprintf("%s#%s", entry.KeycapSet, entry.Kit)
-		markers = append(markers, refMarker{ownerID: ownerID, refType: "keycap_kit", refID: refID, buildID: b.ID})
+		markers = append(markers, refMarker{ownerID: ownerID, refType: repository.RefTypeKeycapKit, refID: refID, buildID: b.ID})
 	}
 
 	return markers
@@ -100,7 +100,7 @@ func putMarkerTransactItem(tableName string, m refMarker) types.TransactWriteIte
 				"user_id":   &types.AttributeValueMemberS{Value: m.ownerID},
 				"id":        &types.AttributeValueMemberS{Value: m.sortKey()},
 				"item_type": &types.AttributeValueMemberS{Value: "build_ref_marker"},
-				"ref_type":  &types.AttributeValueMemberS{Value: m.refType},
+				"ref_type":  &types.AttributeValueMemberS{Value: string(m.refType)},
 				"ref_id":    &types.AttributeValueMemberS{Value: m.refID},
 				"build_id":  &types.AttributeValueMemberS{Value: m.buildID},
 			},
@@ -122,10 +122,46 @@ func deleteMarkerTransactItem(tableName string, m refMarker) types.TransactWrite
 	}
 }
 
-// findReferencingBuilds returns the ids of every build owned by ownerID
-// that references refID via refType (an exact ref_id match - use
-// findReferencingBuildsByPrefix for a whole-KeycapSet lookup).
-func (r *BuildRepository) findReferencingBuilds(ctx context.Context, ownerID, refType, refID string) ([]string, error) {
+// FindBuildsReferencingKeyboard implements repository.BuildRepository.
+func (r *BuildRepository) FindBuildsReferencingKeyboard(ctx context.Context, ownerID, keyboardID string) ([]string, error) {
+	return r.findReferencingBuilds(ctx, ownerID, repository.RefTypeKeyboard, keyboardID)
+}
+
+// FindBuildsReferencingSwitch implements repository.BuildRepository.
+func (r *BuildRepository) FindBuildsReferencingSwitch(ctx context.Context, ownerID, switchID string) ([]string, error) {
+	return r.findReferencingBuilds(ctx, ownerID, repository.RefTypeSwitch, switchID)
+}
+
+// FindBuildsReferencingKeycapKit implements repository.BuildRepository. The
+// composite "<KeycapSetID>#<KitID>" ref_id format is a dynamo-package
+// implementation detail - callers pass the two ids separately.
+func (r *BuildRepository) FindBuildsReferencingKeycapKit(ctx context.Context, ownerID, keycapSetID, kitID string) ([]string, error) {
+	refID := fmt.Sprintf("%s#%s", keycapSetID, kitID)
+	return r.findReferencingBuilds(ctx, ownerID, repository.RefTypeKeycapKit, refID)
+}
+
+// FindBuildsReferencingKeycapSet implements repository.BuildRepository. It
+// matches every kit in keycapSetID via a begins_with prefix query - a Build
+// never references a bare KeycapSet without a specific kit, so there's no
+// separate set-level marker to look up directly (see deriveRefMarkers).
+func (r *BuildRepository) FindBuildsReferencingKeycapSet(ctx context.Context, ownerID, keycapSetID string) ([]string, error) {
+	prefix := keycapSetID + "#"
+	expr, err := expression.NewBuilder().
+		WithKeyCondition(expression.Key("user_id").Equal(expression.Value(ownerID)).
+			And(expression.Key("ref_id").BeginsWith(prefix))).
+		Build()
+	if err != nil {
+		return nil, fmt.Errorf("building reverse-lookup prefix expression for keycap set %q: %w", keycapSetID, err)
+	}
+
+	return r.queryReferencingBuilds(ctx, repository.RefTypeKeycapKit, prefix, expr)
+}
+
+// findReferencingBuilds is the shared exact-match implementation behind the
+// three FindBuildsReferencingX methods that look up by a single ref_id
+// (KeycapSet is the exception - it prefix-matches, see
+// FindBuildsReferencingKeycapSet).
+func (r *BuildRepository) findReferencingBuilds(ctx context.Context, ownerID string, refType repository.RefType, refID string) ([]string, error) {
 	expr, err := expression.NewBuilder().
 		WithKeyCondition(expression.Key("user_id").Equal(expression.Value(ownerID)).
 			And(expression.Key("ref_id").Equal(expression.Value(refID)))).
@@ -137,22 +173,7 @@ func (r *BuildRepository) findReferencingBuilds(ctx context.Context, ownerID, re
 	return r.queryReferencingBuilds(ctx, refType, refID, expr)
 }
 
-// findReferencingBuildsByPrefix returns the ids of every build owned by
-// ownerID whose ref_id begins with refIDPrefix - used to find every build
-// referencing any kit in a KeycapSet being deleted as a whole.
-func (r *BuildRepository) findReferencingBuildsByPrefix(ctx context.Context, ownerID, refType, refIDPrefix string) ([]string, error) {
-	expr, err := expression.NewBuilder().
-		WithKeyCondition(expression.Key("user_id").Equal(expression.Value(ownerID)).
-			And(expression.Key("ref_id").BeginsWith(refIDPrefix))).
-		Build()
-	if err != nil {
-		return nil, fmt.Errorf("building reverse-lookup prefix expression for %s %q: %w", refType, refIDPrefix, err)
-	}
-
-	return r.queryReferencingBuilds(ctx, refType, refIDPrefix, expr)
-}
-
-func (r *BuildRepository) queryReferencingBuilds(ctx context.Context, refType, refID string, expr expression.Expression) ([]string, error) {
+func (r *BuildRepository) queryReferencingBuilds(ctx context.Context, refType repository.RefType, refID string, expr expression.Expression) ([]string, error) {
 	out, err := r.client.Query(ctx, &dynamodb.QueryInput{
 		TableName:                 &r.tableName,
 		IndexName:                 aws.String(buildRefIndexName),
