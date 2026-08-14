@@ -7,15 +7,10 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// ValidateBuild returns every field on b that isn't an approved value for
-// its lookup category. An unset field is skipped, not treated as invalid.
-// Does not check whether b.Keyboard/Switches/KeycapKits reference entities
-// that actually exist and are owned by the caller - that needs
-// KeyboardRepository/SwitchRepository/KeycapSetRepository in addition to
-// b itself, which doesn't fit this package's static lookup-category model,
-// so it's handled separately by internal/buildrefs.ValidateReferences,
-// called from the REST/MCP handler layer alongside this function rather
-// than folded into it.
+// ValidateBuild does not check whether b.Keyboard/Switches/KeycapKits
+// reference entities that actually exist - that needs live repository
+// data, not this package's static lookup-category model, so it's handled
+// separately by internal/buildrefs.ValidateReferences.
 func ValidateBuild(ctx context.Context, b repository.Build) []FieldError {
 	var checks []fieldCheck
 	add := func(field string, value *string, category Category) {

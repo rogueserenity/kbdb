@@ -19,8 +19,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// validateBuildLookups writes a 400 listing every invalid field if any check
-// fails. An unset (nil) field is skipped, not treated as invalid.
+// An unset (nil) field is skipped, not treated as invalid.
 func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b repository.Build) (ok bool) {
 	fieldErrs := lookup.ValidateBuild(ctx, b)
 	if len(fieldErrs) > 0 {
@@ -38,10 +37,7 @@ func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b reposito
 	return true
 }
 
-// validateBuildReferences writes a 400 listing every invalid reference if
-// any check fails (a repository error instead writes a 500). Matches
-// validateBuildLookups' signature/shape so CreateBuild can call both the
-// same way.
+// A repository error writes a 500 rather than a 400.
 func validateBuildReferences(
 	ctx context.Context, w http.ResponseWriter, ownerID string, b repository.Build,
 	keyboardRepo repository.KeyboardRepository,
@@ -66,9 +62,7 @@ func validateBuildReferences(
 	return true
 }
 
-// ListBuilds reads the {userId} path value and lists that owner's builds.
-// Anonymous callers are allowed; visibility is scoped to what the caller (if
-// any) may read, per internal/authz.
+// ListBuilds handles GET /v1/users/{userId}/builds.
 func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -107,9 +101,8 @@ func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.Keyboar
 	}
 }
 
-// GetBuild reads the {userId} and {buildId} path values. Anonymous callers
-// are allowed; a build that exists but isn't readable by the caller returns
-// 404, not 403, to avoid revealing it exists.
+// GetBuild returns 404, not 403, for a build that exists but isn't
+// readable by the caller, to avoid revealing it exists.
 func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -145,9 +138,8 @@ func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore
 	}
 }
 
-// CreateBuild reads the {userId} path value and requires an authenticated
-// caller. userId must be the caller's own subject; creating in another
-// user's collection returns 404, not 403, to avoid revealing it exists.
+// CreateBuild returns 404, not 403, when creating in another user's
+// collection, to avoid revealing it exists.
 func CreateBuild(
 	buildRepo repository.BuildRepository,
 	images repository.BuildImageStore,

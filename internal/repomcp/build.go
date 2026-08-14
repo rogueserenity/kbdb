@@ -9,10 +9,8 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// BuildToMCP maps a repository.Build to its MCP tool shape. Unlike
-// repoapi.BuildToAPI, this never presigns a GET URL for an image - it
-// reports only HasImages, so mapping a build can't fail the way the REST
-// mapping can on a presign error.
+// BuildToMCP never presigns an image URL, unlike repoapi.BuildToAPI - it
+// reports only HasImages, so this can't fail on a presign error.
 func BuildToMCP(b repository.Build) schema.Build {
 	return schema.Build{
 		ID:            b.ID,
@@ -30,10 +28,9 @@ func BuildToMCP(b repository.Build) schema.Build {
 	}
 }
 
-// BuildFromMCP maps a create_build tool argument to its repository shape.
-// ID and UserID are left unset: the caller sets ID, and UserID comes from
-// ctx in the repository layer. Images are left unset too - a build write
-// never carries images, which are managed one at a time via their own
+// BuildFromMCP leaves ID and UserID unset: the caller sets ID, and UserID
+// comes from ctx in the repository layer. Images are left unset too -
+// never carried in a build write, managed one at a time via their own
 // tools.
 func BuildFromMCP(in schema.BuildInput) repository.Build {
 	return repository.Build{
@@ -50,17 +47,9 @@ func BuildFromMCP(in schema.BuildInput) repository.Build {
 	}
 }
 
-// BuildToMCPSummary maps a repository.Build to the list_builds tool's
-// reduced BuildSummary shape. Mirrors repoapi.BuildToAPISummary's
-// keyboardRepo.Get denormalization strategy (a per-item fetch - see that
-// function's doc comment for why this isn't batched) but reports HasImage
-// rather than a presigned URL, matching schema.Build's HasImages design. If
-// the referenced keyboard can't be resolved (repository.ErrNotFound - e.g.
-// deleted after the build was created; see
-// https://github.com/rogueserenity/kbdb/issues/172 for the broader
-// dangling-reference question), Keyboard is left nil rather than failing
-// the whole list call over one bad denormalization. Any other repository
-// error still fails the call.
+// BuildToMCPSummary mirrors repoapi.BuildToAPISummary's keyboardRepo.Get
+// denormalization (see that function's doc comment) but reports HasImage
+// rather than a presigned URL.
 func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
 	summary := schema.BuildSummary{
 		ID:        b.ID,

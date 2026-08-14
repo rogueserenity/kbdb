@@ -62,19 +62,13 @@ func BuildToRepo(in api.BuildInput) repository.Build {
 	}
 }
 
-// BuildToAPISummary maps a repository.Build to the BuildSummary schema
-// returned by the list endpoint. Unlike every other entity's summary
-// mapping, this denormalizes the referenced Keyboard's brand/name via a
-// per-item keyboardRepo.Get call - there's no batch-get precedent in this
-// codebase, and a list page is capped at 100 items, so an O(n) fetch here is
-// the simplest correct approach; revisit only if this proves to be a real
-// bottleneck. If the keyboard can't be resolved (repository.ErrNotFound -
-// e.g. it was deleted after the build was created; nothing currently stops
-// deleting a keyboard/switch/keycap set still referenced by a build, see
-// https://github.com/rogueserenity/kbdb/issues/172 for the broader
-// dangling-reference question), Keyboard is left nil rather than failing
-// the whole list request over one bad denormalization. Any other
-// repository error still fails the request.
+// BuildToAPISummary denormalizes the referenced Keyboard's brand/name via
+// a per-item keyboardRepo.Get call - no batch-get precedent exists, and a
+// list page is capped at 100 items, so this O(n) fetch is the simplest
+// correct approach for now. If the keyboard can't be resolved
+// (repository.ErrNotFound - e.g. deleted after the build was created, see
+// https://github.com/rogueserenity/kbdb/issues/172), Keyboard is left nil
+// rather than failing the whole request; any other error still fails it.
 func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) (api.BuildSummary, error) {
 	buildDate, err := buildDateToAPI(b.BuildDate)
 	if err != nil {
