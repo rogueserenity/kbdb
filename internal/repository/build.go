@@ -91,6 +91,29 @@ type BuildRepository interface {
 	// DeleteImage is idempotent: an imageID not present in the build
 	// returns (nil, nil), not an error.
 	DeleteImage(ctx context.Context, buildID, imageID string) (*BuildImageKey, error)
+
+	// FindBuildsReferencingKeyboard returns the ids of every build owned by
+	// ownerID whose keyboard field is keyboardID. Used by KeyboardRepository
+	// Delete to block/cascade a delete that's still referenced.
+	FindBuildsReferencingKeyboard(ctx context.Context, ownerID, keyboardID string) ([]string, error)
+
+	// FindBuildsReferencingSwitch returns the ids of every build owned by
+	// ownerID with a switches[] entry referencing switchID. Used by
+	// SwitchRepository Delete to block/cascade a delete that's still
+	// referenced.
+	FindBuildsReferencingSwitch(ctx context.Context, ownerID, switchID string) ([]string, error)
+
+	// FindBuildsReferencingKeycapKit returns the ids of every build owned
+	// by ownerID with a keycap_kits[] entry referencing the (keycapSetID,
+	// kitID) pair. Used by KeycapSetRepository DeleteKit to block/cascade a
+	// delete of a single kit that's still referenced.
+	FindBuildsReferencingKeycapKit(ctx context.Context, ownerID, keycapSetID, kitID string) ([]string, error)
+
+	// FindBuildsReferencingKeycapSet returns the ids of every build owned
+	// by ownerID with a keycap_kits[] entry referencing any kit in
+	// keycapSetID. Used by KeycapSetRepository Delete to block/cascade a
+	// whole-set delete that's still referenced by any of its kits.
+	FindBuildsReferencingKeycapSet(ctx context.Context, ownerID, keycapSetID string) ([]string, error)
 }
 
 // BuildImageKey is the object key an image is stored under in a

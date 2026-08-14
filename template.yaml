@@ -145,6 +145,16 @@ Resources:
         - AttributeName: id
           KeyType: RANGE
 
+  # user_id/id access patterns follow SwitchTable's rationale above, with
+  # one exception: BuildRefIndex answers "which builds reference entity X"
+  # (e.g. before deleting a Keyboard/Switch/KeycapSet still in use - see
+  # issue #172), where the known key is a *referenced entity's* id, not a
+  # Build's own id. Builds also carry synthetic "refMarker" items (one per
+  # Keyboard/Switch/KeycapKit reference, distinguished by a "REF#..." id
+  # rather than a real build id) alongside real Build items, so the GSI has
+  # something to index - see internal/repository/dynamo/build_ref.go.
+  # scripts/func-setup.sh hand-creates an equivalent table+index against
+  # LocalStack - keep that script's schema in sync with this resource.
   BuildTable:
     Type: AWS::DynamoDB::Table
     Properties:
@@ -154,11 +164,24 @@ Resources:
           AttributeType: S
         - AttributeName: id
           AttributeType: S
+        - AttributeName: ref_id
+          AttributeType: S
       KeySchema:
         - AttributeName: user_id
           KeyType: HASH
         - AttributeName: id
           KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: BuildRefIndex
+          KeySchema:
+            - AttributeName: user_id
+              KeyType: HASH
+            - AttributeName: ref_id
+              KeyType: RANGE
+          Projection:
+            ProjectionType: INCLUDE
+            NonKeyAttributes:
+              - build_id
 
   # Matches ApiFunction's explicit FunctionName below so Lambda writes here
   # instead of auto-creating an unmanaged, never-expiring log group.
@@ -236,7 +259,12 @@ Resources:
                 - dynamodb:GetItem
                 - dynamodb:PutItem
                 - dynamodb:DeleteItem
+                - dynamodb:TransactWriteItems
               Resource: !GetAtt BuildTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource: !Sub "${BuildTable.Arn}/index/BuildRefIndex"
       Events:
         # No auth: security: [] in api/openapi.yaml. Lookup categories are
         # static, deploy-time data (internal/lookup) - GET only, no write

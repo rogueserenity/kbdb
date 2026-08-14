@@ -6,11 +6,12 @@ import (
 )
 
 type body struct {
-	Type          string         `json:"type"`
-	Title         string         `json:"title"`
-	Status        int            `json:"status"`
-	Detail        string         `json:"detail,omitempty"`
-	InvalidParams []InvalidParam `json:"invalid_params,omitempty"`
+	Type             string         `json:"type"`
+	Title            string         `json:"title"`
+	Status           int            `json:"status"`
+	Detail           string         `json:"detail,omitempty"`
+	InvalidParams    []InvalidParam `json:"invalid_params,omitempty"`
+	BlockingBuildIDs []string       `json:"blocking_build_ids,omitempty"`
 }
 
 // InvalidParam is one field-level violation reported in a validation
@@ -73,6 +74,20 @@ func Unauthorized(w http.ResponseWriter, detail string) {
 // Conflict writes a 409 Problem response.
 func Conflict(w http.ResponseWriter, detail string) {
 	Write(w, http.StatusConflict, "https://mykeebs.info/errors/conflict", "Conflict", detail)
+}
+
+// StillReferenced writes a 409 Problem response listing the ids of every
+// build blocking a delete in blocking_build_ids, per RFC 9457 §3.2's
+// pattern of extending Problem with an extension member (mirrors
+// ValidationFailed's invalid_params for the analogous validation case).
+func StillReferenced(w http.ResponseWriter, detail string, blockingBuildIDs []string) {
+	writeBody(w, http.StatusConflict, body{
+		Type:             "https://mykeebs.info/errors/conflict",
+		Title:            "Conflict",
+		Status:           http.StatusConflict,
+		Detail:           detail,
+		BlockingBuildIDs: blockingBuildIDs,
+	})
 }
 
 // BadRequest writes a 400 Problem response.

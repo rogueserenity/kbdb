@@ -882,6 +882,14 @@ components:
                 type: array
                 items:
                   type: string
+        blocking_build_ids:
+          type: array
+          description: >
+            Present on a 409 response caused by the item still being
+            referenced by one or more builds. Lists the ids of the blocking
+            builds.
+          items:
+            type: string
       required: [type, title, status]
 
     Money:

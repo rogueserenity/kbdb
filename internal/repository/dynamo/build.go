@@ -150,20 +150,46 @@ func (r *BuildRepository) Create(ctx context.Context, b repository.Build) (*repo
 		return nil, fmt.Errorf("marshalling build %q for owner %q: %w", b.ID, b.UserID, err)
 	}
 
-	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
-		TableName:           &r.tableName,
-		Item:                item,
-		ConditionExpression: aws.String("attribute_not_exists(id)"),
-	})
+	transactItems := []types.TransactWriteItem{
+		{
+			Put: &types.Put{
+				TableName:           &r.tableName,
+				Item:                item,
+				ConditionExpression: aws.String("attribute_not_exists(id)"),
+			},
+		},
+	}
+	for _, m := range deriveRefMarkers(ownerID, b) {
+		transactItems = append(transactItems, putMarkerTransactItem(r.tableName, m))
+	}
+
+	_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
 	if err != nil {
-		var condErr *types.ConditionalCheckFailedException
-		if errors.As(err, &condErr) {
+		if isConditionalCheckFailed(err) {
 			return nil, repository.ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("creating build %q for owner %q: %w", b.ID, b.UserID, err)
 	}
 
 	return &b, nil
+}
+
+// isConditionalCheckFailed reports whether err is a TransactWriteItems
+// failure caused by a ConditionExpression not being met - DynamoDB reports
+// this as a TransactionCanceledException wrapping per-item cancellation
+// reasons, not the ConditionalCheckFailedException a plain PutItem/DeleteItem
+// would return.
+func isConditionalCheckFailed(err error) bool {
+	var txErr *types.TransactionCanceledException
+	if !errors.As(err, &txErr) {
+		return false
+	}
+	for _, reason := range txErr.CancellationReasons {
+		if reason.Code != nil && *reason.Code == "ConditionalCheckFailed" {
+			return true
+		}
+	}
+	return false
 }
 
 // Update goes through mutateBuild rather than a naive whole-item PutItem:
@@ -199,40 +225,72 @@ func (r *BuildRepository) Update(ctx context.Context, b repository.Build) (*repo
 	return updated, nil
 }
 
-// Delete implements repository.BuildRepository.
+// Delete implements repository.BuildRepository. It Gets the build first
+// (rather than a plain DeleteItem with ReturnValues: ALL_OLD) because a
+// TransactWriteItems Delete has no ReturnValues equivalent, and the deleted
+// build's Images/references must be known up front to also delete its
+// refMarkers in the same transaction. The base item's delete is
+// CAS-conditioned on the version this Get saw: without that, a concurrent
+// Update landing between the Get and the transact-write could change the
+// build's references out from under this call, leaving a refMarker
+// orphaned - deleted for a reference that's no longer current, or never
+// deleted for a reference the concurrent Update just added. On a lost race,
+// retry from a fresh Get, mirroring mutateBuild's CAS loop.
 func (r *BuildRepository) Delete(ctx context.Context, id string) ([]repository.BuildImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("deleting build %q: %w", id, repository.ErrNoUserID)
 	}
 
-	out, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
-		TableName: &r.tableName,
-		Key: map[string]types.AttributeValue{
-			"user_id": &types.AttributeValueMemberS{Value: ownerID},
-			"id":      &types.AttributeValueMemberS{Value: id},
-		},
-		ReturnValues: types.ReturnValueAllOld,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
+	for range maxBuildMutationAttempts {
+		existing, err := r.Get(ctx, ownerID, id)
+		if err != nil {
+			return nil, err
+		}
+
+		expr, err := expression.NewBuilder().
+			WithCondition(expression.Name("version").Equal(expression.Value(existing.Version))).
+			Build()
+		if err != nil {
+			return nil, fmt.Errorf("building build delete condition for build %q: %w", id, err)
+		}
+
+		transactItems := []types.TransactWriteItem{
+			{
+				Delete: &types.Delete{
+					TableName: &r.tableName,
+					Key: map[string]types.AttributeValue{
+						"user_id": &types.AttributeValueMemberS{Value: ownerID},
+						"id":      &types.AttributeValueMemberS{Value: id},
+					},
+					ConditionExpression:       expr.Condition(),
+					ExpressionAttributeNames:  expr.Names(),
+					ExpressionAttributeValues: expr.Values(),
+				},
+			},
+		}
+		for _, m := range deriveRefMarkers(ownerID, *existing) {
+			transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
+		}
+
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
+		if err == nil {
+			imageKeys := make([]repository.BuildImageKey, len(existing.Images))
+			for i, image := range existing.Images {
+				imageKeys[i] = image.Path
+			}
+			return imageKeys, nil
+		}
+
+		if !isConditionalCheckFailed(err) {
+			return nil, fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
+		}
+		// Lost the CAS race - another writer updated Version first. Loop
+		// and retry from a fresh Get.
+		log.FromContext(ctx).Warn("build delete CAS retry", log.BuildID, id, "attempted_version", existing.Version)
 	}
 
-	if len(out.Attributes) == 0 {
-		return nil, repository.ErrNotFound
-	}
-
-	var deleted repository.Build
-	if err := attributevalue.UnmarshalMap(out.Attributes, &deleted); err != nil {
-		return nil, fmt.Errorf("unmarshalling deleted build %q for owner %q: %w", id, ownerID, err)
-	}
-
-	imageKeys := make([]repository.BuildImageKey, len(deleted.Images))
-	for i, image := range deleted.Images {
-		imageKeys[i] = image.Path
-	}
-
-	return imageKeys, nil
+	return nil, fmt.Errorf("deleting build %q owner %q: %w", id, ownerID, repository.ErrMutationConflict)
 }
 
 const maxBuildMutationAttempts = 3
@@ -252,6 +310,7 @@ func (r *BuildRepository) mutateBuild(
 		if err != nil {
 			return nil, err
 		}
+		oldMarkers := deriveRefMarkers(ownerID, *b)
 
 		if err := mutate(b); err != nil {
 			return nil, err
@@ -272,19 +331,31 @@ func (r *BuildRepository) mutateBuild(
 			return nil, fmt.Errorf("building build mutation condition for build %q: %w", buildID, err)
 		}
 
-		_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
-			TableName:                 &r.tableName,
-			Item:                      item,
-			ConditionExpression:       expr.Condition(),
-			ExpressionAttributeNames:  expr.Names(),
-			ExpressionAttributeValues: expr.Values(),
-		})
+		transactItems := []types.TransactWriteItem{
+			{
+				Put: &types.Put{
+					TableName:                 &r.tableName,
+					Item:                      item,
+					ConditionExpression:       expr.Condition(),
+					ExpressionAttributeNames:  expr.Names(),
+					ExpressionAttributeValues: expr.Values(),
+				},
+			},
+		}
+		toAdd, toRemove := diffRefMarkers(oldMarkers, deriveRefMarkers(ownerID, *b))
+		for _, m := range toAdd {
+			transactItems = append(transactItems, putMarkerTransactItem(r.tableName, m))
+		}
+		for _, m := range toRemove {
+			transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
+		}
+
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
 		if err == nil {
 			return b, nil
 		}
 
-		var condErr *types.ConditionalCheckFailedException
-		if !errors.As(err, &condErr) {
+		if !isConditionalCheckFailed(err) {
 			return nil, fmt.Errorf("mutating build %q owner %q: %w", buildID, ownerID, err)
 		}
 		// Lost the CAS race - another writer updated Version first. Loop

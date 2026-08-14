@@ -322,6 +322,308 @@ func (_c *MockBuildRepository_DeleteImage_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// FindBuildsReferencingKeyboard provides a mock function for the type MockBuildRepository
+func (_mock *MockBuildRepository) FindBuildsReferencingKeyboard(ctx context.Context, ownerID string, keyboardID string) ([]string, error) {
+	ret := _mock.Called(ctx, ownerID, keyboardID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindBuildsReferencingKeyboard")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]string, error)); ok {
+		return returnFunc(ctx, ownerID, keyboardID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []string); ok {
+		r0 = returnFunc(ctx, ownerID, keyboardID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, ownerID, keyboardID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBuildRepository_FindBuildsReferencingKeyboard_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindBuildsReferencingKeyboard'
+type MockBuildRepository_FindBuildsReferencingKeyboard_Call struct {
+	*mock.Call
+}
+
+// FindBuildsReferencingKeyboard is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ownerID string
+//   - keyboardID string
+func (_e *MockBuildRepository_Expecter) FindBuildsReferencingKeyboard(ctx any, ownerID any, keyboardID any) *MockBuildRepository_FindBuildsReferencingKeyboard_Call {
+	return &MockBuildRepository_FindBuildsReferencingKeyboard_Call{Call: _e.mock.On("FindBuildsReferencingKeyboard", ctx, ownerID, keyboardID)}
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeyboard_Call) Run(run func(ctx context.Context, ownerID string, keyboardID string)) *MockBuildRepository_FindBuildsReferencingKeyboard_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeyboard_Call) Return(strings []string, err error) *MockBuildRepository_FindBuildsReferencingKeyboard_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeyboard_Call) RunAndReturn(run func(ctx context.Context, ownerID string, keyboardID string) ([]string, error)) *MockBuildRepository_FindBuildsReferencingKeyboard_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FindBuildsReferencingKeycapKit provides a mock function for the type MockBuildRepository
+func (_mock *MockBuildRepository) FindBuildsReferencingKeycapKit(ctx context.Context, ownerID string, keycapSetID string, kitID string) ([]string, error) {
+	ret := _mock.Called(ctx, ownerID, keycapSetID, kitID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindBuildsReferencingKeycapKit")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) ([]string, error)); ok {
+		return returnFunc(ctx, ownerID, keycapSetID, kitID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, string) []string); ok {
+		r0 = returnFunc(ctx, ownerID, keycapSetID, kitID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, string) error); ok {
+		r1 = returnFunc(ctx, ownerID, keycapSetID, kitID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBuildRepository_FindBuildsReferencingKeycapKit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindBuildsReferencingKeycapKit'
+type MockBuildRepository_FindBuildsReferencingKeycapKit_Call struct {
+	*mock.Call
+}
+
+// FindBuildsReferencingKeycapKit is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ownerID string
+//   - keycapSetID string
+//   - kitID string
+func (_e *MockBuildRepository_Expecter) FindBuildsReferencingKeycapKit(ctx any, ownerID any, keycapSetID any, kitID any) *MockBuildRepository_FindBuildsReferencingKeycapKit_Call {
+	return &MockBuildRepository_FindBuildsReferencingKeycapKit_Call{Call: _e.mock.On("FindBuildsReferencingKeycapKit", ctx, ownerID, keycapSetID, kitID)}
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeycapKit_Call) Run(run func(ctx context.Context, ownerID string, keycapSetID string, kitID string)) *MockBuildRepository_FindBuildsReferencingKeycapKit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 string
+		if args[3] != nil {
+			arg3 = args[3].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeycapKit_Call) Return(strings []string, err error) *MockBuildRepository_FindBuildsReferencingKeycapKit_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeycapKit_Call) RunAndReturn(run func(ctx context.Context, ownerID string, keycapSetID string, kitID string) ([]string, error)) *MockBuildRepository_FindBuildsReferencingKeycapKit_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FindBuildsReferencingKeycapSet provides a mock function for the type MockBuildRepository
+func (_mock *MockBuildRepository) FindBuildsReferencingKeycapSet(ctx context.Context, ownerID string, keycapSetID string) ([]string, error) {
+	ret := _mock.Called(ctx, ownerID, keycapSetID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindBuildsReferencingKeycapSet")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]string, error)); ok {
+		return returnFunc(ctx, ownerID, keycapSetID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []string); ok {
+		r0 = returnFunc(ctx, ownerID, keycapSetID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, ownerID, keycapSetID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBuildRepository_FindBuildsReferencingKeycapSet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindBuildsReferencingKeycapSet'
+type MockBuildRepository_FindBuildsReferencingKeycapSet_Call struct {
+	*mock.Call
+}
+
+// FindBuildsReferencingKeycapSet is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ownerID string
+//   - keycapSetID string
+func (_e *MockBuildRepository_Expecter) FindBuildsReferencingKeycapSet(ctx any, ownerID any, keycapSetID any) *MockBuildRepository_FindBuildsReferencingKeycapSet_Call {
+	return &MockBuildRepository_FindBuildsReferencingKeycapSet_Call{Call: _e.mock.On("FindBuildsReferencingKeycapSet", ctx, ownerID, keycapSetID)}
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeycapSet_Call) Run(run func(ctx context.Context, ownerID string, keycapSetID string)) *MockBuildRepository_FindBuildsReferencingKeycapSet_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeycapSet_Call) Return(strings []string, err error) *MockBuildRepository_FindBuildsReferencingKeycapSet_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingKeycapSet_Call) RunAndReturn(run func(ctx context.Context, ownerID string, keycapSetID string) ([]string, error)) *MockBuildRepository_FindBuildsReferencingKeycapSet_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// FindBuildsReferencingSwitch provides a mock function for the type MockBuildRepository
+func (_mock *MockBuildRepository) FindBuildsReferencingSwitch(ctx context.Context, ownerID string, switchID string) ([]string, error) {
+	ret := _mock.Called(ctx, ownerID, switchID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for FindBuildsReferencingSwitch")
+	}
+
+	var r0 []string
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) ([]string, error)); ok {
+		return returnFunc(ctx, ownerID, switchID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) []string); ok {
+		r0 = returnFunc(ctx, ownerID, switchID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]string)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, ownerID, switchID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockBuildRepository_FindBuildsReferencingSwitch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FindBuildsReferencingSwitch'
+type MockBuildRepository_FindBuildsReferencingSwitch_Call struct {
+	*mock.Call
+}
+
+// FindBuildsReferencingSwitch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ownerID string
+//   - switchID string
+func (_e *MockBuildRepository_Expecter) FindBuildsReferencingSwitch(ctx any, ownerID any, switchID any) *MockBuildRepository_FindBuildsReferencingSwitch_Call {
+	return &MockBuildRepository_FindBuildsReferencingSwitch_Call{Call: _e.mock.On("FindBuildsReferencingSwitch", ctx, ownerID, switchID)}
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingSwitch_Call) Run(run func(ctx context.Context, ownerID string, switchID string)) *MockBuildRepository_FindBuildsReferencingSwitch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingSwitch_Call) Return(strings []string, err error) *MockBuildRepository_FindBuildsReferencingSwitch_Call {
+	_c.Call.Return(strings, err)
+	return _c
+}
+
+func (_c *MockBuildRepository_FindBuildsReferencingSwitch_Call) RunAndReturn(run func(ctx context.Context, ownerID string, switchID string) ([]string, error)) *MockBuildRepository_FindBuildsReferencingSwitch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function for the type MockBuildRepository
 func (_mock *MockBuildRepository) Get(ctx context.Context, ownerID string, id string) (*repository.Build, error) {
 	ret := _mock.Called(ctx, ownerID, id)
