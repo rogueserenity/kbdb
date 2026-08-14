@@ -150,6 +150,17 @@ func (s *DeleteKeyboardSuite) TestCascade_BuildDeleteFails_ReturnsErrorWithoutDe
 	// mockKeyboards has no .EXPECT() - verifies Delete was never reached.
 }
 
+func (s *DeleteKeyboardSuite) TestUnknownOnDelete_ReturnsError_CallsNothing() {
+	_, err := cascadedelete.DeleteKeyboard(
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		"alice", "kb1", cascadedelete.OnDelete("bogus"),
+	)
+
+	s.Require().Error(err)
+	// mockKeyboards and mockBuilds have no .EXPECT() calls set up -
+	// verifies the unknown value is rejected before any repository call.
+}
+
 func (s *DeleteKeyboardSuite) TestFindReferencingBuildsFails_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").

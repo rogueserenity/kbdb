@@ -10,14 +10,15 @@ import (
 // DeleteKeyboard deletes the keyboard identified by (ownerID, keyboardID),
 // applying onDelete's policy toward any build that still references it:
 //
-//   - OnDeleteBlock (the default): if any build references keyboardID,
-//     deletes nothing and returns a *BlockedError listing those build ids.
+//   - OnDeleteBlock: if any build references keyboardID, deletes nothing
+//     and returns a *BlockedError listing those build ids.
 //   - OnDeleteCascade: deletes every build referencing keyboardID first,
 //     then the keyboard. Returns the deleted build ids.
 //   - OnDeleteDetach: deletes the keyboard unconditionally, without even
 //     checking for references, leaving any referencing build's keyboard
 //     field dangling.
 //
+// onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
 // DeleteKeyboard does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
 func DeleteKeyboard(
@@ -28,6 +29,12 @@ func DeleteKeyboard(
 	ownerID, keyboardID string,
 	onDelete OnDelete,
 ) (Result, error) {
+	switch onDelete {
+	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
+	default:
+		return Result{}, fmt.Errorf("deleting keyboard %q: unknown on_delete value %q", keyboardID, onDelete)
+	}
+
 	if onDelete == OnDeleteDetach {
 		if err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
 			return Result{}, fmt.Errorf("detach-deleting keyboard %q: %w", keyboardID, err)
