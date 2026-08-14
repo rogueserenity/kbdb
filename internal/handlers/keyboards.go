@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
@@ -238,8 +239,14 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 // DeleteKeyboard reads the {userId} and {keyboardId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keyboard returns 404, not 403, to avoid revealing it
-// exists.
-func DeleteKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
+// exists. The on_delete query param (default "block") controls what
+// happens if a build still references this keyboard: see
+// internal/cascadedelete.DeleteKeyboard.
+func DeleteKeyboard(
+	keyboardRepo repository.KeyboardRepository,
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keyboardId")
@@ -249,9 +256,29 @@ func DeleteKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 			return
 		}
 
-		if err := keyboardRepo.Delete(r.Context(), id); err != nil {
+		onDelete, ok := cascadedelete.ParseOnDelete(r.URL.Query().Get("on_delete"))
+		if !ok {
+			problem.BadRequest(w, "on_delete must be one of: block, cascade, detach")
+			return
+		}
+
+		result, err := cascadedelete.DeleteKeyboard(r.Context(), keyboardRepo, buildRepo, images, ownerID, id, onDelete)
+		if errors.Is(err, cascadedelete.ErrBlocked) {
+			var blocked *cascadedelete.BlockedError
+			errors.As(err, &blocked)
+			problem.StillReferenced(w, "keyboard is still referenced by one or more builds", blocked.BuildIDs)
+			return
+		}
+		if err != nil {
 			log.FromContext(r.Context()).Error("deleting keyboard", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to delete keyboard")
+			return
+		}
+
+		if onDelete == cascadedelete.OnDeleteCascade {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(api.CascadeDeleteResult{DeletedBuildIds: result.DeletedBuildIDs})
 			return
 		}
 

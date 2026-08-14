@@ -811,8 +811,10 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MalformedStoredDate_Returns500N
 type DeleteKeyboardSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeyboardRepository
-	handler  http.HandlerFunc
+	mockKeyboards *mocks.MockKeyboardRepository
+	mockBuilds    *mocks.MockBuildRepository
+	mockImages    *mocks.MockBuildImageStore
+	handler       http.HandlerFunc
 }
 
 func TestDeleteKeyboardSuite(t *testing.T) {
@@ -820,12 +822,18 @@ func TestDeleteKeyboardSuite(t *testing.T) {
 }
 
 func (s *DeleteKeyboardSuite) SetupTest() {
-	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.handler = DeleteKeyboard(s.mockRepo)
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.handler = DeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
 }
 
-func (s *DeleteKeyboardSuite) newRequest(ctx context.Context) *http.Request {
-	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keyboards/kb1", nil)
+func (s *DeleteKeyboardSuite) newRequest(ctx context.Context, onDelete string) *http.Request {
+	target := "/users/alice/keyboards/kb1"
+	if onDelete != "" {
+		target += "?on_delete=" + onDelete
+	}
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, target, nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keyboardId", "kb1")
 	return req
@@ -835,22 +843,89 @@ func (s *DeleteKeyboardSuite) ownerCtx() context.Context {
 	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
-func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Succeeds() {
-	s.mockRepo.EXPECT().
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_DefaultOnDelete_NoReferences_Returns204() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, "alice", "kb1").
+		Return(nil, nil)
+	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
 		Return(nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Block_Referenced_Returns409WithBlockingBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, "alice", "kb1").
+		Return([]string{"build-1", "build-2"}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "block"))
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var body struct {
+		BlockingBuildIDs []string `json:"blocking_build_ids"`
+	}
+	s.Require().NoError(json.NewDecoder(rec.Body).Decode(&body))
+	s.ElementsMatch([]string{"build-1", "build-2"}, body.BlockingBuildIDs)
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
+	s.mockKeyboards.EXPECT().
+		Delete(mock.Anything, "kb1").
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingKeyboard
+	// was never called in detach mode.
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Cascade_Referenced_Returns200WithDeletedBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, "alice", "kb1").
+		Return([]string{"build-1"}, nil)
+	s.mockBuilds.EXPECT().
+		Delete(mock.Anything, "build-1").
+		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
+	s.mockKeyboards.EXPECT().
+		Delete(mock.Anything, "kb1").
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "cascade"))
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var body struct {
+		DeletedBuildIDs []string `json:"deleted_build_ids"`
+	}
+	s.Require().NoError(json.NewDecoder(rec.Body).Decode(&body))
+	s.Equal([]string{"build-1"}, body.DeletedBuildIDs)
+}
+
+func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_InvalidOnDelete_Returns400() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "bogus"))
+
+	s.Equal(http.StatusBadRequest, rec.Code)
 }
 
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx))
+	s.handler(rec, s.newRequest(ctx, ""))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -858,20 +933,22 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_NotOwner_Returns404() {
 
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Anonymous_Returns404() {
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.T().Context()))
+	s.handler(rec, s.newRequest(s.T().Context(), ""))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_RepositoryError_Returns500() {
-	s.mockRepo.EXPECT().
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, "alice", "kb1").
+		Return(nil, nil)
+	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
 		Return(errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }

@@ -73,7 +73,7 @@ func New(
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteKeyboard(keyboardRepo))))
+		middleware.Auth(verifier)(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see internal/authz.ReadableVisibilities).
