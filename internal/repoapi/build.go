@@ -98,10 +98,7 @@ func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo rep
 		return api.BuildSummary{}, err
 	}
 	if ok {
-		summary.Keyboard = &struct {
-			Brand *string `json:"brand,omitempty"`
-			Name  *string `json:"name,omitempty"`
-		}{Brand: &kb.Brand, Name: &kb.Name}
+		summary.Keyboard = &api.BuildSummaryKeyboard{Brand: &kb.Brand, Name: &kb.Name}
 	}
 
 	return summary, nil

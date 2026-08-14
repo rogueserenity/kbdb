@@ -1389,6 +1389,15 @@ components:
             new on every fetch of the build — do not cache or persist this
             value, it expires.
 
+    BuildSummaryKeyboard:
+      type: object
+      description: A build's denormalized keyboard brand/name, for display in a list view.
+      properties:
+        brand:
+          type: string
+        name:
+          type: string
+
     Build:
       allOf:
         - $ref: "#/components/schemas/BuildInput"
@@ -1423,12 +1432,7 @@ components:
             - type: "null"
           description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Build resource).
         keyboard:
-          type: object
-          properties:
-            brand:
-              type: string
-            name:
-              type: string
+          $ref: "#/components/schemas/BuildSummaryKeyboard"
 
     BuildListPage:
       type: object
