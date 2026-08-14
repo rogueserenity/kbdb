@@ -1,5 +1,5 @@
 [tools]
-go = "1.26.5"
+go = "1.26.6"
 aws-cli = "2"
 aws-sam-cli = "1.165.0"
 mockery = "3.7.3"
