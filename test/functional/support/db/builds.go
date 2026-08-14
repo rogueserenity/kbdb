@@ -8,20 +8,17 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
 
-// keyboardRefMarkerSortKey mirrors internal/repository/dynamo.refMarker's
-// sortKey format for a keyboard reference marker, so SeedBuild/DeleteBuild
-// keep BuildRefIndex consistent with what the real repository would write -
-// tests exercising FindBuildsReferencingKeyboard need the marker item to
-// exist, not just the base Build item.
+// keyboardRefMarkerSortKey mirrors the marker item sort key format
+// [github.com/rogueserenity/kbdb/internal/repository/dynamo] writes for a
+// keyboard reference, so seeded builds are discoverable via
+// [github.com/rogueserenity/kbdb/internal/repository.BuildRepository.FindBuildsReferencingKeyboard]
+// without needing a real Create call.
 func keyboardRefMarkerSortKey(keyboardID, buildID string) string {
 	return fmt.Sprintf("REF#keyboard#%s#%s", keyboardID, buildID)
 }
 
 // SeedBuild writes directly to the table, bypassing buildrefs' existence
-// check - keyboardID isn't validated against a real keyboard. It also
-// writes the keyboard reverse-reference marker item BuildRepository's real
-// Create path would write, so the seeded build is discoverable via
-// FindBuildsReferencingKeyboard.
+// check - keyboardID isn't validated against a real keyboard.
 func SeedBuild(ctx context.Context, ownerID, id, keyboardID, visibility string) error {
 	table := NewDynamoTable(ctx, support.BuildTableName())
 	if err := table.PutItem(ctx, map[string]any{

@@ -12,18 +12,14 @@ import (
 //
 //   - OnDeleteBlock (the default): if any build references keyboardID,
 //     deletes nothing and returns a *BlockedError listing those build ids.
-//   - OnDeleteCascade: deletes every build referencing keyboardID first -
-//     via the same buildRepo.Delete + images.BestEffortDelete calls
-//     DeleteBuild's own handler/MCP tool make, so a cascaded build is
-//     cleaned up identically to an explicit DeleteBuild call - then
-//     deletes the keyboard. Returns the deleted build ids.
+//   - OnDeleteCascade: deletes every build referencing keyboardID first,
+//     then the keyboard. Returns the deleted build ids.
 //   - OnDeleteDetach: deletes the keyboard unconditionally, without even
 //     checking for references, leaving any referencing build's keyboard
-//     field dangling (today's pre-cascade-delete behavior).
+//     field dangling.
 //
-// ownerID must be the caller's own resolved subject; DeleteKeyboard does no
-// authorization itself - callers (handlers/MCP tools) are responsible for
-// that, as they already are for every other delete path.
+// DeleteKeyboard does no authorization itself; ownerID must already be the
+// caller's own resolved subject.
 func DeleteKeyboard(
 	ctx context.Context,
 	keyboardRepo repository.KeyboardRepository,
@@ -54,7 +50,6 @@ func DeleteKeyboard(
 		return Result{}, nil
 	}
 
-	// onDelete == OnDeleteCascade.
 	for _, buildID := range buildIDs {
 		imageKeys, err := buildRepo.Delete(ctx, buildID)
 		if err != nil {

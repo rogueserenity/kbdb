@@ -241,7 +241,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 // another user's keyboard returns 404, not 403, to avoid revealing it
 // exists. The on_delete query param (default "block") controls what
 // happens if a build still references this keyboard: see
-// internal/cascadedelete.DeleteKeyboard.
+// [cascadedelete.DeleteKeyboard].
 func DeleteKeyboard(
 	keyboardRepo repository.KeyboardRepository,
 	buildRepo repository.BuildRepository,

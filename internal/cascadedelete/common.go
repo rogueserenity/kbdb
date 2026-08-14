@@ -29,9 +29,8 @@ const (
 )
 
 // ParseOnDelete maps a raw on_delete value (a REST query param or MCP tool
-// input field) to an OnDelete. An empty raw defaults to OnDeleteBlock,
-// matching the documented default. ok is false if raw is non-empty and
-// isn't one of block/cascade/detach.
+// input field) to an OnDelete. An empty raw defaults to OnDeleteBlock. ok is
+// false if raw is non-empty and isn't one of block/cascade/detach.
 func ParseOnDelete(raw string) (onDelete OnDelete, ok bool) {
 	switch OnDelete(raw) {
 	case "":
@@ -44,12 +43,12 @@ func ParseOnDelete(raw string) (onDelete OnDelete, ok bool) {
 }
 
 // ErrBlocked is returned by a DeleteX call in block mode when the item is
-// still referenced by at least one build. Callers use errors.As with
+// still referenced by at least one build. Callers use [errors.As] with
 // *BlockedError to get the blocking build ids.
 var ErrBlocked = errors.New("item is still referenced by at least one build")
 
 // BlockedError carries the ids of the builds blocking a DeleteX call. It
-// matches errors.Is(err, ErrBlocked).
+// matches [errors.Is](err, ErrBlocked).
 type BlockedError struct {
 	BuildIDs []string
 }
@@ -58,8 +57,7 @@ func (e *BlockedError) Error() string {
 	return fmt.Sprintf("still referenced by builds: %s", strings.Join(e.BuildIDs, ", "))
 }
 
-// Is matches ErrBlocked so errors.Is(err, ErrBlocked) works on a
-// *BlockedError without callers needing errors.As.
+// Is reports whether target is [ErrBlocked].
 func (e *BlockedError) Is(target error) bool {
 	return target == ErrBlocked
 }
