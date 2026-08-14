@@ -234,14 +234,7 @@ func handleDeleteKeycapSet(
 			return nil, schema.DeleteKeycapSetOutput{}, errors.New("failed to delete keycap set")
 		}
 
-		// Best-effort: the set itself is already gone by this point, so a
-		// failed image cleanup is logged, not surfaced as a tool error,
-		// matching handlers.DeleteKeycapSet.
-		for _, key := range imageKeys {
-			if err := images.Delete(ctx, key); err != nil {
-				log.FromContext(ctx).Warn("deleting keycap kit image object after set delete", log.KeycapSetID, in.KeycapSetID, log.KeycapKitImage, key, log.Error, err)
-			}
-		}
+		images.BestEffortDelete(ctx, imageKeys)
 
 		return nil, schema.DeleteKeycapSetOutput{}, nil
 	}

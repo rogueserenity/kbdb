@@ -576,6 +576,7 @@ func (s *HandleDeleteKeycapSetSuite) SetupTest() {
 
 func (s *HandleDeleteKeycapSetSuite) TestSucceeds() {
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
@@ -592,6 +593,7 @@ func (s *HandleDeleteKeycapSetSuite) TestBlankKeycapSetID_ReturnsError() {
 
 func (s *HandleDeleteKeycapSetSuite) TestNotFound_StillSucceeds() {
 	s.mockRepo.EXPECT().Delete(mock.Anything, "missing").Return(nil, repository.ErrNotFound)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "missing"})
@@ -599,28 +601,15 @@ func (s *HandleDeleteKeycapSetSuite) TestNotFound_StillSucceeds() {
 	s.Require().NoError(err, "delete is idempotent: a nonexistent id is not an error")
 }
 
-func (s *HandleDeleteKeycapSetSuite) TestImageKeysAreCleanedUp() {
-	key1 := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
-	key2 := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-2/image")
-	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return([]repository.KeycapKitImageKey{key1, key2}, nil)
-	s.mockImages.EXPECT().Delete(mock.Anything, key1).Return(nil)
-	s.mockImages.EXPECT().Delete(mock.Anything, key2).Return(nil)
+func (s *HandleDeleteKeycapSetSuite) TestImageKeysAreBestEffortCleanedUp() {
+	keys := []repository.KeycapKitImageKey{"keycap-sets/u/ks-1/kits/kit-1/image", "keycap-sets/u/ks-1/kits/kit-2/image"}
+	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(keys, nil)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, keys).Return()
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().NoError(err)
-}
-
-func (s *HandleDeleteKeycapSetSuite) TestImageCleanupFailure_StillSucceeds() {
-	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
-	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return([]repository.KeycapKitImageKey{key}, nil)
-	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
-
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
-
-	s.Require().NoError(err, "the set is already deleted by this point, so a failed best-effort image cleanup must not fail the tool call")
 }
 
 func (s *HandleDeleteKeycapSetSuite) TestRepositoryError_ReturnsError() {

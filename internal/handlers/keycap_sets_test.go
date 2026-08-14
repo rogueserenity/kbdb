@@ -677,6 +677,9 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).
+		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -684,32 +687,14 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
-func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_KitsWithImages_DeletesEachFromImages() {
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_KitsWithImages_BestEffortDeletesThem() {
 	keys := []repository.KeycapKitImageKey{"keycap-sets/alice/ks1/kits/kit1/image", "keycap-sets/alice/ks1/kits/kit2/image"}
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(keys, nil)
 	s.mockImages.EXPECT().
-		Delete(mock.Anything, keys[0]).
-		Return(nil)
-	s.mockImages.EXPECT().
-		Delete(mock.Anything, keys[1]).
-		Return(nil)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusNoContent, rec.Code)
-}
-
-func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_ImageDeleteFails_StillReturns204() {
-	keys := []repository.KeycapKitImageKey{"keycap-sets/alice/ks1/kits/kit1/image"}
-	s.mockRepo.EXPECT().
-		Delete(mock.Anything, "ks1").
-		Return(keys, nil)
-	s.mockImages.EXPECT().
-		Delete(mock.Anything, keys[0]).
-		Return(errors.New("s3: access denied"))
+		BestEffortDelete(mock.Anything, keys).
+		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -721,6 +706,9 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryNotFound_StillRetur
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(nil, repository.ErrNotFound)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).
+		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))

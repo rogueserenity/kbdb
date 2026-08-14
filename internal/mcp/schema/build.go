@@ -80,6 +80,15 @@ type UpdateBuildOutput struct {
 	Build Build `json:"build" jsonschema:"the updated build"`
 }
 
+// DeleteBuildInput is the delete_build tool's input.
+type DeleteBuildInput struct {
+	BuildID string `json:"build_id" jsonschema:"the id of the build to delete"`
+}
+
+// DeleteBuildOutput is the delete_build tool's output. Deleting is
+// idempotent, so there is no payload.
+type DeleteBuildOutput struct{}
+
 // GetBuildInput is the get_build tool's input.
 type GetBuildInput struct {
 	BuildID string `json:"build_id" jsonschema:"the build's unique id"`

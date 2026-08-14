@@ -268,3 +268,30 @@ func UpdateBuild(
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
+
+// DeleteBuild reads the {userId} and {buildId} path values and requires an
+// authenticated caller. userId must be the caller's own subject; deleting
+// another user's build always returns 404. Deleting is idempotent: a build
+// that doesn't exist returns 204.
+func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("buildId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		imageKeys, err := buildRepo.Delete(r.Context(), id)
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
+			log.FromContext(r.Context()).Error("deleting build", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to delete build")
+			return
+		}
+
+		images.BestEffortDelete(r.Context(), imageKeys)
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}

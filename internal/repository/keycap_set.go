@@ -143,4 +143,8 @@ type KeycapKitImageStore interface {
 	// Delete removes the object at key. Idempotent: a nonexistent key is
 	// not an error, matching S3's own DeleteObject semantics.
 	Delete(ctx context.Context, key KeycapKitImageKey) error
+
+	// BestEffortDelete deletes each of keys, logging rather than returning
+	// any per-key failure.
+	BestEffortDelete(ctx context.Context, keys []KeycapKitImageKey)
 }

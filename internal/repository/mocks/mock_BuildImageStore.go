@@ -38,6 +38,52 @@ func (_m *MockBuildImageStore) EXPECT() *MockBuildImageStore_Expecter {
 	return &MockBuildImageStore_Expecter{mock: &_m.Mock}
 }
 
+// BestEffortDelete provides a mock function for the type MockBuildImageStore
+func (_mock *MockBuildImageStore) BestEffortDelete(ctx context.Context, keys []repository.BuildImageKey) {
+	_mock.Called(ctx, keys)
+	return
+}
+
+// MockBuildImageStore_BestEffortDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BestEffortDelete'
+type MockBuildImageStore_BestEffortDelete_Call struct {
+	*mock.Call
+}
+
+// BestEffortDelete is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keys []repository.BuildImageKey
+func (_e *MockBuildImageStore_Expecter) BestEffortDelete(ctx any, keys any) *MockBuildImageStore_BestEffortDelete_Call {
+	return &MockBuildImageStore_BestEffortDelete_Call{Call: _e.mock.On("BestEffortDelete", ctx, keys)}
+}
+
+func (_c *MockBuildImageStore_BestEffortDelete_Call) Run(run func(ctx context.Context, keys []repository.BuildImageKey)) *MockBuildImageStore_BestEffortDelete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []repository.BuildImageKey
+		if args[1] != nil {
+			arg1 = args[1].([]repository.BuildImageKey)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockBuildImageStore_BestEffortDelete_Call) Return() *MockBuildImageStore_BestEffortDelete_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *MockBuildImageStore_BestEffortDelete_Call) RunAndReturn(run func(ctx context.Context, keys []repository.BuildImageKey)) *MockBuildImageStore_BestEffortDelete_Call {
+	_c.Run(run)
+	return _c
+}
+
 // DeleteBuildImage provides a mock function for the type MockBuildImageStore
 func (_mock *MockBuildImageStore) DeleteBuildImage(ctx context.Context, key repository.BuildImageKey) error {
 	ret := _mock.Called(ctx, key)

@@ -110,11 +110,13 @@ func New(
 		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
 		middleware.Auth(verifier)(validate(handlers.UpdateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",
+		middleware.Auth(verifier)(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
 	// only covers the REST surface.
-	mcpHandlers := mcp.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, issuerURL, version)
+	mcpHandlers := mcp.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

@@ -565,3 +565,66 @@ func (s *HandleGetBuildSuite) TestOtherUsersSharedVisibilityBuild_Succeeds() {
 	s.Require().NoError(err)
 	s.Equal("build-1", out.Build.ID)
 }
+
+type HandleDeleteBuildSuite struct {
+	suite.Suite
+
+	mockBuilds *mocks.MockBuildRepository
+	mockImages *mocks.MockBuildImageStore
+}
+
+func TestHandleDeleteBuildSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteBuildSuite))
+}
+
+func (s *HandleDeleteBuildSuite) SetupTest() {
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+}
+
+func (s *HandleDeleteBuildSuite) TestSucceeds() {
+	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil, nil)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).Return()
+
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteBuildSuite) TestBlankBuildID_ReturnsError() {
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: ""})
+
+	s.Require().ErrorContains(err, "build_id must not be blank")
+}
+
+func (s *HandleDeleteBuildSuite) TestNotFound_StillSucceeds() {
+	s.mockBuilds.EXPECT().Delete(mock.Anything, "missing").Return(nil, repository.ErrNotFound)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).Return()
+
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "missing"})
+
+	s.Require().NoError(err, "delete is idempotent: a nonexistent id is not an error")
+}
+
+func (s *HandleDeleteBuildSuite) TestImageKeysAreBestEffortCleanedUp() {
+	keys := []repository.BuildImageKey{"builds/u/build-1/images/img-1", "builds/u/build-1/images/img-2"}
+	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(keys, nil)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, keys).Return()
+
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteBuildSuite) TestRepositoryError_ReturnsError() {
+	s.mockBuilds.EXPECT().Delete(mock.Anything, mock.Anything).Return(nil, errors.New("delete failed"))
+
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
+
+	s.Require().ErrorContains(err, "failed to delete build")
+}

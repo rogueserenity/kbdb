@@ -110,14 +110,15 @@ func NewBuildImageKey(ctx context.Context, buildID, imageID string) (BuildImageK
 
 // BuildImageStore is a parallel interface to [KeycapKitImageStore], not
 // shared, since a build's images are a growable array of server-generated
-// ids rather than a single optional slot. Method names are suffixed
-// because the concrete s3.ImageStore implements both interfaces on one
-// struct, and Go doesn't allow two methods of the same name with
-// different signatures.
+// ids rather than a single optional slot.
 type BuildImageStore interface {
 	PresignGetBuildImage(ctx context.Context, key BuildImageKey) (url string, err error)
 	PresignPutBuildImage(ctx context.Context, key BuildImageKey, contentType string) (url string, err error)
 
 	// DeleteBuildImage is idempotent, matching S3's own DeleteObject.
 	DeleteBuildImage(ctx context.Context, key BuildImageKey) error
+
+	// BestEffortDelete deletes each of keys, logging rather than returning
+	// any per-key failure.
+	BestEffortDelete(ctx context.Context, keys []BuildImageKey)
 }
