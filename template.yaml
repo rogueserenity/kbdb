@@ -452,6 +452,14 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # Default CognitoAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        UpdateBuildEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/builds/{buildId}
+            Method: put
         # Authorizer: NONE is deliberate on all three MCP routes below -
         # internal/mcp handles auth itself and needs the request to reach it.
         McpEvent:
