@@ -374,7 +374,9 @@ func (s *HandleUpdateKeyboardSuite) TestNotFound_ReturnsNotFound() {
 type HandleDeleteKeyboardSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeyboardRepository
+	mockKeyboards *mocks.MockKeyboardRepository
+	mockBuilds    *mocks.MockBuildRepository
+	mockImages    *mocks.MockBuildImageStore
 }
 
 func TestHandleDeleteKeyboardSuite(t *testing.T) {
@@ -382,32 +384,96 @@ func TestHandleDeleteKeyboardSuite(t *testing.T) {
 }
 
 func (s *HandleDeleteKeyboardSuite) SetupTest() {
-	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 }
 
 func (s *HandleDeleteKeyboardSuite) TestSucceeds() {
-	s.mockRepo.EXPECT().Delete(mock.Anything, "kb-1").Return(nil)
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, mock.Anything, "kb-1").
+		Return(nil, nil)
+	s.mockKeyboards.EXPECT().
+		Delete(mock.Anything, "kb-1").
+		Return(nil)
 
-	handler := handleDeleteKeyboard(s.mockRepo)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
 
 	s.Require().NoError(err)
+	s.Empty(out.DeletedBuildIDs)
 }
 
 func (s *HandleDeleteKeyboardSuite) TestBlankKeyboardID_ReturnsError() {
-	handler := handleDeleteKeyboard(s.mockRepo)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: ""})
 
-	s.Require().ErrorContains(err, "keyboard_id must not be blank")
+	s.Require().Error(err)
+}
+
+func (s *HandleDeleteKeyboardSuite) TestInvalidOnDelete_ReturnsError() {
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "bogus"})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleDeleteKeyboardSuite) TestBlock_Referenced_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, mock.Anything, "kb-1").
+		Return([]string{"build-1"}, nil)
+
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "block"})
+
+	s.Require().ErrorContains(err, "build-1")
+}
+
+func (s *HandleDeleteKeyboardSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
+	s.mockKeyboards.EXPECT().
+		Delete(mock.Anything, "kb-1").
+		Return(nil)
+
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "detach"})
+
+	s.Require().NoError(err)
+	s.Empty(out.DeletedBuildIDs)
+}
+
+func (s *HandleDeleteKeyboardSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, mock.Anything, "kb-1").
+		Return([]string{"build-1"}, nil)
+	s.mockBuilds.EXPECT().
+		Delete(mock.Anything, "build-1").
+		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
+	s.mockKeyboards.EXPECT().
+		Delete(mock.Anything, "kb-1").
+		Return(nil)
+
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "cascade"})
+
+	s.Require().NoError(err)
+	s.Equal([]string{"build-1"}, out.DeletedBuildIDs)
 }
 
 func (s *HandleDeleteKeyboardSuite) TestRepositoryError_ReturnsError() {
-	s.mockRepo.EXPECT().Delete(mock.Anything, mock.Anything).Return(errors.New("delete failed"))
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(mock.Anything, mock.Anything, "kb-1").
+		Return(nil, nil)
+	s.mockKeyboards.EXPECT().
+		Delete(mock.Anything, "kb-1").
+		Return(errors.New("delete failed"))
 
-	handler := handleDeleteKeyboard(s.mockRepo)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
 
-	s.Require().ErrorContains(err, "failed to delete keyboard")
+	s.Require().Error(err)
 }
 
 // REST rejects a malformed date via api/openapi.yaml's `format: date`. MCP

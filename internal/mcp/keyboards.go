@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -44,7 +45,7 @@ var updateKeyboardTool = &mcp.Tool{
 
 var deleteKeyboardTool = &mcp.Tool{
 	Name:        "delete_keyboard",
-	Description: "Removes a keyboard from your own collection. Idempotent: deleting a keyboard that isn't there succeeds.",
+	Description: "Removes a keyboard from your own collection. Idempotent: deleting a keyboard that isn't there succeeds. on_delete controls what happens if a build still references this keyboard: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the keyboard and every referencing build; \"detach\" deletes the keyboard regardless, leaving referencing builds with a dangling keyboard_id.",
 }
 
 func handleListKeyboards(repo repository.KeyboardRepository) mcp.ToolHandlerFor[schema.ListKeyboardsInput, schema.ListKeyboardsOutput] {
@@ -139,18 +140,38 @@ func handleUpdateKeyboard(
 	}
 }
 
-func handleDeleteKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[schema.DeleteKeyboardInput, schema.DeleteKeyboardOutput] {
+func handleDeleteKeyboard(
+	keyboardRepo repository.KeyboardRepository,
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) mcp.ToolHandlerFor[schema.DeleteKeyboardInput, schema.DeleteKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeyboardInput) (*mcp.CallToolResult, schema.DeleteKeyboardOutput, error) {
 		if strings.TrimSpace(in.KeyboardID) == "" {
 			return nil, schema.DeleteKeyboardOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
-		if err := repo.Delete(ctx, in.KeyboardID); err != nil {
+		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
+		if !ok {
+			return nil, schema.DeleteKeyboardOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+		}
+
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteKeyboardOutput{}, err
+		}
+
+		result, err := cascadedelete.DeleteKeyboard(ctx, keyboardRepo, buildRepo, images, ownerID, in.KeyboardID, onDelete)
+		if errors.Is(err, cascadedelete.ErrBlocked) {
+			var blocked *cascadedelete.BlockedError
+			errors.As(err, &blocked)
+			return nil, schema.DeleteKeyboardOutput{}, fmt.Errorf("keyboard is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
+		}
+		if err != nil {
 			log.FromContext(ctx).Error("deleting keyboard", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.DeleteKeyboardOutput{}, errors.New("failed to delete keyboard")
 		}
 
-		return nil, schema.DeleteKeyboardOutput{}, nil
+		return nil, schema.DeleteKeyboardOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
 	}
 }
 
