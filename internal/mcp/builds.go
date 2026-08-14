@@ -24,6 +24,8 @@ var errBuildAlreadyExists = errors.New("build already exists")
 
 var errBuildNotFound = errors.New("build not found")
 
+var errBuildMutationConflict = errors.New("the build is being modified concurrently, please retry")
+
 // errNoCaller mirrors [errNoTokenInfo]'s fail-closed shape: unreachable in
 // practice since [identityMiddleware] always sets a caller ID before a tool
 // handler runs, but this fails closed rather than validating references
@@ -43,6 +45,11 @@ var getBuildTool = &mcp.Tool{
 var listBuildsTool = &mcp.Tool{
 	Name:        "list_builds",
 	Description: "Lists builds in a user's collection, most useful for browsing. Returns an abbreviated shape, including the referenced keyboard's brand/name; call get_build for a single build's full details. Omit user_id to list your own builds.",
+}
+
+var updateBuildTool = &mcp.Tool{
+	Name:        "update_build",
+	Description: "Replaces every field of one of your own builds - fields omitted from the call are cleared, not left unchanged. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images are managed separately and are unaffected by this call.",
 }
 
 func handleListBuilds(
@@ -135,6 +142,61 @@ func handleCreateBuild(
 		}
 
 		return nil, schema.CreateBuildOutput{Build: repomcp.BuildToMCP(*created)}, nil
+	}
+}
+
+func handleUpdateBuild(
+	buildRepo repository.BuildRepository,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+) mcp.ToolHandlerFor[schema.UpdateBuildInput, schema.UpdateBuildOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateBuildInput) (*mcp.CallToolResult, schema.UpdateBuildOutput, error) {
+		if strings.TrimSpace(in.BuildID) == "" {
+			return nil, schema.UpdateBuildOutput{}, errors.New("build_id must not be blank")
+		}
+
+		b, err := validatedBuild(ctx, in.BuildInput)
+		if err != nil {
+			return nil, schema.UpdateBuildOutput{}, err
+		}
+
+		ownerID, ok := kbdbctx.UserID(ctx)
+		if !ok {
+			return nil, schema.UpdateBuildOutput{}, errNoCaller
+		}
+
+		fieldErrs, err := buildrefs.ValidateReferences(ctx, ownerID, b, keyboardRepo, switchRepo, keycapSetRepo)
+		if err != nil {
+			log.FromContext(ctx).Error("validating build references", log.Error, err)
+			return nil, schema.UpdateBuildOutput{}, errors.New("failed to validate build")
+		}
+		if len(fieldErrs) > 0 {
+			reasons := make([]string, len(fieldErrs))
+			for i, fe := range fieldErrs {
+				reasons[i] = fmt.Sprintf("%s: %q %s", fe.Field, fe.Value, fe.Reason)
+			}
+			return nil, schema.UpdateBuildOutput{}, errors.New(strings.Join(reasons, "; "))
+		}
+
+		b.ID = in.BuildID
+
+		updated, err := buildRepo.Update(ctx, b)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.UpdateBuildOutput{}, errBuildNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			// Warn, not Error: expected contention under retry, not a bug -
+			// still worth a trace if one build sees this repeatedly.
+			log.FromContext(ctx).Warn("build mutation conflict", log.BuildID, b.ID)
+			return nil, schema.UpdateBuildOutput{}, errBuildMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("updating build", log.BuildID, b.ID, log.Error, err)
+			return nil, schema.UpdateBuildOutput{}, errors.New("failed to update build")
+		}
+
+		return nil, schema.UpdateBuildOutput{Build: repomcp.BuildToMCP(*updated)}, nil
 	}
 }
 

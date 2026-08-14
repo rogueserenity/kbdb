@@ -29,6 +29,11 @@ func (c *BuildsClient) Get(ctx context.Context, ownerID, id, token string) (*htt
 	return c.client.Do(ctx, http.MethodGet, "/v1/users/"+ownerID+"/builds/"+id, token, nil)
 }
 
+// Update calls PUT /v1/users/{ownerID}/builds/{id}.
+func (c *BuildsClient) Update(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPut, "/v1/users/"+ownerID+"/builds/"+id, token, bytes.NewBufferString(body))
+}
+
 // List sends limit as the query parameter when >= 0; a negative limit
 // omits it, letting the server apply its default.
 func (c *BuildsClient) List(ctx context.Context, ownerID, token string, limit int) (*http.Response, error) {

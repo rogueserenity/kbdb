@@ -108,6 +108,8 @@ func New(
 	// Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore))))
+	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
+		middleware.Auth(verifier)(validate(handlers.UpdateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 
 	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
 	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml

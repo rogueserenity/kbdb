@@ -251,6 +251,134 @@ func (s *HandleCreateBuildSuite) TestReferenceCheckRepositoryError_ReturnsError(
 	s.Require().ErrorContains(err, "failed to validate build")
 }
 
+type HandleUpdateBuildSuite struct {
+	suite.Suite
+
+	mockBuilds    *mocks.MockBuildRepository
+	mockKeyboards *mocks.MockKeyboardRepository
+	mockSwitches  *mocks.MockSwitchRepository
+	mockKeycaps   *mocks.MockKeycapSetRepository
+}
+
+func TestHandleUpdateBuildSuite(t *testing.T) {
+	suite.Run(t, new(HandleUpdateBuildSuite))
+}
+
+func (s *HandleUpdateBuildSuite) SetupTest() {
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
+	s.mockKeycaps = mocks.NewMockKeycapSetRepository(s.T())
+}
+
+func (s *HandleUpdateBuildSuite) handler() mcp.ToolHandlerFor[schema.UpdateBuildInput, schema.UpdateBuildOutput] {
+	return handleUpdateBuild(s.mockBuilds, s.mockKeyboards, s.mockSwitches, s.mockKeycaps)
+}
+
+func (s *HandleUpdateBuildSuite) stubOwnedKeyboard() {
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, mock.Anything, "kb-1").
+		Return(&repository.Keyboard{ID: "kb-1"}, nil).
+		Maybe()
+}
+
+func (s *HandleUpdateBuildSuite) TestSucceeds() {
+	s.stubOwnedKeyboard()
+	s.mockBuilds.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, b repository.Build) (*repository.Build, error) {
+			return &b, nil
+		})
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{
+		BuildID:    "b-1",
+		BuildInput: validBuildInput(),
+	})
+
+	s.Require().NoError(err)
+	s.Equal("b-1", out.Build.ID, "update must target the requested id")
+}
+
+func (s *HandleUpdateBuildSuite) TestBlankBuildID_ReturnsError() {
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{
+		BuildID:    "  ",
+		BuildInput: validBuildInput(),
+	})
+
+	s.Require().ErrorContains(err, "build_id must not be blank")
+}
+
+func (s *HandleUpdateBuildSuite) TestBlankKeyboard_ReturnsError() {
+	in := validBuildInput()
+	in.Keyboard = "   "
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{BuildID: "b-1", BuildInput: in})
+
+	s.Require().ErrorContains(err, "keyboard must not be blank")
+}
+
+func (s *HandleUpdateBuildSuite) TestMissingKeyboard_ReturnsError() {
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, mock.Anything, "kb-1").
+		Return(nil, repository.ErrNotFound)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{
+		BuildID:    "b-1",
+		BuildInput: validBuildInput(),
+	})
+
+	s.Require().ErrorContains(err, "keyboard")
+}
+
+func (s *HandleUpdateBuildSuite) TestNotFound_ReturnsNotFound() {
+	s.stubOwnedKeyboard()
+	s.mockBuilds.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{
+		BuildID:    "missing",
+		BuildInput: validBuildInput(),
+	})
+
+	s.Require().ErrorIs(err, errBuildNotFound)
+}
+
+func (s *HandleUpdateBuildSuite) TestMutationConflict_ReturnsConflictError() {
+	s.stubOwnedKeyboard()
+	s.mockBuilds.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{
+		BuildID:    "b-1",
+		BuildInput: validBuildInput(),
+	})
+
+	s.Require().ErrorIs(err, errBuildMutationConflict)
+}
+
+func (s *HandleUpdateBuildSuite) TestRepositoryError_ReturnsError() {
+	s.stubOwnedKeyboard()
+	s.mockBuilds.EXPECT().
+		Update(mock.Anything, mock.Anything).
+		Return(nil, errors.New("update failed"))
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{
+		BuildID:    "b-1",
+		BuildInput: validBuildInput(),
+	})
+
+	s.Require().ErrorContains(err, "failed to update build")
+}
+
 func strPtrMCP(s string) *string { return &s }
 
 type HandleListBuildsSuite struct {

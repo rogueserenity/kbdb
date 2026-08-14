@@ -199,3 +199,72 @@ func CreateBuild(
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
+
+// UpdateBuild reads the {userId} and {buildId} path values and requires an
+// authenticated caller. userId must be the caller's own subject; updating
+// another user's build, or one that doesn't exist, both return 404, to
+// avoid revealing it exists.
+func UpdateBuild(
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("buildId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.BuildInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		b := repoapi.BuildToRepo(in)
+
+		if !validateBuildLookups(r.Context(), w, b) {
+			return
+		}
+
+		if !validateBuildReferences(r.Context(), w, ownerID, b, keyboardRepo, switchRepo, keycapSetRepo) {
+			return
+		}
+
+		b.ID = id
+
+		updated, err := buildRepo.Update(r.Context(), b)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			// Warn, not Error: expected contention under retry, not a bug -
+			// still worth a trace if one build sees this repeatedly.
+			log.FromContext(r.Context()).Warn("build mutation conflict", log.BuildID, id)
+			problem.Conflict(w, "the build is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("updating build", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to update build")
+			return
+		}
+
+		out, err := repoapi.BuildToAPI(r.Context(), *updated, images)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, updated.ID)
+			problem.Internal(w, "failed to update build")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}

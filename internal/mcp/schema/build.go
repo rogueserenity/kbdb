@@ -69,6 +69,17 @@ type CreateBuildOutput struct {
 	Build Build `json:"build" jsonschema:"the created build, including its server-generated id"`
 }
 
+// UpdateBuildInput is the update_build tool's input.
+type UpdateBuildInput struct {
+	BuildInput
+	BuildID string `json:"build_id" jsonschema:"the build's unique id"`
+}
+
+// UpdateBuildOutput is the update_build tool's output.
+type UpdateBuildOutput struct {
+	Build Build `json:"build" jsonschema:"the updated build"`
+}
+
 // GetBuildInput is the get_build tool's input.
 type GetBuildInput struct {
 	BuildID string `json:"build_id" jsonschema:"the build's unique id"`
