@@ -62,15 +62,16 @@ for _ in $(seq 1 15); do
 done
 
 # KEEP THIS IN SYNC with template.yaml's BuildTable resource - same caveat
-# as the SwitchTable block above.
+# as the SwitchTable block above, plus its BuildRefIndex GSI.
 for _ in $(seq 1 15); do
   aws dynamodb describe-table --endpoint-url http://localhost:4566 \
     --table-name kbdb-local-build >/dev/null 2>&1 && break
   aws dynamodb create-table \
     --endpoint-url http://localhost:4566 \
     --table-name kbdb-local-build \
-    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S \
+    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S AttributeName=ref_id,AttributeType=S \
     --key-schema AttributeName=user_id,KeyType=HASH AttributeName=id,KeyType=RANGE \
+    --global-secondary-indexes 'IndexName=BuildRefIndex,KeySchema=[{AttributeName=user_id,KeyType=HASH},{AttributeName=ref_id,KeyType=RANGE}],Projection={ProjectionType=INCLUDE,NonKeyAttributes=[build_id]}' \
     --billing-mode PAY_PER_REQUEST \
     >/dev/null 2>&1 && break
   sleep 1
