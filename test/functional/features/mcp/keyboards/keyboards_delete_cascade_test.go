@@ -130,6 +130,17 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build, over 
 				getBuild, getErr := client.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})
 				Expect(getErr).NotTo(HaveOccurred())
 				Expect(getBuild.IsError).To(BeFalse())
+
+				raw, marshalErr := json.Marshal(getBuild.StructuredContent)
+				Expect(marshalErr).NotTo(HaveOccurred())
+
+				var buildOut struct {
+					Build struct {
+						Keyboard string `json:"keyboard"`
+					} `json:"build"`
+				}
+				Expect(json.Unmarshal(raw, &buildOut)).To(Succeed())
+				Expect(buildOut.Build.Keyboard).To(Equal(keyboardID))
 			})
 		})
 	})
