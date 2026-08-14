@@ -240,8 +240,8 @@ const maxBuildMutationAttempts = 3
 // mutateBuild is a hand-rolled Version-based CAS retry loop: DynamoDB can't
 // address a List element by an inner field like image_id, so image
 // mutations must decode/mutate/re-encode the whole Images slice, and the Go
-// SDK has no built-in optimistic-locking primitive. Mirrors keycap_set.go's
-// mutateSet.
+// SDK has no built-in optimistic-locking primitive. Mirrors
+// [(*KeycapSetRepository).mutateSet].
 func (r *BuildRepository) mutateBuild(
 	ctx context.Context,
 	ownerID, buildID string,

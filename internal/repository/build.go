@@ -20,7 +20,8 @@ type BuildKeycapKitEntry struct {
 }
 
 // BuildStabs has open-vocabulary Name and MountType, validated via
-// internal/lookup.ValidateBuild, not closed Go enums.
+// [github.com/rogueserenity/kbdb/internal/lookup.ValidateBuild], not
+// closed Go enums.
 type BuildStabs struct {
 	Name      *string  `dynamodbav:"name,omitempty" json:"name,omitempty"`
 	MountType *string  `dynamodbav:"mount_type,omitempty" json:"mount_type,omitempty"`
@@ -28,7 +29,8 @@ type BuildStabs struct {
 }
 
 // BuildCaseMountType has open-vocabulary Type and Durometer, validated
-// via internal/lookup.ValidateBuild, not closed Go enums.
+// via [github.com/rogueserenity/kbdb/internal/lookup.ValidateBuild], not
+// closed Go enums.
 type BuildCaseMountType struct {
 	Type      *string `dynamodbav:"type,omitempty" json:"type,omitempty"`
 	Durometer *string `dynamodbav:"durometer,omitempty" json:"durometer,omitempty"`
@@ -65,7 +67,8 @@ type BuildRepository interface {
 	List(ctx context.Context, ownerID string, visibilities []Visibility, limit int, cursor string) (builds []Build, nextCursor string, err error)
 
 	// Get fetches by exact key regardless of visibility; the caller checks
-	// the result via internal/authz.CanReadVisibility.
+	// the result via
+	// [github.com/rogueserenity/kbdb/internal/authz.CanReadVisibility].
 	Get(ctx context.Context, ownerID, id string) (*Build, error)
 
 	// Create returns ErrAlreadyExists on an ID collision.
@@ -104,7 +107,7 @@ func NewBuildImageKey(ctx context.Context, buildID, imageID string) (BuildImageK
 	return BuildImageKey(fmt.Sprintf("builds/%s/%s/images/%s", ownerID, buildID, imageID)), nil
 }
 
-// BuildImageStore is a parallel interface to KeycapKitImageStore, not
+// BuildImageStore is a parallel interface to [KeycapKitImageStore], not
 // shared, since a build's images are a growable array of server-generated
 // ids rather than a single optional slot. Method names are suffixed
 // because the concrete s3.ImageStore implements both interfaces on one

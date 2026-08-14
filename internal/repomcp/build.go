@@ -9,8 +9,9 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// BuildToMCP never presigns an image URL, unlike repoapi.BuildToAPI - it
-// reports only HasImages, so this can't fail on a presign error.
+// BuildToMCP never presigns an image URL, unlike
+// [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPI] - it reports
+// only HasImages, so this can't fail on a presign error.
 func BuildToMCP(b repository.Build) schema.Build {
 	return schema.Build{
 		ID:            b.ID,
@@ -47,9 +48,9 @@ func BuildFromMCP(in schema.BuildInput) repository.Build {
 	}
 }
 
-// BuildToMCPSummary mirrors repoapi.BuildToAPISummary's keyboardRepo.Get
-// denormalization (see that function's doc comment) but reports HasImage
-// rather than a presigned URL.
+// BuildToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPISummary]'s
+// keyboardRepo.Get denormalization but reports HasImage rather than a
+// presigned URL.
 func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
 	summary := schema.BuildSummary{
 		ID:        b.ID,
@@ -60,7 +61,7 @@ func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo rep
 	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		// Leave summary.Keyboard nil - see this function's doc comment.
+		// Leave summary.Keyboard nil.
 	case err != nil:
 		return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
 	default:

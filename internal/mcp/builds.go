@@ -24,8 +24,8 @@ var errBuildAlreadyExists = errors.New("build already exists")
 
 var errBuildNotFound = errors.New("build not found")
 
-// errNoCaller mirrors errNoTokenInfo's fail-closed shape: unreachable in
-// practice since identityMiddleware always sets a caller ID before a tool
+// errNoCaller mirrors [errNoTokenInfo]'s fail-closed shape: unreachable in
+// practice since [identityMiddleware] always sets a caller ID before a tool
 // handler runs, but this fails closed rather than validating references
 // against an empty ownerID if that wiring is ever broken.
 var errNoCaller = errors.New("no caller identity on context")

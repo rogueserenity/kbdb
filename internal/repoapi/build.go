@@ -93,7 +93,7 @@ func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo rep
 	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
 	switch {
 	case errors.Is(err, repository.ErrNotFound):
-		// Leave summary.Keyboard nil - see this function's doc comment.
+		// Leave summary.Keyboard nil.
 	case err != nil:
 		return api.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
 	default:
@@ -224,7 +224,7 @@ func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repositor
 }
 
 // buildImagesToAPI mints a fresh presigned GET URL per image, per request -
-// never persisted, mirroring KeycapKitToAPI's handling of a kit's image.
+// never persisted, mirroring [KeycapKitToAPI]'s handling of a kit's image.
 func buildImagesToAPI(ctx context.Context, images []repository.BuildImage, store repository.BuildImageStore) (*[]api.BuildImage, error) {
 	if images == nil {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
