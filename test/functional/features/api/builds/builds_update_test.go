@@ -48,7 +48,7 @@ var _ = Describe("Updating a build", func() {
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 		})
 
 		Context("given the caller is the owner", func() {
@@ -212,7 +212,7 @@ var _ = Describe("Updating a build", func() {
 		})
 
 		AfterEach(func(ctx SpecContext) {
-			Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 		})
 
 		Context("given a request body omitting that field", func() {

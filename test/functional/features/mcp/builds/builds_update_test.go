@@ -52,7 +52,7 @@ var _ = Describe("Updating a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 			})
 
 			When("the update_build tool is called", func() {
@@ -197,7 +197,7 @@ var _ = Describe("Updating a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, otherKeyboardID)).To(Succeed())
 				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 			})
 

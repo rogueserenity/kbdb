@@ -57,7 +57,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, ownerID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
 			})
 
 			Context("given an approved content_type", func() {
@@ -123,7 +123,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
 			})
 
 			When("the add_build_image tool is called with that build_id", func() {
