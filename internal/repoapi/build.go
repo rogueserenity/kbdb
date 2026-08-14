@@ -91,12 +91,12 @@ func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo rep
 	}
 
 	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
-	switch {
-	case errors.Is(err, repository.ErrNotFound):
+	if err != nil {
+		if !errors.Is(err, repository.ErrNotFound) {
+			return api.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
+		}
 		// Leave summary.Keyboard nil.
-	case err != nil:
-		return api.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
-	default:
+	} else {
 		summary.Keyboard = &api.BuildSummaryKeyboard{Brand: &kb.Brand, Name: &kb.Name}
 	}
 

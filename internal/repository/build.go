@@ -79,12 +79,13 @@ type BuildRepository interface {
 	// retry budget.
 	Update(ctx context.Context, b Build) (*Build, error)
 
-	// Delete returns the BuildImageKey of every image the build had, so
-	// callers can clean up the corresponding objects in a BuildImageStore.
+	// Delete returns ErrNotFound if id doesn't exist, otherwise the
+	// BuildImageKey of every image the build had, so callers can clean up
+	// the corresponding objects in a BuildImageStore.
 	Delete(ctx context.Context, id string) ([]BuildImageKey, error)
 
-	// AddImage returns ErrMutationConflict if concurrent writers exhaust
-	// the retry budget.
+	// AddImage returns ErrNotFound if the parent build doesn't exist, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
 	AddImage(ctx context.Context, buildID string, image BuildImage) (*BuildImage, error)
 
 	// DeleteImage is idempotent: an imageID not present in the build
