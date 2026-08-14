@@ -50,3 +50,8 @@ func (c *BuildsClient) List(ctx context.Context, ownerID, token string, limit in
 
 	return c.client.Do(ctx, http.MethodGet, path, token, nil)
 }
+
+// AddImage calls POST /v1/users/{ownerID}/builds/{id}/images.
+func (c *BuildsClient) AddImage(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/builds/"+id+"/images", token, bytes.NewBufferString(body))
+}

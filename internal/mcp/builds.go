@@ -57,6 +57,11 @@ var deleteBuildTool = &mcp.Tool{
 	Description: "Removes a build from your own collection, along with any images. Idempotent: deleting a build that isn't there succeeds.",
 }
 
+var addBuildImageTool = &mcp.Tool{
+	Name:        "add_build_image",
+	Description: "Mints a presigned URL to upload a new image to one of your own builds. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header. A build may have any number of images; this always adds a new one rather than replacing an existing image.",
+}
+
 func handleListBuilds(
 	buildRepo repository.BuildRepository,
 	keyboardRepo repository.KeyboardRepository,
@@ -263,5 +268,49 @@ func handleDeleteBuild(
 		images.BestEffortDelete(ctx, imageKeys)
 
 		return nil, schema.DeleteBuildOutput{}, nil
+	}
+}
+
+func handleAddBuildImage(
+	buildRepo repository.BuildRepository,
+	images repository.BuildImageStore,
+) mcp.ToolHandlerFor[schema.AddBuildImageInput, schema.AddBuildImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.AddBuildImageInput) (*mcp.CallToolResult, schema.AddBuildImageOutput, error) {
+		if strings.TrimSpace(in.BuildID) == "" {
+			return nil, schema.AddBuildImageOutput{}, errors.New("build_id must not be blank")
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
+			return nil, schema.AddBuildImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
+		}
+
+		imageID := uuid.NewString()
+
+		key, err := repository.NewBuildImageKey(ctx, in.BuildID, imageID)
+		if err != nil {
+			log.FromContext(ctx).Error("building build image key", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		}
+
+		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning build image upload", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		}
+
+		_, err = buildRepo.AddImage(ctx, in.BuildID, repository.BuildImage{ImageID: imageID, Path: key})
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.AddBuildImageOutput{}, errBuildNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("build mutation conflict", log.BuildID, in.BuildID)
+			return nil, schema.AddBuildImageOutput{}, errBuildMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("adding build image", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		}
+
+		return nil, schema.AddBuildImageOutput{ImageID: imageID, UploadURL: uploadURL}, nil
 	}
 }
