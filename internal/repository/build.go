@@ -2,7 +2,6 @@ package repository
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
@@ -160,27 +159,4 @@ type BuildImageStore interface {
 	// nonexistent key is not an error, matching S3's own DeleteObject
 	// semantics.
 	DeleteBuildImage(ctx context.Context, key BuildImageKey) error
-}
-
-// ResolveBuildSummaryKeyboard fetches b's referenced Keyboard for a list
-// summary's denormalized brand/name display, shared by both
-// repoapi.BuildToAPISummary and repomcp.BuildToMCPSummary so the two
-// protocols' not-found tolerance can't silently diverge. ok is false (with a
-// nil Keyboard and nil error) if the keyboard can't be resolved (e.g. it was
-// deleted after the build was created - builds are validated to reference
-// an existing keyboard at create/update time via internal/buildrefs, so
-// this should be rare in practice); callers should omit the denormalized
-// fields in that case rather than failing the whole list request over one
-// bad denormalization. Any other repository error is returned as-is.
-func ResolveBuildSummaryKeyboard(ctx context.Context, b Build, keyboardRepo KeyboardRepository) (kb *Keyboard, ok bool, err error) {
-	kb, err = keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
-	if err != nil {
-		if errors.Is(err, ErrNotFound) {
-			return nil, false, nil
-		}
-
-		return nil, false, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
-	}
-
-	return kb, true, nil
 }

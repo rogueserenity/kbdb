@@ -2,6 +2,8 @@ package repomcp
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -53,9 +55,12 @@ func BuildFromMCP(in schema.BuildInput) repository.Build {
 // keyboardRepo.Get denormalization strategy (a per-item fetch - see that
 // function's doc comment for why this isn't batched) but reports HasImage
 // rather than a presigned URL, matching schema.Build's HasImages design. If
-// the referenced keyboard can't be resolved (e.g. deleted after the build
-// was created), Keyboard is left nil rather than failing the whole list
-// call over one bad denormalization.
+// the referenced keyboard can't be resolved (repository.ErrNotFound - e.g.
+// deleted after the build was created; see
+// https://github.com/rogueserenity/kbdb/issues/172 for the broader
+// dangling-reference question), Keyboard is left nil rather than failing
+// the whole list call over one bad denormalization. Any other repository
+// error still fails the call.
 func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
 	summary := schema.BuildSummary{
 		ID:        b.ID,
@@ -63,11 +68,13 @@ func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo rep
 		HasImage:  len(b.Images) > 0,
 	}
 
-	kb, ok, err := repository.ResolveBuildSummaryKeyboard(ctx, b, keyboardRepo)
-	if err != nil {
-		return schema.BuildSummary{}, err
-	}
-	if ok {
+	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
+	switch {
+	case errors.Is(err, repository.ErrNotFound):
+		// Leave summary.Keyboard nil - see this function's doc comment.
+	case err != nil:
+		return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
+	default:
 		summary.Keyboard = &schema.BuildSummaryKeyboard{Brand: kb.Brand, Name: kb.Name}
 	}
 
