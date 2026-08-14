@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
@@ -44,15 +45,20 @@ func SeedBuild(ctx context.Context, ownerID, id, keyboardID, visibility string) 
 }
 
 // DeleteBuild removes the build with id, and its keyboard reverse-reference
-// marker, from the table.
+// marker, from the table. Both deletes are attempted even if the first
+// fails, so a transient failure on one doesn't orphan the other in the
+// shared, long-lived table CI deploys per PR (see .github/workflows/ci.yml
+// - that stack persists across every push until the PR closes, so leftover
+// rows aren't cleaned up by a fresh-container teardown the way a local
+// LocalStack run's would be).
 func DeleteBuild(ctx context.Context, ownerID, id, keyboardID string) error {
 	table := NewDynamoTable(ctx, support.BuildTableName())
-	if err := table.DeleteItem(ctx, map[string]string{"user_id": ownerID, "id": id}); err != nil {
-		return err
-	}
 
-	return table.DeleteItem(ctx, map[string]string{
+	buildErr := table.DeleteItem(ctx, map[string]string{"user_id": ownerID, "id": id})
+	markerErr := table.DeleteItem(ctx, map[string]string{
 		"user_id": ownerID,
 		"id":      keyboardRefMarkerSortKey(keyboardID, id),
 	})
+
+	return errors.Join(buildErr, markerErr)
 }

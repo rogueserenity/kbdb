@@ -161,9 +161,7 @@ func handleDeleteKeyboard(
 		}
 
 		result, err := cascadedelete.DeleteKeyboard(ctx, keyboardRepo, buildRepo, images, ownerID, in.KeyboardID, onDelete)
-		if errors.Is(err, cascadedelete.ErrBlocked) {
-			var blocked *cascadedelete.BlockedError
-			errors.As(err, &blocked)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteKeyboardOutput{}, fmt.Errorf("keyboard is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
 		if err != nil {

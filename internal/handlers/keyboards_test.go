@@ -951,4 +951,5 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_RepositoryError_Returns500() {
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
