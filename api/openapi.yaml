@@ -405,12 +405,40 @@ paths:
       summary: Delete a keycap set
       operationId: deleteKeycapSet
       description: >
-        userId must be the caller's own subject; deleting another user's keycap set always returns 404.
+        userId must be the caller's own subject; deleting another user's
+        keycap set always returns 404. on_delete controls what happens if
+        any kit in the set is still referenced by a build: "block" (the
+        default) fails with 409 and lists the blocking build ids;
+        "cascade" deletes the set and every build that references any kit
+        in it, returning their ids; "detach" deletes the set regardless,
+        leaving referencing builds with a dangling keycap_kits[] entry.
+      parameters:
+        - name: on_delete
+          in: query
+          schema:
+            type: string
+            enum: [block, cascade, detach]
+            default: block
+          description: How to handle a set still referenced by one or more builds.
       responses:
+        "200":
+          description: Deleted via cascade; lists the builds that were also deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted.
+          description: Deleted (block with no references, or detach).
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: >
+            Blocked by one or more referencing builds (on_delete=block, the
+            default — the Problem body has blocking_build_ids).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         default:
           $ref: "#/components/responses/ProblemResponse"
 

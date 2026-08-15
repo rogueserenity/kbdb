@@ -647,9 +647,11 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MutationConflict_Returns409()
 type DeleteKeycapSetSuite struct {
 	suite.Suite
 
-	mockRepo   *mocks.MockKeycapSetRepository
-	mockImages *mocks.MockKeycapKitImageStore
-	handler    http.HandlerFunc
+	mockRepo     *mocks.MockKeycapSetRepository
+	mockBuilds   *mocks.MockBuildRepository
+	mockBuildImg *mocks.MockBuildImageStore
+	mockImages   *mocks.MockKeycapKitImageStore
+	handler      http.HandlerFunc
 }
 
 func TestDeleteKeycapSetSuite(t *testing.T) {
@@ -658,12 +660,18 @@ func TestDeleteKeycapSetSuite(t *testing.T) {
 
 func (s *DeleteKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockBuildImg = mocks.NewMockBuildImageStore(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = DeleteKeycapSet(s.mockRepo, s.mockImages)
+	s.handler = DeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 }
 
-func (s *DeleteKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
-	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keycap-sets/ks1", nil)
+func (s *DeleteKeycapSetSuite) newRequest(ctx context.Context, onDelete string) *http.Request {
+	target := "/users/alice/keycap-sets/ks1"
+	if onDelete != "" {
+		target += "?on_delete=" + onDelete
+	}
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, target, nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keycapSetId", "ks1")
 	return req
@@ -674,6 +682,9 @@ func (s *DeleteKeycapSetSuite) ownerCtx() context.Context {
 }
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
+		Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(nil, nil)
@@ -682,13 +693,16 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
 		Return()
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_KitsWithImages_BestEffortDeletesThem() {
 	keys := []repository.KeycapKitImageKey{"keycap-sets/alice/ks1/kits/kit1/image", "keycap-sets/alice/ks1/kits/kit2/image"}
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
+		Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(keys, nil)
@@ -697,12 +711,15 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_KitsWithImages_BestEffortDele
 		Return()
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryNotFound_StillReturns204() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
+		Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(nil, repository.ErrNotFound)
@@ -711,7 +728,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryNotFound_StillRetur
 		Return()
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusNoContent, rec.Code)
 }
@@ -720,7 +737,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx))
+	s.handler(rec, s.newRequest(ctx, ""))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -728,22 +745,100 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_NotOwner_Returns404() {
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Anonymous_Returns404() {
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.T().Context()))
+	s.handler(rec, s.newRequest(s.T().Context(), ""))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
+		Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
 		Return(nil, errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Block_Referenced_Returns409WithBlockingBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
+		Return([]string{"build-1", "build-2"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), "block")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var body struct {
+		BlockingBuildIDs []string `json:"blocking_build_ids"`
+	}
+	s.Require().NoError(json.NewDecoder(rec.Body).Decode(&body))
+	s.ElementsMatch([]string{"build-1", "build-2"}, body.BlockingBuildIDs)
+	// s.mockRepo has no Delete .EXPECT() - verifies nothing was deleted.
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Detach_Referenced_Returns204_DoesNotCheckReferences() {
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).
+		Return()
+
+	req := s.newRequest(s.ownerCtx(), "detach")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingKeycapSet
+	// was never called in detach mode.
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Cascade_Referenced_Returns200WithDeletedBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
+		Return([]string{"build-1"}, nil)
+	s.mockBuilds.EXPECT().
+		Delete(mock.Anything, "build-1").
+		Return(nil, nil)
+	s.mockBuildImg.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
+	s.mockRepo.EXPECT().
+		Delete(mock.Anything, "ks1").
+		Return(nil, nil)
+	s.mockImages.EXPECT().
+		BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).
+		Return()
+
+	req := s.newRequest(s.ownerCtx(), "cascade")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var body struct {
+		DeletedBuildIDs []string `json:"deleted_build_ids"`
+	}
+	s.Require().NoError(json.NewDecoder(rec.Body).Decode(&body))
+	s.Equal([]string{"build-1"}, body.DeletedBuildIDs)
+}
+
+func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_InvalidOnDelete_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "bogus")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
 }
 
 type CreateKeycapKitSuite struct {

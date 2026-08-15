@@ -222,6 +222,8 @@ func handleUpdateKeycapSet(
 
 func handleDeleteKeycapSet(
 	keycapSetRepo repository.KeycapSetRepository,
+	buildRepo repository.BuildRepository,
+	buildImages repository.BuildImageStore,
 	images repository.KeycapKitImageStore,
 ) mcp.ToolHandlerFor[schema.DeleteKeycapSetInput, schema.DeleteKeycapSetOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeycapSetInput) (*mcp.CallToolResult, schema.DeleteKeycapSetOutput, error) {
@@ -229,15 +231,28 @@ func handleDeleteKeycapSet(
 			return nil, schema.DeleteKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		imageKeys, err := keycapSetRepo.Delete(ctx, in.KeycapSetID)
+		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
+		if !ok {
+			return nil, schema.DeleteKeycapSetOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+		}
+
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteKeycapSetOutput{}, err
+		}
+
+		result, err := cascadedelete.DeleteKeycapSet(ctx, keycapSetRepo, buildRepo, buildImages, ownerID, in.KeycapSetID, onDelete)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
+			return nil, schema.DeleteKeycapSetOutput{}, fmt.Errorf("keycap set is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
+		}
 		if err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(ctx).Error("deleting keycap set", log.KeycapSetID, in.KeycapSetID, log.Error, err)
 			return nil, schema.DeleteKeycapSetOutput{}, errors.New("failed to delete keycap set")
 		}
 
-		images.BestEffortDelete(ctx, imageKeys)
+		images.BestEffortDelete(ctx, result.ImageKeys)
 
-		return nil, schema.DeleteKeycapSetOutput{}, nil
+		return nil, schema.DeleteKeycapSetOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
 	}
 }
 

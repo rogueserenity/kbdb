@@ -561,8 +561,10 @@ func (s *HandleUpdateKeycapSetSuite) TestRepositoryError_ReturnsError() {
 type HandleDeleteKeycapSetSuite struct {
 	suite.Suite
 
-	mockRepo   *mocks.MockKeycapSetRepository
-	mockImages *mocks.MockKeycapKitImageStore
+	mockRepo     *mocks.MockKeycapSetRepository
+	mockBuilds   *mocks.MockBuildRepository
+	mockBuildImg *mocks.MockBuildImageStore
+	mockImages   *mocks.MockKeycapKitImageStore
 }
 
 func TestHandleDeleteKeycapSetSuite(t *testing.T) {
@@ -571,31 +573,43 @@ func TestHandleDeleteKeycapSetSuite(t *testing.T) {
 
 func (s *HandleDeleteKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockBuildImg = mocks.NewMockBuildImageStore(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 }
 
 func (s *HandleDeleteKeycapSetSuite) TestSucceeds() {
+	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
 	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().NoError(err)
+	s.Empty(out.DeletedBuildIDs)
 }
 
 func (s *HandleDeleteKeycapSetSuite) TestBlankKeycapSetID_ReturnsError() {
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: ""})
 
 	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
 }
 
+func (s *HandleDeleteKeycapSetSuite) TestInvalidOnDelete_ReturnsError() {
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "bogus"})
+
+	s.Require().Error(err)
+}
+
 func (s *HandleDeleteKeycapSetSuite) TestNotFound_StillSucceeds() {
+	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "missing").Return(nil, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "missing").Return(nil, repository.ErrNotFound)
 	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "missing"})
 
 	s.Require().NoError(err, "delete is idempotent: a nonexistent id is not an error")
@@ -603,22 +617,66 @@ func (s *HandleDeleteKeycapSetSuite) TestNotFound_StillSucceeds() {
 
 func (s *HandleDeleteKeycapSetSuite) TestImageKeysAreBestEffortCleanedUp() {
 	keys := []repository.KeycapKitImageKey{"keycap-sets/u/ks-1/kits/kit-1/image", "keycap-sets/u/ks-1/kits/kit-2/image"}
+	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(keys, nil)
 	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, keys).Return()
 
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().NoError(err)
 }
 
 func (s *HandleDeleteKeycapSetSuite) TestRepositoryError_ReturnsError() {
+	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, mock.Anything).Return(nil, errors.New("delete failed"))
 
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockImages)
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().ErrorContains(err, "failed to delete keycap set")
+}
+
+func (s *HandleDeleteKeycapSetSuite) TestBlock_Referenced_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").
+		Return([]string{"build-1"}, nil)
+
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "block"})
+
+	s.Require().ErrorContains(err, "build-1")
+}
+
+func (s *HandleDeleteKeycapSetSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
+	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
+
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "detach"})
+
+	s.Require().NoError(err)
+	s.Empty(out.DeletedBuildIDs)
+}
+
+func (s *HandleDeleteKeycapSetSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").
+		Return([]string{"build-1"}, nil)
+	s.mockBuilds.EXPECT().
+		Delete(mock.Anything, "build-1").
+		Return(nil, nil)
+	s.mockBuildImg.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
+	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
+	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
+
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "cascade"})
+
+	s.Require().NoError(err)
+	s.Equal([]string{"build-1"}, out.DeletedBuildIDs)
 }
 
 func validKeycapKitInput() schema.KeycapKitInput {
