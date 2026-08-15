@@ -97,7 +97,7 @@ func keycapKitPurchaseFromMCP(p *schema.KeycapKitPurchase) repository.KeycapKitP
 }
 
 // Dates pass through as strings, unlike repoapi's mapping, so this can't
-// fail on a malformed one. Mirrors keyboardPurchaseToMCP.
+// fail on a malformed one. Mirrors [keyboardPurchaseToMCP].
 func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase) *schema.KeycapKitPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
