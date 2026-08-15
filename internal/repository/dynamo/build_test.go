@@ -302,7 +302,7 @@ func (s *BuildRepositorySuite) TestUpdate_ReferenceChange_DiffsMarkers() {
 					}
 				}
 				if item.Delete != nil {
-					if id, ok := item.Delete.Key["id"].(*types.AttributeValueMemberS); ok && id.Value == "REF#keyboard#kb1#b1" {
+					if id, ok := item.Delete.Key["id"].(*types.AttributeValueMemberS); ok && id.Value == "zREF#keyboard#kb1#b1" {
 						removesKb1 = true
 					}
 				}
@@ -496,7 +496,7 @@ func (s *BuildRepositorySuite) TestDelete_ConcurrentUpdate_RetriesThenSucceeds()
 				return false
 			}
 			id, ok := in.TransactItems[1].Delete.Key["id"].(*types.AttributeValueMemberS)
-			return ok && id.Value == "REF#keyboard#kb2#b1"
+			return ok && id.Value == "zREF#keyboard#kb2#b1"
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
 

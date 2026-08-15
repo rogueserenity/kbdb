@@ -101,7 +101,7 @@ func (s *BuildRefSuite) TestDiffRefMarkers_NoChanges_ReturnsEmptyBoth() {
 func (s *BuildRefSuite) TestRefMarkerSortKey_IsSyntheticAndUnique() {
 	m := refMarker{ownerID: "alice", refType: "keyboard", refID: "kb1", buildID: "b1"}
 
-	s.Equal("REF#keyboard#kb1#b1", m.sortKey())
+	s.Equal("zREF#keyboard#kb1#b1", m.sortKey())
 }
 
 func (s *BuildRefSuite) TestPutMarkerTransactItem_HasExpectedKeyAndTable() {
@@ -116,7 +116,7 @@ func (s *BuildRefSuite) TestPutMarkerTransactItem_HasExpectedKeyAndTable() {
 	s.Equal("alice", userID.Value)
 	id, ok := item.Put.Item["id"].(*types.AttributeValueMemberS)
 	s.Require().True(ok)
-	s.Equal("REF#keyboard#kb1#b1", id.Value)
+	s.Equal("zREF#keyboard#kb1#b1", id.Value)
 	refID, ok := item.Put.Item["ref_id"].(*types.AttributeValueMemberS)
 	s.Require().True(ok)
 	s.Equal("kb1", refID.Value)
@@ -137,7 +137,7 @@ func (s *BuildRefSuite) TestDeleteMarkerTransactItem_HasExpectedKeyAndTable() {
 	s.Equal("alice", userID.Value)
 	id, ok := item.Delete.Key["id"].(*types.AttributeValueMemberS)
 	s.Require().True(ok)
-	s.Equal("REF#keyboard#kb1#b1", id.Value)
+	s.Equal("zREF#keyboard#kb1#b1", id.Value)
 }
 
 func (s *BuildRefSuite) TestFindBuildsReferencingKeyboard_QueriesGSIByOwnerAndKeyboardID() {

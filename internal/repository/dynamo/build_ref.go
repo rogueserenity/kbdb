@@ -31,9 +31,13 @@ type refMarker struct {
 
 // sortKey is the marker item's "id" attribute - synthetic, never a real
 // build id, so it can never collide with a real Build item in the same
-// table.
+// table. The "z" prefix is deliberate: it sorts after every character a
+// build id (a lowercase hex UUIDv4) can contain, so a user_id partition
+// Query in default ascending order scans every real Build before it reaches
+// any marker - List relies on this to fill a page with builds first rather
+// than a Limit-bounded scan being diluted by interleaved markers.
 func (m refMarker) sortKey() string {
-	return fmt.Sprintf("REF#%s#%s#%s", m.refType, m.refID, m.buildID)
+	return fmt.Sprintf("zREF#%s#%s#%s", m.refType, m.refID, m.buildID)
 }
 
 // deriveRefMarkers computes the full set of refMarkers for b's current

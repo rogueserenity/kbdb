@@ -167,6 +167,38 @@ var _ = Describe("Listing builds", func() {
 		})
 	})
 
+	Context("given the owner has more builds than fit under a small limit, each referencing the keyboard", func() {
+		var buildIDs []string
+
+		BeforeEach(func(ctx SpecContext) {
+			buildIDs = nil
+			for range 5 {
+				id := "paged-build-" + uuid.NewString()
+				Expect(db.SeedBuild(ctx, ownerID, id, keyboardID, "public")).To(Succeed())
+				buildIDs = append(buildIDs, id)
+			}
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			for _, id := range buildIDs {
+				Expect(db.DeleteBuild(ctx, ownerID, id, keyboardID)).To(Succeed())
+			}
+		})
+
+		When("listing builds with a limit smaller than the build count", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.List(ctx, ownerID, ownerToken, 3)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns a full page of builds, not markers filtered down to a partial page", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+				Expect(decodeItems(resp)).To(HaveLen(3))
+			})
+		})
+	})
+
 	DescribeTable("given an invalid limit",
 		func(ctx SpecContext, limit int) {
 			var err error
