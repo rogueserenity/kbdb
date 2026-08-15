@@ -77,9 +77,17 @@ func (r *BuildRepository) List(
 		visValues[i] = expression.Value(v)
 	}
 
+	// BuildTable's user_id partition also holds refMarker items (see
+	// build_ref.go), which sort after every real Build id (their sort key is
+	// "z"-prefixed) so a fresh scan exhausts real builds before reaching any
+	// marker. This filter is still needed as a backstop: a single
+	// Limit-bounded page can straddle the build/marker boundary once a
+	// user's builds are exhausted, and a marker item has no visibility
+	// attribute to match anyway.
 	builder := expression.NewBuilder().
 		WithKeyCondition(expression.Key("user_id").Equal(expression.Value(ownerID))).
-		WithFilter(expression.Name("visibility").In(visValues[0], visValues[1:]...))
+		WithFilter(expression.Name("visibility").In(visValues[0], visValues[1:]...).
+			And(expression.AttributeNotExists(expression.Name("item_type"))))
 
 	expr, err := builder.Build()
 	if err != nil {

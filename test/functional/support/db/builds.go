@@ -14,7 +14,7 @@ import (
 // [github.com/rogueserenity/kbdb/internal/repository.BuildRepository.FindBuildsReferencingKeyboard]
 // without needing a real Create call.
 func keyboardRefMarkerSortKey(keyboardID, buildID string) string {
-	return fmt.Sprintf("REF#keyboard#%s#%s", keyboardID, buildID)
+	return fmt.Sprintf("zREF#keyboard#%s#%s", keyboardID, buildID)
 }
 
 // switchRefMarkerSortKey mirrors the marker item sort key format
@@ -23,7 +23,7 @@ func keyboardRefMarkerSortKey(keyboardID, buildID string) string {
 // [github.com/rogueserenity/kbdb/internal/repository.BuildRepository.FindBuildsReferencingSwitch]
 // without needing a real Create call.
 func switchRefMarkerSortKey(switchID, buildID string) string {
-	return fmt.Sprintf("REF#switch#%s#%s", switchID, buildID)
+	return fmt.Sprintf("zREF#switch#%s#%s", switchID, buildID)
 }
 
 // keycapKitRefID mirrors the composite ref_id
@@ -39,7 +39,7 @@ func keycapKitRefID(keycapSetID, kitID string) string {
 // [github.com/rogueserenity/kbdb/internal/repository.BuildRepository.FindBuildsReferencingKeycapKit]
 // without needing a real Create call.
 func keycapKitRefMarkerSortKey(keycapSetID, kitID, buildID string) string {
-	return fmt.Sprintf("REF#keycap_kit#%s#%s", keycapKitRefID(keycapSetID, kitID), buildID)
+	return fmt.Sprintf("zREF#keycap_kit#%s#%s", keycapKitRefID(keycapSetID, kitID), buildID)
 }
 
 // SeedBuild writes directly to the table, bypassing buildrefs' existence
