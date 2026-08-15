@@ -22,14 +22,21 @@ and 02's workaround applied in `scripts/func-setup-floci.sh`, kbdb's entire
 Ginkgo functional suite passes:
 
 ```
-REST Keyboards Suite   - 36/36 specs   PASS
-REST Keycap Sets Suite - 68/68 specs   PASS
-REST Lookups Suite     - 18/18 specs   PASS
-REST Switches Suite    - 36/36 specs   PASS
-MCP Keyboards Suite    - 24/24 specs   PASS
-MCP Lookups Suite      -  6/6  specs   PASS
-MCP Switches Suite     - 23/23 specs   PASS
+REST Builds Suite       - 49/49 specs   PASS
+REST Keyboards Suite    - 41/41 specs   PASS
+REST Keycap Sets Suite  - 79/79 specs   PASS
+REST Lookups Suite      -  3/3  specs   PASS
+REST Switches Suite     - 41/41 specs   PASS
+MCP Builds Suite        - 40/40 specs   PASS
+MCP Keyboards Suite     - 29/29 specs   PASS
+MCP Keycap Sets Suite   - 69/69 specs   PASS
+MCP Lookups Suite       -  6/6  specs   PASS
+MCP Switches Suite      - 28/28 specs   PASS
 ```
+
+(Verified 2026-08-15 against floci built from `floci-io/floci`'s `upstream/main` —
+385/385 specs across all 10 suites. Counts have grown since the original pass
+above the table was written; kbdb has since added Builds, REST and MCP.)
 
 01 and 06 were genuine floci bugs, both fixed and merged upstream. 02 is real
 but has a one-line runtime workaround (`cognito-idp create-group` after

@@ -80,10 +80,10 @@ Deployed. Export these to run the suite:
 
   export KBDB_API_BASE_URL='$ENDPOINT/execute-api/$API_ID/\$default'
   export KBDB_DYNAMODB_ENDPOINT_URL=$ENDPOINT
-  export KBDB_LOOKUP_TABLE_NAME=$(out LookupTableName)
   export KBDB_SWITCH_TABLE_NAME=$(out SwitchTableName)
   export KBDB_KEYBOARD_TABLE_NAME=$(out KeyboardTableName)
   export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
+  export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
   export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
   export KBDB_ADMIN_AUTH_TOKEN=$KBDB_ADMIN_AUTH_TOKEN
   export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
