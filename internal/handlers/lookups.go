@@ -10,7 +10,7 @@ import (
 )
 
 // ListLookups reads no path values and requires no auth. Returns category
-// names only, not their values (see GetLookup for that).
+// names only, not their values (see [GetLookup] for that).
 func ListLookups(w http.ResponseWriter, r *http.Request) {
 	names := lookup.ListCategoryNames(r.Context())
 

@@ -36,10 +36,11 @@ func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 
 // OptionalAuth verifies the bearer token if one is present, for routes that
 // allow anonymous callers (e.g. reads on items whose visibility may permit
-// public or authenticated-but-not-owner access — see internal/authz). A
-// missing token is not an error and the request proceeds with no user ID on
-// its context; a present-but-invalid token is still rejected with 401,
-// since silently treating it as anonymous would hide a real client error.
+// public or authenticated-but-not-owner access — see
+// [github.com/rogueserenity/kbdb/internal/authz]). A missing token is not
+// an error and the request proceeds with no user ID on its context; a
+// present-but-invalid token is still rejected with 401, since silently
+// treating it as anonymous would hide a real client error.
 func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

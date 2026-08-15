@@ -21,7 +21,7 @@ import (
 
 // ListKeyboards reads the {userId} path value and lists that owner's
 // keyboards. Anonymous callers are allowed; visibility is scoped to what
-// the caller (if any) may read, per internal/authz.
+// the caller (if any) may read, per [authz.ReadableVisibilities].
 func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")

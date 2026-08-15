@@ -1,10 +1,10 @@
 package repository
 
 // RefType identifies which of a Build's reference fields a refMarker (see
-// internal/repository/dynamo/build_ref.go) points at. Used internally to
-// build marker items and reverse-lookup queries - never appears in
-// BuildRepository's exported FindBuildsReferencingX method signatures,
-// which are typed per reference kind instead.
+// [github.com/rogueserenity/kbdb/internal/repository/dynamo]) points at.
+// Used internally to build marker items and reverse-lookup queries - never
+// appears in BuildRepository's exported FindBuildsReferencingX method
+// signatures, which are typed per reference kind instead.
 type RefType string
 
 const (
