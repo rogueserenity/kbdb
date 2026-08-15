@@ -58,7 +58,8 @@ type KeycapSetRepository interface {
 	// ErrNotFound if it doesn't exist. Get doesn't take a visibility
 	// argument: unlike List, it fetches by exact key regardless of
 	// visibility - the caller (a handler) checks the returned item's
-	// Visibility via internal/authz.CanReadVisibility.
+	// Visibility via
+	// [github.com/rogueserenity/kbdb/internal/authz.CanReadVisibility].
 	Get(ctx context.Context, ownerID, id string) (*KeycapSet, error)
 
 	// Create stores ks (UserID is set from ctx, ks.ID must already be set).

@@ -21,7 +21,7 @@ import (
 
 // ListKeycapSets reads the {userId} path value and lists that owner's
 // keycap sets. Anonymous callers are allowed; visibility is scoped to what
-// the caller (if any) may read, per internal/authz.
+// the caller (if any) may read, per [authz.ReadableVisibilities].
 func ListKeycapSets(repo repository.KeycapSetRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")

@@ -1,9 +1,11 @@
 // Package cascadedelete implements the block/cascade/detach on_delete
 // policy for deleting an item that may still be referenced by one or more
-// Builds. Both the REST handlers (internal/handlers) and the MCP tools
-// (internal/mcp) call the DeleteX function for the entity being deleted
-// directly and map its result/error to their own response shape, rather
-// than each reimplementing the find-then-decide-then-delete flow.
+// Builds. Both the REST handlers
+// ([github.com/rogueserenity/kbdb/internal/handlers]) and the MCP tools
+// ([github.com/rogueserenity/kbdb/internal/mcp]) call the DeleteX function
+// for the entity being deleted directly and map its result/error to their
+// own response shape, rather than each reimplementing the
+// find-then-decide-then-delete flow.
 package cascadedelete
 
 import (

@@ -10,7 +10,7 @@ import (
 // server's HTTP context function (internal/mcp), since both are HTTP-based
 // transports that need to pull the same token out of the same header.
 //
-// Verifier/VerifyToken remain deliberately protocol-agnostic (see verify.go);
+// [Verifier]/[Verifier.VerifyToken] remain deliberately protocol-agnostic;
 // this helper is the one place internal/auth takes on a net/http dependency,
 // since extracting a bearer token from an HTTP request is inherently
 // HTTP-shaped regardless of which higher-level protocol (REST, MCP) is

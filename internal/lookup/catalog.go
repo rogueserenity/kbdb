@@ -82,8 +82,7 @@ func validateInvariants() {
 
 // validateLayoutSizesAreApproved panics if any data/keyboard_layout.json
 // entry's Sizes references a size not present in data/keyboard_size.json -
-// see internal/lookup/keyboard.go's validateKeyboardLayout, which relies
-// on that relationship holding.
+// see [validateKeyboardLayout], which relies on that relationship holding.
 func validateLayoutSizesAreApproved() {
 	layouts := catalog[CategoryKeyboardLayout].LayoutValues()
 	approvedSizes := catalog[CategoryKeyboardSize].Strings()

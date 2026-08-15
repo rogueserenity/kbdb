@@ -21,8 +21,8 @@ import (
 )
 
 // parseListLimit reads the limit query param. The OpenAPI request validator
-// (internal/router.restOpenAPIValidator) enforces range (1-100) and injects
-// the spec's default (api/openapi.yaml's Limit param) when absent, so it's
+// (router.restOpenAPIValidator) enforces range (1-100) and injects the
+// spec's default (api/openapi.yaml's Limit param) when absent, so it's
 // always present and a valid integer here.
 func parseListLimit(r *http.Request) int {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
@@ -31,7 +31,7 @@ func parseListLimit(r *http.Request) int {
 
 // ListSwitches reads the {userId} path value and lists that owner's
 // switches. Anonymous callers are allowed; visibility is scoped to what the
-// caller (if any) may read, per internal/authz.
+// caller (if any) may read, per [authz.ReadableVisibilities].
 func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")

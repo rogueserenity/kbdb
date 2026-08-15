@@ -26,7 +26,7 @@ func ValidateKeycapSet(ctx context.Context, ks repository.KeycapSet) []FieldErro
 
 // ValidateKeycapKit returns every field on k that isn't an approved value
 // for its lookup category. An unset field is skipped, not treated as
-// invalid. Mirrors ValidateSwitch/ValidateKeyboard's purchase.vendor and
+// invalid. Mirrors [ValidateSwitch]/[ValidateKeyboard]'s purchase.vendor and
 // purchase.order_status checks - a kit's purchase is structurally the same
 // shape as a keyboard's or switch's.
 func ValidateKeycapKit(ctx context.Context, k repository.KeycapKit) []FieldError {
