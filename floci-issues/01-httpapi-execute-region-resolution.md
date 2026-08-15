@@ -1,6 +1,6 @@
 # HTTP API (v2) execute-api returns "Invalid API id specified" for unsigned requests
 
-**Status:** fixed locally on this branch, ready to upstream
+**Status:** fixed upstream — merged as [floci-io/floci#2146](https://github.com/floci-io/floci/pull/2146) and [#2286](https://github.com/floci-io/floci/pull/2286)
 **Severity:** blocker — no HTTP API can be invoked unless it happens to live in `floci.default-region`
 **Component:** `services/apigateway/ApiGatewayExecuteController`, `services/apigatewayv2/ApiGatewayV2Service`
 **Found against:** `rogueserenity/floci` @ `fix/sam-httpapi-transform`

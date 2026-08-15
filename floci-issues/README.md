@@ -1,25 +1,25 @@
 # floci issues blocking kbdb's functional suite
 
-Found by deploying kbdb's real `template.yaml` to a local floci built from
-`rogueserenity/floci` @ `fix/sam-httpapi-transform`, then running the Ginkgo
-functional suite against it.
+Found by deploying kbdb's real `template.yaml` to a local floci build, then
+running the Ginkgo functional suite against it.
 
 Each file is scoped to one PR against floci.
 
 | # | issue | status | blocks |
 |---|---|---|---|
-| 01 | [HTTP API execute-api region resolution](01-httpapi-execute-region-resolution.md) | fixed on this branch | every request whose region can't be read from a SigV4 header — includes all bearer-JWT requests |
+| 01 | [HTTP API execute-api region resolution](01-httpapi-execute-region-resolution.md) | fixed upstream — merged in [floci-io/floci#2146](https://github.com/floci-io/floci/pull/2146) and [#2286](https://github.com/floci-io/floci/pull/2286) | every request whose region can't be read from a SigV4 header — includes all bearer-JWT requests |
 | 02 | [UserPoolGroup silently stubbed](02-cognito-userpoolgroup-silently-stubbed.md) | real gap, workaround in `func-setup-floci.sh` | admin-group specs, until `AWS::Cognito::UserPoolGroup` is provisioned for real |
 | 03 | [Cognito OIDC issuer over HTTPS](03-cognito-oidc-issuer-path-shape.md) | not a floci blocker | nothing — solved with `FLOCI_HOSTNAME` + a kbdb template parameter |
 | 04 | [RETRACTED — ECR push](04-ecr-image-push-hostname-not-routed.md) | n/a | not a floci bug; `sam deploy --resolve-image-repos` ignores floci's repositoryUri |
 | 05 | [UNCONFIRMED — GetTemplateSummary](05-cloudformation-gettemplatesummary-unsupported.md) | n/a | observed once, not reproducible on retest — not filed upstream |
-| 06 | [Lambda proxy Content-Type case sensitivity](06-lambda-proxy-response-content-type-case-sensitive.md) | fixed on this branch | every error response and any handler returning lowercase header names |
+| 06 | [Lambda proxy Content-Type case sensitivity](06-lambda-proxy-response-content-type-case-sensitive.md) | fixed upstream — merged in [floci-io/floci#2150](https://github.com/floci-io/floci/pull/2150) | every error response and any handler returning lowercase header names |
 
 ## Current state: full functional suite passes
 
-With 01 and 06 fixed (both on this branch, both verified against a real
-`sam deploy` of kbdb's actual `template.yaml`) and 02's workaround applied in
-`scripts/func-setup-floci.sh`, kbdb's entire Ginkgo functional suite passes:
+With 01 and 06 fixed upstream (both merged into `floci-io/floci`'s `main`,
+both verified against a real `sam deploy` of kbdb's actual `template.yaml`)
+and 02's workaround applied in `scripts/func-setup-floci.sh`, kbdb's entire
+Ginkgo functional suite passes:
 
 ```
 REST Keyboards Suite   - 36/36 specs   PASS
@@ -31,12 +31,18 @@ MCP Lookups Suite      -  6/6  specs   PASS
 MCP Switches Suite     - 23/23 specs   PASS
 ```
 
-01 and 06 are genuine floci bugs worth PRs upstream. 02 is real but has a
-one-line runtime workaround (`cognito-idp create-group` after deploy) rather
-than requiring a floci code change to unblock kbdb locally. 03 was a
-misdiagnosis in its original form — no floci change needed, just a kbdb
-template parameter plus `FLOCI_HOSTNAME`. 04 and 05 were misdiagnoses,
+01 and 06 were genuine floci bugs, both fixed and merged upstream. 02 is real
+but has a one-line runtime workaround (`cognito-idp create-group` after
+deploy) rather than requiring a floci code change to unblock kbdb locally.
+03 was a misdiagnosis in its original form — no floci change needed, just a
+kbdb template parameter plus `FLOCI_HOSTNAME`. 04 and 05 were misdiagnoses,
 retracted rather than deleted.
+
+As of 2026-08-15, neither fix has shipped in a tagged floci release yet
+(latest is `1.6.0`, from 2026-08-06 — see `floci-io/floci`'s release list).
+`floci/floci:latest` on Docker Hub therefore does *not* yet contain either
+fix. Until a new version tag is cut, build floci locally from `upstream/main`
+rather than pulling the published image.
 
 ## What already works
 
@@ -62,6 +68,7 @@ retracted rather than deleted.
 
 ```
 cd floci-fork
+git checkout upstream/main
 export JAVA_HOME=/Users/jay/.local/share/mise/installs/java/25.0.1  # or: mise use java in this repo
 ./mvnw -DskipTests package
 docker build -f docker/Dockerfile -t floci-local:test .
@@ -72,3 +79,7 @@ bash scripts/func-setup-floci.sh   # deploys, mints tokens, prints exports
 # export the printed KBDB_* vars, then:
 bash scripts/func-test.sh
 ```
+
+Once floci-io/floci tags a release containing #2146 and #2150, switch
+`docker-compose.floci.yml`'s `floci` service to `image: floci/floci:latest`
+(or a pinned version tag) and drop the local build step above.

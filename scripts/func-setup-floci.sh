@@ -2,9 +2,9 @@
 # Experimental: bring up floci and deploy the real template.yaml against it,
 # instead of localstack + sam local start-api.
 #
-# BLOCKED - see floci-issues/. The stack deploys and DynamoDB works, but no
-# request reaches the app. Kept so the next attempt starts here rather than
-# rediscovering the setup.
+# The full functional suite passes against this setup - see floci-issues/.
+# Requires a local floci build from upstream/main until floci-io/floci cuts
+# a release tag containing #2146 and #2150 (see floci-issues/README.md).
 set -euo pipefail
 
 export AWS_ACCESS_KEY_ID=test

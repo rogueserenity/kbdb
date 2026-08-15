@@ -1,6 +1,6 @@
 # Lambda proxy response Content-Type lost when the header name isn't exact-case
 
-**Status:** fixed locally on this branch, ready to upstream
+**Status:** fixed upstream — merged as [floci-io/floci#2150](https://github.com/floci-io/floci/pull/2150)
 **Severity:** high — every error response (and any handler that lowercases
 header names) loses its real Content-Type
 **Component:** `services/apigateway/ApiGatewayExecuteController#buildProxyResponse`
