@@ -214,7 +214,7 @@ func validatedKeyboard(
 // a FieldError on "layout" carrying the *size* category, which the generic
 // wording would render as "layout is not an approved keyboard_size value" -
 // telling an agent to go fix a field that's already correct. Mirrors
-// handlers.keyboardFieldErrorToInvalidParam.
+// [github.com/rogueserenity/kbdb/internal/handlers.keyboardFieldErrorToInvalidParam].
 func keyboardFieldErrorReason(fe lookup.FieldError, size *string) string {
 	if fe.Field == "layout" && fe.Category == lookup.CategoryKeyboardSize && size != nil {
 		return fmt.Sprintf("layout: %q is not a valid layout for size %q", fe.Value, *size)

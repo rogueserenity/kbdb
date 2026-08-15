@@ -44,7 +44,7 @@ func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 // entity genuinely doesn't exist and when the caller can't read it, so a
 // visibility-denied entity isn't distinguishable from a nonexistent one.
 // Mirrors the equivalent per-handler logic in each entity's REST handler
-// (e.g. handlers.GetKeyboard).
+// (e.g. [github.com/rogueserenity/kbdb/internal/handlers.GetKeyboard]).
 func ownedReadable[T any](
 	ctx context.Context,
 	get func(ctx context.Context, ownerID, id string) (*T, error),

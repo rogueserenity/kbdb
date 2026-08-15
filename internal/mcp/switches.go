@@ -103,7 +103,7 @@ func handleCreateSwitch(
 			// Practically unreachable - ID is a fresh UUID, not caller
 			// input - but Create's ConditionExpression guards a collision
 			// regardless, so surface it rather than reporting an internal
-			// failure, matching handlers.CreateSwitch's 409.
+			// failure, matching [github.com/rogueserenity/kbdb/internal/handlers.CreateSwitch]'s 409.
 			return nil, schema.CreateSwitchOutput{}, errSwitchAlreadyExists
 		}
 		if err != nil {
