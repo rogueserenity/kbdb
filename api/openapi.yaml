@@ -850,6 +850,9 @@ paths:
       summary: Get one lookup category's approved values
       operationId: getLookup
       security: []
+      description: >
+        Returns 404 if category isn't one of the names returned by GET
+        /lookups.
       responses:
         "200":
           description: The requested lookup category.
@@ -948,7 +951,10 @@ components:
           schema:
             $ref: "#/components/schemas/Problem"
     ConflictResponse:
-      description: The request conflicts with the current state of the resource (e.g. creating a category that already exists).
+      description: >
+        The keycap set or build was modified by a concurrent request while
+        this one was in flight, and retries were exhausted. Safe to retry
+        the request as-is.
       content:
         application/problem+json:
           schema:
