@@ -93,6 +93,16 @@ func (c *KeycapSetsClient) DeleteKit(ctx context.Context, ownerID, setID, kitID,
 	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keycap-sets/"+setID+"/kits/"+kitID, token, nil)
 }
 
+// DeleteKitWithOnDelete is DeleteKit, but appends an on_delete query
+// parameter. The caller owns closing resp.Body.
+func (c *KeycapSetsClient) DeleteKitWithOnDelete(ctx context.Context, ownerID, setID, kitID, token, onDelete string) (*http.Response, error) {
+	path := "/v1/users/" + ownerID + "/keycap-sets/" + setID + "/kits/" + kitID
+	if onDelete != "" {
+		path += "?" + url.Values{"on_delete": []string{onDelete}}.Encode()
+	}
+	return c.client.Do(ctx, http.MethodDelete, path, token, nil)
+}
+
 // SetKitImage calls POST /v1/users/{ownerID}/keycap-sets/{setID}/kits/{kitID}/image
 // with body as the raw JSON request body and the given bearer token (empty
 // for an anonymous request). The caller owns closing resp.Body.

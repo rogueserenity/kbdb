@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
@@ -403,7 +404,14 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 // set is not an error. If the kit had an image, it's removed from images
 // best-effort - a failed image delete is logged but doesn't fail the
 // response, since the kit itself has already been deleted by that point.
-func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+// The on_delete query param (default "block") controls what happens if a
+// build still references this kit: see [cascadedelete.DeleteKeycapKit].
+func DeleteKeycapKit(
+	keycapSetRepo repository.KeycapSetRepository,
+	buildRepo repository.BuildRepository,
+	buildImages repository.BuildImageStore,
+	images repository.KeycapKitImageStore,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		setID := r.PathValue("keycapSetId")
@@ -414,7 +422,17 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		cleared, err := keycapSetRepo.DeleteKit(r.Context(), setID, kitID)
+		onDelete, ok := cascadedelete.ParseOnDelete(r.URL.Query().Get("on_delete"))
+		if !ok {
+			problem.BadRequest(w, "on_delete must be one of: block, cascade, detach")
+			return
+		}
+
+		result, err := cascadedelete.DeleteKeycapKit(r.Context(), keycapSetRepo, buildRepo, buildImages, ownerID, setID, kitID, onDelete)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
+			problem.StillReferenced(w, "keycap kit is still referenced by one or more builds", blocked.BuildIDs)
+			return
+		}
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
 			return
@@ -430,10 +448,17 @@ func DeleteKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		if cleared != nil {
-			if err := images.Delete(r.Context(), *cleared); err != nil {
-				log.FromContext(r.Context()).Warn("deleting keycap kit image object after kit delete", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID, log.KeycapKitImage, *cleared)
+		if result.ImageKey != nil {
+			if err := images.Delete(r.Context(), *result.ImageKey); err != nil {
+				log.FromContext(r.Context()).Warn("deleting keycap kit image object after kit delete", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID, log.KeycapKitImage, *result.ImageKey)
 			}
+		}
+
+		if onDelete == cascadedelete.OnDeleteCascade {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(api.CascadeDeleteResult{DeletedBuildIds: result.DeletedBuildIDs})
+			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)

@@ -491,14 +491,42 @@ paths:
         userId must be the caller's own subject; deleting a kit from
         another user's keycap set, or from a keycap set that doesn't exist,
         both return 404. Idempotent — deleting a kitId not present in the
-        set is not an error.
+        set is not an error. on_delete controls what happens if the kit is
+        still referenced by a build: "block" (the default) fails with 409
+        and lists the blocking build ids; "cascade" deletes the kit and
+        every build that references it, returning their ids; "detach"
+        deletes the kit regardless, leaving referencing builds with a
+        dangling keycap_kits[] entry. A 409 can also mean the set is being
+        modified concurrently (unrelated to on_delete) — distinguish the
+        two by whether the Problem body has a blocking_build_ids field.
+      parameters:
+        - name: on_delete
+          in: query
+          schema:
+            type: string
+            enum: [block, cascade, detach]
+            default: block
+          description: How to handle a kit still referenced by one or more builds.
       responses:
+        "200":
+          description: Deleted via cascade; lists the builds that were also deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted.
+          description: Deleted (block with no references, or detach).
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         "409":
-          $ref: "#/components/responses/ConflictResponse"
+          description: >
+            Either blocked by one or more referencing builds (on_delete=block, the default —
+            the Problem body has blocking_build_ids), or the set is being modified
+            concurrently (no blocking_build_ids; retry).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         default:
           $ref: "#/components/responses/ProblemResponse"
 

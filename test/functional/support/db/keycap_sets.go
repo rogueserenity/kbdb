@@ -30,3 +30,20 @@ func DeleteKeycapSet(ctx context.Context, ownerID, id string) error {
 	table := NewDynamoTable(ctx, support.KeycapSetTableName())
 	return table.DeleteItem(ctx, map[string]string{"user_id": ownerID, "id": id})
 }
+
+// SeedKeycapSetWithKit is SeedKeycapSet, but includes a single kit with the
+// given kitID in its Kits, so DeleteKit specs have something to delete.
+func SeedKeycapSetWithKit(ctx context.Context, ownerID, id, kitID, visibility string) error {
+	table := NewDynamoTable(ctx, support.KeycapSetTableName())
+	return table.PutItem(ctx, map[string]any{
+		"user_id": ownerID,
+		"id":      id,
+		"brand":   "GMK",
+		"name":    "Laser",
+		"kits": []map[string]any{
+			{"kit_id": kitID, "name": "Base", "purchase": map[string]any{}},
+		},
+		"visibility": visibility,
+		"version":    0,
+	})
+}
