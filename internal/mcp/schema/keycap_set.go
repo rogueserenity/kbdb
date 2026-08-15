@@ -158,15 +158,23 @@ type UpdateKeycapKitOutput struct {
 	KeycapKit KeycapKit `json:"keycap_kit" jsonschema:"the updated kit"`
 }
 
-// DeleteKeycapKitInput is the delete_keycap_kit tool input.
+// DeleteKeycapKitInput is the delete_keycap_kit tool input. OnDelete
+// controls what happens if the kit is still referenced by a build: "block"
+// (the default when omitted) fails the call; "cascade" deletes the kit and
+// every referencing build; "detach" deletes the kit regardless, leaving
+// referencing builds with a dangling keycap_kits[] entry.
 type DeleteKeycapKitInput struct {
 	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
 	KitID       string `json:"kit_id" jsonschema:"the id of the kit to delete"`
+	OnDelete    string `json:"on_delete,omitempty" jsonschema:"how to handle a kit still referenced by a build: block (default), cascade, or detach"`
 }
 
-// DeleteKeycapKitOutput is the delete_keycap_kit tool output. Deleting is
-// idempotent, so there is no payload.
-type DeleteKeycapKitOutput struct{}
+// DeleteKeycapKitOutput is the delete_keycap_kit tool output.
+// DeletedBuildIDs is populated only when on_delete was "cascade" and at
+// least one build referenced the kit.
+type DeleteKeycapKitOutput struct {
+	DeletedBuildIDs []string `json:"deleted_build_ids,omitempty" jsonschema:"ids of builds also deleted, when on_delete was cascade"`
+}
 
 // SetKeycapKitImageInput is the set_keycap_kit_image tool input. It doesn't
 // carry the image bytes themselves - see UploadURL on the output.

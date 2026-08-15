@@ -11,6 +11,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
+	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -343,6 +344,8 @@ func handleUpdateKeycapKit(
 
 func handleDeleteKeycapKit(
 	keycapSetRepo repository.KeycapSetRepository,
+	buildRepo repository.BuildRepository,
+	buildImages repository.BuildImageStore,
 	images repository.KeycapKitImageStore,
 ) mcp.ToolHandlerFor[schema.DeleteKeycapKitInput, schema.DeleteKeycapKitOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeycapKitInput) (*mcp.CallToolResult, schema.DeleteKeycapKitOutput, error) {
@@ -353,7 +356,20 @@ func handleDeleteKeycapKit(
 			return nil, schema.DeleteKeycapKitOutput{}, errors.New("kit_id must not be blank")
 		}
 
-		cleared, err := keycapSetRepo.DeleteKit(ctx, in.KeycapSetID, in.KitID)
+		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
+		if !ok {
+			return nil, schema.DeleteKeycapKitOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+		}
+
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteKeycapKitOutput{}, err
+		}
+
+		result, err := cascadedelete.DeleteKeycapKit(ctx, keycapSetRepo, buildRepo, buildImages, ownerID, in.KeycapSetID, in.KitID, onDelete)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
+			return nil, schema.DeleteKeycapKitOutput{}, fmt.Errorf("keycap kit is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
+		}
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.DeleteKeycapKitOutput{}, errKeycapSetNotFound
 		}
@@ -366,13 +382,13 @@ func handleDeleteKeycapKit(
 			return nil, schema.DeleteKeycapKitOutput{}, errors.New("failed to delete kit")
 		}
 
-		if cleared != nil {
-			if err := images.Delete(ctx, *cleared); err != nil {
-				log.FromContext(ctx).Warn("deleting keycap kit image object after kit delete", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.KeycapKitImage, *cleared, log.Error, err)
+		if result.ImageKey != nil {
+			if err := images.Delete(ctx, *result.ImageKey); err != nil {
+				log.FromContext(ctx).Warn("deleting keycap kit image object after kit delete", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.KeycapKitImage, *result.ImageKey, log.Error, err)
 			}
 		}
 
-		return nil, schema.DeleteKeycapKitOutput{}, nil
+		return nil, schema.DeleteKeycapKitOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
 	}
 }
 
