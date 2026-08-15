@@ -3,6 +3,10 @@
 **Severity:** high — silent data-plane divergence, not a visible failure
 **Component:** `services/cloudformation/CloudFormationResourceProvisioner`
 **Found against:** `rogueserenity/floci` @ `fix/sam-httpapi-transform`
+**kbdb impact:** none currently — kbdb dropped its admin-group requirement
+(`template.yaml` no longer declares `AWS::Cognito::UserPoolGroup`, and no
+functional spec exercises an admin token), so this no longer blocks kbdb's
+suite. Left filed since it's a genuine floci bug independent of kbdb.
 
 ## Symptom
 

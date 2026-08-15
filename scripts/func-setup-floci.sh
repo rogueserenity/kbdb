@@ -56,19 +56,11 @@ out() {
 POOL_ID=$(out UserPoolId)
 CLIENT_ID=$(out UserPoolClientId)
 
-# floci stubs AWS::Cognito::UserPoolGroup - the stack reports CREATE_COMPLETE
-# but no group exists, so AdminAddUserToGroup fails and admin tokens carry no
-# cognito:groups claim. CreateGroup works at runtime; see floci-issues/02.
-aws --endpoint-url "$ENDPOINT" cognito-idp create-group \
-  --user-pool-id "$POOL_ID" --group-name admins >/dev/null 2>&1 || true
-
-# Mint the same three identities CI does, via the same script, and export
-# them through the overrides token.go already honors.
+# Mint the same identities CI does, via the same script, and export them
+# through the overrides token.go already honors.
 PASSWORD="$(openssl rand -base64 24)Aa1!"
 KBDB_AUTH_TOKEN=$(scripts/ci-create-test-user.sh "$POOL_ID" "$CLIENT_ID" \
   "ci-test-user@rogueserenity.dev" "$PASSWORD")
-KBDB_ADMIN_AUTH_TOKEN=$(scripts/ci-create-test-user.sh "$POOL_ID" "$CLIENT_ID" \
-  "ci-test-admin@rogueserenity.dev" "$PASSWORD" admins)
 KBDB_SECOND_USER_AUTH_TOKEN=$(scripts/ci-create-test-user.sh "$POOL_ID" "$CLIENT_ID" \
   "ci-test-user-2@rogueserenity.dev" "$PASSWORD")
 
@@ -85,7 +77,6 @@ Deployed. Export these to run the suite:
   export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
   export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
   export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
-  export KBDB_ADMIN_AUTH_TOKEN=$KBDB_ADMIN_AUTH_TOKEN
   export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
 
 ENVEOF

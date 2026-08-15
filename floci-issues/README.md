@@ -8,7 +8,7 @@ Each file is scoped to one PR against floci.
 | # | issue | status | blocks |
 |---|---|---|---|
 | 01 | [HTTP API execute-api region resolution](01-httpapi-execute-region-resolution.md) | fixed upstream — merged in [floci-io/floci#2146](https://github.com/floci-io/floci/pull/2146) and [#2286](https://github.com/floci-io/floci/pull/2286) | every request whose region can't be read from a SigV4 header — includes all bearer-JWT requests |
-| 02 | [UserPoolGroup silently stubbed](02-cognito-userpoolgroup-silently-stubbed.md) | real gap, workaround in `func-setup-floci.sh` | admin-group specs, until `AWS::Cognito::UserPoolGroup` is provisioned for real |
+| 02 | [UserPoolGroup silently stubbed](02-cognito-userpoolgroup-silently-stubbed.md) | real gap, but moot for kbdb — no admin-group requirement anymore | nothing currently; would block admin-group specs if kbdb re-adds one |
 | 03 | [Cognito OIDC issuer over HTTPS](03-cognito-oidc-issuer-path-shape.md) | not a floci blocker | nothing — solved with `FLOCI_HOSTNAME` + a kbdb template parameter |
 | 04 | [RETRACTED — ECR push](04-ecr-image-push-hostname-not-routed.md) | n/a | not a floci bug; `sam deploy --resolve-image-repos` ignores floci's repositoryUri |
 | 05 | [UNCONFIRMED — GetTemplateSummary](05-cloudformation-gettemplatesummary-unsupported.md) | n/a | observed once, not reproducible on retest — not filed upstream |
@@ -18,8 +18,8 @@ Each file is scoped to one PR against floci.
 
 With 01 and 06 fixed upstream (both merged into `floci-io/floci`'s `main`,
 both verified against a real `sam deploy` of kbdb's actual `template.yaml`)
-and 02's workaround applied in `scripts/func-setup-floci.sh`, kbdb's entire
-Ginkgo functional suite passes:
+and 02 no longer applicable (kbdb has no admin-group requirement), kbdb's
+entire Ginkgo functional suite passes:
 
 ```
 REST Builds Suite       - 49/49 specs   PASS
@@ -38,12 +38,13 @@ MCP Switches Suite      - 28/28 specs   PASS
 385/385 specs across all 10 suites. Counts have grown since the original pass
 above the table was written; kbdb has since added Builds, REST and MCP.)
 
-01 and 06 were genuine floci bugs, both fixed and merged upstream. 02 is real
-but has a one-line runtime workaround (`cognito-idp create-group` after
-deploy) rather than requiring a floci code change to unblock kbdb locally.
-03 was a misdiagnosis in its original form — no floci change needed, just a
-kbdb template parameter plus `FLOCI_HOSTNAME`. 04 and 05 were misdiagnoses,
-retracted rather than deleted.
+01 and 06 were genuine floci bugs, both fixed and merged upstream. 02 is a
+genuine floci gap too, but kbdb no longer has an admin-group requirement to
+expose it — `template.yaml` doesn't declare `AWS::Cognito::UserPoolGroup`
+and no functional spec exercises an admin token, so it's left filed
+upstream-only, not worked around. 03 was a misdiagnosis in its original
+form — no floci change needed, just a kbdb template parameter plus
+`FLOCI_HOSTNAME`. 04 and 05 were misdiagnoses, retracted rather than deleted.
 
 As of 2026-08-15, neither fix has shipped in a tagged floci release yet
 (latest is `1.6.0`, from 2026-08-06 — see `floci-io/floci`'s release list).
