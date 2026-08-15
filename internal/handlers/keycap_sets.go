@@ -253,8 +253,15 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 // exists. Idempotent: deleting a set that doesn't exist still returns 204.
 // Any kit images the set had are removed from images best-effort - a
 // failed image delete is logged but doesn't fail the response, since the
-// keycap set itself has already been deleted by that point.
-func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+// keycap set itself has already been deleted by that point. The on_delete
+// query param (default "block") controls what happens if a build still
+// references any kit in this set: see [cascadedelete.DeleteKeycapSet].
+func DeleteKeycapSet(
+	keycapSetRepo repository.KeycapSetRepository,
+	buildRepo repository.BuildRepository,
+	buildImages repository.BuildImageStore,
+	images repository.KeycapKitImageStore,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keycapSetId")
@@ -264,14 +271,31 @@ func DeleteKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		imageKeys, err := keycapSetRepo.Delete(r.Context(), id)
+		onDelete, ok := cascadedelete.ParseOnDelete(r.URL.Query().Get("on_delete"))
+		if !ok {
+			problem.BadRequest(w, "on_delete must be one of: block, cascade, detach")
+			return
+		}
+
+		result, err := cascadedelete.DeleteKeycapSet(r.Context(), keycapSetRepo, buildRepo, buildImages, ownerID, id, onDelete)
+		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
+			problem.StillReferenced(w, "keycap set is still referenced by one or more builds", blocked.BuildIDs)
+			return
+		}
 		if err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(r.Context()).Error("deleting keycap set", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to delete keycap set")
 			return
 		}
 
-		images.BestEffortDelete(r.Context(), imageKeys)
+		images.BestEffortDelete(r.Context(), result.ImageKeys)
+
+		if onDelete == cascadedelete.OnDeleteCascade {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(api.CascadeDeleteResult{DeletedBuildIds: result.DeletedBuildIDs})
+			return
+		}
 
 		w.WriteHeader(http.StatusNoContent)
 	}

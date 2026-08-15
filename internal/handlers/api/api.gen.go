@@ -58,6 +58,27 @@ func (e DeleteKeyboardParamsOnDelete) Valid() bool {
 	}
 }
 
+// Defines values for DeleteKeycapSetParamsOnDelete.
+const (
+	DeleteKeycapSetParamsOnDeleteBlock   DeleteKeycapSetParamsOnDelete = "block"
+	DeleteKeycapSetParamsOnDeleteCascade DeleteKeycapSetParamsOnDelete = "cascade"
+	DeleteKeycapSetParamsOnDeleteDetach  DeleteKeycapSetParamsOnDelete = "detach"
+)
+
+// Valid indicates whether the value is a known member of the DeleteKeycapSetParamsOnDelete enum.
+func (e DeleteKeycapSetParamsOnDelete) Valid() bool {
+	switch e {
+	case DeleteKeycapSetParamsOnDeleteBlock:
+		return true
+	case DeleteKeycapSetParamsOnDeleteCascade:
+		return true
+	case DeleteKeycapSetParamsOnDeleteDetach:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for DeleteKeycapKitParamsOnDelete.
 const (
 	DeleteKeycapKitParamsOnDeleteBlock   DeleteKeycapKitParamsOnDelete = "block"
@@ -640,6 +661,15 @@ type ListKeycapSetsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 }
 
+// DeleteKeycapSetParams defines parameters for DeleteKeycapSet.
+type DeleteKeycapSetParams struct {
+	// OnDelete How to handle a set still referenced by one or more builds.
+	OnDelete *DeleteKeycapSetParamsOnDelete `form:"on_delete,omitempty" json:"on_delete,omitempty"`
+}
+
+// DeleteKeycapSetParamsOnDelete defines parameters for DeleteKeycapSet.
+type DeleteKeycapSetParamsOnDelete string
+
 // DeleteKeycapKitParams defines parameters for DeleteKeycapKit.
 type DeleteKeycapKitParams struct {
 	// OnDelete How to handle a kit still referenced by one or more builds.
@@ -808,22 +838,23 @@ var swaggerSpec = []string{
 	"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",
-	"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",
+	"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",
+	"D2mNO/fMjWIG/OeAamcO8/dvL27/OwAA//8=",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

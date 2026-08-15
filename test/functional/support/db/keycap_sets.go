@@ -34,15 +34,25 @@ func DeleteKeycapSet(ctx context.Context, ownerID, id string) error {
 // SeedKeycapSetWithKit is SeedKeycapSet, but includes a single kit with the
 // given kitID in its Kits, so DeleteKit specs have something to delete.
 func SeedKeycapSetWithKit(ctx context.Context, ownerID, id, kitID, visibility string) error {
+	return SeedKeycapSetWithKits(ctx, ownerID, id, []string{kitID}, visibility)
+}
+
+// SeedKeycapSetWithKits is SeedKeycapSet, but includes one kit per given
+// kitID in its Kits, so whole-set DeleteKeycapSet specs can exercise
+// multiple kits referenced by different builds.
+func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []string, visibility string) error {
+	kits := make([]map[string]any, len(kitIDs))
+	for i, kitID := range kitIDs {
+		kits[i] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{}}
+	}
+
 	table := NewDynamoTable(ctx, support.KeycapSetTableName())
 	return table.PutItem(ctx, map[string]any{
-		"user_id": ownerID,
-		"id":      id,
-		"brand":   "GMK",
-		"name":    "Laser",
-		"kits": []map[string]any{
-			{"kit_id": kitID, "name": "Base", "purchase": map[string]any{}},
-		},
+		"user_id":    ownerID,
+		"id":         id,
+		"brand":      "GMK",
+		"name":       "Laser",
+		"kits":       kits,
 		"visibility": visibility,
 		"version":    0,
 	})
