@@ -60,7 +60,7 @@ Resources:
     Condition: ShouldCreateApiRepository
     Properties:
       # Stack-name-derived, not a literal - each per-developer kbdb-dev-<name>
-      # stack owns its own repo, avoiding collisions across stacks.
+      # stack owns its own repo, avoiding a name collision between stacks.
       RepositoryName: !Sub kbdb-api-${AWS::StackName}
       LifecyclePolicy:
         LifecyclePolicyText: |
@@ -81,8 +81,8 @@ Resources:
 
   # Holds user-uploaded images (build photos, keycap kit renders). Private -
   # access only via presigned URLs minted by ApiFunction after an ownership/
-  # sharing check. Stack-scoped like ApiRepository (no per-bucket cost, keeps
-  # environments isolated).
+  # sharing check. Stack-scoped like ApiRepository (no per-bucket cost,
+  # keeps environments isolated).
   ImagesBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -99,7 +99,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
-  # User-owned switches. user_id (Cognito subject, the owner) is the
+  # User-owned switches. user_id (WorkOS user ID, the owner) is the
   # partition key, id the sort key - every real access pattern is scoped to
   # an already-known user_id (see README's DynamoDB rationale), so no GSI is
   # needed; visibility filtering happens as a Query filter expression, not
