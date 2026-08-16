@@ -72,8 +72,8 @@ sam deploy \
   --capabilities CAPABILITY_IAM \
   --parameter-overrides \
     SkipApiRepository=true \
-    "WorkOSIssuerBaseUrl=$ISSUER_URL" \
-    "WorkOSUserManagementClientId=client_local_kbdb"
+    "OidcIssuerBaseUrl=$ISSUER_URL" \
+    "OidcAudience=client_local_kbdb"
 
 out() {
   aws cloudformation describe-stacks --stack-name "$STACK" \

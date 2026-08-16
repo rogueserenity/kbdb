@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
   kbdb - keyboard database. Infrastructure for the kbdb API: a single
-  Lambda function fronted by an HTTP API with a WorkOS JWT authorizer,
+  Lambda function fronted by an HTTP API with a native OIDC JWT authorizer,
   DynamoDB tables, an S3 bucket for images, and a budget cost tripwire.
 
 Globals:
@@ -23,24 +23,23 @@ Parameters:
       name (CloudFormation's early validation correctly refuses to create a
       duplicate). Left at the default 'false' for the real kbdb-dev stack,
       which does own and manage its repo via this template.
-  WorkOSIssuerBaseUrl:
+  OidcIssuerBaseUrl:
     Type: String
     Description: >-
-      This deployment's WorkOS issuer base URL, scheme included - e.g.
-      https://your-app.authkit.app (or a custom domain) for real WorkOS,
-      or a floci-local http://... URL for local dev (see
-      scripts/func-setup.sh). Not a bare domain: real WorkOS is always
+      This deployment's OIDC issuer base URL, scheme included - e.g.
+      https://your-app.authkit.app for a real WorkOS deployment, or a
+      floci-local http://... URL for local dev (see
+      scripts/func-setup.sh). Not a bare domain: a real IdP is always
       https, but floci's local S3 emulation only serves plain http, so
       the scheme must be supplied by the caller rather than hardcoded
       here.
-  WorkOSUserManagementClientId:
+  OidcAudience:
     Type: String
     Description: >-
-      The WorkOS User Management application's client_id for this
-      environment - used as the native JWT authorizer's audience,
-      since every Connect-issued access token's aud claim resolves to
-      this value (confirmed empirically, not derived from any
-      resource= parameter a client supplies).
+      The expected aud claim on every access token for this environment -
+      used as the native JWT authorizer's audience. For WorkOS, this is
+      the User Management application's client_id (confirmed empirically,
+      not derived from any resource= parameter a client supplies).
 
 Conditions:
   ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
@@ -104,7 +103,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
-  # User-owned switches. user_id (WorkOS user ID, the owner) is the
+  # User-owned switches. user_id (the owner's IdP subject claim) is the
   # partition key, id the sort key - every real access pattern is scoped to
   # an already-known user_id (see README's DynamoDB rationale), so no GSI is
   # needed; visibility filtering happens as a Query filter expression, not
@@ -221,8 +220,8 @@ Resources:
         - arm64
       Environment:
         Variables:
-          OIDC_ISSUER_URL: !Ref WorkOSIssuerBaseUrl
-          OIDC_AUDIENCE: !Ref WorkOSUserManagementClientId
+          OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
+          OIDC_AUDIENCE: !Ref OidcAudience
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
@@ -324,7 +323,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default WorkOSAuthorizer applies (security: [CognitoAuth] in
+        # Default OidcAuthorizer applies (security: [CognitoAuth] in
         # api/openapi.yaml, no anonymous override, unlike the GET routes) -
         # ownership is checked at the app layer by authz.IsOwner.
         CreateSwitchEvent:
@@ -333,7 +332,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches
             Method: post
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateSwitchEvent.
         UpdateSwitchEvent:
           Type: HttpApi
@@ -341,7 +340,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches/{switchId}
             Method: put
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateSwitchEvent.
         DeleteSwitchEvent:
           Type: HttpApi
@@ -370,7 +369,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default WorkOSAuthorizer applies (security: [CognitoAuth] in
+        # Default OidcAuthorizer applies (security: [CognitoAuth] in
         # api/openapi.yaml, no anonymous override, unlike the GET routes) -
         # ownership is checked at the app layer by authz.IsOwner.
         CreateKeyboardEvent:
@@ -379,7 +378,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards
             Method: post
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateKeyboardEvent:
           Type: HttpApi
@@ -387,7 +386,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards/{keyboardId}
             Method: put
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteKeyboardEvent:
           Type: HttpApi
@@ -413,7 +412,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateKeycapSetEvent:
           Type: HttpApi
@@ -421,7 +420,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets
             Method: post
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateKeycapSetEvent:
           Type: HttpApi
@@ -429,7 +428,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: put
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteKeycapSetEvent:
           Type: HttpApi
@@ -437,7 +436,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: delete
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateKeycapKitEvent:
           Type: HttpApi
@@ -445,7 +444,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits
             Method: post
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateKeycapKitEvent:
           Type: HttpApi
@@ -480,7 +479,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateBuildEvent:
           Type: HttpApi
@@ -497,7 +496,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateBuildEvent:
           Type: HttpApi
@@ -505,7 +504,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}
             Method: put
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteBuildEvent:
           Type: HttpApi
@@ -513,7 +512,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}
             Method: delete
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         AddBuildImageEvent:
           Type: HttpApi
@@ -521,7 +520,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images
             Method: post
-        # Default WorkOSAuthorizer applies - same rationale as
+        # Default OidcAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteBuildImageEvent:
           Type: HttpApi
@@ -529,7 +528,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images/{imageId}
             Method: delete
-        # Default WorkOSAuthorizer applies - the native JWT authorizer now
+        # Default OidcAuthorizer applies - the native JWT authorizer now
         # fronts these routes too (see internal/mcp for how it consumes the
         # header aws-lambda-web-adapter forwards).
         McpEvent:
@@ -563,13 +562,13 @@ Resources:
     Properties:
       Auth:
         Authorizers:
-          WorkOSAuthorizer:
+          OidcAuthorizer:
             JwtConfiguration:
-              issuer: !Ref WorkOSIssuerBaseUrl
+              issuer: !Ref OidcIssuerBaseUrl
               audience:
-                - !Ref WorkOSUserManagementClientId
+                - !Ref OidcAudience
             IdentitySource: $request.header.Authorization
-        DefaultAuthorizer: WorkOSAuthorizer
+        DefaultAuthorizer: OidcAuthorizer
 
   CostBudget:
     Type: AWS::Budgets::Budget

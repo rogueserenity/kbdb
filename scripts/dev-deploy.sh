@@ -6,8 +6,8 @@ STACK_NAME="kbdb-dev-${DEV_NAME}"
 REPO_NAME="kbdb-api-${STACK_NAME}"
 ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
-WORKOS_ISSUER_BASE_URL="${KBDB_WORKOS_ISSUER_BASE_URL:?set KBDB_WORKOS_ISSUER_BASE_URL - see CONTRIBUTING.md}"
-WORKOS_USER_MANAGEMENT_CLIENT_ID="${KBDB_WORKOS_USER_MANAGEMENT_CLIENT_ID:?set KBDB_WORKOS_USER_MANAGEMENT_CLIENT_ID - see CONTRIBUTING.md}"
+OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL - see CONTRIBUTING.md}"
+OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
 
 sam build --template-file template.yaml --region "$REGION"
 sam deploy --stack-name "$STACK_NAME" \
@@ -15,8 +15,8 @@ sam deploy --stack-name "$STACK_NAME" \
   --region "$REGION" \
   --image-repositories "ApiFunction=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}" \
   --parameter-overrides \
-    "WorkOSIssuerBaseUrl=${WORKOS_ISSUER_BASE_URL}" \
-    "WorkOSUserManagementClientId=${WORKOS_USER_MANAGEMENT_CLIENT_ID}" \
+    "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
+    "OidcAudience=${OIDC_AUDIENCE}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --no-confirm-changeset
