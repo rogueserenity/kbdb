@@ -126,8 +126,7 @@ Resources:
                 # API Gateway v2 management-plane ARNs are keyed by an opaque,
                 # randomly-generated API ID (arn:...:apigateway:region::/apis/api-id/*),
                 # not a name derived from the stack - unlike Lambda/CloudFormation,
-                # there is no kbdb-pr-*-based pattern to scope to. Same structural
-                # constraint as Cognito below, not an oversight. Creating a
+                # there is no kbdb-pr-*-based pattern to scope to. Creating a
                 # new API is a PUT against the bare /apis collection endpoint
                 # (no trailing slash/ID - the ID doesn't exist yet), distinct
                 # from /apis/<id>/* used for an already-existing API's
@@ -139,34 +138,6 @@ Resources:
                   - !Sub arn:aws:apigateway:${AWS::Region}::/apis
                   - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
                   - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
-              - Sid: CognitoCreateUserPool
-                Effect: Allow
-                # CreateUserPool and the TagResource call CloudFormation makes
-                # immediately after (to apply the stack's tags to the new
-                # pool) both genuinely can't be scoped to a resource ARN - at
-                # the moment CreateUserPool runs the pool doesn't exist (and
-                # its ID isn't known) yet, and empirically the immediately-
-                # following TagResource call is denied under the same
-                # scoped-ARN pattern too (confirmed via two separate real
-                # CREATE_FAILED AccessDenied errors in CI, one per action,
-                # after which each was moved here rather than assumed).
-                Action:
-                  - cognito-idp:CreateUserPool
-                  - cognito-idp:TagResource
-                Resource: '*'
-              - Sid: CognitoAdminAndManagement
-                Effect: Allow
-                Action: cognito-idp:*
-                # Every other Cognito action (UpdateUserPool, the UserPoolClient/
-                # UserPoolDomain sub-resources, and every Admin* action used to
-                # create/auth the throwaway CI test user) operates on an
-                # already-existing pool. Per-PR UserPool ARNs don't exist until
-                # after that PR's own CreateUserPool call above, so the exact ID
-                # can't be scoped ahead of time - but pool IDs are always
-                # region-prefixed (e.g. us-east-2_XXXXXXXXX), so scope to this
-                # account+region's pools rather than every account's every pool
-                # everywhere.
-                Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${AWS::Region}_*
               - Sid: IamPassRoleForSam
                 Effect: Allow
                 Action:
