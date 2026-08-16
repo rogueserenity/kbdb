@@ -89,11 +89,10 @@ jobs:
         run: sam build --config-env ci
 
       # JWKS_BUCKET_NAME: set via GitHub repo Settings -> Secrets and
-      # variables -> Actions -> Variables, once the dedicated public JWKS
-      # bucket + IAM permissions exist (see bootstrap/ci-oidc-role.yaml's
-      # own header comment for why that's a separate, human-operator-only
-      # step) - this workflow will fail at the "Publish emulator JWKS to
-      # S3" step until that variable is set.
+      # variables -> Actions -> Variables to the JWKSBucketName output of
+      # bootstrap/jwks-bucket.yaml, once that (human-operator-deployed,
+      # one-time) stack exists - this workflow will fail at the "Publish
+      # emulator JWKS to S3" step until that variable is set.
       - name: Publish emulator JWKS to S3
         id: emulator-jwks
         run: |

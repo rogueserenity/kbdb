@@ -1,0 +1,79 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap (kbdb-ci only): a fixed, long-lived
+  public S3 bucket holding throwaway local WorkOS/OIDC emulator signing
+  keys, so a CI-deployed kbdb-pr-<N> stack's native JWT authorizer has a
+  real, publicly-fetchable issuer/JWKS to verify against. Deployed
+  manually, once, via `aws cloudformation deploy --template-file
+  bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks` by a human
+  operator with the kbdb-ci-admin profile - see the resource comment
+  below for why this must be a fixed bucket, not a per-stack one.
+
+Resources:
+  # API Gateway can't reach back into the ephemeral GitHub Actions runner
+  # that's the only thing that could otherwise serve this live (see
+  # docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md's
+  # Testing section for the full reachability rationale) - hence
+  # publishing to S3 instead.
+  #
+  # Deliberately NOT a per-stack CloudFormation resource in template.yaml
+  # (unlike ImagesBucket): scripts/ci-publish-emulator-jwks.sh must run
+  # and publish to this bucket BEFORE `sam deploy` (the authorizer's
+  # WorkOSAuthKitDomain parameter depends on the JWKS URL it produces),
+  # so a stack-owned bucket can't exist yet when the script needs to
+  # write to it - this bucket pre-exists every PR stack's lifecycle
+  # entirely, same tier as bootstrap/artifact-bucket.yaml.
+  #
+  # Each PR writes/reads only its own jwks/kbdb-pr-<N>/ prefix (see
+  # ci.yml's "Publish emulator JWKS to S3" step and
+  # scripts/ci-publish-emulator-jwks.sh) - objects are cleaned up
+  # explicitly by teardown.yml on PR close, with the 1-day
+  # lifecycle-expiration rule below as a backstop for PRs closed without
+  # a clean teardown run (e.g. a force-deleted branch, an interrupted
+  # workflow).
+  JWKSBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub kbdb-jwks-${AWS::AccountId}
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: false
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: false
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireJwksObjectsBackstop
+            Status: Enabled
+            Prefix: jwks/
+            ExpirationInDays: 1
+
+  # Public read is scoped to the jwks/ prefix only via this bucket
+  # policy, not a bucket-wide ACL - BucketOwnerEnforced disables ACLs
+  # entirely, and a policy scoped to one prefix is more precise anyway.
+  JWKSBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref JWKSBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadJwksPrefixOnly
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub ${JWKSBucket.Arn}/jwks/*
+
+Outputs:
+  JWKSBucketName:
+    Description: >-
+      Set as the JWKS_BUCKET_NAME GitHub Actions repo variable (Settings ->
+      Secrets and variables -> Actions -> Variables) once this stack is
+      deployed.
+    Value: !Ref JWKSBucket

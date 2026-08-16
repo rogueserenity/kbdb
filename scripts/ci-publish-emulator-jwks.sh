@@ -81,9 +81,13 @@ PYEOF
 
 KID="$(cat "$WORKDIR/kid")"
 
+# No --acl public-read: the bucket (bootstrap/jwks-bucket.yaml) is
+# BucketOwnerEnforced, which disables ACLs entirely - passing one would
+# fail the call outright. Public read access comes from that bucket's own
+# bucket policy, scoped to the jwks/ prefix, not per-object ACLs.
 aws s3 cp "$WORKDIR/jwks.json" "s3://${S3_BUCKET}/${S3_PREFIX}/jwks.json" \
-  --content-type application/json --acl public-read >/dev/null
+  --content-type application/json >/dev/null
 aws s3 cp "$WORKDIR/openid-configuration" "s3://${S3_BUCKET}/${S3_PREFIX}/.well-known/openid-configuration" \
-  --content-type application/json --acl public-read >/dev/null
+  --content-type application/json >/dev/null
 
 echo "${ISSUER_URL} ${KEY_PATH} ${KID}"
