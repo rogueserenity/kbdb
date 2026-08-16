@@ -88,10 +88,7 @@ jobs:
       - name: sam build
         run: sam build --config-env ci
 
-      # JWKS_BUCKET_NAME is a repo variable (Settings -> Secrets and
-      # variables -> Actions -> Variables), not hardcoded here, since it's
-      # account-specific: the JWKSBucketName output of the one-time
-      # bootstrap/jwks-bucket.yaml stack.
+      # JWKS_BUCKET_NAME is set as a GitHub Actions repo variable.
       - name: Publish emulator JWKS to S3
         id: emulator-jwks
         run: |
