@@ -75,7 +75,7 @@ func RequireAuthorizerIdentity(next http.Handler) http.Handler {
 }
 
 // authenticate verifies rawToken and returns r with its context updated to
-// carry the verified caller's user ID, groups, and request-scoped logger.
+// carry the verified caller's user ID and request-scoped logger.
 func authenticate(r *http.Request, verifier *auth.Verifier, rawToken string) (*http.Request, error) {
 	claims, err := verifier.VerifyToken(r.Context(), rawToken)
 	if err != nil {
@@ -87,7 +87,6 @@ func authenticate(r *http.Request, verifier *auth.Verifier, rawToken string) (*h
 	}
 
 	ctx := ctxpkg.WithUserID(r.Context(), claims.Subject)
-	ctx = ctxpkg.WithGroups(ctx, claims.Groups)
 	l := logpkg.WithUserID(logpkg.FromContext(ctx), claims.Subject)
 	ctx = logpkg.WithLogger(ctx, l)
 

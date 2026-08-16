@@ -14,16 +14,8 @@ import (
 // fields can be added later without changing VerifyToken's signature.
 type Claims struct {
 	Subject string
-	// Groups is the token's cognito:groups claim. Empty if absent.
-	Groups []string
 	// Expiry is the token's exp claim.
 	Expiry time.Time
-}
-
-// cognitoGroupsClaims reads cognito:groups via IDToken.Claims - it's
-// Cognito-specific, not exposed as an oidc.IDToken field.
-type cognitoGroupsClaims struct {
-	Groups []string `json:"cognito:groups"`
 }
 
 // tokenVerifier is the single method of *oidc.IDTokenVerifier that Verifier
@@ -40,18 +32,11 @@ type Verifier struct {
 
 // NewVerifier constructs a Verifier for issuerURL. audience is the
 // expected token audience (WorkOS's User Management application
-// client_id in production - see
-// docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md).
+// client_id in production).
 //
-// Tries OIDC discovery first (fetching issuerURL's
-// /.well-known/openid-configuration) - this is how real WorkOS works.
-// Falls back to constructing a verifier directly against issuerURL +
-// "/oauth2/jwks" if discovery fails, since @workos/emulate (this
-// project's local dev/test stand-in for WorkOS - see CONTRIBUTING.md)
-// does not serve a discovery document, only bare JWKS (confirmed
-// against a live emulator container; go-oidc's NewRemoteKeySet is
-// documented as existing specifically for "providers that don't support
-// discovery").
+// Tries OIDC discovery first; falls back to a plain JWKS fetch if that
+// fails, since @workos/emulate (the local dev/test stand-in for WorkOS)
+// doesn't serve a discovery document.
 func NewVerifier(ctx context.Context, issuerURL, audience string) (*Verifier, error) {
 	provider, err := oidc.NewProvider(ctx, issuerURL)
 	if err == nil {
@@ -105,9 +90,5 @@ func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, e
 		return nil, fmt.Errorf("auth: verifying token: %w", err)
 	}
 
-	// Missing claim isn't an error - just leaves Groups nil.
-	var groups cognitoGroupsClaims
-	_ = idToken.Claims(&groups)
-
-	return &Claims{Subject: idToken.Subject, Groups: groups.Groups, Expiry: idToken.Expiry}, nil
+	return &Claims{Subject: idToken.Subject, Expiry: idToken.Expiry}, nil
 }

@@ -37,8 +37,8 @@ type KeyboardPurchase struct {
 }
 
 // Keyboard is a mechanical keyboard in a user's collection, or shared with
-// the caller. UserID is the DynamoDB partition key (the owner's Cognito
-// subject); ID is the sort key. Only Brand, Name, and Visibility are
+// the caller. UserID is the DynamoDB partition key (the owner's WorkOS
+// user ID); ID is the sort key. Only Brand, Name, and Visibility are
 // required, per api/openapi.yaml's KeyboardInput schema; every other field
 // (here and in KeyboardMaterialColor/KeyboardDesign/KeyboardPCB/
 // KeyboardPurchase) is a pointer so nil ("not provided") round-trips
