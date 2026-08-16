@@ -1,0 +1,82 @@
+#!/usr/bin/env bash
+set -euo pipefail
+# Generates a throwaway RSA keypair, derives the corresponding static
+# OIDC discovery document + JWKS, and publishes both to S3 at a stable
+# URL - so a real deployed AWS stack's native JWT authorizer has a
+# publicly-reachable issuer/jwks_uri to fetch from, without needing to
+# reach back into the ephemeral GitHub Actions runner (which has no
+# stable public IP/DNS - see docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md's
+# Testing section for the full reachability rationale).
+#
+# Usage: ci-publish-emulator-jwks.sh <s3-bucket> <s3-prefix>
+# Prints: <issuer-url> <private-key-path> to stdout, space-separated,
+# for the caller to capture and pass to `sam deploy` / the emulator.
+
+S3_BUCKET="$1"
+S3_PREFIX="$2"
+
+WORKDIR="$(mktemp -d)"
+trap 'rm -rf "$WORKDIR"' EXIT
+
+openssl genrsa -out "$WORKDIR/key.pem" 2048 >/dev/null 2>&1
+openssl rsa -in "$WORKDIR/key.pem" -pubout -out "$WORKDIR/key.pub.pem" >/dev/null 2>&1
+
+ISSUER_URL="https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}"
+
+# Derive kid (a short, stable identifier for this run's key) and the
+# JWK's n/e (RSA modulus/exponent, base64url-no-padding) from the public
+# key via openssl + python3 (both already required by this repo's CI/dev
+# environment).
+python3 - "$WORKDIR/key.pub.pem" "$ISSUER_URL" "$WORKDIR" <<'PYEOF'
+import sys, base64, json
+from cryptography.hazmat.primitives import serialization
+
+pub_path, issuer, workdir = sys.argv[1], sys.argv[2], sys.argv[3]
+
+with open(pub_path, "rb") as f:
+    pub = serialization.load_pem_public_key(f.read())
+numbers = pub.public_numbers()
+
+def b64url(i: int) -> str:
+    b = i.to_bytes((i.bit_length() + 7) // 8, "big")
+    return base64.urlsafe_b64encode(b).rstrip(b"=").decode()
+
+kid = "ci-" + base64.urlsafe_b64encode(str(numbers.n)[:16].encode()).rstrip(b"=").decode()[:16]
+
+jwks = {
+    "keys": [{
+        "kty": "RSA",
+        "use": "sig",
+        "alg": "RS256",
+        "kid": kid,
+        "n": b64url(numbers.n),
+        "e": b64url(numbers.e),
+    }]
+}
+
+discovery = {
+    "issuer": issuer,
+    "jwks_uri": issuer + "/jwks.json",
+    "authorization_endpoint": issuer + "/authorize",
+    "token_endpoint": issuer + "/token",
+    "response_types_supported": ["code"],
+    "subject_types_supported": ["public"],
+    "id_token_signing_alg_values_supported": ["RS256"],
+}
+
+with open(f"{workdir}/jwks.json", "w") as f:
+    json.dump(jwks, f)
+with open(f"{workdir}/openid-configuration", "w") as f:
+    json.dump(discovery, f)
+with open(f"{workdir}/kid", "w") as f:
+    f.write(kid)
+PYEOF
+
+KID="$(cat "$WORKDIR/kid")"
+
+aws s3 cp "$WORKDIR/jwks.json" "s3://${S3_BUCKET}/${S3_PREFIX}/jwks.json" \
+  --content-type application/json --acl public-read >/dev/null
+aws s3 cp "$WORKDIR/openid-configuration" "s3://${S3_BUCKET}/${S3_PREFIX}/.well-known/openid-configuration" \
+  --content-type application/json --acl public-read >/dev/null
+
+echo "${ISSUER_URL} ${WORKDIR}/key.pem ${KID}"
