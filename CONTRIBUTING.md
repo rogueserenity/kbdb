@@ -32,12 +32,15 @@ sam validate --lint
 ## Running the app locally
 
 ```sh
-mise run func-setup    # brings up LocalStack + mockoidc + sam local start-api
+mise run func-setup    # deploys template.yaml to floci + starts the WorkOS emulator
+# export the KBDB_* vars func-setup prints, then:
 mise run func-test     # runs the functional test suite against it
 mise run func-teardown # tears it all down
 ```
 
-Once `func-setup` is running, most iteration just needs `mise run func-test` again — Go code and test changes are picked up automatically. You only need to restart (`mise run func-teardown && mise run func-setup`) after editing `template.yaml`, `docker-compose.yml`, or mockoidc's own source.
+`func-setup` deploys kbdb's real `template.yaml` to [floci](https://github.com/floci-io/floci) (a local AWS emulator) via a genuine `sam deploy` — not `sam local start-api`, which never emulates API Gateway's native JWT authorizer, so it couldn't exercise any auth-required write route (see `internal/middleware.RequireAuthorizerIdentity`). It prints `KBDB_*` exports (API URL, table names, auth tokens) each run — export those before `func-test`, since floci assigns real, stack-derived names rather than fixed local ones.
+
+Most iteration just needs `mise run func-test` again once those are exported — Go code and test changes are picked up automatically. Restart (`mise run func-teardown && mise run func-setup`) after editing `template.yaml`, `docker-compose.floci.yml`, or the WorkOS emulator's seed config.
 
 ## Deploying to AWS
 
@@ -69,12 +72,13 @@ There's no default AWS profile — commands will fail with `NoCredentials` unles
 
 ### First-time account bootstrap
 
-New AWS account, never deployed to before? One-time steps, done once per account by whoever's setting it up (not needed for everyday `dev-deploy`). **If you're forking this repo to deploy to your own account, you only need step 1** — steps 3 and 4 exist for this project's own separate CI account and don't apply to a single-account personal deploy; `.github/workflows/` is entirely specific to this project's own CI and isn't something you need to set up or replicate.
+New AWS account, never deployed to before? One-time steps, done once per account by whoever's setting it up (not needed for everyday `dev-deploy`). **If you're forking this repo to deploy to your own account, you only need step 1** — steps 3-5 exist for this project's own separate CI account and don't apply to a single-account personal deploy; `.github/workflows/` is entirely specific to this project's own CI and isn't something you need to set up or replicate.
 
 1. **Artifact bucket** (needed by everyone): `aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml --stack-name kbdb-bootstrap --profile <profile>`. The scripts compute its name automatically (`kbdb-sam-artifacts-<your-account-id>`, matching this template's output) — nothing to copy into `samconfig.toml` by hand.
 2. **ECR repo**: for a personal/`kbdb-dev`-style account, `mise run dev-setup` handles this automatically — nothing manual to do. For `kbdb-ci`'s shared bootstrap repo, see [ECR bootstrap procedure](#ecr-bootstrap-procedure) below.
 3. **Cost budget** (only needed for accounts without their own app stack, e.g. `kbdb-ci`): `aws cloudformation deploy --template-file bootstrap/cost-budget.yaml --stack-name kbdb-cost-budget --profile <profile>`.
 4. **(`kbdb-ci` only) GitHub Actions OIDC role**, so CI can authenticate to AWS: `aws cloudformation deploy --template-file bootstrap/ci-oidc-role.yaml --stack-name kbdb-ci-oidc --capabilities CAPABILITY_NAMED_IAM --profile kbdb-ci-admin`.
+5. **(`kbdb-ci` only) JWKS bucket**, so CI's functional-test job can publish a real, publicly-fetchable issuer/JWKS for its per-PR stacks' native WorkOS authorizer to verify against: `aws cloudformation deploy --template-file bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks --profile kbdb-ci-admin`. Then set the resulting `JWKSBucketName` output as the `JWKS_BUCKET_NAME` GitHub Actions repo variable (Settings → Secrets and variables → Actions → Variables) — `ci.yml`'s functional-test job fails at its "Publish emulator JWKS to S3" step until that's set.
 
 After all bootstraps, ordinary `sam deploy` calls (and, for `kbdb-ci`, CI's own workflow) work.
 
@@ -139,7 +143,7 @@ Two test layers, kept separate — don't mix them:
 
 Functional specs follow a consistent BDD shape: `Describe` the subject (and, for multi-action resources, a nested `Describe` per action) → `Context("given <precondition>")` → `When("<action>")` → one `It` with a `By(...)` per assertion. Build the actual request inside the innermost `BeforeEach`, not an outer one — Ginkgo's context is scoped to the node that received it.
 
-`mockoidc` stands in for Cognito in functional tests, since `auth.NewVerifier` does a real OIDC discovery round-trip and needs something real to talk to. It runs as its own docker-compose service; see `test/functional/support/mockoidc/main.go` if you need to touch it.
+The WorkOS emulator (`ghcr.io/workos/emulate`) stands in for WorkOS in functional tests, since `auth.NewVerifier` does a real OIDC discovery round-trip and needs something real to talk to. It runs as its own docker-compose service, seeded via `scripts/workos-emulate-seed.yaml`.
 
 ## Conventions
 

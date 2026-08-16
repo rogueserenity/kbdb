@@ -70,10 +70,11 @@ same place.
 
 ## Consumer-side note (kbdb)
 
-`scripts/func-setup-floci.sh` should:
-1. set `FLOCI_SERVICES_ECR_URI_STYLE=path` on the floci container,
+`scripts/func-setup.sh` does exactly this:
+1. sets `FLOCI_SERVICES_ECR_URI_STYLE=path` on the floci container
+   (`docker-compose.floci.yml`),
 2. `aws ecr create-repository` explicitly, and
-3. pass `--image-repositories` to `sam deploy` instead of
+3. passes `--image-repositories` to `sam deploy` instead of
    `--resolve-image-repos` — mirroring `dev-deploy.sh`/CI, not inventing a
    new pattern.
 

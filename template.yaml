@@ -2,7 +2,7 @@ AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
 Description: >
   kbdb - keyboard database. Infrastructure for the kbdb API: a single
-  Lambda function fronted by an HTTP API with a Cognito JWT authorizer,
+  Lambda function fronted by an HTTP API with a WorkOS JWT authorizer,
   DynamoDB tables, an S3 bucket for images, and a budget cost tripwire.
 
 Globals:
@@ -23,26 +23,27 @@ Parameters:
       name (CloudFormation's early validation correctly refuses to create a
       duplicate). Left at the default 'false' for the real kbdb-dev stack,
       which does own and manage its repo via this template.
-
-  OidcIssuerBaseUrl:
+  WorkOSIssuerBaseUrl:
     Type: String
-    Default: ''
-    Description: >
-      Base URL the Cognito issuer is built from, as <this>/<UserPoolId>.
-      Left empty - the default for every real deploy, kbdb-dev and CI alike -
-      it resolves to real Cognito's regional endpoint, which must be exact:
-      go-oidc requires the discovery document's own issuer field to equal
-      the URL it was configured with. Override only to point a local
-      emulator run at that emulator's Cognito issuer instead (floci reports
-      its issuer as its own host and port plus the pool id, not the AWS
-      shape). A Parameter's Default can't reference AWS::Region -
-      pseudo-parameters aren't resolvable at parameter-definition time - so
-      the real-Cognito fallback is applied via UseDefaultOidcIssuerBaseUrl
-      where this value is consumed, not here.
+    Description: >-
+      This deployment's WorkOS issuer base URL, scheme included - e.g.
+      https://your-app.authkit.app (or a custom domain) for real WorkOS,
+      or a floci-local http://... URL for local dev (see
+      scripts/func-setup.sh). Not a bare domain: real WorkOS is always
+      https, but floci's local S3 emulation only serves plain http, so
+      the scheme must be supplied by the caller rather than hardcoded
+      here.
+  WorkOSUserManagementClientId:
+    Type: String
+    Description: >-
+      The WorkOS User Management application's client_id for this
+      environment - used as the native JWT authorizer's audience,
+      since every Connect-issued access token's aud claim resolves to
+      this value (confirmed empirically, not derived from any
+      resource= parameter a client supplies).
 
 Conditions:
   ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
-  UseDefaultOidcIssuerBaseUrl: !Equals [!Ref OidcIssuerBaseUrl, '']
 
 Resources:
   # Dedicated ECR repo for ApiFunction's container image, declared in-template
@@ -64,8 +65,7 @@ Resources:
     Condition: ShouldCreateApiRepository
     Properties:
       # Stack-name-derived, not a literal - each per-developer kbdb-dev-<name>
-      # stack owns its own repo (same class of collision the UserPoolDomain
-      # fix addressed for the Cognito hosted-UI domain; here for ECR).
+      # stack owns its own repo, avoiding a name collision between stacks.
       RepositoryName: !Sub kbdb-api-${AWS::StackName}
       LifecyclePolicy:
         LifecyclePolicyText: |
@@ -86,8 +86,8 @@ Resources:
 
   # Holds user-uploaded images (build photos, keycap kit renders). Private -
   # access only via presigned URLs minted by ApiFunction after an ownership/
-  # sharing check. Stack-scoped like ApiRepository/UserPoolDomain (no
-  # per-bucket cost, keeps environments isolated).
+  # sharing check. Stack-scoped like ApiRepository (no per-bucket cost,
+  # keeps environments isolated).
   ImagesBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -104,7 +104,7 @@ Resources:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
 
-  # User-owned switches. user_id (Cognito subject, the owner) is the
+  # User-owned switches. user_id (WorkOS user ID, the owner) is the
   # partition key, id the sort key - every real access pattern is scoped to
   # an already-known user_id (see README's DynamoDB rationale), so no GSI is
   # needed; visibility filtering happens as a Query filter expression, not
@@ -221,11 +221,8 @@ Resources:
         - arm64
       Environment:
         Variables:
-          OIDC_ISSUER_URL: !If
-            - UseDefaultOidcIssuerBaseUrl
-            - !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
-            - !Sub ${OidcIssuerBaseUrl}/${UserPool}
-          OIDC_AUDIENCE: !Ref UserPoolClient
+          OIDC_ISSUER_URL: !Ref WorkOSIssuerBaseUrl
+          OIDC_AUDIENCE: !Ref WorkOSUserManagementClientId
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
@@ -327,7 +324,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
+        # Default WorkOSAuthorizer applies (security: [CognitoAuth] in
         # api/openapi.yaml, no anonymous override, unlike the GET routes) -
         # ownership is checked at the app layer by authz.IsOwner.
         CreateSwitchEvent:
@@ -336,7 +333,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches
             Method: post
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateSwitchEvent.
         UpdateSwitchEvent:
           Type: HttpApi
@@ -344,7 +341,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches/{switchId}
             Method: put
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateSwitchEvent.
         DeleteSwitchEvent:
           Type: HttpApi
@@ -373,7 +370,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default CognitoAuthorizer applies (security: [CognitoAuth] in
+        # Default WorkOSAuthorizer applies (security: [CognitoAuth] in
         # api/openapi.yaml, no anonymous override, unlike the GET routes) -
         # ownership is checked at the app layer by authz.IsOwner.
         CreateKeyboardEvent:
@@ -382,7 +379,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards
             Method: post
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateKeyboardEvent:
           Type: HttpApi
@@ -390,7 +387,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards/{keyboardId}
             Method: put
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteKeyboardEvent:
           Type: HttpApi
@@ -416,7 +413,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateKeycapSetEvent:
           Type: HttpApi
@@ -424,7 +421,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets
             Method: post
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateKeycapSetEvent:
           Type: HttpApi
@@ -432,7 +429,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: put
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteKeycapSetEvent:
           Type: HttpApi
@@ -440,7 +437,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}
             Method: delete
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateKeycapKitEvent:
           Type: HttpApi
@@ -448,7 +445,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keycap-sets/{keycapSetId}/kits
             Method: post
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateKeycapKitEvent:
           Type: HttpApi
@@ -483,7 +480,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         CreateBuildEvent:
           Type: HttpApi
@@ -500,7 +497,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         UpdateBuildEvent:
           Type: HttpApi
@@ -508,7 +505,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}
             Method: put
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteBuildEvent:
           Type: HttpApi
@@ -516,7 +513,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}
             Method: delete
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         AddBuildImageEvent:
           Type: HttpApi
@@ -524,7 +521,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images
             Method: post
-        # Default CognitoAuthorizer applies - same rationale as
+        # Default WorkOSAuthorizer applies - same rationale as
         # CreateKeyboardEvent.
         DeleteBuildImageEvent:
           Type: HttpApi
@@ -532,32 +529,27 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images/{imageId}
             Method: delete
-        # Authorizer: NONE is deliberate on all three MCP routes below -
-        # internal/mcp handles auth itself and needs the request to reach it.
+        # Default WorkOSAuthorizer applies - the native JWT authorizer now
+        # fronts these routes too (see internal/mcp for how it consumes the
+        # header aws-lambda-web-adapter forwards).
         McpEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /mcp
             Method: any
-            Auth:
-              Authorizer: NONE
         McpMetadataEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource
             Method: get
-            Auth:
-              Authorizer: NONE
         McpMetadataMcpEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource/mcp
             Method: get
-            Auth:
-              Authorizer: NONE
     Metadata:
       # DockerContext is the repo root, not functions/api/, so the build has
       # access to the whole Go module (internal/ packages, go.mod/go.sum) -
@@ -571,78 +563,13 @@ Resources:
     Properties:
       Auth:
         Authorizers:
-          CognitoAuthorizer:
+          WorkOSAuthorizer:
             JwtConfiguration:
-              issuer: !If
-                - UseDefaultOidcIssuerBaseUrl
-                - !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
-                - !Sub ${OidcIssuerBaseUrl}/${UserPool}
+              issuer: !Ref WorkOSIssuerBaseUrl
               audience:
-                - !Ref UserPoolClient
+                - !Ref WorkOSUserManagementClientId
             IdentitySource: $request.header.Authorization
-        DefaultAuthorizer: CognitoAuthorizer
-
-  UserPool:
-    Type: AWS::Cognito::UserPool
-    Properties:
-      UserPoolName: kbdb-users
-      AutoVerifiedAttributes:
-        - email
-      UsernameAttributes:
-        - email
-      Schema:
-        - Name: email
-          Required: true
-          Mutable: true
-      AdminCreateUserConfig:
-        AllowAdminCreateUserOnly: false
-      Policies:
-        PasswordPolicy:
-          MinimumLength: 8
-          RequireLowercase: true
-          RequireUppercase: true
-          RequireNumbers: true
-          RequireSymbols: true
-
-  UserPoolClient:
-    Type: AWS::Cognito::UserPoolClient
-    Properties:
-      UserPoolId: !Ref UserPool
-      AllowedOAuthFlows:
-        - code
-      AllowedOAuthScopes:
-        - openid
-        - email
-        - profile
-      AllowedOAuthFlowsUserPoolClient: true
-      # Placeholder - replace with the real client callback URL(s) once a
-      # real client/UI exists.
-      CallbackURLs:
-        - https://example.com/callback
-      SupportedIdentityProviders:
-        - COGNITO
-      # Required for ci.yml's functional-test job to mint a test token via
-      # admin-initiate-auth (ADMIN_USER_PASSWORD_AUTH) against a throwaway
-      # Cognito user. Declared here rather than left to CI's own
-      # update-user-pool-client call so this is real, version-controlled
-      # stack configuration - every deployed stack (kbdb-dev included) gets
-      # it, not just ones that happen to go through that exact CI step.
-      ExplicitAuthFlows:
-        - ALLOW_ADMIN_USER_PASSWORD_AUTH
-        - ALLOW_REFRESH_TOKEN_AUTH
-
-  UserPoolDomain:
-    Type: AWS::Cognito::UserPoolDomain
-    Properties:
-      # Cognito-prefix domains are globally unique across all AWS accounts
-      # in the region - suffixed with the account ID AND stack name to avoid
-      # collision. Account ID alone isn't enough: every kbdb-pr-<N> CI stack
-      # deploys into the same kbdb-ci account, so two PR stacks open at once
-      # would otherwise collide on this exact domain (a real, if
-      # not-yet-triggered, bug - every CI run so far has tested one PR stack
-      # at a time).
-      Domain: !Sub kbdb-auth-${AWS::AccountId}-${AWS::StackName}
-      UserPoolId: !Ref UserPool
+        DefaultAuthorizer: WorkOSAuthorizer
 
   CostBudget:
     Type: AWS::Budgets::Budget
@@ -673,15 +600,6 @@ Outputs:
   ApiUrl:
     Description: Base URL of the HTTP API
     Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
-  UserPoolId:
-    Description: Cognito User Pool ID
-    Value: !Ref UserPool
-  UserPoolClientId:
-    Description: Cognito User Pool Client ID
-    Value: !Ref UserPoolClient
-  UserPoolHostedUiDomain:
-    Description: Cognito Hosted UI domain
-    Value: !Sub https://kbdb-auth-${AWS::AccountId}-${AWS::StackName}.auth.${AWS::Region}.amazoncognito.com
   ImagesBucketName:
     Description: S3 bucket holding user-uploaded images (build photos, keycap kit renders)
     Value: !Ref ImagesBucket

@@ -5,6 +5,11 @@ package main
 // Kong's struct-tag env binding, defaults, and required-field validation are
 // useful regardless of whether flag parsing is ever exercised.
 type Config struct {
+	// OIDCIssuerURL/OIDCAudience configure the verifier used only by
+	// middleware.OptionalAuth (required-auth routes rely solely on API
+	// Gateway's native JWT authorizer - see template.yaml). Points at
+	// WorkOS Connect's issuer (the environment's AuthKit domain) and the
+	// WorkOS User Management application's client_id, respectively.
 	OIDCIssuerURL      string `env:"OIDC_ISSUER_URL" required:""`
 	OIDCAudience       string `env:"OIDC_AUDIENCE" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`

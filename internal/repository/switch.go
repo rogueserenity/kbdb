@@ -36,7 +36,7 @@ type SwitchPurchase struct {
 
 // Switch is a mechanical keyboard switch in a user's collection, or shared
 // with the caller. UserID is the DynamoDB partition key (the owner's
-// Cognito subject); ID is the sort key. Only Brand, Name, Type, and
+// WorkOS user ID); ID is the sort key. Only Brand, Name, Type, and
 // Visibility are required, per api/openapi.yaml's SwitchInput schema; every
 // other field (here and in SwitchMaterial/SwitchForce/SwitchSpring/
 // SwitchPurchase) is a pointer so nil ("not provided") round-trips

@@ -78,29 +78,11 @@ Resources:
             Effect: Allow
             Action: apigateway:*
             # API Gateway v2 IDs are opaque and don't exist until after
-            # creation, so there's no kbdb-dev-*-based ARN pattern to use -
-            # same constraint as Cognito below.
+            # creation, so there's no kbdb-dev-*-based ARN pattern to use.
             Resource:
               - !Sub arn:aws:apigateway:${AWS::Region}::/apis
               - !Sub arn:aws:apigateway:${AWS::Region}::/apis/*
               - !Sub arn:aws:apigateway:${AWS::Region}::/tags/*
-          - Sid: CognitoCreateUserPool
-            Effect: Allow
-            # CreateUserPool and the TagResource call CloudFormation makes
-            # right after can't be scoped to a resource ARN - the pool
-            # doesn't exist (and its ID isn't known) until CreateUserPool
-            # itself returns.
-            Action:
-              - cognito-idp:CreateUserPool
-              - cognito-idp:TagResource
-            Resource: '*'
-          - Sid: CognitoAdminAndManagement
-            Effect: Allow
-            Action: cognito-idp:*
-            # Pool IDs are always region-prefixed (e.g. us-east-2_XXXXXXXXX)
-            # but not otherwise predictable ahead of creation - scope to
-            # this account+region's pools rather than Resource: '*'.
-            Resource: !Sub arn:aws:cognito-idp:${AWS::Region}:${AWS::AccountId}:userpool/${AWS::Region}_*
           - Sid: IamPassRoleForSam
             Effect: Allow
             Action:
@@ -180,9 +162,7 @@ Resources:
               # confirmed via real AccessDenied errors (UPDATE_FAILED on
               # ApiRepository, one per action, in two separate end-to-end
               # test runs) during verification of this exact policy, not
-              # assumed from docs - same pattern as
-              # bootstrap/ci-oidc-role.yaml's CognitoCreateUserPool
-              # statement needing an empirically-discovered TagResource.
+              # assumed from docs.
               - ecr:DeleteRepositoryPolicy
               - ecr:TagResource
             Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/kbdb-api-kbdb-dev-*

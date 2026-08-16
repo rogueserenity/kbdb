@@ -88,6 +88,37 @@ jobs:
       - name: sam build
         run: sam build --config-env ci
 
+      # JWKS_BUCKET_NAME is set as a GitHub Actions repo variable. The
+      # generic https://<bucket>.s3.amazonaws.com host 307-redirects to the
+      # region-specific one for any bucket outside us-east-1 (confirmed live
+      # against the real kbdb-jwks bucket) - API Gateway's JWT authorizer
+      # won't follow that redirect when fetching JWKS, so the
+      # region-specific host is passed explicitly, not the generic one.
+      - name: Publish emulator JWKS to S3
+        id: emulator-jwks
+        run: |
+          JWKS_PREFIX="jwks/kbdb-pr-${{ github.event.pull_request.number }}"
+          ISSUER_BASE_URL="https://${{ vars.JWKS_BUCKET_NAME }}.s3.us-east-2.amazonaws.com/${JWKS_PREFIX}"
+          read -r ISSUER_URL KEY_PATH KID < <(scripts/ci-publish-emulator-jwks.sh \
+            "${{ vars.JWKS_BUCKET_NAME }}" "$JWKS_PREFIX" us-east-2 "$ISSUER_BASE_URL")
+          {
+            echo "issuer-url=$ISSUER_URL"
+            echo "key-path=$KEY_PATH"
+            echo "kid=$KID"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Start WorkOS emulator
+        run: |
+          docker run --rm -d -p 4100:4100 --name workos-emulate \
+            -e WORKOS_EMULATE_ISSUER="${{ steps.emulator-jwks.outputs.issuer-url }}" \
+            -e WORKOS_EMULATE_KID="${{ steps.emulator-jwks.outputs.kid }}" \
+            -v "${{ steps.emulator-jwks.outputs.key-path }}:/keys/signing-key.pem:ro" \
+            ghcr.io/workos/emulate --host 0.0.0.0 --signing-key /keys/signing-key.pem
+          for _ in $(seq 1 20); do
+            curl -sf http://localhost:4100/health && break
+            sleep 0.5
+          done
+
       - name: sam deploy
         run: |
           sam deploy \
@@ -95,6 +126,8 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --image-repositories "ApiFunction=${ECR_REPOSITORY_URI}" \
             --parameter-overrides "SkipApiRepository=true" \
+              "WorkOSIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
+              "WorkOSUserManagementClientId=client_local_kbdb" \
             --tags "kbdb:pr=pr-${{ github.event.pull_request.number }}" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
@@ -105,14 +138,6 @@ jobs:
           API_URL=$(aws cloudformation describe-stacks \
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --query "Stacks[0].Outputs[?OutputKey=='ApiUrl'].OutputValue" \
-            --output text)
-          USER_POOL_ID=$(aws cloudformation describe-stacks \
-            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
-            --query "Stacks[0].Outputs[?OutputKey=='UserPoolId'].OutputValue" \
-            --output text)
-          USER_POOL_CLIENT_ID=$(aws cloudformation describe-stacks \
-            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
-            --query "Stacks[0].Outputs[?OutputKey=='UserPoolClientId'].OutputValue" \
             --output text)
           SWITCH_TABLE_NAME=$(aws cloudformation describe-stacks \
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
@@ -132,25 +157,32 @@ jobs:
             --output text)
           {
             echo "api-url=$API_URL"
-            echo "user-pool-id=$USER_POOL_ID"
-            echo "user-pool-client-id=$USER_POOL_CLIENT_ID"
             echo "switch-table-name=$SWITCH_TABLE_NAME"
             echo "keyboard-table-name=$KEYBOARD_TABLE_NAME"
             echo "keycap-set-table-name=$KEYCAP_SET_TABLE_NAME"
             echo "build-table-name=$BUILD_TABLE_NAME"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create throwaway Cognito test users and mint tokens
+      - name: Create test users and mint emulator tokens
         id: auth-token
         run: |
-          USER_POOL_ID="${{ steps.stack-outputs.outputs.user-pool-id }}"
-          USER_POOL_CLIENT_ID="${{ steps.stack-outputs.outputs.user-pool-client-id }}"
           PASSWORD="$(openssl rand -base64 24)Aa1!"
 
-          TOKEN=$(scripts/ci-create-test-user.sh "$USER_POOL_ID" "$USER_POOL_CLIENT_ID" \
-            "ci-test-user@rogueserenity.dev" "$PASSWORD")
-          SECOND_USER_TOKEN=$(scripts/ci-create-test-user.sh "$USER_POOL_ID" "$USER_POOL_CLIENT_ID" \
-            "ci-test-user-2@rogueserenity.dev" "$PASSWORD")
+          create_and_mint() {
+            local email="$1"
+            curl -sf -X POST http://localhost:4100/user_management/users \
+              -H "Content-Type: application/json" \
+              -H "Authorization: Bearer sk_test_default" \
+              -d "{\"email\":\"$email\",\"password\":\"$PASSWORD\",\"email_verified\":true}" >/dev/null
+
+            curl -sf -X POST http://localhost:4100/user_management/authenticate \
+              -H "Content-Type: application/json" \
+              -d "{\"client_id\":\"client_local_kbdb\",\"client_secret\":\"sk_test_default\",\"grant_type\":\"password\",\"email\":\"$email\",\"password\":\"$PASSWORD\"}" \
+              | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"
+          }
+
+          TOKEN=$(create_and_mint "ci-test-user@rogueserenity.dev")
+          SECOND_USER_TOKEN=$(create_and_mint "ci-test-user-2@rogueserenity.dev")
 
           echo "::add-mask::$TOKEN"
           echo "::add-mask::$SECOND_USER_TOKEN"

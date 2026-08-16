@@ -47,8 +47,8 @@ since has been against a template that already had it.
 ## What this means for the migration
 
 Not filing this upstream until it reproduces reliably with a known trigger.
-The `create-stack`/`update-stack` workaround already written into
-`scripts/func-setup-floci.sh` is harmless to keep regardless - it works,
-and unlike `deploy` it doesn't create a changeset, so it doesn't need
-whatever `deploy` triggers. But the claim that plain `deploy` requires it
-is retracted until reproduced deliberately, not accidentally.
+`scripts/func-setup.sh` uses plain `sam deploy` with no `create-stack`/
+`update-stack` workaround, consistent with this file's own finding that the
+workaround isn't reliably needed - if `GetTemplateSummary` resurfaces, it
+should reproduce there and be re-investigated at that point, not worked
+around preemptively.

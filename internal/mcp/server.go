@@ -4,16 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
-	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
-	"github.com/rogueserenity/kbdb/internal/auth"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/middleware"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -60,7 +58,6 @@ const (
 // authenticate against, advertised via RFC 9728 Protected Resource Metadata.
 // version is advertised to MCP clients on connect.
 func New(
-	verifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -87,95 +84,43 @@ func New(
 	)
 
 	return Handlers{
-		Streamable:       requireBearerToken(verifier, streamable),
+		Streamable:       middleware.RequireAuthorizerIdentity(streamable),
 		MetadataPath:     MetadataPath,
 		RootMetadataPath: RootMetadataPath,
 		Metadata:         metadataHandler(issuerURL),
 	}
 }
 
-// requireBearerToken wraps next with the SDK's bearer-token verification
-// middleware, per the MCP 2026-07-28 authorization spec's normative
-// requirement that invalid or expired tokens receive a real HTTP 401 (with
-// a WWW-Authenticate challenge), not an MCP protocol-level error — a prior
-// version of this package got this wrong by rejecting failed auth as an
-// in-band tool-call error instead.
-//
-// ResourceMetadataURL (advertised in the 401's WWW-Authenticate header) is
-// derived per-request for the same reason metadataHandler's "resource"
-// field is: it depends on the request's Host, not a static, deploy-time
-// value.
-func requireBearerToken(verifier *auth.Verifier, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		opts := &sdkauth.RequireBearerTokenOptions{
-			ResourceMetadataURL: resourceMetadataURL(r),
-		}
-		sdkauth.RequireBearerToken(tokenVerifier(verifier), opts)(next).ServeHTTP(w, r)
-	})
-}
-
-// tokenVerifier adapts auth.Verifier.VerifyToken to the SDK's
-// auth.TokenVerifier signature.
-func tokenVerifier(verifier *auth.Verifier) sdkauth.TokenVerifier {
-	return func(ctx context.Context, token string, _ *http.Request) (*sdkauth.TokenInfo, error) {
-		claims, err := verifier.VerifyToken(ctx, token)
-		if err != nil {
-			// Warn, not Error: an individual invalid/expired token from one
-			// client is expected traffic, not a bug - still worth a trace to
-			// spot a misconfigured client or repeated probing.
-			logpkg.FromContext(ctx).Warn("token verification failed", logpkg.Error, err)
-			// The SDK sends this error's message straight to the client in
-			// the 401 body, so return the sentinel itself rather than err -
-			// internal verifier detail (issuer, clock skew, etc.) stays
-			// server-side in the log above.
-			return nil, sdkauth.ErrInvalidToken
-		}
-
-		return &sdkauth.TokenInfo{
-			UserID:     claims.Subject,
-			Expiration: claims.Expiry,
-			Extra:      map[string]any{"groups": claims.Groups},
-		}, nil
-	}
-}
-
 // errNoTokenInfo guards against a request ever reaching the tool dispatch
-// layer without requireBearerToken having run first - unreachable today
+// layer without middleware.RequireAuthorizerIdentity having run first (see
+// New, which wraps the streamable handler with it) - unreachable today
 // since it's the only entrypoint into this server, but this fails closed
 // rather than silently proceeding unauthenticated if that wiring is ever
 // broken by a future change (e.g. a second transport added to mcpServer).
 var errNoTokenInfo = errors.New("no verified identity on context")
 
-// identityMiddleware reads the TokenInfo requireBearerToken already
-// verified and stored on context, and writes the caller's identity into
-// ctxpkg/logpkg the same way REST's middleware.Auth does, so tool handlers
-// only depend on those shared, transport-agnostic packages.
+// identityMiddleware reads the caller's user ID that
+// middleware.RequireAuthorizerIdentity already wrote onto context at the
+// HTTP layer (see New) and writes it into logpkg the same way REST's
+// handlers see it, so tool handlers only depend on those shared,
+// transport-agnostic packages. WorkOS tokens carry no groups-equivalent
+// claim, and nothing populates ctxpkg's groups value on this path, so
+// groups handling was dropped rather than kept as dead code that always
+// sees nil.
 func identityMiddleware() sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
 		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
-			info := sdkauth.TokenInfoFromContext(ctx)
-			if info == nil {
-				logpkg.FromContext(ctx).Error("MCP request reached tool dispatch with no verified TokenInfo on context")
+			userID, ok := ctxpkg.UserID(ctx)
+			if !ok {
+				logpkg.FromContext(ctx).Error("MCP request reached tool dispatch with no verified identity on context")
 				return nil, errNoTokenInfo
 			}
 
-			groups, ok := info.Extra["groups"].([]string)
-			if !ok && info.Extra["groups"] != nil {
-				logpkg.FromContext(ctx).Error("TokenInfo.Extra[\"groups\"] present but not a []string", "type", fmt.Sprintf("%T", info.Extra["groups"]))
-			}
-			ctx = ctxpkg.WithUserID(ctx, info.UserID)
-			ctx = ctxpkg.WithGroups(ctx, groups)
-			ctx = logpkg.WithLogger(ctx, logpkg.WithUserID(logpkg.FromContext(ctx), info.UserID))
+			ctx = logpkg.WithLogger(ctx, logpkg.WithUserID(logpkg.FromContext(ctx), userID))
 
 			return next(ctx, method, req)
 		}
 	}
-}
-
-// resourceMetadataURL builds the RFC 9728 metadata document's absolute URL
-// from r, for use in a 401 response's WWW-Authenticate header.
-func resourceMetadataURL(r *http.Request) string {
-	return schemeOf(r) + "://" + r.Host + MetadataPath
 }
 
 func schemeOf(r *http.Request) string {

@@ -1,0 +1,61 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  One-time-per-account bootstrap (kbdb-ci only): a fixed, long-lived
+  public S3 bucket holding throwaway local WorkOS/OIDC emulator signing
+  keys, so a CI-deployed kbdb-pr-<N> stack's native JWT authorizer has a
+  real, publicly-fetchable issuer/JWKS to verify against. Deployed
+  manually, once, via `aws cloudformation deploy --template-file
+  bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks` by a human
+  operator with the kbdb-ci-admin profile.
+
+Resources:
+  # Not a per-stack template.yaml resource: ci-publish-emulator-jwks.sh
+  # writes here before sam deploy runs, so a stack-owned bucket wouldn't
+  # exist yet when it's needed.
+  JWKSBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub kbdb-jwks-${AWS::AccountId}
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: false
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: false
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      # Backstop for PRs closed without a clean teardown run.
+      LifecycleConfiguration:
+        Rules:
+          - Id: ExpireJwksObjectsBackstop
+            Status: Enabled
+            Prefix: jwks/
+            ExpirationInDays: 1
+
+  # Public read is scoped to the jwks/ prefix only via this bucket
+  # policy, not a bucket-wide ACL - BucketOwnerEnforced disables ACLs
+  # entirely, and a policy scoped to one prefix is more precise anyway.
+  JWKSBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref JWKSBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadJwksPrefixOnly
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub ${JWKSBucket.Arn}/jwks/*
+
+Outputs:
+  JWKSBucketName:
+    Description: >-
+      Set as the JWKS_BUCKET_NAME GitHub Actions repo variable (Settings ->
+      Secrets and variables -> Actions -> Variables) once this stack is
+      deployed.
+    Value: !Ref JWKSBucket
