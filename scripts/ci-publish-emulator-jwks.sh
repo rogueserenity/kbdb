@@ -9,8 +9,13 @@ set -euo pipefail
 # Testing section for the full reachability rationale).
 #
 # Usage: ci-publish-emulator-jwks.sh <s3-bucket> <s3-prefix>
-# Prints: <issuer-url> <private-key-path> to stdout, space-separated,
-# for the caller to capture and pass to `sam deploy` / the emulator.
+# Prints: <issuer-url> <private-key-path> <kid> to stdout, space-separated,
+# for the caller to capture and pass to `sam deploy` / the emulator. The
+# private key file at <private-key-path> deliberately survives past this
+# script's own exit (it lives outside WORKDIR, which is the only thing
+# the EXIT trap removes) - the caller needs it to still exist afterward
+# to mount into the emulator container; it's the caller's/CI job's
+# responsibility to clean it up once it's no longer needed.
 
 S3_BUCKET="$1"
 S3_PREFIX="$2"
@@ -18,8 +23,10 @@ S3_PREFIX="$2"
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
 
-openssl genrsa -out "$WORKDIR/key.pem" 2048 >/dev/null 2>&1
-openssl rsa -in "$WORKDIR/key.pem" -pubout -out "$WORKDIR/key.pub.pem" >/dev/null 2>&1
+KEY_PATH="$(mktemp)"
+
+openssl genrsa -out "$KEY_PATH" 2048 >/dev/null 2>&1
+openssl rsa -in "$KEY_PATH" -pubout -out "$WORKDIR/key.pub.pem" >/dev/null 2>&1
 
 ISSUER_URL="https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}"
 
@@ -79,4 +86,4 @@ aws s3 cp "$WORKDIR/jwks.json" "s3://${S3_BUCKET}/${S3_PREFIX}/jwks.json" \
 aws s3 cp "$WORKDIR/openid-configuration" "s3://${S3_BUCKET}/${S3_PREFIX}/.well-known/openid-configuration" \
   --content-type application/json --acl public-read >/dev/null
 
-echo "${ISSUER_URL} ${WORKDIR}/key.pem ${KID}"
+echo "${ISSUER_URL} ${KEY_PATH} ${KID}"
