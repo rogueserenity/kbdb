@@ -49,8 +49,9 @@ form — no floci change needed, just a kbdb template parameter plus
 As of 2026-08-15, neither fix has shipped in a tagged floci release yet
 (latest is `1.6.0`, from 2026-08-06 — see `floci-io/floci`'s release list).
 `floci/floci:latest` on Docker Hub therefore does *not* yet contain either
-fix. Until a new version tag is cut, build floci locally from `upstream/main`
-rather than pulling the published image.
+fix. floci also publishes `floci/floci:nightly`, built from `upstream/main`
+on a schedule, which does contain both fixes — use that until a versioned
+release tag is cut, instead of building floci locally.
 
 ## What already works
 
@@ -75,19 +76,17 @@ rather than pulling the published image.
 ## Reproducing (current, working setup)
 
 ```
-cd floci-fork
-git checkout upstream/main
-export JAVA_HOME=/Users/jay/.local/share/mise/installs/java/25.0.1  # or: mise use java in this repo
-./mvnw -DskipTests package
-docker build -f docker/Dockerfile -t floci-local:test .
-
 cd kbdb
+docker compose -f docker-compose.floci.yml pull floci   # refresh the nightly tag
 docker compose -f docker-compose.floci.yml up -d
 bash scripts/func-setup-floci.sh   # deploys, mints tokens, prints exports
 # export the printed KBDB_* vars, then:
 bash scripts/func-test.sh
 ```
 
-Once floci-io/floci tags a release containing #2146 and #2150, switch
-`docker-compose.floci.yml`'s `floci` service to `image: floci/floci:latest`
-(or a pinned version tag) and drop the local build step above.
+`docker-compose.floci.yml` pulls `floci/floci:nightly`, which floci builds
+from `upstream/main` on a schedule and already contains both #2146 and
+#2150. Because it's a moving tag, `docker compose pull` before `up -d` to
+avoid running against a stale cached image. Once floci-io/floci cuts a
+versioned release tag containing both fixes, switch to that pinned tag
+instead of `nightly`.

@@ -9,7 +9,10 @@ services:
       - "9999:9999"
 
   floci:
-    image: floci-local:test
+    # nightly tracks upstream/main; switch to a pinned version tag once
+    # floci-io/floci cuts a release containing #2146 and #2150 (see
+    # floci-issues/README.md).
+    image: floci/floci:nightly
     environment:
       # Both the host-side test process and the Lambda container must reach
       # the issuer at the same name. floci's embedded DNS resolves this to

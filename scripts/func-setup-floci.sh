@@ -3,7 +3,7 @@
 # instead of localstack + sam local start-api.
 #
 # The full functional suite passes against this setup - see floci-issues/.
-# Requires a local floci build from upstream/main until floci-io/floci cuts
+# Uses floci/floci:nightly (tracks upstream/main) until floci-io/floci cuts
 # a release tag containing #2146 and #2150 (see floci-issues/README.md).
 set -euo pipefail
 
