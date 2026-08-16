@@ -1,6 +1,6 @@
 # kbdb
 
-kbdb is a keyboard collection database — keyboards, switches, keycap sets, and the builds assembled from them. It's multi-user, with each user's data private to them, and designed to eventually support sharing specific items.
+kbdb is a keyboard collection database — keyboards, switches, keycap sets, and the builds assembled from them. It's multi-user: each item has a visibility of private (owner only), authenticated (any signed-in user), or public (no auth needed), set per item by its owner.
 
 The primary interface is an MCP server, so you can manage your collection from an AI chat client; REST is a secondary interface for everything else. Both share the same service/repository layer, so they never drift out of sync with each other.
 
@@ -14,7 +14,7 @@ The primary interface is an MCP server, so you can manage your collection from a
 
 **DynamoDB over PostgreSQL**, chosen after evaluating the actual access patterns: every real query (list/get a user's own items, hydrate a build by reading its linked keyboard/switch/keycap set) is a shallow, fixed-fan-out lookup scoped to an already-known `user_id` — never a cross-user query or open-ended search. That means no secondary indexes are needed, and DynamoDB's permanent free tier is a better cost fit than RDS's non-permanent one.
 
-**Multi-tenancy is baked in from day one**, even though nothing is currently shared: every entity table is partitioned by `user_id` (WorkOS's immutable user ID, not the mutable email), so a later "share/view specific items" feature doesn't require a schema rewrite.
+**Multi-tenancy is baked in from day one**: every entity table is partitioned by `user_id` (WorkOS's immutable user ID, not the mutable email), and each item's visibility (private/authenticated/public) is enforced independently of that partitioning.
 
 **API versioning**: REST routes are prefixed `/v1/...` from day one. MCP has no formal version number (the protocol has no standardized tool-versioning layer) — instead, MCP tool schemas and descriptions follow additive-only evolution, since tool descriptions affect which tool an LLM client selects, not just the schema shape.
 
