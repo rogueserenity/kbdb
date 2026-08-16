@@ -126,8 +126,8 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --image-repositories "ApiFunction=${ECR_REPOSITORY_URI}" \
             --parameter-overrides "SkipApiRepository=true" \
-              "WorkOSIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
-              "WorkOSUserManagementClientId=client_local_kbdb" \
+              "OidcIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
+              "OidcAudience=client_local_kbdb" \
             --tags "kbdb:pr=pr-${{ github.event.pull_request.number }}" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
