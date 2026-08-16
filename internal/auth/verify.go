@@ -51,6 +51,14 @@ func NewVerifier(ctx context.Context, issuerURL, audience string) (*Verifier, er
 	}, nil
 }
 
+// NewVerifierForTesting constructs a Verifier from an already-configured
+// tokenVerifier, for tests in other packages that need to inject a mock
+// (internal/auth/mocks.MockTokenVerifier) without a real OIDC discovery
+// round-trip. Not used by production code - see NewVerifier for that.
+func NewVerifierForTesting(v tokenVerifier) *Verifier {
+	return &Verifier{verifier: v}
+}
+
 // VerifyToken verifies rawToken's signature, expiry, issuer, and audience,
 // returning the verified claims or an error if the token is invalid.
 func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, error) {

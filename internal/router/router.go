@@ -44,7 +44,7 @@ func New(
 
 	mux := http.NewServeMux()
 
-	// No middleware.Auth: security: [] in api/openapi.yaml. No PUT/DELETE:
+	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:
 	// lookup categories are static, deploy-time data (internal/lookup),
 	// not writable at runtime.
 	mux.Handle("GET /v1/lookups", validate(http.HandlerFunc(handlers.ListLookups)))
@@ -57,11 +57,11 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
-		middleware.Auth(verifier)(validate(handlers.CreateSwitch(switchRepo))))
+		validate(handlers.CreateSwitch(switchRepo)))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateSwitch(switchRepo))))
+		validate(handlers.UpdateSwitch(switchRepo)))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore))))
+		validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore)))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
@@ -70,11 +70,11 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
-		middleware.Auth(verifier)(validate(handlers.CreateKeyboard(keyboardRepo))))
+		validate(handlers.CreateKeyboard(keyboardRepo)))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeyboard(keyboardRepo))))
+		validate(handlers.UpdateKeyboard(keyboardRepo)))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore))))
+		validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore)))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
@@ -83,43 +83,44 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore))))
+		validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore)))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapSet(keycapSetRepo, imageStore))))
+		validate(handlers.UpdateKeycapSet(keycapSetRepo, imageStore)))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteKeycapSet(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
+		validate(handlers.DeleteKeycapSet(keycapSetRepo, buildRepo, buildImageStore, imageStore)))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		middleware.Auth(verifier)(validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore))))
+		validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore)))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore))))
+		validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore)))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKit(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
+		validate(handlers.DeleteKeycapKit(keycapSetRepo, buildRepo, buildImageStore, imageStore)))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
-		middleware.Auth(verifier)(validate(handlers.SetKeycapKitImage(keycapSetRepo, imageStore))))
+		validate(handlers.SetKeycapKitImage(keycapSetRepo, imageStore)))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
-		middleware.Auth(verifier)(validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore))))
+		validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore)))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds",
-		middleware.Auth(verifier)(validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo)))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
-		middleware.Auth(verifier)(validate(handlers.UpdateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		validate(handlers.UpdateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo)))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
+		validate(handlers.DeleteBuild(buildRepo, buildImageStore)))
 	mux.Handle("POST /v1/users/{userId}/builds/{buildId}/images",
-		middleware.Auth(verifier)(validate(handlers.AddBuildImage(buildRepo, buildImageStore))))
+		validate(handlers.AddBuildImage(buildRepo, buildImageStore)))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}/images/{imageId}",
-		middleware.Auth(verifier)(validate(handlers.DeleteBuildImage(buildRepo, buildImageStore))))
+		validate(handlers.DeleteBuildImage(buildRepo, buildImageStore)))
 
-	// MCP: auth happens inside the MCP server itself, returning MCP-shaped
-	// errors rather than a bare 401. Not wrapped in validate: api/openapi.yaml
-	// only covers the REST surface.
-	mcpHandlers := mcp.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, issuerURL, version)
+	// MCP: auth relies solely on API Gateway's native JWT authorizer (see
+	// template.yaml's HttpApi.Auth.DefaultAuthorizer) - all MCP routes
+	// require auth, same as required-auth REST routes above. Not wrapped in
+	// validate: api/openapi.yaml only covers the REST surface.
+	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

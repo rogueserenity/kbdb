@@ -9,31 +9,6 @@ import (
 	"github.com/rogueserenity/kbdb/internal/problem"
 )
 
-// Auth verifies the bearer token on every request independently of any
-// upstream API Gateway authorizer (defense-in-depth — see project plan). On
-// success it attaches the verified user ID to the request context and the
-// request-scoped logger. A missing or invalid token is always rejected with
-// 401 — use OptionalAuth for routes that allow anonymous callers.
-func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rawToken, ok := auth.BearerToken(r)
-			if !ok {
-				problem.Unauthorized(w, "missing or malformed authorization header")
-				return
-			}
-
-			authedReq, err := authenticate(r, verifier, rawToken)
-			if err != nil {
-				problem.Unauthorized(w, "invalid token")
-				return
-			}
-
-			next.ServeHTTP(w, authedReq)
-		})
-	}
-}
-
 // OptionalAuth verifies the bearer token if one is present, for routes that
 // allow anonymous callers (e.g. reads on items whose visibility may permit
 // public or authenticated-but-not-owner access — see
@@ -41,6 +16,15 @@ func Auth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 // an error and the request proceeds with no user ID on its context; a
 // present-but-invalid token is still rejected with 401, since silently
 // treating it as anonymous would hide a real client error.
+//
+// Required-auth routes no longer have an equivalent in-process middleware:
+// they rely solely on API Gateway's native JWT authorizer (see
+// template.yaml's HttpApi.Auth.DefaultAuthorizer), which verifies the
+// identical token before the request ever reaches this process. That
+// in-process re-verification was deliberate defense-in-depth under
+// Cognito; re-examined for the WorkOS migration and dropped as
+// redundant — the native authorizer is the same class of AWS-verified
+// mechanism Cognito's JWT authorizer already was.
 func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
