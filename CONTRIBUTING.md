@@ -32,12 +32,12 @@ sam validate --lint
 ## Running the app locally
 
 ```sh
-mise run func-setup    # brings up LocalStack + mockoidc + sam local start-api
+mise run func-setup    # brings up LocalStack + the WorkOS emulator + sam local start-api
 mise run func-test     # runs the functional test suite against it
 mise run func-teardown # tears it all down
 ```
 
-Once `func-setup` is running, most iteration just needs `mise run func-test` again — Go code and test changes are picked up automatically. You only need to restart (`mise run func-teardown && mise run func-setup`) after editing `template.yaml`, `docker-compose.yml`, or mockoidc's own source.
+Once `func-setup` is running, most iteration just needs `mise run func-test` again — Go code and test changes are picked up automatically. You only need to restart (`mise run func-teardown && mise run func-setup`) after editing `template.yaml`, `docker-compose.yml`, or the WorkOS emulator's seed config.
 
 ## Deploying to AWS
 
@@ -139,7 +139,7 @@ Two test layers, kept separate — don't mix them:
 
 Functional specs follow a consistent BDD shape: `Describe` the subject (and, for multi-action resources, a nested `Describe` per action) → `Context("given <precondition>")` → `When("<action>")` → one `It` with a `By(...)` per assertion. Build the actual request inside the innermost `BeforeEach`, not an outer one — Ginkgo's context is scoped to the node that received it.
 
-`mockoidc` stands in for Cognito in functional tests, since `auth.NewVerifier` does a real OIDC discovery round-trip and needs something real to talk to. It runs as its own docker-compose service; see `test/functional/support/mockoidc/main.go` if you need to touch it.
+The WorkOS emulator (`ghcr.io/workos/emulate`) stands in for WorkOS in functional tests, since `auth.NewVerifier` does a real OIDC discovery round-trip and needs something real to talk to. It runs as its own docker-compose service, seeded via `scripts/workos-emulate-seed.yaml`.
 
 ## Conventions
 

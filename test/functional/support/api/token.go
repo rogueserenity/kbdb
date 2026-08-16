@@ -49,8 +49,10 @@ func postJSON(ctx context.Context, url string, headers map[string]string, body [
 }
 
 // ensureEmulatorUser creates email/password as a WorkOS emulator user if it
-// doesn't already exist. A 422 (already exists) is not an error - specs may
-// call this repeatedly across a suite run.
+// doesn't already exist. A 409 (already exists) is not an error - specs may
+// call this repeatedly across a suite run, and the fixture users are also
+// pre-seeded via scripts/workos-emulate-seed.yaml, so this call is expected
+// to hit the "already exists" case on every fresh emulator startup.
 func ensureEmulatorUser(ctx context.Context, email, password string) error {
 	body, err := json.Marshal(map[string]any{
 		"email":          email,
@@ -75,7 +77,7 @@ func ensureEmulatorUser(ctx context.Context, email, password string) error {
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusUnprocessableEntity {
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
 		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("create-user returned %d: %s", resp.StatusCode, respBody)
 	}

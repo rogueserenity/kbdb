@@ -52,7 +52,7 @@ file = "scripts/dev-teardown.sh"
 
 [tasks.func-setup]
 alias = "fs"
-description = "Bring up LocalStack + mockoidc + sam local start-api for functional testing"
+description = "Bring up LocalStack + the WorkOS emulator + sam local start-api for functional testing"
 file = "scripts/func-setup.sh"
 
 [tasks.func-teardown]
