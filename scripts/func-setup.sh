@@ -1,115 +1,62 @@
 #!/usr/bin/env bash
+# Deploys the real template.yaml to floci (a local AWS emulator) and starts
+# the WorkOS emulator against it, so the functional suite runs against a
+# real CloudFormation deploy - including a real API Gateway JWT authorizer,
+# which sam local start-api never emulated (write routes rely on it
+# entirely now - see internal/middleware.RequireAuthorizerIdentity).
 set -euo pipefail
-docker compose up -d --build
 
-# sam local start-api never runs a real CloudFormation deploy, so
-# template.yaml's DynamoDB tables are never provisioned locally - create
-# them by hand. KEEP THIS IN SYNC with template.yaml's table resources
-# (AttributeDefinitions/KeySchema/BillingMode) - there's no automated check
-# for drift between the two. Table name/region must also match
-# test/functional/support/env.local.json and samconfig.toml's region. This
-# whole block goes away once local dev deploys the real template against
-# floci instead of sam local start-api (see project memory on the floci
-# migration).
 export AWS_ACCESS_KEY_ID=test
 export AWS_SECRET_ACCESS_KEY=test
 export AWS_DEFAULT_REGION=us-east-2
+# sam deploy honors this (botocore reads it); there is no --endpoint-url
+# flag, which is all samlocal wraps.
+export AWS_ENDPOINT_URL="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
 
-# Up to 15s waiting for LocalStack to accept connections; one extra
-# describe-table check if the table already exists from a prior run.
-# KEEP THIS IN SYNC with template.yaml's SwitchTable resource.
-for _ in $(seq 1 15); do
-  aws dynamodb describe-table --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-switch >/dev/null 2>&1 && break
-  aws dynamodb create-table \
-    --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-switch \
-    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S \
-    --key-schema AttributeName=user_id,KeyType=HASH AttributeName=id,KeyType=RANGE \
-    --billing-mode PAY_PER_REQUEST \
-    >/dev/null 2>&1 && break
+STACK="${KBDB_FLOCI_STACK:-kbdb-floci}"
+ENDPOINT="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
+OIDC_BUCKET="kbdb-floci-oidc"
+# Must match docker-compose.floci.yml's WORKOS_EMULATE_ISSUER exactly - it's
+# both the discovery doc's own "issuer" field and the fetch URL go-oidc uses.
+ISSUER_URL="$ENDPOINT/$OIDC_BUCKET"
+
+docker compose -f docker-compose.floci.yml up -d floci workos-emulate
+
+for _ in $(seq 1 30); do
+  curl -sf -o /dev/null "$ENDPOINT/_floci/health" && break
   sleep 1
 done
-
-# KEEP THIS IN SYNC with template.yaml's KeyboardTable resource - same
-# caveat as the SwitchTable block above.
-for _ in $(seq 1 15); do
-  aws dynamodb describe-table --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-keyboard >/dev/null 2>&1 && break
-  aws dynamodb create-table \
-    --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-keyboard \
-    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S \
-    --key-schema AttributeName=user_id,KeyType=HASH AttributeName=id,KeyType=RANGE \
-    --billing-mode PAY_PER_REQUEST \
-    >/dev/null 2>&1 && break
-  sleep 1
+for _ in $(seq 1 20); do
+  curl -sf -o /dev/null "http://localhost:4100/health" && break
+  sleep 0.5
 done
 
-# KEEP THIS IN SYNC with template.yaml's KeycapSetTable resource - same
-# caveat as the SwitchTable block above.
-for _ in $(seq 1 15); do
-  aws dynamodb describe-table --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-keycap-set >/dev/null 2>&1 && break
-  aws dynamodb create-table \
-    --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-keycap-set \
-    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S \
-    --key-schema AttributeName=user_id,KeyType=HASH AttributeName=id,KeyType=RANGE \
-    --billing-mode PAY_PER_REQUEST \
-    >/dev/null 2>&1 && break
-  sleep 1
-done
+sam build
 
-# KEEP THIS IN SYNC with template.yaml's BuildTable resource - same caveat
-# as the SwitchTable block above, plus its BuildRefIndex GSI.
-for _ in $(seq 1 15); do
-  aws dynamodb describe-table --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-build >/dev/null 2>&1 && break
-  aws dynamodb create-table \
-    --endpoint-url http://localhost:4566 \
-    --table-name kbdb-local-build \
-    --attribute-definitions AttributeName=user_id,AttributeType=S AttributeName=id,AttributeType=S AttributeName=ref_id,AttributeType=S \
-    --key-schema AttributeName=user_id,KeyType=HASH AttributeName=id,KeyType=RANGE \
-    --global-secondary-indexes 'IndexName=BuildRefIndex,KeySchema=[{AttributeName=user_id,KeyType=HASH},{AttributeName=ref_id,KeyType=RANGE}],Projection={ProjectionType=INCLUDE,NonKeyAttributes=[build_id]}' \
-    --billing-mode PAY_PER_REQUEST \
-    >/dev/null 2>&1 && break
-  sleep 1
-done
+# sam deploy --resolve-image-repos fabricates the standard AWS ECR hostname
+# itself rather than reading floci's returned repositoryUri, so it always
+# tries to push to a real AWS host (floci-issues/04, retracted as a floci
+# bug). dev-deploy.sh/ci.yml already avoid --resolve-image-repos for the
+# equivalent real-AWS reason - mirror that: create the repo explicitly and
+# pass --image-repositories.
+ECR_REPO="kbdb-floci"
+aws ecr create-repository --repository-name "$ECR_REPO" >/dev/null 2>&1 || true
+REPO_URI=$(aws ecr describe-repositories \
+  --repository-names "$ECR_REPO" --query 'repositories[0].repositoryUri' --output text)
 
-# KEEP THIS IN SYNC with template.yaml's ImagesBucket resource name
-# (kbdb-local-images is a fixed local-only stand-in, since ImagesBucket's
-# real name is account/stack-suffixed) - same caveat as the SwitchTable
-# block above.
-aws s3api head-bucket --endpoint-url http://localhost:4566 \
-  --bucket kbdb-local-images >/dev/null 2>&1 || \
-  aws s3api create-bucket \
-    --endpoint-url http://localhost:4566 \
-    --bucket kbdb-local-images \
-    --region us-east-2 \
-    --create-bucket-configuration LocationConstraint=us-east-2 \
-    >/dev/null 2>&1
-
-# @workos/emulate (the local WorkOS stand-in) doesn't serve
-# /.well-known/openid-configuration, so host a static one here whose
+# @workos/emulate has no discovery endpoint, so host a static one here whose
 # jwks_uri points at the emulator's real, live JWKS endpoint - the doc is
-# just a pointer, never a JWKS snapshot, so it can't go stale. Must match
-# test/functional/support/env.local.json's OIDC_ISSUER_URL exactly (used
-# as both the fetch URL and the required "issuer" claim).
-aws s3api head-bucket --endpoint-url http://localhost:4566 \
-  --bucket kbdb-local-oidc >/dev/null 2>&1 || \
-  aws s3api create-bucket \
-    --endpoint-url http://localhost:4566 \
-    --bucket kbdb-local-oidc \
-    --region us-east-2 \
-    --create-bucket-configuration LocationConstraint=us-east-2 \
-    >/dev/null 2>&1
+# just a pointer, never a JWKS snapshot, so it can't go stale and there's no
+# signing key to generate or pin (the emulator mints its own at startup).
+aws s3api create-bucket --bucket "$OIDC_BUCKET" \
+  --region "$AWS_DEFAULT_REGION" \
+  --create-bucket-configuration LocationConstraint="$AWS_DEFAULT_REGION" \
+  >/dev/null 2>&1 || true
 
-cat <<'EOF' | aws s3 cp --endpoint-url http://localhost:4566 - \
-  s3://kbdb-local-oidc/.well-known/openid-configuration \
+cat <<EOF | aws s3 cp - "s3://$OIDC_BUCKET/.well-known/openid-configuration" \
   --content-type application/json >/dev/null
 {
-  "issuer": "http://localstack:4566/kbdb-local-oidc",
+  "issuer": "$ISSUER_URL",
   "jwks_uri": "http://workos-emulate:4100/oauth2/jwks",
   "response_types_supported": ["code", "id_token"],
   "subject_types_supported": ["public"],
@@ -117,13 +64,49 @@ cat <<'EOF' | aws s3 cp --endpoint-url http://localhost:4566 - \
 }
 EOF
 
-if [ -f .sam-local-api.pid ] && kill -0 "$(cat .sam-local-api.pid)" 2>/dev/null; then
-  echo "sam local start-api is already running (pid $(cat .sam-local-api.pid))." >&2
-  echo "Run 'mise run func-teardown' first, or reuse the running instance." >&2
-  exit 1
-fi
+sam deploy \
+  --stack-name "$STACK" \
+  --no-confirm-changeset --no-fail-on-empty-changeset \
+  --resolve-s3 \
+  --image-repositories "ApiFunction=$REPO_URI" \
+  --capabilities CAPABILITY_IAM \
+  --parameter-overrides \
+    SkipApiRepository=true \
+    "WorkOSIssuerBaseUrl=$ISSUER_URL" \
+    "WorkOSUserManagementClientId=client_local_kbdb"
 
-sam build
-nohup sam local start-api > .sam-local-api.log 2>&1 &
-echo $! > .sam-local-api.pid
-echo "sam local start-api started (pid $(cat .sam-local-api.pid)); logs: .sam-local-api.log"
+out() {
+  aws cloudformation describe-stacks --stack-name "$STACK" \
+    --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
+}
+
+# scripts/workos-emulate-seed.yaml pre-seeds these two users plus the
+# client_local_kbdb application - no need to create them per run like
+# ci.yml does for its throwaway per-PR users.
+create_and_mint() {
+  local email="$1" password="$2"
+  curl -sf -X POST http://localhost:4100/user_management/authenticate \
+    -H "Content-Type: application/json" \
+    -d "{\"client_id\":\"client_local_kbdb\",\"client_secret\":\"sk_test_default\",\"grant_type\":\"password\",\"email\":\"$email\",\"password\":\"$password\"}" \
+    | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"
+}
+
+KBDB_AUTH_TOKEN=$(create_and_mint "kbdb-local-test-user@rogueserenity.dev" "kbdb-local-test-password-1")
+KBDB_SECOND_USER_AUTH_TOKEN=$(create_and_mint "kbdb-local-second-user@rogueserenity.dev" "kbdb-local-test-password-2")
+
+API_ID=$(aws apigatewayv2 get-apis --query 'Items[0].ApiId' --output text)
+
+cat <<ENVEOF
+
+Deployed. Export these to run the suite:
+
+  export KBDB_API_BASE_URL='$ENDPOINT/execute-api/$API_ID/\$default'
+  export KBDB_DYNAMODB_ENDPOINT_URL=$ENDPOINT
+  export KBDB_SWITCH_TABLE_NAME=$(out SwitchTableName)
+  export KBDB_KEYBOARD_TABLE_NAME=$(out KeyboardTableName)
+  export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
+  export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
+  export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
+  export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
+
+ENVEOF

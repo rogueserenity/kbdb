@@ -15,11 +15,6 @@ capabilities = "CAPABILITY_IAM"
 [default.global.parameters]
 region = "us-east-2"
 
-[default.local_start_api.parameters]
-env_vars = "test/functional/support/env.local.json"
-docker_network = "kbdb_default"
-warm_containers = "EAGER"
-
 # CI deploys per-PR stacks into the separate kbdb-ci account (475976462467),
 # selected via `sam build/deploy --config-env ci`. stack_name and
 # image_repositories are deliberately NOT set here - both are supplied

@@ -8,7 +8,12 @@ set -euo pipefail
 # stable public IP/DNS - see docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md's
 # Testing section for the full reachability rationale).
 #
-# Usage: ci-publish-emulator-jwks.sh <s3-bucket> <s3-prefix> <s3-region>
+# Usage: ci-publish-emulator-jwks.sh <s3-bucket> <s3-prefix> <s3-region> <issuer-base-url>
+# issuer-base-url is the full externally-reachable URL the bucket/prefix
+# resolve to - the caller assembles it (e.g.
+# https://<bucket>.s3.<region>.amazonaws.com/<prefix> for real AWS S3, or a
+# floci-local http://... URL for func-setup.sh) since this script has no way
+# to know which AWS_ENDPOINT_URL, if any, the caller's `aws` CLI is using.
 # Prints: <issuer-url> <private-key-path> <kid> to stdout, space-separated,
 # for the caller to capture and pass to `sam deploy` / the emulator. The
 # private key file at <private-key-path> deliberately survives past this
@@ -20,6 +25,7 @@ set -euo pipefail
 S3_BUCKET="$1"
 S3_PREFIX="$2"
 S3_REGION="$3"
+ISSUER_URL="$4"
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -28,13 +34,6 @@ KEY_PATH="$(mktemp)"
 
 openssl genrsa -out "$KEY_PATH" 2048 >/dev/null 2>&1
 openssl rsa -in "$KEY_PATH" -pubout -out "$WORKDIR/key.pub.pem" >/dev/null 2>&1
-
-# The generic https://<bucket>.s3.amazonaws.com host 307-redirects to the
-# region-specific one for any bucket outside us-east-1 (confirmed live
-# against the real kbdb-jwks bucket) - API Gateway's JWT authorizer won't
-# follow that redirect when fetching JWKS, so the region-specific host
-# must be used directly, not the generic one.
-ISSUER_URL="https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${S3_PREFIX}"
 
 # Derive kid (a short, stable identifier for this run's key) and the
 # JWK's n/e (RSA modulus/exponent, base64url-no-padding) from the public

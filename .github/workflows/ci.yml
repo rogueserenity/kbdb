@@ -88,12 +88,19 @@ jobs:
       - name: sam build
         run: sam build --config-env ci
 
-      # JWKS_BUCKET_NAME is set as a GitHub Actions repo variable.
+      # JWKS_BUCKET_NAME is set as a GitHub Actions repo variable. The
+      # generic https://<bucket>.s3.amazonaws.com host 307-redirects to the
+      # region-specific one for any bucket outside us-east-1 (confirmed live
+      # against the real kbdb-jwks bucket) - API Gateway's JWT authorizer
+      # won't follow that redirect when fetching JWKS, so the
+      # region-specific host is passed explicitly, not the generic one.
       - name: Publish emulator JWKS to S3
         id: emulator-jwks
         run: |
+          JWKS_PREFIX="jwks/kbdb-pr-${{ github.event.pull_request.number }}"
+          ISSUER_BASE_URL="https://${{ vars.JWKS_BUCKET_NAME }}.s3.us-east-2.amazonaws.com/${JWKS_PREFIX}"
           read -r ISSUER_URL KEY_PATH KID < <(scripts/ci-publish-emulator-jwks.sh \
-            "${{ vars.JWKS_BUCKET_NAME }}" "jwks/kbdb-pr-${{ github.event.pull_request.number }}" us-east-2)
+            "${{ vars.JWKS_BUCKET_NAME }}" "$JWKS_PREFIX" us-east-2 "$ISSUER_BASE_URL")
           {
             echo "issuer-url=$ISSUER_URL"
             echo "key-path=$KEY_PATH"
@@ -119,7 +126,7 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --image-repositories "ApiFunction=${ECR_REPOSITORY_URI}" \
             --parameter-overrides "SkipApiRepository=true" \
-              "WorkOSAuthKitDomain=$(echo '${{ steps.emulator-jwks.outputs.issuer-url }}' | sed 's|^https://||')" \
+              "WorkOSIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
               "WorkOSUserManagementClientId=client_local_kbdb" \
             --tags "kbdb:pr=pr-${{ github.event.pull_request.number }}" \
             --no-confirm-changeset \

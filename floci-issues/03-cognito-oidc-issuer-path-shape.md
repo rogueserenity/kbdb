@@ -71,11 +71,13 @@ Not a bug fix so much as two smaller things:
 
 ## Consumer-side note (kbdb)
 
-The practical fix on our side is a template parameter overriding
-`OIDC_ISSUER_URL` for local runs — which is exactly what the stashed
-`OidcIssuerBaseUrl` work did. With `FLOCI_HOSTNAME=localhost.floci.io` set,
-pointing that at `http://localhost.floci.io:4566` needs no floci change at
-all.
+The practical fix on our side is a template parameter carrying the full
+issuer base URL, scheme included, rather than hardcoding `https://` around
+a bare domain - kbdb's `template.yaml` now does exactly this
+(`WorkOSIssuerBaseUrl`, see the WorkOS migration plan). With
+`FLOCI_HOSTNAME=localhost.floci.io` set, `scripts/func-setup.sh` passes
+`http://localhost.floci.io:4566/...` for that parameter - no floci change
+needed.
 
 So this is **not a floci blocker**. It is a kbdb template change plus two
 documentation/TLS improvements worth suggesting upstream.

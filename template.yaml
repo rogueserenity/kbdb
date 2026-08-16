@@ -23,11 +23,16 @@ Parameters:
       name (CloudFormation's early validation correctly refuses to create a
       duplicate). Left at the default 'false' for the real kbdb-dev stack,
       which does own and manage its repo via this template.
-  WorkOSAuthKitDomain:
+  WorkOSIssuerBaseUrl:
     Type: String
     Description: >-
-      This deployment's WorkOS AuthKit domain (the Connect issuer),
-      e.g. a *.authkit.app subdomain or a configured custom domain.
+      This deployment's WorkOS issuer base URL, scheme included - e.g.
+      https://your-app.authkit.app (or a custom domain) for real WorkOS,
+      or a floci-local http://... URL for local dev (see
+      scripts/func-setup.sh). Not a bare domain: real WorkOS is always
+      https, but floci's local S3 emulation only serves plain http, so
+      the scheme must be supplied by the caller rather than hardcoded
+      here.
   WorkOSUserManagementClientId:
     Type: String
     Description: >-
@@ -216,7 +221,7 @@ Resources:
         - arm64
       Environment:
         Variables:
-          OIDC_ISSUER_URL: !Sub https://${WorkOSAuthKitDomain}
+          OIDC_ISSUER_URL: !Ref WorkOSIssuerBaseUrl
           OIDC_AUDIENCE: !Ref WorkOSUserManagementClientId
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
@@ -560,7 +565,7 @@ Resources:
         Authorizers:
           WorkOSAuthorizer:
             JwtConfiguration:
-              issuer: !Sub https://${WorkOSAuthKitDomain}
+              issuer: !Ref WorkOSIssuerBaseUrl
               audience:
                 - !Ref WorkOSUserManagementClientId
             IdentitySource: $request.header.Authorization

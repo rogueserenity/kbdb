@@ -32,12 +32,15 @@ sam validate --lint
 ## Running the app locally
 
 ```sh
-mise run func-setup    # brings up LocalStack + the WorkOS emulator + sam local start-api
+mise run func-setup    # deploys template.yaml to floci + starts the WorkOS emulator
+# export the KBDB_* vars func-setup prints, then:
 mise run func-test     # runs the functional test suite against it
 mise run func-teardown # tears it all down
 ```
 
-Once `func-setup` is running, most iteration just needs `mise run func-test` again — Go code and test changes are picked up automatically. You only need to restart (`mise run func-teardown && mise run func-setup`) after editing `template.yaml`, `docker-compose.yml`, or the WorkOS emulator's seed config.
+`func-setup` deploys kbdb's real `template.yaml` to [floci](https://github.com/floci-io/floci) (a local AWS emulator) via a genuine `sam deploy` — not `sam local start-api`, which never emulates API Gateway's native JWT authorizer, so it couldn't exercise any auth-required write route (see `internal/middleware.RequireAuthorizerIdentity`). It prints `KBDB_*` exports (API URL, table names, auth tokens) each run — export those before `func-test`, since floci assigns real, stack-derived names rather than fixed local ones.
+
+Most iteration just needs `mise run func-test` again once those are exported — Go code and test changes are picked up automatically. Restart (`mise run func-teardown && mise run func-setup`) after editing `template.yaml`, `docker-compose.floci.yml`, or the WorkOS emulator's seed config.
 
 ## Deploying to AWS
 
