@@ -6,19 +6,19 @@ It exposes two first-class APIs — REST and an MCP server, so you can manage yo
 
 ## Architecture
 
-**One Lambda function for everything.** `ApiFunction` handles both REST routes and the MCP endpoint, across every entity (keyboards, switches, keycap sets, builds) — deliberately not split by protocol or by entity. Splitting would duplicate no code (REST and MCP already share the same service/repository layer, auth, and logging) while adding multiple cold-start profiles and deployment packages to keep in sync, with no isolation benefit at this project's traffic scale.
+**A single Lambda function serves everything** — every REST route and the MCP endpoint, across every entity. REST and MCP share one service/repository layer, one auth path, one logging setup: a fix or a new capability lands in both interfaces at once, with nothing to keep in sync by hand.
 
-**Lambda packaging is a container image via [`aws-lambda-web-adapter`](https://github.com/awslabs/aws-lambda-web-adapter), not a zip with an in-process Lambda SDK adapter.** `aws-lambda-web-adapter` is a Lambda extension (sidecar) that translates API Gateway events into real HTTP requests against a plain `net/http` server — the Go application has zero AWS/Lambda SDK imports; the entrypoint just calls `http.ListenAndServe`. That's a genuine portability property: the same binary that runs in Lambda would run unmodified behind any other HTTP-speaking host.
+**The Lambda ships as a container image running a plain `net/http` server**, via [`aws-lambda-web-adapter`](https://github.com/awslabs/aws-lambda-web-adapter). The Go application itself has zero AWS/Lambda SDK imports — the entrypoint just calls `http.ListenAndServe`. The same binary runs unmodified behind any other HTTP-speaking host, not just Lambda.
 
-**Auth verification happens twice, deliberately.** API Gateway's native JWT authorizer (configured with an OIDC issuer/audience — this deployment uses WorkOS, but any OIDC-compliant IdP works, see below) rejects invalid tokens before the Lambda runs, as a coarse pre-filter. The application also independently verifies every token itself, rather than trusting API-Gateway-injected claims implicitly. This is defense-in-depth, and it's required for MCP regardless: MCP clients won't necessarily go through API Gateway's authorizer the same way, so the MCP tool layer needs its own verification call into the same underlying verifier.
+**Auth is defense-in-depth.** API Gateway's native JWT authorizer rejects invalid tokens before the Lambda even runs. The application then independently verifies every token itself rather than trusting injected claims implicitly — the same verification path both REST and MCP tool calls go through, since MCP clients don't all reach the server via API Gateway's authorizer the same way.
 
-**DynamoDB over PostgreSQL**, chosen after evaluating the actual access patterns: every real query (list/get a user's own items, hydrate a build by reading its linked keyboard/switch/keycap set) is a shallow, fixed-fan-out lookup scoped to an already-known `user_id` — never a cross-user query or open-ended search. That means no secondary indexes are needed, and DynamoDB's permanent free tier is a better cost fit than RDS's non-permanent one.
+**DynamoDB gives every query a predictable, flat-rate cost.** Every real access pattern — list/get a user's own items, hydrate a build from its linked keyboard/switch/keycap set — is a shallow lookup scoped to a known `user_id`, so there's nothing here a secondary index or a relational query planner would improve on.
 
-**Multi-tenancy is baked in from day one**: every entity table is partitioned by `user_id` (the IdP's immutable subject claim, not the mutable email), and each item's visibility (private/authenticated/public) is enforced independently of that partitioning.
+**Multi-tenancy and per-item visibility are load-bearing from the schema up.** Every entity table is partitioned by `user_id` (the IdP's immutable subject claim, never the mutable email), and each item carries its own visibility — private, authenticated, or public — enforced independently of that partitioning.
 
-**API versioning**: REST routes are prefixed `/v1/...` from day one. MCP has no formal version number (the protocol has no standardized tool-versioning layer) — instead, MCP tool schemas and descriptions follow additive-only evolution, since tool descriptions affect which tool an LLM client selects, not just the schema shape.
+**API versioning is explicit where it needs to be.** REST routes are prefixed `/v1/...`. MCP tool schemas and descriptions evolve additive-only instead, since tool descriptions steer which tool an LLM client picks, not just the schema shape a version number would cover.
 
-**This whole stack runs at effectively $0** on AWS free-tier usage by design — a cost-budget tripwire is wired into every environment so a real bill appearing is itself a signal something is wrong.
+**The whole stack runs at effectively $0** on AWS free-tier usage — a cost-budget tripwire is wired into every environment, so a real bill showing up is itself the alarm.
 
 ## Identity provider requirements
 
