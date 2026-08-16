@@ -197,11 +197,22 @@ caller — `middleware.OptionalAuth`, for the routes above — reconfigured to
 verify against WorkOS's issuer/JWKS instead of Cognito's. Every other
 caller goes away: `internal/middleware.Auth` (required-auth REST) no
 longer calls it at all, since the native authorizer now gates those
-routes before the request reaches `functions/api`. `internal/mcp`'s
-tool-level middleware likewise drops its own `VerifyToken` call, since MCP
-routes are now fronted by the same native authorizer as REST writes.
-`internal/authz.ReadableVisibilities`/`authz.IsOwner` are unchanged —
-still kbdb's job, operating on whatever identity is available (from the
+routes before the request reaches `functions/api`.
+
+**Explicitly re-examined, not silently dropped**: `middleware.Auth`'s
+existing doc comment describes its in-process verification as deliberate
+defense-in-depth, "independently of any upstream API Gateway authorizer."
+That reasoning predates this design and was re-considered on its own
+merits (not just carried over) — decided to drop it: the native JWT
+authorizer is the same class of mechanism `CognitoAuthorizer` already was
+(AWS-verified signature/issuer/audience/expiry before a request ever
+reaches `functions/api`), so re-verifying the identical token in-process
+adds cost without covering a materially different failure mode.
+`internal/mcp`'s tool-level middleware likewise drops its own
+`VerifyToken` call, since MCP routes are now fronted by the same native
+authorizer as REST writes. `internal/authz.ReadableVisibilities`/
+`authz.IsOwner` are unchanged — still kbdb's job, operating on whatever
+identity is available (from the
 native authorizer's context on gated routes, or from the surviving
 in-process check on optional-auth routes).
 
