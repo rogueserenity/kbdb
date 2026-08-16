@@ -28,6 +28,7 @@ kbdb has no IdP-specific code — it's built against WorkOS but doesn't depend o
 - Issues RS256-signed JWTs with standard `iss`, `aud`, and `exp` claims.
 - Includes a `sub` claim that's a stable, immutable identifier for the user — it's used as the partition key for every entity table, so it must never change or be reused for a different person.
 - Serves OAuth 2.0 Authorization Server Metadata (RFC 8414) at that issuer, so MCP clients doing OAuth discovery can find its authorization/token endpoints. The MCP endpoint advertises the issuer as its authorization server via RFC 9728 Protected Resource Metadata (`/.well-known/oauth-protected-resource`) — an IdP without RFC 8414 metadata breaks MCP client login even though REST and hand-issued tokens would still work fine.
+- Supports RFC 7591 Dynamic Client Registration and RFC 8252 loopback wildcard-port redirect URIs. This is what an MCP client like Claude Code actually needs to register and authenticate itself against kbdb without a human manually provisioning it a client ID first — it's also the reason this project uses WorkOS rather than Cognito, which supports neither.
 
 ## Getting started
 
