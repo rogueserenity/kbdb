@@ -246,11 +246,88 @@ in-process check on optional-auth routes).
   (anonymous request succeeds with public-only visibility; authenticated
   request succeeds with full visibility) against the surviving in-process
   path.
-- No `mockoidc`/floci dependency for any of this — WorkOS's real Staging
-  environment (a second, free WorkOS environment, same as kbdb already
-  does with a personal dev AWS stack) plays the role LocalStack/floci
-  played for Cognito. No local emulation needed since there's no AWS
-  service being emulated here at all — WorkOS is Auth-as-a-Service.
+
+### Local and CI both replace `mockoidc`, but with different mechanisms —
+### deliberately, not an inconsistency
+
+`mockoidc` (`test/functional/support/mockoidc/`) is retired entirely —
+both its role as the OIDC issuer and its `cognito:groups`-claim shim
+(Cognito-specific, no WorkOS equivalent needed). What replaces it differs
+by environment, because the two environments have a materially different
+constraint:
+
+**Local (`func-setup`/`sam local start-api`)**: run **WorkOS's own
+official emulator**, `@workos/emulate` (npm package; MIT-licensed;
+verified live — real RS256-signed, JWKS-verifiable JWTs; real
+`user_management/authorize`, `.../authenticate`, `.../users` HTTP
+surface), as a **Docker container** — `ghcr.io/workos/emulate`, published
+by WorkOS with every release, alongside `docker-compose.yml`'s existing
+services. Confirmed via the image's own docs: it binds `0.0.0.0` (reachable
+from sibling containers, same requirement `mockoidc`'s own code comments
+document for itself today) and supports a mounted seed config
+(`workos-emulate.config.yaml`) that can pre-declare a stable Connect OAuth
+application (fixed `client_id`, `audience`) — avoiding any "look up the
+dynamically-generated client_id" step in local dev, same convenience
+`mockoidc`'s fixed `TestClientID` currently provides. Test users can
+additionally be created ad hoc via a plain `POST /user_management/users`
+call against the running container (confirmed live — this is exactly how
+`fixtures.TestUserSubject`-style dynamic identities work today), so
+`QueueUser`/`MintToken` in `test/functional/support/api/token.go` port
+over as "call the emulator's real HTTP API" instead of driving
+`mockoidc`'s bespoke `/test/queue-user` control endpoint. There is no
+reachability problem locally — the emulator container and
+`sam local start-api` share the same Docker network, exactly like
+`mockoidc` does today — so the *live, full* emulator is used, not a
+static/pre-baked shortcut. This also unlocks `--interactive` mode (real
+hosted login pages) for manual dev-loop testing, something `mockoidc`
+never offered.
+
+**CI (`functional-test` job)**: cannot use the live emulator the same
+way, because CI's structure is fundamentally different from local dev —
+`sam deploy` puts the API behind a **real, publicly-reachable AWS API
+Gateway** (confirmed by reading `.github/workflows/ci.yml`: CI deploys a
+real `kbdb-pr-<N>` stack and calls *into* it from the runner, the reverse
+of local dev's same-machine setup). API Gateway's native JWT authorizer
+needs to fetch JWKS via an outbound HTTPS call to the configured
+`issuer`/`jwks_uri` — and a GitHub-hosted runner has no stable public
+IP/DNS a deployed AWS resource can reach back into. Investigated and
+rejected: tunneling (ngrok/Cloudflare Tunnel) works but hands back a
+fresh random URL every run, forcing the deploy step to depend on a
+started-tunnel's dynamic output and adding an external, non-AWS service
+as a flake source on every PR; self-hosted runners solve reachability
+trivially but trade it for real ongoing cost/maintenance disproportionate
+to this one problem.
+
+**Adopted instead**: `@workos/emulate` supports a **pinned signing key**
+(`--signing-key <pem>` / `WORKOS_EMULATE_SIGNING_KEY`, confirmed via
+`--help` and the image's own docs) and a **pinned issuer**
+(`--issuer <url>` / `WORKOS_EMULATE_ISSUER`) — meaning its JWKS is fully
+deterministic and computable *without running the emulator at all*, from
+just the public half of a keypair. CI generates (or uses a checked-in
+test) RSA keypair, derives the corresponding static JWKS JSON, and
+publishes it (plus a static `openid-configuration` document) to a
+public/pre-signed S3 location at a stable, known URL *before* `sam
+deploy` runs — so the stack's `JwtConfiguration.issuer`/discovery can be
+set at deploy time, no dynamic-URL ordering problem. This is a real,
+AWS-community-precedented pattern (not novel to kbdb): API Gateway's JWT
+authorizer only requires `jwks_uri` to be *some* static, publicly
+reachable HTTPS endpoint serving standard JWKS JSON — it has no concept
+of "live OIDC issuer" beyond that. The CI runner itself still runs
+`@workos/emulate` locally (same pinned key) purely to *mint* tokens for
+test users via its HTTP API — that direction of traffic (runner calling
+out to a process on the same runner) has no reachability problem, only
+the reverse direction (AWS calling into the runner) did, which this
+approach avoids needing entirely.
+
+If this proves more complex in practice than it looks on paper, the
+documented fallback (a recognized, common testing-pyramid tradeoff, not
+unique to kbdb) is to not exercise the real authorizer/API-Gateway config
+on every PR — verify it on a slower, less frequent tier (e.g.
+merge-to-main only) while PR-level functional tests exercise the
+Lambda/business logic through a path that doesn't require real API
+Gateway JWT verification. Not adopted as the primary plan, noted as a
+pressure-release valve if the S3-JWKS approach turns out to be more
+trouble than it's worth.
 
 ## Explicitly out of scope / retired
 
