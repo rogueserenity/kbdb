@@ -2,6 +2,13 @@
 
 Date: 2026-08-15
 
+**Superseded 2026-08-16 by `2026-08-16-workos-auth-migration-design.md`.**
+Live testing found a second Cognito blocker beyond DCR (no RFC 8252
+loopback wildcard-port redirect URI support), and a provider comparison
+concluded WorkOS AuthKit meets both requirements natively. Retained
+unmodified as the research trail — the Cognito-shim architecture below is
+not being built.
+
 ## Problem
 
 AWS Cognito user pools do not support RFC 7591 Dynamic Client Registration
