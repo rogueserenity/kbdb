@@ -2,7 +2,7 @@
 
 kbdb is a keyboard collection database — keyboards, switches, keycap sets, and the builds assembled from them. It's multi-user: each item has a visibility of private (owner only), authenticated (any signed-in user), or public (no auth needed), set per item by its owner.
 
-The primary interface is an MCP server, so you can manage your collection from an AI chat client; REST is a secondary interface for everything else. Both share the same service/repository layer, so they never drift out of sync with each other.
+It exposes two first-class APIs — REST and an MCP server, so you can manage your collection from an AI chat client — backed by the same service/repository layer, so they never drift out of sync with each other.
 
 ## Architecture
 
