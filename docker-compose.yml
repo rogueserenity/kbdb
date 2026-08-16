@@ -37,3 +37,12 @@ services:
       - "4566:4566"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+
+  workos-emulate:
+    image: ghcr.io/workos/emulate:latest
+    environment:
+      - WORKOS_EMULATE_ISSUER=http://workos-emulate:4100
+    ports:
+      - "4100:4100"
+    volumes:
+      - ./scripts/workos-emulate-seed.yaml:/app/workos-emulate.config.yaml:ro
