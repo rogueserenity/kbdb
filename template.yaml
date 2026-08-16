@@ -24,8 +24,25 @@ Parameters:
       duplicate). Left at the default 'false' for the real kbdb-dev stack,
       which does own and manage its repo via this template.
 
+  OidcIssuerBaseUrl:
+    Type: String
+    Default: ''
+    Description: >
+      Base URL the Cognito issuer is built from, as <this>/<UserPoolId>.
+      Left empty - the default for every real deploy, kbdb-dev and CI alike -
+      it resolves to real Cognito's regional endpoint, which must be exact:
+      go-oidc requires the discovery document's own issuer field to equal
+      the URL it was configured with. Override only to point a local
+      emulator run at that emulator's Cognito issuer instead (floci reports
+      its issuer as its own host and port plus the pool id, not the AWS
+      shape). A Parameter's Default can't reference AWS::Region -
+      pseudo-parameters aren't resolvable at parameter-definition time - so
+      the real-Cognito fallback is applied via UseDefaultOidcIssuerBaseUrl
+      where this value is consumed, not here.
+
 Conditions:
   ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
+  UseDefaultOidcIssuerBaseUrl: !Equals [!Ref OidcIssuerBaseUrl, '']
 
 Resources:
   # Dedicated ECR repo for ApiFunction's container image, declared in-template
@@ -204,7 +221,10 @@ Resources:
         - arm64
       Environment:
         Variables:
-          OIDC_ISSUER_URL: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+          OIDC_ISSUER_URL: !If
+            - UseDefaultOidcIssuerBaseUrl
+            - !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+            - !Sub ${OidcIssuerBaseUrl}/${UserPool}
           OIDC_AUDIENCE: !Ref UserPoolClient
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
@@ -553,7 +573,10 @@ Resources:
         Authorizers:
           CognitoAuthorizer:
             JwtConfiguration:
-              issuer: !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+              issuer: !If
+                - UseDefaultOidcIssuerBaseUrl
+                - !Sub https://cognito-idp.${AWS::Region}.amazonaws.com/${UserPool}
+                - !Sub ${OidcIssuerBaseUrl}/${UserPool}
               audience:
                 - !Ref UserPoolClient
             IdentitySource: $request.header.Authorization

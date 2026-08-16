@@ -1,0 +1,29 @@
+services:
+  mockoidc:
+    build:
+      context: .
+      dockerfile: test/functional/support/mockoidc/Dockerfile
+    environment:
+      - MOCKOIDC_ADVERTISE_ADDR=mockoidc:9999
+    ports:
+      - "9999:9999"
+
+  floci:
+    # nightly tracks upstream/main; switch to a pinned version tag once
+    # floci-io/floci cuts a release containing #2146 and #2150 (see
+    # floci-issues/README.md).
+    image: floci/floci:nightly
+    environment:
+      # Both the host-side test process and the Lambda container must reach
+      # the issuer at the same name. floci's embedded DNS resolves this to
+      # its own container IP for siblings; public DNS resolves it to
+      # 127.0.0.1 for the host.
+      - FLOCI_HOSTNAME=localhost.floci.io
+      # path-style ECR URIs (localhost:5100/<acct>/<region>/<repo>) are what
+      # sam deploy --image-repositories accepts as a valid ECR URI; the
+      # default hostname style is rejected client-side. See floci-issues/04.
+      - FLOCI_SERVICES_ECR_URI_STYLE=path
+    ports:
+      - "4566:4566"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
