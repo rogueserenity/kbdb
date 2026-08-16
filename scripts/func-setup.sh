@@ -35,10 +35,9 @@ sam build
 
 # sam deploy --resolve-image-repos fabricates the standard AWS ECR hostname
 # itself rather than reading floci's returned repositoryUri, so it always
-# tries to push to a real AWS host (floci-issues/04, retracted as a floci
-# bug). dev-deploy.sh/ci.yml already avoid --resolve-image-repos for the
-# equivalent real-AWS reason - mirror that: create the repo explicitly and
-# pass --image-repositories.
+# tries to push to a real AWS host. dev-deploy.sh/ci.yml already avoid
+# --resolve-image-repos for the equivalent real-AWS reason - mirror that:
+# create the repo explicitly and pass --image-repositories.
 ECR_REPO="kbdb-floci"
 aws ecr create-repository --repository-name "$ECR_REPO" >/dev/null 2>&1 || true
 REPO_URI=$(aws ecr describe-repositories \

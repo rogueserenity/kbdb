@@ -1,52 +1,39 @@
 # kbdb
 
-kbdb is a keyboard collection database — keyboards, switches, keycap sets, and assembled builds. The primary interface is an MCP server for AI chat clients, with REST as a secondary interface; both share the same service/repository layer. It's built to be multi-user and eventually community-facing, though the current phase ships fully private, siloed-per-user data.
+kbdb is a keyboard collection database — keyboards, switches, keycap sets, and the builds assembled from them. It's multi-user: each item has a visibility of private (owner only), authenticated (any signed-in user), or public (no auth needed), set per item by its owner.
 
-The project is being built issue-by-issue against a fixed architecture. It's currently in Phase 0: the scaffolding — auth, routing, the MCP layer, CI/CD, the local dev loop — is in place and proven end-to-end against a real deployed stack. The real keyboard/switch/keycap/build data model comes in Phase 1.
-
-## Stack
-
-Go, AWS Lambda (container image), API Gateway (HTTP API), Cognito, DynamoDB (Phase 1), AWS SAM for infrastructure-as-code. [`mark3labs/mcp-go`](https://github.com/mark3labs/mcp-go) for the MCP layer.
+It exposes two first-class APIs — REST and an MCP server, so you can manage your collection from an AI chat client — backed by the same service/repository layer, so they never drift out of sync with each other.
 
 ## Architecture
 
-**One Lambda function for everything.** `ApiFunction` handles both REST routes and the MCP endpoint, and will handle every entity (keyboards, switches, keycap sets, builds) once Phase 1 lands — deliberately not split by protocol or by entity. Splitting would duplicate no code (REST and MCP already share the same service/repository layer, auth, and logging) while adding multiple cold-start profiles and deployment packages to keep in sync, with no isolation benefit at this project's traffic scale.
+**A single Lambda function serves everything** — every REST route and the MCP endpoint, across every entity. REST and MCP share one service/repository layer, one auth path, one logging setup: a fix or a new capability lands in both interfaces at once, with nothing to keep in sync by hand.
 
-**Lambda packaging is a container image via [`aws-lambda-web-adapter`](https://github.com/awslabs/aws-lambda-web-adapter), not a zip with an in-process Lambda SDK adapter.** `aws-lambda-web-adapter` is a Lambda extension (sidecar) that translates API Gateway events into real HTTP requests against a plain `net/http` server — the Go application has zero AWS/Lambda SDK imports; the entrypoint just calls `http.ListenAndServe`. That's a genuine portability property: the same binary that runs in Lambda would run unmodified behind any other HTTP-speaking host.
+**The Lambda ships as a container image running a plain `net/http` server**, via [`aws-lambda-web-adapter`](https://github.com/awslabs/aws-lambda-web-adapter). The Go application itself has zero AWS/Lambda SDK imports — the entrypoint just calls `http.ListenAndServe`. The same binary runs unmodified behind any other HTTP-speaking host, not just Lambda.
 
-**Auth verification happens twice, deliberately.** API Gateway's Cognito JWT authorizer rejects invalid tokens before the Lambda runs, as a coarse pre-filter. The application also independently verifies every token itself, rather than trusting API-Gateway-injected claims implicitly. This is defense-in-depth, and it's required for MCP regardless: MCP clients won't necessarily go through API Gateway's authorizer the same way, so the MCP tool layer needs its own verification call into the same underlying verifier.
+**Auth is defense-in-depth.** API Gateway's native JWT authorizer rejects invalid tokens before the Lambda even runs. The application then independently verifies every token itself rather than trusting injected claims implicitly — the same verification path both REST and MCP tool calls go through, since MCP clients don't all reach the server via API Gateway's authorizer the same way.
 
-**DynamoDB (Phase 1) over PostgreSQL**, chosen after evaluating the actual access patterns: every real query (list/get a user's own items, hydrate a build by reading its linked keyboard/switch/keycap set) is a shallow, fixed-fan-out lookup scoped to an already-known `user_id` — never a cross-user query or open-ended search. That means no secondary indexes are needed, and DynamoDB's permanent free tier is a better cost fit than RDS's non-permanent one.
+**DynamoDB gives every query a predictable, flat-rate cost.** Every real access pattern — list/get a user's own items, hydrate a build from its linked keyboard/switch/keycap set — is a shallow lookup scoped to a known `user_id`, so there's nothing here a secondary index or a relational query planner would improve on.
 
-**Multi-tenancy is baked in from day one**, even though nothing is currently shared: every entity table (Phase 1) will be partitioned by `user_id` (Cognito's immutable `sub` claim, not the mutable email), so a later "share/view specific items" feature doesn't require a schema rewrite.
+**Multi-tenancy and per-item visibility are load-bearing from the schema up.** Every entity table is partitioned by `user_id` (the IdP's immutable subject claim, never the mutable email), and each item carries its own visibility — private, authenticated, or public — enforced independently of that partitioning.
 
-**API versioning**: REST routes are prefixed `/v1/...` from day one. MCP has no formal version number (the protocol has no standardized tool-versioning layer) — instead, MCP tool schemas and descriptions follow additive-only evolution, since tool descriptions affect which tool an LLM client selects, not just the schema shape.
+**API versioning is explicit where it needs to be.** REST routes are prefixed `/v1/...`. MCP tool schemas and descriptions evolve additive-only instead, since tool descriptions steer which tool an LLM client picks, not just the schema shape a version number would cover.
 
-**This whole stack runs at effectively $0** on AWS free-tier usage by design — a cost-budget tripwire is wired into every environment so a real bill appearing is itself a signal something is wrong.
+**The whole stack runs at effectively $0** on AWS free-tier usage — a cost-budget tripwire is wired into every environment, so a real bill showing up is itself the alarm.
+
+## Identity provider requirements
+
+kbdb has no IdP-specific code — it's built against WorkOS but doesn't depend on it. Any IdP works as long as it:
+
+- Publishes standard OIDC discovery (`.well-known/openid-configuration`) and a JWKS endpoint, since both API Gateway's native JWT authorizer and the application's own `go-oidc`-based verifier resolve signing keys that way.
+- Issues RS256-signed JWTs with standard `iss`, `aud`, and `exp` claims.
+- Includes a `sub` claim that's a stable, immutable identifier for the user — it's used as the partition key for every entity table, so it must never change or be reused for a different person.
+- Serves OAuth 2.0 Authorization Server Metadata (RFC 8414) at that issuer, so MCP clients doing OAuth discovery can find its authorization/token endpoints. The MCP endpoint advertises the issuer as its authorization server via RFC 9728 Protected Resource Metadata (`/.well-known/oauth-protected-resource`) — an IdP without RFC 8414 metadata breaks MCP client login even though REST and hand-issued tokens would still work fine.
+- Supports RFC 7591 Dynamic Client Registration, so an MCP client like Claude Code can register itself against kbdb without a human manually provisioning it a client ID first. This is the reason this project uses WorkOS rather than Cognito, which supports neither this nor the next requirement.
+- Supports RFC 8252 loopback wildcard-port redirect URIs, since that's how a locally-running MCP client completes its OAuth redirect.
 
 ## Getting started
 
-Tool versions are pinned via [mise](https://mise.jdx.dev/):
-
-```sh
-mise install
-```
-
-Common tasks (see `mise.toml` for the full list):
-
-```sh
-mise run lint          # golangci-lint + actionlint + shellcheck
-mise run test          # unit tests
-mise run func-setup    # bring up a local dev loop (LocalStack + mockoidc + sam local start-api)
-mise run func-test     # run functional tests against it
-mise run func-teardown # tear it down
-```
-
-Deploying to AWS uses per-developer stacks (`mise run dev-setup`/`dev-deploy`/`dev-teardown`) rather than one shared environment. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full command reference and AWS account/deploy model.
-
-## Status
-
-GitHub issues in this repo are the authoritative source of what's built, in progress, or deferred.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, running the app against a local dev loop, deploying to your own AWS/WorkOS accounts, and the full command reference.
 
 ## License
 
