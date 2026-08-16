@@ -1,3 +1,5 @@
+name: kbdb
+
 services:
   localstack:
     image: localstack/localstack:latest
@@ -22,7 +24,11 @@ services:
   workos-emulate:
     image: ghcr.io/workos/emulate:latest
     environment:
-      - WORKOS_EMULATE_ISSUER=http://workos-emulate:4100
+      # Set to LocalStack's discovery-doc URL, not this container's own
+      # host - the emulator has no discovery endpoint, so a static doc is
+      # published to LocalStack S3 instead (see scripts/func-setup.sh).
+      # Its jwks_uri points back here, at the emulator's real, live JWKS.
+      - WORKOS_EMULATE_ISSUER=http://localstack:4566/kbdb-local-oidc
     ports:
       - "4100:4100"
     volumes:

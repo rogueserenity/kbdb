@@ -90,6 +90,33 @@ aws s3api head-bucket --endpoint-url http://localhost:4566 \
     --create-bucket-configuration LocationConstraint=us-east-2 \
     >/dev/null 2>&1
 
+# @workos/emulate (the local WorkOS stand-in) doesn't serve
+# /.well-known/openid-configuration, so host a static one here whose
+# jwks_uri points at the emulator's real, live JWKS endpoint - the doc is
+# just a pointer, never a JWKS snapshot, so it can't go stale. Must match
+# test/functional/support/env.local.json's OIDC_ISSUER_URL exactly (used
+# as both the fetch URL and the required "issuer" claim).
+aws s3api head-bucket --endpoint-url http://localhost:4566 \
+  --bucket kbdb-local-oidc >/dev/null 2>&1 || \
+  aws s3api create-bucket \
+    --endpoint-url http://localhost:4566 \
+    --bucket kbdb-local-oidc \
+    --region us-east-2 \
+    --create-bucket-configuration LocationConstraint=us-east-2 \
+    >/dev/null 2>&1
+
+cat <<'EOF' | aws s3 cp --endpoint-url http://localhost:4566 - \
+  s3://kbdb-local-oidc/.well-known/openid-configuration \
+  --content-type application/json >/dev/null
+{
+  "issuer": "http://localstack:4566/kbdb-local-oidc",
+  "jwks_uri": "http://workos-emulate:4100/oauth2/jwks",
+  "response_types_supported": ["code", "id_token"],
+  "subject_types_supported": ["public"],
+  "id_token_signing_alg_values_supported": ["RS256"]
+}
+EOF
+
 if [ -f .sam-local-api.pid ] && kill -0 "$(cat .sam-local-api.pid)" 2>/dev/null; then
   echo "sam local start-api is already running (pid $(cat .sam-local-api.pid))." >&2
   echo "Run 'mise run func-teardown' first, or reuse the running instance." >&2
