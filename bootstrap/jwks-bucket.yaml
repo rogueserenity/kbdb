@@ -6,31 +6,12 @@ Description: >
   real, publicly-fetchable issuer/JWKS to verify against. Deployed
   manually, once, via `aws cloudformation deploy --template-file
   bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks` by a human
-  operator with the kbdb-ci-admin profile - see the resource comment
-  below for why this must be a fixed bucket, not a per-stack one.
+  operator with the kbdb-ci-admin profile.
 
 Resources:
-  # API Gateway can't reach back into the ephemeral GitHub Actions runner
-  # that's the only thing that could otherwise serve this live (see
-  # docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md's
-  # Testing section for the full reachability rationale) - hence
-  # publishing to S3 instead.
-  #
-  # Deliberately NOT a per-stack CloudFormation resource in template.yaml
-  # (unlike ImagesBucket): scripts/ci-publish-emulator-jwks.sh must run
-  # and publish to this bucket BEFORE `sam deploy` (the authorizer's
-  # WorkOSAuthKitDomain parameter depends on the JWKS URL it produces),
-  # so a stack-owned bucket can't exist yet when the script needs to
-  # write to it - this bucket pre-exists every PR stack's lifecycle
-  # entirely, same tier as bootstrap/artifact-bucket.yaml.
-  #
-  # Each PR writes/reads only its own jwks/kbdb-pr-<N>/ prefix (see
-  # ci.yml's "Publish emulator JWKS to S3" step and
-  # scripts/ci-publish-emulator-jwks.sh) - objects are cleaned up
-  # explicitly by teardown.yml on PR close, with the 1-day
-  # lifecycle-expiration rule below as a backstop for PRs closed without
-  # a clean teardown run (e.g. a force-deleted branch, an interrupted
-  # workflow).
+  # Not a per-stack template.yaml resource: ci-publish-emulator-jwks.sh
+  # writes here before sam deploy runs, so a stack-owned bucket wouldn't
+  # exist yet when it's needed.
   JWKSBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -47,6 +28,7 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      # Backstop for PRs closed without a clean teardown run.
       LifecycleConfiguration:
         Rules:
           - Id: ExpireJwksObjectsBackstop

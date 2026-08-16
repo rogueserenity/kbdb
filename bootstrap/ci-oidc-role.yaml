@@ -191,11 +191,9 @@ Resources:
                 Resource:
                   - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}
                   - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}/*
-              # Fixed, long-lived bucket (bootstrap/jwks-bucket.yaml), not a
-              # per-stack resource - no CreateBucket/DeleteBucket here,
-              # same shape as ArtifactBucket above. PutObject for
-              # scripts/ci-publish-emulator-jwks.sh; DeleteObject +
-              # ListBucket for teardown.yml's per-PR prefix cleanup.
+              # Fixed bucket (bootstrap/jwks-bucket.yaml) - no
+              # CreateBucket/DeleteBucket, unlike ImagesBucketManagement
+              # below.
               - Sid: JwksBucket
                 Effect: Allow
                 Action:

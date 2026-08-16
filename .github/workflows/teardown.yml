@@ -29,13 +29,8 @@ jobs:
             aws s3 rm "s3://$BUCKET" --recursive
           fi
 
-      # JWKSBucket (see bootstrap/jwks-bucket.yaml) is a fixed, long-lived
-      # bucket shared across every kbdb-pr-<N> stack, not a per-stack
-      # CloudFormation resource - deleting the stack never touches it.
-      # Without this, every PR's throwaway emulator JWKS/discovery objects
-      # (scripts/ci-publish-emulator-jwks.sh's jwks/kbdb-pr-<N>/ prefix)
-      # would accumulate forever. JWKS_BUCKET_NAME same repo variable
-      # ci.yml's publish step uses (see .github/workflows/ci.yml).
+      # The JWKS bucket outlives every stack, so deleting the stack
+      # doesn't clean this up on its own.
       - name: Empty this PR's JWKS prefix
         run: |
           if [ -n "${{ vars.JWKS_BUCKET_NAME }}" ]; then
