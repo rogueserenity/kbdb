@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/coreos/go-oidc/v3/oidc"
@@ -37,17 +38,54 @@ type Verifier struct {
 	verifier tokenVerifier
 }
 
-// NewVerifier constructs a Verifier by fetching the OIDC discovery document
-// at issuerURL. audience is the expected token audience (the Cognito User
-// Pool Client ID in production).
+// NewVerifier constructs a Verifier for issuerURL. audience is the
+// expected token audience (WorkOS's User Management application
+// client_id in production - see
+// docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md).
+//
+// Tries OIDC discovery first (fetching issuerURL's
+// /.well-known/openid-configuration) - this is how real WorkOS works.
+// Falls back to constructing a verifier directly against issuerURL +
+// "/oauth2/jwks" if discovery fails, since @workos/emulate (this
+// project's local dev/test stand-in for WorkOS - see CONTRIBUTING.md)
+// does not serve a discovery document, only bare JWKS (confirmed
+// against a live emulator container; go-oidc's NewRemoteKeySet is
+// documented as existing specifically for "providers that don't support
+// discovery").
 func NewVerifier(ctx context.Context, issuerURL, audience string) (*Verifier, error) {
 	provider, err := oidc.NewProvider(ctx, issuerURL)
-	if err != nil {
-		return nil, fmt.Errorf("auth: fetching OIDC provider metadata: %w", err)
+	if err == nil {
+		return &Verifier{
+			verifier: provider.Verifier(&oidc.Config{ClientID: audience}),
+		}, nil
 	}
 
+	jwksURL := issuerURL + "/oauth2/jwks"
+
+	// oidc.NewRemoteKeySet never itself returns an error - it fetches
+	// lazily on first Verify() call, and a fake/garbage token would fail
+	// to parse regardless of whether the JWKS endpoint is even
+	// reachable, so probing with one wouldn't actually prove reachability.
+	// Instead, GET the JWKS URL directly here so an issuer that supports
+	// neither discovery nor JWKS still fails NewVerifier itself (matching
+	// its existing contract: functions/api/main.go treats a NewVerifier
+	// error as fatal at startup, not something to retry per-request).
+	req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, jwksURL, nil)
+	if reqErr != nil {
+		return nil, fmt.Errorf("auth: building JWKS fallback request: %w", reqErr)
+	}
+	resp, getErr := http.DefaultClient.Do(req)
+	if getErr != nil {
+		return nil, fmt.Errorf("auth: OIDC discovery failed (%w) and JWKS fallback unreachable: %w", err, getErr)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("auth: OIDC discovery failed (%w) and JWKS fallback returned %s", err, resp.Status)
+	}
+
+	keySet := oidc.NewRemoteKeySet(ctx, jwksURL)
 	return &Verifier{
-		verifier: provider.Verifier(&oidc.Config{ClientID: audience}),
+		verifier: oidc.NewVerifier(issuerURL, keySet, &oidc.Config{ClientID: audience}),
 	}, nil
 }
 
