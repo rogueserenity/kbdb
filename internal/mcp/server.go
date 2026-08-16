@@ -4,15 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"net/http"
 
-	sdkauth "github.com/modelcontextprotocol/go-sdk/auth"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/middleware"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -85,7 +84,7 @@ func New(
 	)
 
 	return Handlers{
-		Streamable:       streamable,
+		Streamable:       middleware.RequireAuthorizerIdentity(streamable),
 		MetadataPath:     MetadataPath,
 		RootMetadataPath: RootMetadataPath,
 		Metadata:         metadataHandler(issuerURL),
@@ -93,32 +92,31 @@ func New(
 }
 
 // errNoTokenInfo guards against a request ever reaching the tool dispatch
-// layer without requireBearerToken having run first - unreachable today
+// layer without middleware.RequireAuthorizerIdentity having run first (see
+// New, which wraps the streamable handler with it) - unreachable today
 // since it's the only entrypoint into this server, but this fails closed
 // rather than silently proceeding unauthenticated if that wiring is ever
 // broken by a future change (e.g. a second transport added to mcpServer).
 var errNoTokenInfo = errors.New("no verified identity on context")
 
-// identityMiddleware reads the TokenInfo requireBearerToken already
-// verified and stored on context, and writes the caller's identity into
-// ctxpkg/logpkg the same way REST's middleware.Auth does, so tool handlers
-// only depend on those shared, transport-agnostic packages.
+// identityMiddleware reads the caller's user ID that
+// middleware.RequireAuthorizerIdentity already wrote onto context at the
+// HTTP layer (see New) and writes it into logpkg the same way REST's
+// handlers see it, so tool handlers only depend on those shared,
+// transport-agnostic packages. WorkOS tokens carry no groups-equivalent
+// claim, and nothing populates ctxpkg's groups value on this path, so
+// groups handling was dropped rather than kept as dead code that always
+// sees nil.
 func identityMiddleware() sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
 		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {
-			info := sdkauth.TokenInfoFromContext(ctx)
-			if info == nil {
-				logpkg.FromContext(ctx).Error("MCP request reached tool dispatch with no verified TokenInfo on context")
+			userID, ok := ctxpkg.UserID(ctx)
+			if !ok {
+				logpkg.FromContext(ctx).Error("MCP request reached tool dispatch with no verified identity on context")
 				return nil, errNoTokenInfo
 			}
 
-			groups, ok := info.Extra["groups"].([]string)
-			if !ok && info.Extra["groups"] != nil {
-				logpkg.FromContext(ctx).Error("TokenInfo.Extra[\"groups\"] present but not a []string", "type", fmt.Sprintf("%T", info.Extra["groups"]))
-			}
-			ctx = ctxpkg.WithUserID(ctx, info.UserID)
-			ctx = ctxpkg.WithGroups(ctx, groups)
-			ctx = logpkg.WithLogger(ctx, logpkg.WithUserID(logpkg.FromContext(ctx), info.UserID))
+			ctx = logpkg.WithLogger(ctx, logpkg.WithUserID(logpkg.FromContext(ctx), userID))
 
 			return next(ctx, method, req)
 		}

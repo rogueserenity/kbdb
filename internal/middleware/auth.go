@@ -45,6 +45,35 @@ func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireAuthorizerIdentity reads the caller's identity from the
+// X-Amzn-Request-Context header API Gateway's native JWT authorizer
+// populates via aws-lambda-web-adapter (see authorizer_context.go) and
+// writes it into ctxpkg/logpkg, the same target OptionalAuth's
+// authenticate() writes to. Unlike OptionalAuth, a missing/unparseable
+// identity here IS an error (500, not 401) - reaching this middleware at
+// all means the route's Auth block has no NONE override, so API Gateway
+// already rejected any request without a valid token before it got here;
+// if this middleware still finds no identity, that's a misconfiguration
+// (e.g. this route wired to the wrong authorizer, or running outside API
+// Gateway/aws-lambda-web-adapter entirely), not a legitimate
+// unauthenticated request to reject with 401.
+func RequireAuthorizerIdentity(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sub, ok := authorizerSubject(r)
+		if !ok {
+			logpkg.FromContext(r.Context()).Error("required-auth route reached with no verified identity from API Gateway authorizer")
+			problem.Internal(w, "server misconfiguration")
+			return
+		}
+
+		ctx := ctxpkg.WithUserID(r.Context(), sub)
+		l := logpkg.WithUserID(logpkg.FromContext(ctx), sub)
+		ctx = logpkg.WithLogger(ctx, l)
+
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 // authenticate verifies rawToken and returns r with its context updated to
 // carry the verified caller's user ID, groups, and request-scoped logger.
 func authenticate(r *http.Request, verifier *auth.Verifier, rawToken string) (*http.Request, error) {

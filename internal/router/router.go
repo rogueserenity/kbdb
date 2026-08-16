@@ -57,11 +57,11 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
-		validate(handlers.CreateSwitch(switchRepo)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
-		validate(handlers.UpdateSwitch(switchRepo)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateSwitch(switchRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
-		validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
@@ -70,11 +70,11 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
-		validate(handlers.CreateKeyboard(keyboardRepo)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
-		validate(handlers.UpdateKeyboard(keyboardRepo)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeyboard(keyboardRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
-		validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
@@ -83,38 +83,38 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
-		validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		validate(handlers.UpdateKeycapSet(keycapSetRepo, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		validate(handlers.DeleteKeycapSet(keycapSetRepo, buildRepo, buildImageStore, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapSet(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		validate(handlers.DeleteKeycapKit(keycapSetRepo, buildRepo, buildImageStore, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapKit(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
-		validate(handlers.SetKeycapKitImage(keycapSetRepo, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.SetKeycapKitImage(keycapSetRepo, imageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
-		validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds",
-		validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
-		validate(handlers.UpdateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, buildImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",
-		validate(handlers.DeleteBuild(buildRepo, buildImageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds/{buildId}/images",
-		validate(handlers.AddBuildImage(buildRepo, buildImageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.AddBuildImage(buildRepo, buildImageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}/images/{imageId}",
-		validate(handlers.DeleteBuildImage(buildRepo, buildImageStore)))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuildImage(buildRepo, buildImageStore))))
 
 	// MCP: auth relies solely on API Gateway's native JWT authorizer (see
 	// template.yaml's HttpApi.Auth.DefaultAuthorizer) - all MCP routes
