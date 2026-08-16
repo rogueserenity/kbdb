@@ -1,18 +1,14 @@
 package support
 
-import (
-	"os"
+import "os"
 
-	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
-)
-
-// MockOIDCClientID/MockOIDCClientSecret are the fixed test credentials
-// mockoidc is configured with (see test/functional/support/mockoidc/main.go)
-// - re-exported here so specs use one shared reference rather than
-// hardcoding the same string twice.
+// EmulatorClientID/EmulatorClientSecret are the WorkOS emulator's seeded
+// Connect application credentials (see scripts/workos-emulate-seed.yaml).
+// sk_test_default is the emulator's fixed default API key/secret,
+// documented by @workos/emulate itself - not a real secret.
 const (
-	MockOIDCClientID     = fixtures.TestClientID
-	MockOIDCClientSecret = fixtures.TestClientSecret
+	EmulatorClientID     = "client_local_kbdb"
+	EmulatorClientSecret = "sk_test_default"
 )
 
 // BaseURL returns the API's base URL under test, e.g. "http://127.0.0.1:3000"
@@ -25,20 +21,15 @@ func BaseURL() string {
 	return "http://127.0.0.1:3000"
 }
 
-// MockOIDCBaseURL returns the mockoidc instance's base address (no /oidc
-// suffix). Configurable via KBDB_MOCKOIDC_BASE_URL.
-func MockOIDCBaseURL() string {
-	if v := os.Getenv("KBDB_MOCKOIDC_BASE_URL"); v != "" {
+// EmulatorBaseURL returns the WorkOS emulator's base address, used to mint
+// test tokens locally. Not used when pointed at a real deployed stack (CI's
+// real-WorkOS-token path is separate - see api.AuthToken).
+// Configurable via KBDB_EMULATOR_BASE_URL.
+func EmulatorBaseURL() string {
+	if v := os.Getenv("KBDB_EMULATOR_BASE_URL"); v != "" {
 		return v
 	}
-	return "http://127.0.0.1:9999"
-}
-
-// MockOIDCTokenURL returns the mockoidc instance's OIDC issuer base, used to
-// mint test tokens. Not used when pointed at a real deployed stack (issue
-// #8's real-Cognito-token path is separate).
-func MockOIDCTokenURL() string {
-	return MockOIDCBaseURL() + "/oidc"
+	return "http://127.0.0.1:4100"
 }
 
 // SwitchTableName returns the DynamoDB table name backing

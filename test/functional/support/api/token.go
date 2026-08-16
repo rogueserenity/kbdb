@@ -8,37 +8,24 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"net/url"
 	"os"
 	"strings"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
-	"github.com/rogueserenity/kbdb/test/functional/support/mockoidc/fixtures"
 )
 
-// QueueUser sets which identity the next /oidc/authorize call on the
-// mockoidc instance at issuerBaseURL (host:port, no /oidc suffix) should
-// authenticate as, via its /test/queue-user control endpoint (see
-// test/functional/support/mockoidc/main.go). groups may be nil for a
-// non-admin user.
-func QueueUser(ctx context.Context, issuerBaseURL, subject string, groups []string) error {
-	body, err := json.Marshal(map[string]any{"subject": subject, "groups": groups})
-	if err != nil {
-		return fmt.Errorf("encoding queue-user request: %w", err)
-	}
-
-	return postJSONExpect(ctx, issuerBaseURL+"/test/queue-user", body, http.StatusNoContent)
-}
-
-// postJSONExpect POSTs body as application/json and returns an error
-// (including the response body) unless the response status is exactly
-// wantStatus.
-func postJSONExpect(ctx context.Context, url string, body []byte, wantStatus int) error {
+// postJSON POSTs body as application/json and decodes the response into
+// out (if non-nil), returning an error (including the response body)
+// unless the response status is exactly wantStatus.
+func postJSON(ctx context.Context, url string, headers map[string]string, body []byte, wantStatus int, out any) error {
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("building request to %s: %w", url, err)
 	}
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
@@ -46,106 +33,98 @@ func postJSONExpect(ctx context.Context, url string, body []byte, wantStatus int
 	}
 	defer func() { _ = resp.Body.Close() }()
 
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("reading response from %s: %w", url, err)
+	}
 	if resp.StatusCode != wantStatus {
-		respBody, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("%s returned %d: %s", url, resp.StatusCode, respBody)
 	}
-
+	if out != nil {
+		if err := json.Unmarshal(respBody, out); err != nil {
+			return fmt.Errorf("decoding response from %s: %w", url, err)
+		}
+	}
 	return nil
 }
 
-// MintToken drives mockoidc's real authorization-code + token-exchange HTTP
-// flow (the same one auth.NewVerifier's discovery-based verifier expects to
-// validate) and returns a real, signed ID token. clientID/clientSecret come
-// from mockoidc's logged Config() at startup (see
-// test/functional/support/mockoidc/main.go) and must match whatever
-// OIDC_AUDIENCE the app under test was configured with.
-func MintToken(ctx context.Context, issuerURL, clientID, clientSecret string) (string, error) {
-	httpClient := &http.Client{
-		CheckRedirect: func(_ *http.Request, _ []*http.Request) error {
-			return http.ErrUseLastResponse
-		},
+// ensureEmulatorUser creates email/password as a WorkOS emulator user if it
+// doesn't already exist. A 422 (already exists) is not an error - specs may
+// call this repeatedly across a suite run.
+func ensureEmulatorUser(ctx context.Context, email, password string) error {
+	body, err := json.Marshal(map[string]any{
+		"email":          email,
+		"password":       password,
+		"email_verified": true,
+	})
+	if err != nil {
+		return fmt.Errorf("encoding create-user request: %w", err)
 	}
 
-	authorizeQuery := url.Values{}
-	authorizeQuery.Set("client_id", clientID)
-	authorizeQuery.Set("scope", "openid email profile")
-	authorizeQuery.Set("response_type", "code")
-	authorizeQuery.Set("redirect_uri", "http://127.0.0.1/callback")
-	authorizeQuery.Set("state", "func-test-state")
-	authorizeQuery.Set("nonce", "func-test-nonce")
-
-	authorizeURL := issuerURL + "/authorize?" + authorizeQuery.Encode()
-
-	authorizeReq, err := http.NewRequestWithContext(ctx, http.MethodGet, authorizeURL, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		support.EmulatorBaseURL()+"/user_management/users", bytes.NewReader(body))
 	if err != nil {
-		return "", fmt.Errorf("building authorize request: %w", err)
+		return fmt.Errorf("building create-user request: %w", err)
 	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+support.EmulatorClientSecret)
 
-	resp, err := httpClient.Do(authorizeReq)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("calling authorize endpoint: %w", err)
+		return fmt.Errorf("calling create-user: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
-	location, err := resp.Location()
-	if err != nil {
-		return "", fmt.Errorf("reading authorize redirect: %w", err)
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusUnprocessableEntity {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("create-user returned %d: %s", resp.StatusCode, respBody)
 	}
-	code := location.Query().Get("code")
-	if code == "" {
-		return "", fmt.Errorf("authorize response missing code")
+	return nil
+}
+
+// mintEmulatorToken drives the WorkOS emulator's password grant and returns
+// a real, signed access token for email/password.
+func mintEmulatorToken(ctx context.Context, email, password string) (string, error) {
+	if err := ensureEmulatorUser(ctx, email, password); err != nil {
+		return "", err
 	}
 
-	tokenForm := url.Values{}
-	tokenForm.Set("client_id", clientID)
-	tokenForm.Set("client_secret", clientSecret)
-	tokenForm.Set("grant_type", "authorization_code")
-	tokenForm.Set("code", code)
-
-	tokenReq, err := http.NewRequestWithContext(ctx, http.MethodPost, issuerURL+"/token", strings.NewReader(tokenForm.Encode()))
+	body, err := json.Marshal(map[string]any{
+		"client_id":     support.EmulatorClientID,
+		"client_secret": support.EmulatorClientSecret,
+		"grant_type":    "password",
+		"email":         email,
+		"password":      password,
+	})
 	if err != nil {
-		return "", fmt.Errorf("building token request: %w", err)
-	}
-	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-
-	tokenResp, err := httpClient.Do(tokenReq)
-	if err != nil {
-		return "", fmt.Errorf("calling token endpoint: %w", err)
-	}
-	defer func() { _ = tokenResp.Body.Close() }()
-
-	body, err := io.ReadAll(tokenResp.Body)
-	if err != nil {
-		return "", fmt.Errorf("reading token response: %w", err)
+		return "", fmt.Errorf("encoding authenticate request: %w", err)
 	}
 
 	var tokens struct {
-		IDToken string `json:"id_token"`
+		AccessToken string `json:"access_token"`
 	}
-	if err := json.Unmarshal(body, &tokens); err != nil {
-		return "", fmt.Errorf("decoding token response: %w", err)
+	err = postJSON(ctx, support.EmulatorBaseURL()+"/user_management/authenticate", nil, body, http.StatusOK, &tokens)
+	if err != nil {
+		return "", err
 	}
-	if tokens.IDToken == "" {
-		return "", fmt.Errorf("token response missing id_token: %s", body)
+	if tokens.AccessToken == "" {
+		return "", fmt.Errorf("authenticate response missing access_token")
 	}
-
-	return tokens.IDToken, nil
+	return tokens.AccessToken, nil
 }
 
-// TokenSubject returns the "sub" claim of an ID token, decoded without
+// TokenSubject returns the "sub" claim of an access token, decoded without
 // signature verification. Fine for functional tests: the caller already
-// obtained this token from a trusted issuer (mockoidc or, in CI, real
-// Cognito) via AuthToken/SecondUserAuthToken - this just
-// reads its subject back out. Needed because CI's real-Cognito-token path
-// mints a real Cognito-generated subject, not the fixed
-// fixtures.TestUserSubject-style constants mockoidc uses - specs that need
-// to know "my own subject" (e.g. to seed owned fixture data) can't assume a
-// fixed value across both environments.
+// obtained this token from a trusted issuer (the WorkOS emulator or, in CI,
+// real WorkOS) via AuthToken/SecondUserAuthToken - this just reads its
+// subject back out. Needed because the emulator/real-WorkOS token path
+// mints a real WorkOS-generated subject, not a fixed constant - specs that
+// need to know "my own subject" (e.g. to seed owned fixture data) can't
+// assume a fixed value.
 func TokenSubject(idToken string) (string, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
-		return "", fmt.Errorf("malformed ID token: expected 3 dot-separated parts, got %d", len(parts))
+		return "", fmt.Errorf("malformed token: expected 3 dot-separated parts, got %d", len(parts))
 	}
 
 	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
@@ -166,25 +145,23 @@ func TokenSubject(idToken string) (string, error) {
 	return claims.Subject, nil
 }
 
-// authToken mints a token for the given fixture identity via mockoidc,
-// unless envOverride is set (a real Cognito-minted token, when
+// authToken mints a token for the given fixture identity via the WorkOS
+// emulator, unless envOverride is set (a real WorkOS-minted token, when
 // support.BaseURL() points at a real deployed stack instead) - a local
-// mockoidc instance and real Cognito aren't interchangeable token issuers,
-// so this can't be derived from support.BaseURL() alone.
-func authToken(ctx context.Context, envOverride, subject string, groups []string) (string, error) {
+// emulator and real WorkOS aren't interchangeable token issuers, so this
+// can't be derived from support.BaseURL() alone.
+func authToken(ctx context.Context, envOverride, email, password string) (string, error) {
 	if v := os.Getenv(envOverride); v != "" {
 		return v, nil
 	}
-	if err := QueueUser(ctx, support.MockOIDCBaseURL(), subject, groups); err != nil {
-		return "", err
-	}
-	return MintToken(ctx, support.MockOIDCTokenURL(), support.MockOIDCClientID, support.MockOIDCClientSecret)
+	return mintEmulatorToken(ctx, email, password)
 }
 
 // AuthToken returns a valid bearer token for the plain (non-admin) test
 // user. See authToken for the KBDB_AUTH_TOKEN override behavior.
 func AuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_AUTH_TOKEN", fixtures.TestUserSubject, nil)
+	return authToken(ctx, "KBDB_AUTH_TOKEN",
+		"kbdb-local-test-user@rogueserenity.dev", "kbdb-local-test-password-1")
 }
 
 // SecondUserAuthToken returns a valid bearer token for a second, unrelated
@@ -192,5 +169,6 @@ func AuthToken(ctx context.Context) (string, error) {
 // exercising ownership/visibility-scoped reads of another user's items. See
 // authToken for the KBDB_SECOND_USER_AUTH_TOKEN override behavior.
 func SecondUserAuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_SECOND_USER_AUTH_TOKEN", fixtures.SecondUserSubject, nil)
+	return authToken(ctx, "KBDB_SECOND_USER_AUTH_TOKEN",
+		"kbdb-local-second-user@rogueserenity.dev", "kbdb-local-test-password-2")
 }
