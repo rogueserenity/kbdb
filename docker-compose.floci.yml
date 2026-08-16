@@ -19,8 +19,7 @@ services:
 
   floci:
     # nightly tracks upstream/main; switch to a pinned version tag once
-    # floci-io/floci cuts a release containing #2146 and #2150 (see
-    # floci-issues/README.md).
+    # floci-io/floci cuts a release containing #2146 and #2150.
     image: floci/floci:nightly
     environment:
       # Both the host-side test process and the Lambda container must reach
@@ -30,7 +29,7 @@ services:
       - FLOCI_HOSTNAME=localhost.floci.io
       # path-style ECR URIs (localhost:5100/<acct>/<region>/<repo>) are what
       # sam deploy --image-repositories accepts as a valid ECR URI; the
-      # default hostname style is rejected client-side. See floci-issues/04.
+      # default hostname style is rejected client-side.
       - FLOCI_SERVICES_ECR_URI_STYLE=path
     ports:
       - "4566:4566"
