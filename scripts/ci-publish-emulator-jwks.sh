@@ -8,7 +8,7 @@ set -euo pipefail
 # stable public IP/DNS - see docs/superpowers/specs/2026-08-16-workos-auth-migration-design.md's
 # Testing section for the full reachability rationale).
 #
-# Usage: ci-publish-emulator-jwks.sh <s3-bucket> <s3-prefix>
+# Usage: ci-publish-emulator-jwks.sh <s3-bucket> <s3-prefix> <s3-region>
 # Prints: <issuer-url> <private-key-path> <kid> to stdout, space-separated,
 # for the caller to capture and pass to `sam deploy` / the emulator. The
 # private key file at <private-key-path> deliberately survives past this
@@ -19,6 +19,7 @@ set -euo pipefail
 
 S3_BUCKET="$1"
 S3_PREFIX="$2"
+S3_REGION="$3"
 
 WORKDIR="$(mktemp -d)"
 trap 'rm -rf "$WORKDIR"' EXIT
@@ -28,7 +29,12 @@ KEY_PATH="$(mktemp)"
 openssl genrsa -out "$KEY_PATH" 2048 >/dev/null 2>&1
 openssl rsa -in "$KEY_PATH" -pubout -out "$WORKDIR/key.pub.pem" >/dev/null 2>&1
 
-ISSUER_URL="https://${S3_BUCKET}.s3.amazonaws.com/${S3_PREFIX}"
+# The generic https://<bucket>.s3.amazonaws.com host 307-redirects to the
+# region-specific one for any bucket outside us-east-1 (confirmed live
+# against the real kbdb-jwks bucket) - API Gateway's JWT authorizer won't
+# follow that redirect when fetching JWKS, so the region-specific host
+# must be used directly, not the generic one.
+ISSUER_URL="https://${S3_BUCKET}.s3.${S3_REGION}.amazonaws.com/${S3_PREFIX}"
 
 # Derive kid (a short, stable identifier for this run's key) and the
 # JWK's n/e (RSA modulus/exponent, base64url-no-padding) from the public
@@ -86,8 +92,8 @@ KID="$(cat "$WORKDIR/kid")"
 # fail the call outright. Public read access comes from that bucket's own
 # bucket policy, scoped to the jwks/ prefix, not per-object ACLs.
 aws s3 cp "$WORKDIR/jwks.json" "s3://${S3_BUCKET}/${S3_PREFIX}/jwks.json" \
-  --content-type application/json >/dev/null
+  --region "$S3_REGION" --content-type application/json >/dev/null
 aws s3 cp "$WORKDIR/openid-configuration" "s3://${S3_BUCKET}/${S3_PREFIX}/.well-known/openid-configuration" \
-  --content-type application/json >/dev/null
+  --region "$S3_REGION" --content-type application/json >/dev/null
 
 echo "${ISSUER_URL} ${KEY_PATH} ${KID}"

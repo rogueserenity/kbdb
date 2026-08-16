@@ -97,7 +97,7 @@ jobs:
         id: emulator-jwks
         run: |
           read -r ISSUER_URL KEY_PATH KID < <(scripts/ci-publish-emulator-jwks.sh \
-            "${{ vars.JWKS_BUCKET_NAME }}" "jwks/kbdb-pr-${{ github.event.pull_request.number }}")
+            "${{ vars.JWKS_BUCKET_NAME }}" "jwks/kbdb-pr-${{ github.event.pull_request.number }}" us-east-2)
           {
             echo "issuer-url=$ISSUER_URL"
             echo "key-path=$KEY_PATH"
