@@ -58,6 +58,12 @@ These scripts derive your AWS account ID and region automatically from your acti
 
 You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
+### WorkOS OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`)
+
+All three scripts also require `KBDB_OIDC_ISSUER_BASE_URL` and `KBDB_OIDC_AUDIENCE` (the OIDC issuer and expected `aud` claim the deployed stack's JWT authorizer validates against). Get real values from the WorkOS dashboard's **Staging** environment (Configuration → issuer/AuthKit domain, and the User Management application's Client ID) — Staging is for dev/personal stacks only, never point a dev stack at WorkOS Production.
+
+To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
+
 ### AWS accounts
 
 Three accounts, one SSO session (`aws configure sso` once, then `aws sso login --profile <profile>` to refresh):

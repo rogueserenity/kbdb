@@ -205,6 +205,11 @@ mise/*.local.toml
 .env.*
 !.env.example
 
+# Local symlink to a developer's own scripts/env/<name>-dev.env - the
+# target file is committed (no secrets, just per-developer WorkOS Staging/
+# stack config), but the symlink itself is local-only and never shared.
+scripts/env/dev.env
+
 # AWS SAM build artifacts
 .aws-sam/
 
