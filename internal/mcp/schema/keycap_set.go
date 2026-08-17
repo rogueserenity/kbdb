@@ -16,7 +16,7 @@ type ListKeycapSetsOutput struct {
 // KeycapSetSummary is the reduced keycap set shape list_keycap_sets returns.
 type KeycapSetSummary struct {
 	ID      string  `json:"id" jsonschema:"the keycap set's unique id"`
-	Brand   string  `json:"brand" jsonschema:"the keycap set's brand"`
+	Brand   string  `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
 	Name    string  `json:"name" jsonschema:"the keycap set's name"`
 	Profile *string `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
 }
@@ -35,7 +35,7 @@ type GetKeycapSetOutput struct {
 // KeycapSet is the full keycap set shape, including its kits.
 type KeycapSet struct {
 	ID         string      `json:"id" jsonschema:"the keycap set's unique id"`
-	Brand      string      `json:"brand" jsonschema:"the keycap set's brand"`
+	Brand      string      `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
 	Name       string      `json:"name" jsonschema:"the keycap set's name"`
 	Profile    *string     `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
 	Material   *string     `json:"material,omitempty" jsonschema:"what the keycaps are made of"`
@@ -86,7 +86,7 @@ type GetKeycapKitImageURLOutput struct {
 // managed one at a time via their own tools, never resent as part of a set
 // edit.
 type KeycapSetInput struct {
-	Brand      string  `json:"brand" jsonschema:"the keycap set's brand"`
+	Brand      string  `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
 	Name       string  `json:"name" jsonschema:"the keycap set's name"`
 	Profile    *string `json:"profile,omitempty" jsonschema:"the keycap set's profile; must be an approved keycap_profile lookup value"`
 	Material   *string `json:"material,omitempty" jsonschema:"what the keycaps are made of; must be an approved keycap_material lookup value"`
