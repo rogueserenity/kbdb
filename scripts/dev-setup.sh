@@ -1,6 +1,19 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# scripts/env/dev.env is a gitignored symlink to your own committed
+# scripts/env/<name>-dev.env (see CONTRIBUTING.md). Fills in unset vars
+# only - an existing shell export always wins.
+ENV_FILE="$(dirname "$0")/env/dev.env"
+if [ -f "$ENV_FILE" ]; then
+  while IFS='=' read -r key value; do
+    case "$key" in ''|'#'*) continue ;; esac
+    if [ -z "${!key:-}" ]; then
+      export "$key=$value"
+    fi
+  done < "$ENV_FILE"
+fi
+
 DEV_NAME="${KBDB_DEV_NAME:-$(whoami)}"
 STACK_NAME="kbdb-dev-${DEV_NAME}"
 REPO_NAME="kbdb-api-${STACK_NAME}"
@@ -8,6 +21,8 @@ ACCOUNT_ID="$(aws sts get-caller-identity --query Account --output text)"
 REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
 REPO_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}"
 S3_BUCKET="kbdb-sam-artifacts-${ACCOUNT_ID}"
+OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL - see CONTRIBUTING.md}"
+OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
 
 if aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$REGION" >/dev/null 2>&1; then
   echo "Stack $STACK_NAME already exists - run 'mise run dev-teardown' first if you want to start over." >&2
@@ -55,6 +70,9 @@ sam deploy --template-file "$NO_REPO_TEMPLATE" \
   --s3-bucket "$S3_BUCKET" \
   --region "$REGION" \
   --image-repositories "ApiFunction=${REPO_URI}" \
+  --parameter-overrides \
+    "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
+    "OidcAudience=${OIDC_AUDIENCE}" \
   --capabilities CAPABILITY_IAM \
   --no-confirm-changeset
 
@@ -103,6 +121,9 @@ sam deploy --stack-name "$STACK_NAME" \
   --s3-bucket "$S3_BUCKET" \
   --region "$REGION" \
   --image-repositories "ApiFunction=${REPO_URI}" \
+  --parameter-overrides \
+    "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
+    "OidcAudience=${OIDC_AUDIENCE}" \
   --capabilities CAPABILITY_IAM \
   --no-confirm-changeset --no-fail-on-empty-changeset
 
