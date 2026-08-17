@@ -99,12 +99,20 @@ cat > "$RESOURCES_TO_IMPORT" <<EOF
 [{"ResourceType":"AWS::ECR::Repository","LogicalResourceId":"ApiRepository","ResourceIdentifier":{"RepositoryName":"${REPO_NAME}"}}]
 EOF
 
+# An IMPORT change set, unlike a normal update, does not fall back to the
+# stack's existing parameter values for keys you omit - it falls back to
+# the template's Default: instead (confirmed via a real "must have values"
+# error), which OidcIssuerBaseUrl/OidcAudience don't have. UsePreviousValue
+# must be requested explicitly per parameter.
 aws cloudformation create-change-set --stack-name "$STACK_NAME" \
   --region "$REGION" \
   --change-set-name import-ecr-repo \
   --change-set-type IMPORT \
   --template-body "file://${PACKAGED_TEMPLATE}" \
   --capabilities CAPABILITY_IAM \
+  --parameters \
+    ParameterKey=OidcIssuerBaseUrl,UsePreviousValue=true \
+    ParameterKey=OidcAudience,UsePreviousValue=true \
   --resources-to-import "file://${RESOURCES_TO_IMPORT}"
 
 aws cloudformation wait change-set-create-complete \
