@@ -64,6 +64,34 @@ All three scripts also require `KBDB_OIDC_ISSUER_BASE_URL` and `KBDB_OIDC_AUDIEN
 
 To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
 
+### Custom domain (`api.<your-name>.mykeebs.dev`)
+
+Optional. `template.yaml`'s `CustomDomainName`/`CustomDomainCertificateArn` parameters (both default to empty) map a stack to a stable domain instead of its default `execute-api.amazonaws.com` URL. `<your-name>.mykeebs.dev` itself is intentionally left free (e.g. for a future web UI hosted elsewhere, like Render) - `api.` is a real subdomain label in front of your name, not a wildcard-coverable suffix of it, so `*.mykeebs.dev` does **not** match `api.jay.mykeebs.dev` (wildcards only cover one label deep). Each developer needs their own certificate for their own `api.<name>.mykeebs.dev`, not one shared wildcard.
+
+DNS for `mykeebs.dev` is hosted on Cloudflare, not Route53, so the ACM certificate can't self-validate the way it would with a Route53-hosted zone — it needs a one-time manual step instead. There's nothing to automate or renew afterward: once issued, a DNS-validated ACM certificate auto-renews forever as long as its validation CNAME record stays in place.
+
+Each developer who wants this does it once for their own name:
+
+1. **Request a certificate for your own subdomain**, region-matched to where you deploy (`api.<name>.mykeebs.dev` needs a *regional* API Gateway custom domain cert, unlike CloudFront/edge certs which require `us-east-1`):
+   ```sh
+   aws acm request-certificate --domain-name 'api.<your-name>.mykeebs.dev' \
+     --validation-method DNS --region us-east-2 --profile kbdb-dev-admin
+   ```
+2. **Read the validation CNAME** ACM wants:
+   ```sh
+   aws acm describe-certificate --certificate-arn <arn-from-step-1> \
+     --region us-east-2 --profile kbdb-dev-admin \
+     --query 'Certificate.DomainValidationOptions[0].ResourceRecord'
+   ```
+3. **Create that CNAME in the `mykeebs.dev` Cloudflare zone**, DNS-only (not proxied) — via the Cloudflare dashboard, or the API/MCP tooling if you have it available.
+4. **Wait for issuance**:
+   ```sh
+   aws acm wait certificate-validated --certificate-arn <arn-from-step-1> \
+     --region us-east-2 --profile kbdb-dev-admin
+   ```
+5. **Set `KBDB_DEV_CUSTOM_DOMAIN=true` and `KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN=<arn-from-step-1>`** in your `scripts/env/<your-name>-dev.env` (see `scripts/env/example-dev.env` for the exact keys). `dev-setup`/`dev-deploy` pick this up automatically and pass `CustomDomainName=api.<your-name>.mykeebs.dev`/`CustomDomainCertificateArn` through to `sam deploy` — no other flag or command needed. Leaving `KBDB_DEV_CUSTOM_DOMAIN` unset (the default for everyone else) means these parameters are never touched.
+6. **Deploy** (`mise run dev-deploy`), then read the stack's `ApiCustomDomainTarget` output and create a matching `api.<your-name>` CNAME in the `mykeebs.dev` Cloudflare zone (DNS-only, not proxied), pointed at that value. This one is a normal, static record — created once, not rewritten on later deploys.
+
 ### AWS accounts
 
 Three accounts, one SSO session (`aws configure sso` once, then `aws sso login --profile <profile>` to refresh):

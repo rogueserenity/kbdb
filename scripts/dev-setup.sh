@@ -24,6 +24,18 @@ S3_BUCKET="kbdb-sam-artifacts-${ACCOUNT_ID}"
 OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL - see CONTRIBUTING.md}"
 OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
 
+# Optional - see CONTRIBUTING.md's "Custom domain" section. Unset by
+# default, so a normal dev-setup run doesn't touch template.yaml's
+# CustomDomainName/CustomDomainCertificateArn parameters at all.
+DOMAIN_PARAMS=()
+if [ "${KBDB_DEV_CUSTOM_DOMAIN:-false}" = "true" ]; then
+  CERT_ARN="${KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN:?KBDB_DEV_CUSTOM_DOMAIN=true requires KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN - see CONTRIBUTING.md}"
+  DOMAIN_PARAMS=(
+    "CustomDomainName=api.${DEV_NAME}.mykeebs.dev"
+    "CustomDomainCertificateArn=${CERT_ARN}"
+  )
+fi
+
 if aws cloudformation describe-stacks --stack-name "$STACK_NAME" --region "$REGION" >/dev/null 2>&1; then
   echo "Stack $STACK_NAME already exists - run 'mise run dev-teardown' first if you want to start over." >&2
   exit 1
@@ -73,6 +85,7 @@ sam deploy --template-file "$NO_REPO_TEMPLATE" \
   --parameter-overrides \
     "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
     "OidcAudience=${OIDC_AUDIENCE}" \
+    "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \
   --no-confirm-changeset
 
@@ -102,8 +115,11 @@ EOF
 # An IMPORT change set, unlike a normal update, does not fall back to the
 # stack's existing parameter values for keys you omit - it falls back to
 # the template's Default: instead (confirmed via a real "must have values"
-# error), which OidcIssuerBaseUrl/OidcAudience don't have. UsePreviousValue
-# must be requested explicitly per parameter.
+# error), which OidcIssuerBaseUrl/OidcAudience don't have (CustomDomainName/
+# CustomDomainCertificateArn do, so omitting those would just silently
+# reset them to '' here rather than error - reconciled back to the real
+# value by step e's plain sam deploy either way, but UsePreviousValue below
+# avoids the pointless round-trip).
 aws cloudformation create-change-set --stack-name "$STACK_NAME" \
   --region "$REGION" \
   --change-set-name import-ecr-repo \
@@ -113,6 +129,8 @@ aws cloudformation create-change-set --stack-name "$STACK_NAME" \
   --parameters \
     ParameterKey=OidcIssuerBaseUrl,UsePreviousValue=true \
     ParameterKey=OidcAudience,UsePreviousValue=true \
+    ParameterKey=CustomDomainName,UsePreviousValue=true \
+    ParameterKey=CustomDomainCertificateArn,UsePreviousValue=true \
   --resources-to-import "file://${RESOURCES_TO_IMPORT}"
 
 aws cloudformation wait change-set-create-complete \
@@ -132,6 +150,7 @@ sam deploy --stack-name "$STACK_NAME" \
   --parameter-overrides \
     "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
     "OidcAudience=${OIDC_AUDIENCE}" \
+    "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \
   --no-confirm-changeset --no-fail-on-empty-changeset
 

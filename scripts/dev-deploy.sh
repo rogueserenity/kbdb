@@ -22,6 +22,18 @@ REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
 OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL - see CONTRIBUTING.md}"
 OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
 
+# Optional - see CONTRIBUTING.md's "Custom domain" section. Unset by
+# default, so a normal dev-deploy run doesn't touch template.yaml's
+# CustomDomainName/CustomDomainCertificateArn parameters at all.
+DOMAIN_PARAMS=()
+if [ "${KBDB_DEV_CUSTOM_DOMAIN:-false}" = "true" ]; then
+  CERT_ARN="${KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN:?KBDB_DEV_CUSTOM_DOMAIN=true requires KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN - see CONTRIBUTING.md}"
+  DOMAIN_PARAMS=(
+    "CustomDomainName=api.${DEV_NAME}.mykeebs.dev"
+    "CustomDomainCertificateArn=${CERT_ARN}"
+  )
+fi
+
 sam build --template-file template.yaml --region "$REGION"
 sam deploy --stack-name "$STACK_NAME" \
   --s3-bucket "kbdb-sam-artifacts-${ACCOUNT_ID}" \
@@ -30,6 +42,7 @@ sam deploy --stack-name "$STACK_NAME" \
   --parameter-overrides \
     "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
     "OidcAudience=${OIDC_AUDIENCE}" \
+    "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
   --no-confirm-changeset
