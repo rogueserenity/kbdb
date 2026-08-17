@@ -44,6 +44,10 @@ func main() {
 	if err != nil {
 		log.Fatalf("initializing token verifier: %v", err)
 	}
+	mcpVerifier, err := auth.NewVerifier(ctx, cfg.OIDCIssuerURL, cfg.OIDCMcpAudience)
+	if err != nil {
+		log.Fatalf("initializing MCP token verifier: %v", err)
+	}
 
 	awsCfg, err := awsconfig.LoadDefaultConfig(ctx)
 	if err != nil {
@@ -74,7 +78,7 @@ func main() {
 	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 
-	handler := router.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, cfg.OIDCIssuerURL, Version)
+	handler := router.New(verifier, mcpVerifier, switchRepo, keyboardRepo, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, cfg.OIDCIssuerURL, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

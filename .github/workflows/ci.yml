@@ -128,6 +128,7 @@ jobs:
             --parameter-overrides "SkipApiRepository=true" \
               "OidcIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
               "OidcAudience=client_local_kbdb" \
+              "OidcMcpAudience=client_local_kbdb" \
             --tags "kbdb:pr=pr-${{ github.event.pull_request.number }}" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset

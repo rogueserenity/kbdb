@@ -36,10 +36,20 @@ Parameters:
   OidcAudience:
     Type: String
     Description: >-
-      The expected aud claim on every access token for this environment -
-      used as the native JWT authorizer's audience. For WorkOS, this is
-      the User Management application's client_id (confirmed empirically,
-      not derived from any resource= parameter a client supplies).
+      The expected aud claim on every REST access token for this
+      environment - used as the native JWT authorizer's audience. For
+      WorkOS, this is the User Management application's client_id
+      (confirmed empirically, not derived from any resource= parameter a
+      client supplies).
+  OidcMcpAudience:
+    Type: String
+    Description: >-
+      The expected aud claim on MCP access tokens - different from
+      OidcAudience because MCP clients authenticate via RFC 8707 resource
+      indicators, which makes the issuer set aud to the resource URL
+      itself (e.g. https://api.jay.mykeebs.dev/mcp) rather than
+      OidcAudience's fixed value (confirmed empirically). Same issuer as
+      OidcIssuerBaseUrl.
   CustomDomainName:
     Type: String
     Default: ''
@@ -241,6 +251,7 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
           OIDC_AUDIENCE: !Ref OidcAudience
+          OIDC_MCP_AUDIENCE: !Ref OidcMcpAudience
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
@@ -547,27 +558,38 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images/{imageId}
             Method: delete
-        # Default OidcAuthorizer applies - the native JWT authorizer now
-        # fronts these routes too (see internal/mcp for how it consumes the
-        # header aws-lambda-web-adapter forwards).
+        # No auth at the gateway: /mcp verifies tokens itself
+        # (middleware.RequireAuth) so a 401 can carry the WWW-Authenticate
+        # header the MCP spec requires - API Gateway's own rejection can't
+        # include that header (see RequireAuth's doc comment).
         McpEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /mcp
             Method: any
+            Auth:
+              Authorizer: NONE
+        # No auth: this metadata exists so an unauthenticated client can
+        # discover where to authenticate - gating it behind auth is
+        # self-defeating.
         McpMetadataEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource
             Method: get
+            Auth:
+              Authorizer: NONE
+        # No auth: same rationale as McpMetadataEvent.
         McpMetadataMcpEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource/mcp
             Method: get
+            Auth:
+              Authorizer: NONE
     Metadata:
       # DockerContext is the repo root, not functions/api/, so the build has
       # access to the whole Go module (internal/ packages, go.mod/go.sum) -

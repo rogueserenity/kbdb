@@ -45,6 +45,59 @@ func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	}
 }
 
+// RequireAuth verifies the bearer token in-process, unlike
+// RequireAuthorizerIdentity below which trusts API Gateway's native
+// authorizer already did so. Only /mcp uses this: the MCP spec requires a
+// 401 there to carry a WWW-Authenticate header naming the RFC 9728 metadata
+// URL, and neither API Gateway's native authorizer nor a custom Lambda
+// authorizer can add that header to their rejection - both reject before
+// Lambda ever runs, confirmed against a live deploy and AWS's own
+// authorizer response-format docs. template.yaml's McpEvent is
+// Authorizer: NONE accordingly.
+//
+// metadataPath is built per-request from the request's scheme/Host, same
+// as internal/mcp/server.go's metadataHandler does for its "resource"
+// field.
+func RequireAuth(verifier *auth.Verifier, metadataPath string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rawToken, ok := auth.BearerToken(r)
+			if !ok {
+				unauthorizedWithMetadata(w, r, metadataPath, "missing bearer token")
+				return
+			}
+
+			authedReq, err := authenticate(r, verifier, rawToken)
+			if err != nil {
+				unauthorizedWithMetadata(w, r, metadataPath, "invalid token")
+				return
+			}
+
+			next.ServeHTTP(w, authedReq)
+		})
+	}
+}
+
+// unauthorizedWithMetadata writes a 401 carrying a WWW-Authenticate header
+// per RFC 9728 section 5.1, so an MCP client with no token yet can discover
+// the Protected Resource Metadata document from the rejection itself
+// (see RequireAuth).
+func unauthorizedWithMetadata(w http.ResponseWriter, r *http.Request, metadataPath, detail string) {
+	metadataURL := schemeOf(r) + "://" + r.Host + metadataPath
+	w.Header().Set("WWW-Authenticate", `Bearer resource_metadata="`+metadataURL+`"`)
+	problem.Unauthorized(w, detail)
+}
+
+// schemeOf mirrors internal/mcp/server.go's identical helper - both need
+// the original client-facing scheme, which the aws-lambda-web-adapter proxy
+// hop would otherwise hide behind a plain http:// Host.
+func schemeOf(r *http.Request) string {
+	if fp := r.Header.Get("X-Forwarded-Proto"); fp != "" {
+		return fp
+	}
+	return "https"
+}
+
 // RequireAuthorizerIdentity reads the caller's identity from the
 // X-Amzn-Request-Context header API Gateway's native JWT authorizer
 // populates via aws-lambda-web-adapter (see authorizer_context.go) and
