@@ -547,27 +547,45 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/builds/{buildId}/images/{imageId}
             Method: delete
-        # Default OidcAuthorizer applies - the native JWT authorizer now
-        # fronts these routes too (see internal/mcp for how it consumes the
-        # header aws-lambda-web-adapter forwards).
+        # No auth at the gateway: /mcp verifies tokens itself
+        # (middleware.RequireAuth) instead of relying on the native
+        # authorizer, so a missing/invalid token can get a 401 carrying a
+        # WWW-Authenticate header naming the RFC 9728 metadata URL - API
+        # Gateway's own fixed rejection response has no way to include
+        # that, for either its native JWT authorizer or a custom Lambda
+        # authorizer (confirmed against AWS's authorizer response-format
+        # reference: neither format has a field that flows into the
+        # client-facing rejection).
         McpEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /mcp
             Method: any
+            Auth:
+              Authorizer: NONE
+        # No auth: RFC 9728 Protected Resource Metadata exists specifically
+        # so an unauthenticated MCP client can discover where to
+        # authenticate - gating it behind the OidcAuthorizer is
+        # self-defeating (confirmed via a real 401 from a live MCP client
+        # attempting OAuth discovery against this route with no token yet).
         McpMetadataEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource
             Method: get
+            Auth:
+              Authorizer: NONE
+        # No auth: same rationale as McpMetadataEvent.
         McpMetadataMcpEvent:
           Type: HttpApi
           Properties:
             ApiId: !Ref HttpApi
             Path: /.well-known/oauth-protected-resource/mcp
             Method: get
+            Auth:
+              Authorizer: NONE
     Metadata:
       # DockerContext is the repo root, not functions/api/, so the build has
       # access to the whole Go module (internal/ packages, go.mod/go.sum) -

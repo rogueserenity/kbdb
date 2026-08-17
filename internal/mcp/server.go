@@ -9,6 +9,7 @@ import (
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/modelcontextprotocol/go-sdk/oauthex"
 
+	"github.com/rogueserenity/kbdb/internal/auth"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	logpkg "github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/middleware"
@@ -55,8 +56,11 @@ const (
 )
 
 // New builds the MCP server. issuerURL is the OIDC issuer MCP clients should
-// authenticate against, advertised via RFC 9728 Protected Resource Metadata.
-// version is advertised to MCP clients on connect.
+// authenticate against, advertised via RFC 9728 Protected Resource
+// Metadata. verifier authenticates every /mcp request in-process (see
+// middleware.RequireAuth for why /mcp can't rely on API Gateway's native
+// authorizer the way REST's required-auth routes do). version is
+// advertised to MCP clients on connect.
 func New(
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
@@ -64,6 +68,7 @@ func New(
 	imageStore repository.KeycapKitImageStore,
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
+	verifier *auth.Verifier,
 	issuerURL, version string,
 ) Handlers {
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "kbdb", Version: version}, nil)
@@ -84,7 +89,7 @@ func New(
 	)
 
 	return Handlers{
-		Streamable:       middleware.RequireAuthorizerIdentity(streamable),
+		Streamable:       middleware.RequireAuth(verifier, MetadataPath)(streamable),
 		MetadataPath:     MetadataPath,
 		RootMetadataPath: RootMetadataPath,
 		Metadata:         metadataHandler(issuerURL),
@@ -92,21 +97,20 @@ func New(
 }
 
 // errNoTokenInfo guards against a request ever reaching the tool dispatch
-// layer without middleware.RequireAuthorizerIdentity having run first (see
-// New, which wraps the streamable handler with it) - unreachable today
-// since it's the only entrypoint into this server, but this fails closed
-// rather than silently proceeding unauthenticated if that wiring is ever
-// broken by a future change (e.g. a second transport added to mcpServer).
+// layer without middleware.RequireAuth having run first (see New, which
+// wraps the streamable handler with it) - unreachable today since it's the
+// only entrypoint into this server, but this fails closed rather than
+// silently proceeding unauthenticated if that wiring is ever broken by a
+// future change (e.g. a second transport added to mcpServer).
 var errNoTokenInfo = errors.New("no verified identity on context")
 
-// identityMiddleware reads the caller's user ID that
-// middleware.RequireAuthorizerIdentity already wrote onto context at the
-// HTTP layer (see New) and writes it into logpkg the same way REST's
-// handlers see it, so tool handlers only depend on those shared,
-// transport-agnostic packages. WorkOS tokens carry no groups-equivalent
-// claim, and nothing populates ctxpkg's groups value on this path, so
-// groups handling was dropped rather than kept as dead code that always
-// sees nil.
+// identityMiddleware reads the caller's user ID that middleware.RequireAuth
+// already wrote onto context at the HTTP layer (see New) and writes it into
+// logpkg the same way REST's handlers see it, so tool handlers only depend
+// on those shared, transport-agnostic packages. WorkOS tokens carry no
+// groups-equivalent claim, and nothing populates ctxpkg's groups value on
+// this path, so groups handling was dropped rather than kept as dead code
+// that always sees nil.
 func identityMiddleware() sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
 		return func(ctx context.Context, method string, req sdkmcp.Request) (sdkmcp.Result, error) {

@@ -116,11 +116,14 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}/images/{imageId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuildImage(buildRepo, buildImageStore))))
 
-	// MCP: auth relies solely on API Gateway's native JWT authorizer (see
-	// template.yaml's HttpApi.Auth.DefaultAuthorizer) - all MCP routes
-	// require auth, same as required-auth REST routes above. Not wrapped in
-	// validate: api/openapi.yaml only covers the REST surface.
-	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, issuerURL, version)
+	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
+	// API Gateway's native authorizer - see that middleware's doc comment
+	// for why (a spec-compliant 401 needs a WWW-Authenticate header naming
+	// the RFC 9728 metadata URL, which the gateway's own fixed rejection
+	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
+	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
+	// the REST surface.
+	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)
