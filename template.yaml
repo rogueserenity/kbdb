@@ -40,9 +40,28 @@ Parameters:
       used as the native JWT authorizer's audience. For WorkOS, this is
       the User Management application's client_id (confirmed empirically,
       not derived from any resource= parameter a client supplies).
+  CustomDomainName:
+    Type: String
+    Default: ''
+    Description: >-
+      Optional custom domain for this stack's HttpApi, e.g.
+      api.jay.mykeebs.dev. Left empty (the default), no custom domain is
+      configured and the stack is only reachable at its default
+      execute-api.amazonaws.com URL - func-setup, CI, and any dev stack
+      not opting in are unaffected.
+  CustomDomainCertificateArn:
+    Type: String
+    Default: ''
+    Description: >-
+      ACM certificate ARN for CustomDomainName, same region as this stack.
+      Provisioned out-of-band (DNS validation against Cloudflare, not
+      Route53, needs an imperative request/validate loop that doesn't fit
+      CloudFormation's declarative model) - not created by this template.
+      Required if CustomDomainName is set, ignored otherwise.
 
 Conditions:
   ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
+  HasCustomDomain: !Not [!Equals [!Ref CustomDomainName, '']]
 
 Resources:
   # Dedicated ECR repo for ApiFunction's container image, declared in-template
@@ -570,6 +589,32 @@ Resources:
             IdentitySource: $request.header.Authorization
         DefaultAuthorizer: OidcAuthorizer
 
+  # Raw CFN, not SAM's HttpApi.Properties.Domain shorthand - that shorthand
+  # is expanded by the SAM transform itself (macro-time), which can't see
+  # through an Fn::If the way plain CloudFormation resources can (confirmed
+  # via a real "Custom Domains only works if both DomainName and
+  # CertificateArn are provided" transform error when conditionally
+  # omitting it). DNS validation and the api.<name> CNAME both live in
+  # Cloudflare, not Route53, so nothing here talks to Route53.
+  ApiCustomDomain:
+    Type: AWS::ApiGatewayV2::DomainName
+    Condition: HasCustomDomain
+    Properties:
+      DomainName: !Ref CustomDomainName
+      DomainNameConfigurations:
+        - CertificateArn: !Ref CustomDomainCertificateArn
+          EndpointType: REGIONAL
+
+  # No ApiMappingKey (empty path prefix) - internal/router's routes
+  # (/v1/..., /mcp) should map straight through with no extra segment.
+  ApiCustomDomainMapping:
+    Type: AWS::ApiGatewayV2::ApiMapping
+    Condition: HasCustomDomain
+    Properties:
+      ApiId: !Ref HttpApi
+      DomainName: !Ref ApiCustomDomain
+      Stage: !Ref HttpApiApiGatewayDefaultStage
+
   CostBudget:
     Type: AWS::Budgets::Budget
     Properties:
@@ -599,6 +644,13 @@ Outputs:
   ApiUrl:
     Description: Base URL of the HTTP API
     Value: !Sub https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  ApiCustomDomainTarget:
+    Description: >-
+      Only present when CustomDomainName is set. Cloudflare CNAME target for
+      the custom domain (api.<name>.mykeebs.dev, etc.) - point a DNS-only
+      (not proxied) CNAME record at this value.
+    Condition: HasCustomDomain
+    Value: !GetAtt ApiCustomDomain.RegionalDomainName
   ImagesBucketName:
     Description: S3 bucket holding user-uploaded images (build photos, keycap kit renders)
     Value: !Ref ImagesBucket
