@@ -89,7 +89,8 @@ Each developer who wants this does it once for their own name:
    aws acm wait certificate-validated --certificate-arn <arn-from-step-1> \
      --region us-east-2 --profile kbdb-dev-admin
    ```
-5. **Use the resulting ARN** as `CustomDomainCertificateArn`, and `api.<your-name>.mykeebs.dev` as `CustomDomainName`, in your `scripts/env/<your-name>-dev.env`. Deploy, then create a matching `api.<your-name>` CNAME in the `mykeebs.dev` zone (DNS-only), pointed at the stack's `ApiCustomDomainTarget` output.
+5. **Set `KBDB_DEV_CUSTOM_DOMAIN=true` and `KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN=<arn-from-step-1>`** in your `scripts/env/<your-name>-dev.env` (see `scripts/env/example-dev.env` for the exact keys). `dev-setup`/`dev-deploy` pick this up automatically and pass `CustomDomainName=api.<your-name>.mykeebs.dev`/`CustomDomainCertificateArn` through to `sam deploy` — no other flag or command needed. Leaving `KBDB_DEV_CUSTOM_DOMAIN` unset (the default for everyone else) means these parameters are never touched.
+6. **Deploy** (`mise run dev-deploy`), then read the stack's `ApiCustomDomainTarget` output and create a matching `api.<your-name>` CNAME in the `mykeebs.dev` Cloudflare zone (DNS-only, not proxied), pointed at that value. This one is a normal, static record — created once, not rewritten on later deploys.
 
 ### AWS accounts
 
