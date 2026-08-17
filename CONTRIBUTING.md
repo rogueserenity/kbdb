@@ -58,9 +58,15 @@ These scripts derive your AWS account ID and region automatically from your acti
 
 You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
-### WorkOS OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`)
+### WorkOS OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_OIDC_MCP_AUDIENCE`)
 
-All three scripts also require `KBDB_OIDC_ISSUER_BASE_URL` and `KBDB_OIDC_AUDIENCE` (the OIDC issuer and expected `aud` claim the deployed stack's JWT authorizer validates against). Get real values from the WorkOS dashboard's **Staging** environment (Configuration → issuer/AuthKit domain, and the User Management application's Client ID) — Staging is for dev/personal stacks only, never point a dev stack at WorkOS Production.
+All three scripts also require these three vars:
+
+- `KBDB_OIDC_ISSUER_BASE_URL` — your WorkOS **Staging** environment's AuthKit domain (WorkOS dashboard → Applications → your application → the `authkit.app` domain shown there; *not* `api.workos.com/user_management/<client_id>` — that issues valid tokens but serves no OIDC/RFC 8414 discovery metadata, which MCP clients need).
+- `KBDB_OIDC_AUDIENCE` — the `aud` claim on REST tokens: the Staging environment's default application Client ID (same dashboard page).
+- `KBDB_OIDC_MCP_AUDIENCE` — the `aud` claim on MCP tokens: `https://api.<your-name>.mykeebs.dev/mcp`. MCP clients authenticate via RFC 8707 resource indicators, so AuthKit issues a token whose `aud` is the resource URL itself rather than the fixed Client ID above — confirmed empirically by decoding real tokens from both flows.
+
+Staging is for dev/personal stacks only — never point a dev stack at WorkOS Production.
 
 To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
 

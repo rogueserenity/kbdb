@@ -45,32 +45,19 @@ func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	}
 }
 
-// RequireAuth verifies the bearer token in-process and rejects a missing or
-// invalid one with a spec-compliant 401 - unlike RequireAuthorizerIdentity
-// below, which trusts API Gateway's native JWT authorizer already rejected
-// anything invalid before the request reached this process.
+// RequireAuth verifies the bearer token in-process, unlike
+// RequireAuthorizerIdentity below which trusts API Gateway's native
+// authorizer already did so. Only /mcp uses this: the MCP spec requires a
+// 401 there to carry a WWW-Authenticate header naming the RFC 9728 metadata
+// URL, and neither API Gateway's native authorizer nor a custom Lambda
+// authorizer can add that header to their rejection - both reject before
+// Lambda ever runs, confirmed against a live deploy and AWS's own
+// authorizer response-format docs. template.yaml's McpEvent is
+// Authorizer: NONE accordingly.
 //
-// This exists only for MCP's /mcp route (see internal/mcp), which cannot
-// use the gateway-only pattern: RFC 9728/the MCP spec requires a 401 on
-// /mcp to carry a WWW-Authenticate header naming the Protected Resource
-// Metadata URL (via a resource_metadata parameter) so a client with no
-// token yet can discover where to authenticate. API Gateway's native JWT
-// authorizer (and, confirmed via AWS's own Lambda-authorizer response
-// format docs, a custom Lambda authorizer too - neither format has any
-// field that flows into the client-facing rejection's headers) always
-// returns its own fixed 401 with a bare "WWW-Authenticate: Bearer" and no
-// way to add resource_metadata, since the authorizer rejects the request
-// before Lambda ever runs. Verifying in-process, with Authorizer: NONE at
-// the gateway for this route (see template.yaml's McpEvent), is the only
-// way to control that header - confirmed by testing the native authorizer's
-// actual rejection response against a live deploy, and by reading AWS's
-// authorizer response-format reference end to end.
-//
-// metadataPath must match whichever RFC 9728 metadata path the caller
-// registers alongside this route (see internal/mcp.MetadataPath) - built
-// per-request from the request's own scheme/Host, not a static value, for
-// the same reason internal/mcp/server.go's metadataHandler derives its
-// "resource" field per-request rather than from deploy-time config.
+// metadataPath is built per-request from the request's scheme/Host, same
+// as internal/mcp/server.go's metadataHandler does for its "resource"
+// field.
 func RequireAuth(verifier *auth.Verifier, metadataPath string) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -21,8 +21,9 @@ import (
 )
 
 // New builds the application's http.Handler. verifier authenticates every
-// request; additional entities/routes are added here in later issues, on
-// this same handler.
+// REST request; mcpVerifier authenticates /mcp only, since MCP tokens carry
+// a different audience (see Config.OIDCMcpAudience). Additional
+// entities/routes are added here in later issues, on this same handler.
 //
 // issuerURL configures the MCP endpoint's RFC 9728 Protected Resource
 // Metadata (the OIDC issuer MCP clients should authenticate against); the
@@ -32,6 +33,7 @@ import (
 // handshake.
 func New(
 	verifier *auth.Verifier,
+	mcpVerifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -123,7 +125,7 @@ func New(
 	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
 	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
 	// the REST surface.
-	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
+	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, mcpVerifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)
