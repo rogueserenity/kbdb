@@ -1,24 +1,23 @@
-name: Publish TS Client
+name: Publish Clients
 
 on:
   release:
     types: [published]
 
 concurrency:
-  group: publish-ts-client-${{ github.event.release.tag_name }}
+  group: publish-clients-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 permissions:
   contents: read
   packages: write
 
-env:
-  CLIENT_GEN_OUT_DIR: client
-
 jobs:
   publish-ts-client:
-    name: Publish TS client
+    name: Publish TS Client
     runs-on: ubuntu-latest
+    env:
+      CLIENT_GEN_OUT_DIR: client
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
