@@ -221,4 +221,4 @@ bin/
 .sam-local-api.log
 
 # Scratch output of mise run client-gen - dev-only, never committed
-client/
+ts-client/
