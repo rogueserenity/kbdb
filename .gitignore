@@ -219,3 +219,6 @@ bin/
 # Local functional-test environment (mise run func-setup/func-teardown)
 .sam-local-api.pid
 .sam-local-api.log
+
+# Scratch output of mise run client-gen - dev-only, never committed
+client/
