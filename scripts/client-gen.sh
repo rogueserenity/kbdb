@@ -22,6 +22,7 @@ rm -rf "$OUT_DIR"
 mkdir -p "$OUT_DIR"
 
 docker run --rm \
+  --user "$(id -u):$(id -g)" \
   -v "$PWD:/local" \
   "$GENERATOR_IMAGE" generate \
   -i "/local/api/openapi.yaml" \
