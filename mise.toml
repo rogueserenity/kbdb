@@ -64,3 +64,8 @@ file = "scripts/func-teardown.sh"
 alias = "fx"
 description = "Run functional tests (Ginkgo) against whatever func-setup brought up"
 file = "scripts/func-test.sh"
+
+[tasks.client-gen]
+alias = "cx"
+description = "Generate a TypeScript client from api/openapi.yaml into client/ (dev-only scratch dir, requires Docker)"
+file = "scripts/client-gen.sh"
