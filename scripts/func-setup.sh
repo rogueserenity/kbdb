@@ -96,17 +96,18 @@ KBDB_SECOND_USER_AUTH_TOKEN=$(create_and_mint "kbdb-local-second-user@rogueseren
 
 API_ID=$(aws apigatewayv2 get-apis --query 'Items[0].ApiId' --output text)
 
-cat <<ENVEOF
-
-Deployed. Export these to run the suite:
-
-  export KBDB_API_BASE_URL='$ENDPOINT/execute-api/$API_ID/\$default'
-  export KBDB_DYNAMODB_ENDPOINT_URL=$ENDPOINT
-  export KBDB_SWITCH_TABLE_NAME=$(out SwitchTableName)
-  export KBDB_KEYBOARD_TABLE_NAME=$(out KeyboardTableName)
-  export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
-  export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
-  export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
-  export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
-
+# func-test.sh sources this directly, so `mise run func-test` picks up a
+# fresh deploy's stack-derived values without any manual export step.
+ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env.floci"
+cat <<ENVEOF > "$ENV_FILE"
+export KBDB_API_BASE_URL='$ENDPOINT/execute-api/$API_ID/\$default'
+export KBDB_DYNAMODB_ENDPOINT_URL=$ENDPOINT
+export KBDB_SWITCH_TABLE_NAME=$(out SwitchTableName)
+export KBDB_KEYBOARD_TABLE_NAME=$(out KeyboardTableName)
+export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
+export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
+export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
+export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
 ENVEOF
+
+echo "Deployed. Wrote $ENV_FILE - mise run func-test sources it automatically."
