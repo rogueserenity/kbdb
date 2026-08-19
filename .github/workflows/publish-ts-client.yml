@@ -1,11 +1,11 @@
-name: Publish Client
+name: Publish TS Client
 
 on:
   release:
     types: [published]
 
 concurrency:
-  group: publish-client-${{ github.event.release.tag_name }}
+  group: publish-ts-client-${{ github.event.release.tag_name }}
   cancel-in-progress: false
 
 permissions:
@@ -16,7 +16,7 @@ env:
   CLIENT_GEN_OUT_DIR: client
 
 jobs:
-  publish-client:
+  publish-ts-client:
     name: Publish TS client
     runs-on: ubuntu-latest
     steps:
@@ -32,7 +32,7 @@ jobs:
 
       - uses: actions/setup-node@2028fbc5c25fe9cf00d9f06a71cc4710d4507903 # v6.0.0
         with:
-          node-version: 22
+          node-version: 22 # Active LTS; 24 doesn't enter LTS until Oct 2026
           registry-url: https://npm.pkg.github.com
           scope: "@rogueserenity"
 
