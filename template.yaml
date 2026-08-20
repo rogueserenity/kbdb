@@ -68,6 +68,13 @@ Parameters:
       Route53, needs an imperative request/validate loop that doesn't fit
       CloudFormation's declarative model) - not created by this template.
       Required if CustomDomainName is set, ignored otherwise.
+  CorsAllowOrigins:
+    Type: CommaDelimitedList
+    Description: >-
+      Comma-separated browser origins (each scheme + host + port, e.g.
+      http://localhost:5173,https://jay.mykeebs.dev) allowed to call this
+      HttpApi cross-origin - typically a local frontend dev server and/or
+      its deployed counterpart.
 
 Conditions:
   ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
@@ -610,6 +617,21 @@ Resources:
                 - !Ref OidcAudience
             IdentitySource: $request.header.Authorization
         DefaultAuthorizer: OidcAuthorizer
+      # API Gateway auto-generates OPTIONS routes for CORS preflight and
+      # exempts them from DefaultAuthorizer above - without this, browser
+      # preflight requests 404 (no OPTIONS route exists) before the
+      # authorizer is ever reached, blocking every browser-based caller.
+      CorsConfiguration:
+        AllowOrigins: !Ref CorsAllowOrigins
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
 
   # Raw CFN, not SAM's HttpApi.Properties.Domain shorthand - that shorthand
   # is expanded by the SAM transform itself (macro-time), which can't see

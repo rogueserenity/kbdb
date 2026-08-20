@@ -22,6 +22,7 @@ REGION="${KBDB_DEV_REGION:-$(aws configure get region)}"
 OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL - see CONTRIBUTING.md}"
 OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
 OIDC_MCP_AUDIENCE="${KBDB_OIDC_MCP_AUDIENCE:?set KBDB_OIDC_MCP_AUDIENCE - see CONTRIBUTING.md}"
+CORS_ALLOW_ORIGINS="${KBDB_CORS_ALLOW_ORIGINS:?set KBDB_CORS_ALLOW_ORIGINS - see CONTRIBUTING.md}"
 
 # Optional - see CONTRIBUTING.md's "Custom domain" section. Unset by
 # default, so a normal dev-deploy run doesn't touch template.yaml's
@@ -44,6 +45,7 @@ sam deploy --stack-name "$STACK_NAME" \
     "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
     "OidcAudience=${OIDC_AUDIENCE}" \
     "OidcMcpAudience=${OIDC_MCP_AUDIENCE}" \
+    "CorsAllowOrigins=${CORS_ALLOW_ORIGINS}" \
     "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \

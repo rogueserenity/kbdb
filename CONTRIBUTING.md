@@ -70,6 +70,10 @@ Staging is for dev/personal stacks only — never point a dev stack at WorkOS Pr
 
 To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
 
+### CORS (`KBDB_CORS_ALLOW_ORIGINS`)
+
+`dev-deploy.sh` also requires `KBDB_CORS_ALLOW_ORIGINS` — a comma-separated list of browser origins (each scheme + host + port) allowed to call your stack's `HttpApi` cross-origin, e.g. `http://localhost:5173,https://jay.mykeebs.dev` to cover both a local frontend dev server and its deployed counterpart. Without this, browser preflight (`OPTIONS`) requests 404 before the authorizer is ever reached — API Gateway auto-generates CORS `OPTIONS` routes and exempts them from `DefaultAuthorizer` only when `HttpApi.Properties.CorsConfiguration` is set.
+
 ### Custom domain (`api.<your-name>.mykeebs.dev`)
 
 Optional. `template.yaml`'s `CustomDomainName`/`CustomDomainCertificateArn` parameters (both default to empty) map a stack to a stable domain instead of its default `execute-api.amazonaws.com` URL. `<your-name>.mykeebs.dev` itself is intentionally left free (e.g. for a future web UI hosted elsewhere, like Render) - `api.` is a real subdomain label in front of your name, not a wildcard-coverable suffix of it, so `*.mykeebs.dev` does **not** match `api.jay.mykeebs.dev` (wildcards only cover one label deep). Each developer needs their own certificate for their own `api.<name>.mykeebs.dev`, not one shared wildcard.
