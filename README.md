@@ -22,18 +22,18 @@ It exposes two first-class APIs — REST and an MCP server, so you can manage yo
 
 ## Identity provider requirements
 
-kbdb has no IdP-specific code — it's built against WorkOS but doesn't depend on it. Any IdP works as long as it:
+kbdb has no IdP-specific code — it's currently deployed against Stytch but doesn't depend on it. Any IdP works as long as it:
 
 - Publishes standard OIDC discovery (`.well-known/openid-configuration`) and a JWKS endpoint, since both API Gateway's native JWT authorizer and the application's own `go-oidc`-based verifier resolve signing keys that way.
 - Issues RS256-signed JWTs with standard `iss`, `aud`, and `exp` claims.
 - Includes a `sub` claim that's a stable, immutable identifier for the user — it's used as the partition key for every entity table, so it must never change or be reused for a different person.
 - Serves OAuth 2.0 Authorization Server Metadata (RFC 8414) at that issuer, so MCP clients doing OAuth discovery can find its authorization/token endpoints. The MCP endpoint advertises the issuer as its authorization server via RFC 9728 Protected Resource Metadata (`/.well-known/oauth-protected-resource`) — an IdP without RFC 8414 metadata breaks MCP client login even though REST and hand-issued tokens would still work fine.
-- Supports RFC 7591 Dynamic Client Registration, so an MCP client like Claude Code can register itself against kbdb without a human manually provisioning it a client ID first. This is the reason this project uses WorkOS rather than Cognito, which supports neither this nor the next requirement.
+- Supports RFC 7591 Dynamic Client Registration, so an MCP client like Claude Code can register itself against kbdb without a human manually provisioning it a client ID first. This is the reason this project doesn't use Cognito, which supports neither this nor the next requirement.
 - Supports RFC 8252 loopback wildcard-port redirect URIs, since that's how a locally-running MCP client completes its OAuth redirect.
 
 ## Getting started
 
-See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, running the app against a local dev loop, deploying to your own AWS/WorkOS accounts, and the full command reference.
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for local setup, running the app against a local dev loop, deploying to your own AWS account and Stytch project, and the full command reference.
 
 ## License
 

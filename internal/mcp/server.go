@@ -107,9 +107,9 @@ var errNoTokenInfo = errors.New("no verified identity on context")
 // identityMiddleware reads the caller's user ID that middleware.RequireAuth
 // already wrote onto context at the HTTP layer (see New) and writes it into
 // logpkg the same way REST's handlers see it, so tool handlers only depend
-// on those shared, transport-agnostic packages. WorkOS tokens carry no
-// groups-equivalent claim, and nothing populates ctxpkg's groups value on
-// this path, so groups handling was dropped rather than kept as dead code
+// on those shared, transport-agnostic packages. Nothing populates ctxpkg's
+// groups value on this path (kbdb's tokens carry no groups-equivalent
+// claim), so groups handling was dropped rather than kept as dead code
 // that always sees nil.
 func identityMiddleware() sdkmcp.Middleware {
 	return func(next sdkmcp.MethodHandler) sdkmcp.MethodHandler {
