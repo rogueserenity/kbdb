@@ -23,7 +23,7 @@ func BaseURL() string {
 
 // EmulatorBaseURL returns the WorkOS emulator's base address, used to mint
 // test tokens locally. Not used when pointed at a real deployed stack (CI's
-// real-WorkOS-token path is separate - see api.AuthToken).
+// real-issuer-token path is separate - see api.AuthToken).
 // Configurable via KBDB_EMULATOR_BASE_URL.
 func EmulatorBaseURL() string {
 	if v := os.Getenv("KBDB_EMULATOR_BASE_URL"); v != "" {

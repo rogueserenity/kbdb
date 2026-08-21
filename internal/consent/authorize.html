@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8" />
+<title>kbdb — Sign in</title>
+<style>
+  stytch-login, stytch-identity-provider { display: block; min-height: 400px; min-width: 300px; }
+  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 4rem auto; padding: 0 1rem; }
+</style>
+</head>
+<body>
+  <h3 id="status">Loading…</h3>
+  <stytch-login id="login-el"></stytch-login>
+  <stytch-identity-provider id="idp-el"></stytch-identity-provider>
+
+  <script type="module">
+    import { StytchClient, StytchIdentityProvider, StytchUI, Products } from 'https://esm.sh/@stytch/vanilla-js@6.2.0';
+
+    const PUBLIC_TOKEN = {{.StytchPublicToken}};
+    // customBaseUrl: Stytch stamps "iss" based on the domain a request hit,
+    // not a fixed per-project setting - without this the RFC 9207 "iss" it
+    // returns won't match the custom domain named in discovery.
+    const stytch = new StytchClient(PUBLIC_TOKEN, {
+      customBaseUrl: {{.OIDCIssuerBaseURL}},
+    });
+
+    customElements.define('stytch-login', StytchUI);
+    customElements.define('stytch-identity-provider', StytchIdentityProvider);
+
+    async function render() {
+      try {
+        // The magic-link redirect replaces our OAuth query params with
+        // Stytch's own - restore them from localStorage (not sessionStorage:
+        // a magic link opened in a new tab can't see the original tab's).
+        const params = new URLSearchParams(window.location.search);
+        const magicToken = params.get('token');
+        const savedQs = localStorage.getItem('kbdb_oauth_qs');
+
+        if (magicToken && !params.has('client_id')) {
+          await stytch.magicLinks.authenticate(magicToken, { session_duration_minutes: 60 });
+          if (savedQs) {
+            window.history.replaceState({}, '', window.location.pathname + savedQs);
+          }
+        }
+
+        const loggedIn = stytch.session.getSync() != null;
+
+        if (loggedIn) {
+          document.getElementById('status').textContent = 'Signed in';
+          document.getElementById('login-el').style.display = 'none';
+          const idp = document.getElementById('idp-el');
+          idp.style.display = 'block';
+          idp.render({ client: stytch });
+        } else {
+          document.getElementById('status').textContent = 'Sign in to continue';
+          document.getElementById('idp-el').style.display = 'none';
+          const login = document.getElementById('login-el');
+          login.style.display = 'block';
+          localStorage.setItem('kbdb_oauth_qs', window.location.search);
+          const bareRedirectUrl = window.location.origin + window.location.pathname;
+          login.render({
+            client: stytch,
+            config: {
+              products: [Products.emailMagicLinks],
+              emailMagicLinksOptions: {
+                loginRedirectURL: bareRedirectUrl,
+                loginExpirationMinutes: 60,
+                signupRedirectURL: bareRedirectUrl,
+                signupExpirationMinutes: 60,
+              },
+            },
+            styles: {
+              container: { width: '100%' },
+            },
+          });
+        }
+      } catch (e) {
+        document.getElementById('status').textContent = 'Error: ' + e.message;
+        console.error(e);
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', render);
+  </script>
+</body>
+</html>

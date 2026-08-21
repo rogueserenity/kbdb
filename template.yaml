@@ -27,8 +27,8 @@ Parameters:
     Type: String
     Description: >-
       This deployment's OIDC issuer base URL, scheme included - e.g.
-      https://your-app.authkit.app for a real WorkOS deployment, or a
-      floci-local http://... URL for local dev (see
+      https://test.stytch.com/v1/public/{project_id} for a real Stytch Test
+      deployment, or a floci-local http://... URL for local dev (see
       scripts/func-setup.sh). Not a bare domain: a real IdP is always
       https, but floci's local S3 emulation only serves plain http, so
       the scheme must be supplied by the caller rather than hardcoded
@@ -36,20 +36,17 @@ Parameters:
   OidcAudience:
     Type: String
     Description: >-
-      The expected aud claim on every REST access token for this
-      environment - used as the native JWT authorizer's audience. For
-      WorkOS, this is the User Management application's client_id
-      (confirmed empirically, not derived from any resource= parameter a
-      client supplies).
-  OidcMcpAudience:
+      The expected aud claim on every access token for this environment
+      (REST and MCP alike) - used as the native JWT authorizer's audience.
+      This is the Stytch project ID: Stytch always includes it in aud for
+      every token regardless of client type (confirmed empirically against
+      a live Stytch test project), so one value covers both flows.
+  StytchPublicToken:
     Type: String
     Description: >-
-      The expected aud claim on MCP access tokens - different from
-      OidcAudience because MCP clients authenticate via RFC 8707 resource
-      indicators, which makes the issuer set aud to the resource URL
-      itself (e.g. https://api.jay.mykeebs.dev/mcp) rather than
-      OidcAudience's fixed value (confirmed empirically). Same issuer as
-      OidcIssuerBaseUrl.
+      This deployment's Stytch public token, rendered into the GET
+      /authorize consent page (see internal/consent). Safe to embed
+      client-side by design.
   CustomDomainName:
     Type: String
     Default: ''
@@ -68,6 +65,13 @@ Parameters:
       Route53, needs an imperative request/validate loop that doesn't fit
       CloudFormation's declarative model) - not created by this template.
       Required if CustomDomainName is set, ignored otherwise.
+  CorsAllowOrigins:
+    Type: CommaDelimitedList
+    Description: >-
+      Comma-separated browser origins (each scheme + host + port, e.g.
+      http://localhost:5173,https://jay.mykeebs.dev) allowed to call this
+      HttpApi cross-origin - typically a local frontend dev server and/or
+      its deployed counterpart.
 
 Conditions:
   ShouldCreateApiRepository: !Equals [!Ref SkipApiRepository, 'false']
@@ -251,7 +255,7 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
           OIDC_AUDIENCE: !Ref OidcAudience
-          OIDC_MCP_AUDIENCE: !Ref OidcMcpAudience
+          STYTCH_PUBLIC_TOKEN: !Ref StytchPublicToken
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
@@ -590,6 +594,16 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # No auth: same rationale as McpMetadataEvent. Method: any so a
+        # non-GET request reaches the handler's own 405 instead of a 404.
+        AuthorizeEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /authorize
+            Method: any
+            Auth:
+              Authorizer: NONE
     Metadata:
       # DockerContext is the repo root, not functions/api/, so the build has
       # access to the whole Go module (internal/ packages, go.mod/go.sum) -
@@ -610,6 +624,21 @@ Resources:
                 - !Ref OidcAudience
             IdentitySource: $request.header.Authorization
         DefaultAuthorizer: OidcAuthorizer
+      # API Gateway auto-generates OPTIONS routes for CORS preflight and
+      # exempts them from DefaultAuthorizer above - without this, browser
+      # preflight requests 404 (no OPTIONS route exists) before the
+      # authorizer is ever reached, blocking every browser-based caller.
+      CorsConfiguration:
+        AllowOrigins: !Ref CorsAllowOrigins
+        AllowHeaders:
+          - authorization
+          - content-type
+        AllowMethods:
+          - GET
+          - POST
+          - PUT
+          - DELETE
+          - OPTIONS
 
   # Raw CFN, not SAM's HttpApi.Properties.Domain shorthand - that shorthand
   # is expanded by the SAM transform itself (macro-time), which can't see

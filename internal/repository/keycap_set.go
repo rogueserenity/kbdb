@@ -27,8 +27,8 @@ type KeycapKit struct {
 }
 
 // KeycapSet is a keycap set in a user's collection, or shared with the
-// caller. UserID is the DynamoDB partition key (the owner's WorkOS user
-// ID); ID is the sort key. Only Brand, Name, and Visibility are
+// caller. UserID is the DynamoDB partition key (the owner's IdP-issued
+// user ID); ID is the sort key. Only Brand, Name, and Visibility are
 // required, per api/openapi.yaml's KeycapSetInput schema.
 type KeycapSet struct {
 	UserID     string      `dynamodbav:"user_id" json:"-"`

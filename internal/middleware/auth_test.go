@@ -29,7 +29,7 @@ func TestOptionalAuthSuite(t *testing.T) {
 
 func (s *OptionalAuthSuite) SetupTest() {
 	s.mockVerifier = mocks.NewMockTokenVerifier(s.T())
-	s.verifier = auth.NewVerifierForTesting(s.mockVerifier)
+	s.verifier = auth.NewVerifierForTesting(s.mockVerifier, "expected-audience")
 }
 
 func (s *OptionalAuthSuite) TestNoTokenProceedsAnonymously() {
@@ -72,7 +72,7 @@ func (s *OptionalAuthSuite) TestInvalidTokenIsRejected() {
 func (s *OptionalAuthSuite) TestValidTokenProceedsAuthenticated() {
 	s.mockVerifier.EXPECT().
 		Verify(mock.Anything, "a-valid-token").
-		Return(&oidc.IDToken{Subject: "user-123"}, nil)
+		Return(&oidc.IDToken{Subject: "user-123", Audience: []string{"expected-audience"}}, nil)
 	var calledWithUserID string
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		calledWithUserID, _ = ctxpkg.UserID(r.Context())
@@ -100,7 +100,7 @@ func TestRequireAuthSuite(t *testing.T) {
 
 func (s *RequireAuthSuite) SetupTest() {
 	s.mockVerifier = mocks.NewMockTokenVerifier(s.T())
-	s.verifier = auth.NewVerifierForTesting(s.mockVerifier)
+	s.verifier = auth.NewVerifierForTesting(s.mockVerifier, "expected-audience")
 }
 
 func (s *RequireAuthSuite) TestNoTokenIsRejectedWithMetadataURL() {
@@ -147,7 +147,7 @@ func (s *RequireAuthSuite) TestInvalidTokenIsRejectedWithMetadataURL() {
 func (s *RequireAuthSuite) TestValidTokenProceedsAuthenticated() {
 	s.mockVerifier.EXPECT().
 		Verify(mock.Anything, "a-valid-token").
-		Return(&oidc.IDToken{Subject: "user-123"}, nil)
+		Return(&oidc.IDToken{Subject: "user-123", Audience: []string{"expected-audience"}}, nil)
 	var calledWithUserID string
 	next := http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		calledWithUserID, _ = ctxpkg.UserID(r.Context())

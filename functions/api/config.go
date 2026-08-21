@@ -7,10 +7,8 @@ package main
 type Config struct {
 	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
 	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
-	// MCP tokens carry a different aud (the RFC 8707 resource URL, e.g.
-	// https://api.jay.mykeebs.dev/mcp) than OIDCAudience's value, so /mcp
-	// gets its own verifier - see internal/mcp.New.
-	OIDCMcpAudience    string `env:"OIDC_MCP_AUDIENCE" required:""`
+	// Rendered into the GET /authorize consent page - see internal/consent.
+	StytchPublicToken  string `env:"STYTCH_PUBLIC_TOKEN" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
 	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`

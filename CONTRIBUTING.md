@@ -58,17 +58,21 @@ These scripts derive your AWS account ID and region automatically from your acti
 
 You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
-### WorkOS OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_OIDC_MCP_AUDIENCE`)
+### Stytch OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_STYTCH_PUBLIC_TOKEN`)
 
 All three scripts also require these three vars:
 
-- `KBDB_OIDC_ISSUER_BASE_URL` — your WorkOS **Staging** environment's AuthKit domain (WorkOS dashboard → Applications → your application → the `authkit.app` domain shown there; *not* `api.workos.com/user_management/<client_id>` — that issues valid tokens but serves no OIDC/RFC 8414 discovery metadata, which MCP clients need).
-- `KBDB_OIDC_AUDIENCE` — the `aud` claim on REST tokens: the Staging environment's default application Client ID (same dashboard page).
-- `KBDB_OIDC_MCP_AUDIENCE` — the `aud` claim on MCP tokens: `https://api.<your-name>.mykeebs.dev/mcp`. MCP clients authenticate via RFC 8707 resource indicators, so AuthKit issues a token whose `aud` is the resource URL itself rather than the fixed Client ID above — confirmed empirically by decoding real tokens from both flows.
+- `KBDB_OIDC_ISSUER_BASE_URL` — your Stytch **Test** project's issuer base URL: `https://test.stytch.com/v1/public/{project_id}`.
+- `KBDB_OIDC_AUDIENCE` — the `aud` claim on every access token, REST and MCP alike: your Stytch project ID. Stytch always includes the project ID in `aud` regardless of client type, so one value covers both flows — no separate MCP audience needed.
+- `KBDB_STYTCH_PUBLIC_TOKEN` — your Stytch project's public token (Stytch dashboard → your project → API keys → Public token). Rendered client-side into the `GET /authorize` consent page to construct the Stytch SDK client - safe to embed client-side by design, but still varies per stack.
 
-Staging is for dev/personal stacks only — never point a dev stack at WorkOS Production.
+Test is for dev/personal stacks only — never point a dev stack at a Stytch Live project.
 
 To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
+
+### CORS (`KBDB_CORS_ALLOW_ORIGINS`)
+
+`dev-deploy.sh` also requires `KBDB_CORS_ALLOW_ORIGINS` — a comma-separated list of browser origins (each scheme + host + port) allowed to call your stack's `HttpApi` cross-origin, e.g. `http://localhost:5173,https://jay.mykeebs.dev` to cover both a local frontend dev server and its deployed counterpart. Without this, browser preflight (`OPTIONS`) requests 404 before the authorizer is ever reached — API Gateway auto-generates CORS `OPTIONS` routes and exempts them from `DefaultAuthorizer` only when `HttpApi.Properties.CorsConfiguration` is set.
 
 ### Custom domain (`api.<your-name>.mykeebs.dev`)
 
@@ -118,7 +122,7 @@ New AWS account, never deployed to before? One-time steps, done once per account
 2. **ECR repo**: for a personal/`kbdb-dev`-style account, `mise run dev-setup` handles this automatically — nothing manual to do. For `kbdb-ci`'s shared bootstrap repo, see [ECR bootstrap procedure](#ecr-bootstrap-procedure) below.
 3. **Cost budget** (only needed for accounts without their own app stack, e.g. `kbdb-ci`): `aws cloudformation deploy --template-file bootstrap/cost-budget.yaml --stack-name kbdb-cost-budget --profile <profile>`.
 4. **(`kbdb-ci` only) GitHub Actions OIDC role**, so CI can authenticate to AWS: `aws cloudformation deploy --template-file bootstrap/ci-oidc-role.yaml --stack-name kbdb-ci-oidc --capabilities CAPABILITY_NAMED_IAM --profile kbdb-ci-admin`.
-5. **(`kbdb-ci` only) JWKS bucket**, so CI's functional-test job can publish a real, publicly-fetchable issuer/JWKS for its per-PR stacks' native WorkOS authorizer to verify against: `aws cloudformation deploy --template-file bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks --profile kbdb-ci-admin`. Then set the resulting `JWKSBucketName` output as the `JWKS_BUCKET_NAME` GitHub Actions repo variable (Settings → Secrets and variables → Actions → Variables) — `ci.yml`'s functional-test job fails at its "Publish emulator JWKS to S3" step until that's set.
+5. **(`kbdb-ci` only) JWKS bucket**, so CI's functional-test job can publish a real, publicly-fetchable issuer/JWKS for its per-PR stacks' native JWT authorizer to verify against: `aws cloudformation deploy --template-file bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks --profile kbdb-ci-admin`. Then set the resulting `JWKSBucketName` output as the `JWKS_BUCKET_NAME` GitHub Actions repo variable (Settings → Secrets and variables → Actions → Variables) — `ci.yml`'s functional-test job fails at its "Publish emulator JWKS to S3" step until that's set.
 
 After all bootstraps, ordinary `sam deploy` calls (and, for `kbdb-ci`, CI's own workflow) work.
 

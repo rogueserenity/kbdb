@@ -117,12 +117,12 @@ func mintEmulatorToken(ctx context.Context, email, password string) (string, err
 
 // TokenSubject returns the "sub" claim of an access token, decoded without
 // signature verification. Fine for functional tests: the caller already
-// obtained this token from a trusted issuer (the WorkOS emulator or, in CI,
-// real WorkOS) via AuthToken/SecondUserAuthToken - this just reads its
-// subject back out. Needed because the emulator/real-WorkOS token path
-// mints a real WorkOS-generated subject, not a fixed constant - specs that
-// need to know "my own subject" (e.g. to seed owned fixture data) can't
-// assume a fixed value.
+// obtained this token from a trusted issuer (the WorkOS emulator, or a real
+// deployed stack's real IdP) via AuthToken/SecondUserAuthToken - this just
+// reads its subject back out. Needed because the emulator/real-IdP token
+// path mints a real, IdP-generated subject, not a fixed constant - specs
+// that need to know "my own subject" (e.g. to seed owned fixture data)
+// can't assume a fixed value.
 func TokenSubject(idToken string) (string, error) {
 	parts := strings.Split(idToken, ".")
 	if len(parts) != 3 {
@@ -148,10 +148,10 @@ func TokenSubject(idToken string) (string, error) {
 }
 
 // authToken mints a token for the given fixture identity via the WorkOS
-// emulator, unless envOverride is set (a real WorkOS-minted token, when
+// emulator, unless envOverride is set (a real IdP-minted token, when
 // support.BaseURL() points at a real deployed stack instead) - a local
-// emulator and real WorkOS aren't interchangeable token issuers, so this
-// can't be derived from support.BaseURL() alone.
+// emulator and a real deployed stack's real IdP aren't interchangeable
+// token issuers, so this can't be derived from support.BaseURL() alone.
 func authToken(ctx context.Context, envOverride, email, password string) (string, error) {
 	if v := os.Getenv(envOverride); v != "" {
 		return v, nil

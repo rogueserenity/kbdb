@@ -12,6 +12,7 @@ import (
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
+	"github.com/rogueserenity/kbdb/internal/consent"
 	"github.com/rogueserenity/kbdb/internal/handlers"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/mcp"
@@ -21,30 +22,33 @@ import (
 )
 
 // New builds the application's http.Handler. verifier authenticates every
-// REST request; mcpVerifier authenticates /mcp only, since MCP tokens carry
-// a different audience (see Config.OIDCMcpAudience). Additional
-// entities/routes are added here in later issues, on this same handler.
+// REST request and /mcp. Additional entities/routes are added here in
+// later issues, on this same handler.
 //
 // issuerURL configures the MCP endpoint's RFC 9728 Protected Resource
 // Metadata (the OIDC issuer MCP clients should authenticate against); the
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see [github.com/rogueserenity/kbdb/internal/mcp.Handlers]
-// for why. version is advertised to MCP clients in the server's initialize
-// handshake.
+// for why. stytchPublicToken configures the GET /authorize consent page
+// (see internal/consent). version is advertised to MCP clients in the
+// server's initialize handshake.
 func New(
 	verifier *auth.Verifier,
-	mcpVerifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
 	keycapSetRepo repository.KeycapSetRepository,
 	imageStore repository.KeycapKitImageStore,
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
-	issuerURL, version string,
+	issuerURL, stytchPublicToken, version string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
 
 	mux := http.NewServeMux()
+
+	// Not part of api/openapi.yaml, so not wrapped in validate - see
+	// internal/consent.
+	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken, issuerURL))
 
 	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:
 	// lookup categories are static, deploy-time data (internal/lookup),
@@ -125,7 +129,7 @@ func New(
 	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
 	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
 	// the REST surface.
-	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, mcpVerifier, issuerURL, version)
+	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)
