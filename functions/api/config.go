@@ -7,9 +7,7 @@ package main
 type Config struct {
 	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
 	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
-	// Rendered client-side into the GET /authorize consent page (see
-	// internal/consent) - varies per dev/CI/prod stack, so it isn't
-	// hardcoded into that page's embedded HTML.
+	// Rendered into the GET /authorize consent page - see internal/consent.
 	StytchPublicToken  string `env:"STYTCH_PUBLIC_TOKEN" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`

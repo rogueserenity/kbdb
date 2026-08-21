@@ -10,11 +10,8 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 )
 
-// GET /authorize hosts kbdb's Stytch consent/login page (see
-// internal/consent) - it must be reachable with no auth, since it's how an
-// unauthenticated MCP client or browser signs in in the first place. It
-// isn't part of api/openapi.yaml (not a REST entity route), so it's tested
-// here directly rather than via a generated entity client.
+// Not part of api/openapi.yaml, so tested here directly rather than via a
+// generated entity client - see internal/consent.
 var _ = Describe("Fetching the Stytch consent page", func() {
 	var (
 		client *api.Client

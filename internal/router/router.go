@@ -46,10 +46,8 @@ func New(
 
 	mux := http.NewServeMux()
 
-	// Stytch consent/login page - not part of api/openapi.yaml (not a REST
-	// entity route) and not wrapped in validate accordingly. Handles its
-	// own login via Stytch's client-side SDK, so no auth middleware here -
-	// see internal/consent.
+	// Not part of api/openapi.yaml, so not wrapped in validate - see
+	// internal/consent.
 	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken, issuerURL))
 
 	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:

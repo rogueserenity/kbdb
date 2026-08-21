@@ -44,12 +44,9 @@ Parameters:
   StytchPublicToken:
     Type: String
     Description: >-
-      This deployment's Stytch public token, rendered client-side into the
-      GET /authorize consent page (see internal/consent) to construct the
-      Stytch SDK client. Safe to embed client-side by design - it
-      authorizes the client-side SDK, not a privileged operation - but
-      still varies per dev/CI/prod stack, so it's a parameter rather than
-      hardcoded into that page's embedded HTML.
+      This deployment's Stytch public token, rendered into the GET
+      /authorize consent page (see internal/consent). Safe to embed
+      client-side by design.
   CustomDomainName:
     Type: String
     Default: ''
@@ -597,13 +594,8 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # No auth at the gateway: this page (see internal/consent) handles
-        # its own login via Stytch's client-side SDK - it's how an
-        # unauthenticated caller signs in in the first place, so gating it
-        # behind auth is self-defeating (same rationale as McpMetadataEvent).
-        # Method: any (not get) so a non-GET request still reaches the
-        # handler and gets its own 405, rather than API Gateway's opaque
-        # 404 for a method with no registered route.
+        # No auth: same rationale as McpMetadataEvent. Method: any so a
+        # non-GET request reaches the handler's own 405 instead of a 404.
         AuthorizeEvent:
           Type: HttpApi
           Properties:
