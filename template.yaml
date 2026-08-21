@@ -597,6 +597,21 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # No auth at the gateway: this page (see internal/consent) handles
+        # its own login via Stytch's client-side SDK - it's how an
+        # unauthenticated caller signs in in the first place, so gating it
+        # behind auth is self-defeating (same rationale as McpMetadataEvent).
+        # Method: any (not get) so a non-GET request still reaches the
+        # handler and gets its own 405, rather than API Gateway's opaque
+        # 404 for a method with no registered route.
+        AuthorizeEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /authorize
+            Method: any
+            Auth:
+              Authorizer: NONE
     Metadata:
       # DockerContext is the repo root, not functions/api/, so the build has
       # access to the whole Go module (internal/ packages, go.mod/go.sum) -
