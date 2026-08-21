@@ -19,17 +19,12 @@ type Claims struct {
 }
 
 // verifiedToken is the subset of *oidc.IDToken's behavior VerifyToken needs:
-// the claims go-oidc always parses (Subject, Expiry, Audience) plus a way to
-// read the client_id claim it doesn't parse itself. A real *oidc.IDToken
-// satisfies this directly - Claims unmarshals its raw JSON payload, which
-// go-oidc only populates via a real Verify() call, so tests construct a
-// fake implementation instead of a zero-value *oidc.IDToken (whose Claims
-// would fail with "oidc: claims not set").
+// the claims go-oidc always parses (Subject, Expiry, Audience). A real
+// *oidc.IDToken satisfies this directly.
 type verifiedToken interface {
 	audience() []string
 	subject() string
 	expiry() time.Time
-	clientID() (string, error)
 }
 
 // oidcToken adapts *oidc.IDToken to verifiedToken.
@@ -38,16 +33,6 @@ type oidcToken struct{ *oidc.IDToken }
 func (t oidcToken) audience() []string { return t.Audience }
 func (t oidcToken) subject() string    { return t.Subject }
 func (t oidcToken) expiry() time.Time  { return t.Expiry }
-
-func (t oidcToken) clientID() (string, error) {
-	var claims struct {
-		ClientID string `json:"client_id"`
-	}
-	if err := t.Claims(&claims); err != nil {
-		return "", fmt.Errorf("reading client_id claim: %w", err)
-	}
-	return claims.ClientID, nil
-}
 
 // tokenVerifier is the single method of *oidc.IDTokenVerifier that Verifier
 // depends on. Depending on this interface rather than the concrete type lets
@@ -63,18 +48,16 @@ type Verifier struct {
 }
 
 // NewVerifier constructs a Verifier for issuerURL via OIDC discovery.
-// audience is the expected token audience (WorkOS's User Management
-// application client_id in production).
+// audience is the expected token audience (the Stytch project ID in
+// production - see checkAudience).
 //
 // The audience check itself is done by VerifyToken, not go-oidc's own
-// Verify - WorkOS access tokens obtained without an RFC 8707 resource
-// parameter (e.g. authkit-js's plain SPA sign-in, as opposed to an MCP
-// client's resource-scoped flow) carry no aud claim at all, only client_id.
-// go-oidc's Verify only ever checks aud, so SkipClientIDCheck is set here
-// and VerifyToken instead applies the same aud-or-client_id fallback rule
-// API Gateway's native JWT authorizer already uses (see
-// template.yaml's OidcAuthorizer): check aud if present, otherwise fall
-// back to client_id.
+// Verify: go-oidc's built-in check (oidc.Config.ClientID) expects aud to
+// match a single value exactly, but Stytch's tokens carry aud as a
+// multi-value array (e.g. [project_id, ...]) that must merely contain the
+// expected value - see checkAudience's slices.Contains. SkipClientIDCheck
+// is set here so go-oidc's own (incompatible) check is bypassed in favor
+// of that.
 func NewVerifier(ctx context.Context, issuerURL, audience string) (*Verifier, error) {
 	provider, err := oidc.NewProvider(ctx, issuerURL)
 	if err != nil {
@@ -96,10 +79,9 @@ func NewVerifierForTesting(v tokenVerifier, audience string) *Verifier {
 }
 
 // VerifyToken verifies rawToken's signature, expiry, and issuer via the
-// underlying tokenVerifier, then separately checks audience: if the token
-// carries an aud claim, it must contain v.audience; otherwise (see
-// NewVerifier) v.audience must match the token's client_id claim. Returns
-// the verified claims, or an error if the token or its audience is invalid.
+// underlying tokenVerifier, then separately checks that its aud claim
+// contains v.audience (see checkAudience). Returns the verified claims, or
+// an error if the token or its audience is invalid.
 func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, error) {
 	idToken, err := v.verifier.Verify(ctx, rawToken)
 	if err != nil {
@@ -114,22 +96,14 @@ func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, e
 	return &Claims{Subject: token.subject(), Expiry: token.expiry()}, nil
 }
 
-// checkAudience applies the aud-or-client_id rule described on NewVerifier.
+// checkAudience rejects token unless its aud claim contains v.audience.
+// aud is checked as a multi-value array rather than requiring an exact
+// match, since Stytch's tokens carry other values alongside the expected
+// one (e.g. aud: [project_id, ...]) - see NewVerifier.
 func (v *Verifier) checkAudience(token verifiedToken) error {
 	aud := token.audience()
-	if slices.Contains(aud, v.audience) {
-		return nil
-	}
-	if len(aud) > 0 {
+	if !slices.Contains(aud, v.audience) {
 		return fmt.Errorf("expected audience %q, got %v", v.audience, aud)
-	}
-
-	clientID, err := token.clientID()
-	if err != nil {
-		return err
-	}
-	if clientID != v.audience {
-		return fmt.Errorf("expected client_id %q, got %q", v.audience, clientID)
 	}
 
 	return nil

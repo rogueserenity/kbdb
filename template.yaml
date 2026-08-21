@@ -27,8 +27,8 @@ Parameters:
     Type: String
     Description: >-
       This deployment's OIDC issuer base URL, scheme included - e.g.
-      https://your-app.authkit.app for a real WorkOS deployment, or a
-      floci-local http://... URL for local dev (see
+      https://test.stytch.com/v1/public/{project_id} for a real Stytch Test
+      deployment, or a floci-local http://... URL for local dev (see
       scripts/func-setup.sh). Not a bare domain: a real IdP is always
       https, but floci's local S3 emulation only serves plain http, so
       the scheme must be supplied by the caller rather than hardcoded
@@ -36,20 +36,11 @@ Parameters:
   OidcAudience:
     Type: String
     Description: >-
-      The expected aud claim on every REST access token for this
-      environment - used as the native JWT authorizer's audience. For
-      WorkOS, this is the User Management application's client_id
-      (confirmed empirically, not derived from any resource= parameter a
-      client supplies).
-  OidcMcpAudience:
-    Type: String
-    Description: >-
-      The expected aud claim on MCP access tokens - different from
-      OidcAudience because MCP clients authenticate via RFC 8707 resource
-      indicators, which makes the issuer set aud to the resource URL
-      itself (e.g. https://api.jay.mykeebs.dev/mcp) rather than
-      OidcAudience's fixed value (confirmed empirically). Same issuer as
-      OidcIssuerBaseUrl.
+      The expected aud claim on every access token for this environment
+      (REST and MCP alike) - used as the native JWT authorizer's audience.
+      This is the Stytch project ID: Stytch always includes it in aud for
+      every token regardless of client type (confirmed empirically against
+      a live Stytch test project), so one value covers both flows.
   CustomDomainName:
     Type: String
     Default: ''
@@ -258,7 +249,6 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
           OIDC_AUDIENCE: !Ref OidcAudience
-          OIDC_MCP_AUDIENCE: !Ref OidcMcpAudience
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable

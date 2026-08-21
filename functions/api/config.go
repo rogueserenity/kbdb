@@ -5,12 +5,8 @@ package main
 // Kong's struct-tag env binding, defaults, and required-field validation are
 // useful regardless of whether flag parsing is ever exercised.
 type Config struct {
-	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
-	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
-	// MCP tokens carry a different aud (the RFC 8707 resource URL, e.g.
-	// https://api.jay.mykeebs.dev/mcp) than OIDCAudience's value, so /mcp
-	// gets its own verifier - see internal/mcp.New.
-	OIDCMcpAudience    string `env:"OIDC_MCP_AUDIENCE" required:""`
+	OIDCIssuerURL      string `env:"OIDC_ISSUER_URL" required:""`
+	OIDCAudience       string `env:"OIDC_AUDIENCE" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
 	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`

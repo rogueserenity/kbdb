@@ -63,49 +63,42 @@ func (s *VerifyTokenSuite) TestInvalidToken_Rejected() {
 	s.Nil(claims)
 }
 
-// checkAudience is exercised directly (not through VerifyToken) for the
-// no-aud/client_id-fallback cases: a real *oidc.IDToken's Claims() only
-// works after a genuine Verify() call populates its unexported raw payload,
-// so a fakeToken stands in for the parts VerifyToken can't easily fake here.
+// checkAudience is exercised directly (not through VerifyToken) so its
+// multi-value aud-containment behavior can be tested without a real
+// *oidc.IDToken (whose Claims() only works after a genuine Verify() call
+// populates its unexported raw payload).
 type fakeToken struct {
-	aud           []string
-	sub           string
-	exp           time.Time
-	clientIDValue string
-	clientIDErr   error
+	aud []string
+	sub string
+	exp time.Time
 }
 
-func (f fakeToken) audience() []string        { return f.aud }
-func (f fakeToken) subject() string           { return f.sub }
-func (f fakeToken) expiry() time.Time         { return f.exp }
-func (f fakeToken) clientID() (string, error) { return f.clientIDValue, f.clientIDErr }
+func (f fakeToken) audience() []string { return f.aud }
+func (f fakeToken) subject() string    { return f.sub }
+func (f fakeToken) expiry() time.Time  { return f.exp }
 
-func (s *VerifyTokenSuite) TestCheckAudience_AudPresent_MatchesExpected() {
+func (s *VerifyTokenSuite) TestCheckAudience_AudContainsExpected_Succeeds() {
 	err := s.verifier.checkAudience(fakeToken{aud: []string{"expected-audience"}})
 
 	s.NoError(err)
 }
 
-func (s *VerifyTokenSuite) TestCheckAudience_AudPresent_DoesNotMatch_Rejected() {
+// Stytch tokens carry aud as a multi-value array (e.g. [project_id, ...]),
+// not just the expected value alone - this must still succeed.
+func (s *VerifyTokenSuite) TestCheckAudience_AudIsMultiValueContainingExpected_Succeeds() {
+	err := s.verifier.checkAudience(fakeToken{aud: []string{"someone-else", "expected-audience"}})
+
+	s.NoError(err)
+}
+
+func (s *VerifyTokenSuite) TestCheckAudience_AudDoesNotContainExpected_Rejected() {
 	err := s.verifier.checkAudience(fakeToken{aud: []string{"someone-else"}})
 
 	s.Error(err)
 }
 
-func (s *VerifyTokenSuite) TestCheckAudience_AudAbsent_ClientIDMatchesExpected() {
-	err := s.verifier.checkAudience(fakeToken{clientIDValue: "expected-audience"})
-
-	s.NoError(err)
-}
-
-func (s *VerifyTokenSuite) TestCheckAudience_AudAbsent_ClientIDDoesNotMatch_Rejected() {
-	err := s.verifier.checkAudience(fakeToken{clientIDValue: "someone-else"})
-
-	s.Error(err)
-}
-
-func (s *VerifyTokenSuite) TestCheckAudience_AudAbsent_ClientIDReadFails_Rejected() {
-	err := s.verifier.checkAudience(fakeToken{clientIDErr: errors.New("boom")})
+func (s *VerifyTokenSuite) TestCheckAudience_AudEmpty_Rejected() {
+	err := s.verifier.checkAudience(fakeToken{})
 
 	s.Error(err)
 }

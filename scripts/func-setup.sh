@@ -72,8 +72,7 @@ sam deploy \
   --parameter-overrides \
     SkipApiRepository=true \
     "OidcIssuerBaseUrl=$ISSUER_URL" \
-    "OidcAudience=client_local_kbdb" \
-    "OidcMcpAudience=client_local_kbdb"
+    "OidcAudience=client_local_kbdb"
 
 out() {
   aws cloudformation describe-stacks --stack-name "$STACK" \

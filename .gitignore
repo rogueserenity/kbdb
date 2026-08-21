@@ -222,3 +222,6 @@ bin/
 
 # Scratch output of mise run client-gen - dev-only, never committed
 ts-client/
+
+# Local planning docs, never committed
+PLAN.md
