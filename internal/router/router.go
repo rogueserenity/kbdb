@@ -12,6 +12,7 @@ import (
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
+	"github.com/rogueserenity/kbdb/internal/consent"
 	"github.com/rogueserenity/kbdb/internal/handlers"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/mcp"
@@ -28,8 +29,9 @@ import (
 // Metadata (the OIDC issuer MCP clients should authenticate against); the
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see [github.com/rogueserenity/kbdb/internal/mcp.Handlers]
-// for why. version is advertised to MCP clients in the server's initialize
-// handshake.
+// for why. stytchPublicToken configures the GET /authorize consent page
+// (see internal/consent). version is advertised to MCP clients in the
+// server's initialize handshake.
 func New(
 	verifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
@@ -38,11 +40,17 @@ func New(
 	imageStore repository.KeycapKitImageStore,
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
-	issuerURL, version string,
+	issuerURL, stytchPublicToken, version string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
 
 	mux := http.NewServeMux()
+
+	// Stytch consent/login page - not part of api/openapi.yaml (not a REST
+	// entity route) and not wrapped in validate accordingly. Handles its
+	// own login via Stytch's client-side SDK, so no auth middleware here -
+	// see internal/consent.
+	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken))
 
 	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:
 	// lookup categories are static, deploy-time data (internal/lookup),

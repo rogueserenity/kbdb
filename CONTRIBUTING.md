@@ -58,12 +58,13 @@ These scripts derive your AWS account ID and region automatically from your acti
 
 You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
-### Stytch OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`)
+### Stytch OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_STYTCH_PUBLIC_TOKEN`)
 
-All three scripts also require these two vars:
+All three scripts also require these three vars:
 
 - `KBDB_OIDC_ISSUER_BASE_URL` — your Stytch **Test** project's issuer base URL: `https://test.stytch.com/v1/public/{project_id}`.
 - `KBDB_OIDC_AUDIENCE` — the `aud` claim on every access token, REST and MCP alike: your Stytch project ID. Stytch always includes the project ID in `aud` regardless of client type, so one value covers both flows — no separate MCP audience needed.
+- `KBDB_STYTCH_PUBLIC_TOKEN` — your Stytch project's public token (Stytch dashboard → your project → API keys → Public token). Rendered client-side into the `GET /authorize` consent page to construct the Stytch SDK client - safe to embed client-side by design, but still varies per stack.
 
 Test is for dev/personal stacks only — never point a dev stack at a Stytch Live project.
 

@@ -74,7 +74,7 @@ func main() {
 	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 
-	handler := router.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, cfg.OIDCIssuerURL, Version)
+	handler := router.New(verifier, switchRepo, keyboardRepo, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, cfg.OIDCIssuerURL, cfg.StytchPublicToken, Version)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

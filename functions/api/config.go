@@ -5,8 +5,12 @@ package main
 // Kong's struct-tag env binding, defaults, and required-field validation are
 // useful regardless of whether flag parsing is ever exercised.
 type Config struct {
-	OIDCIssuerURL      string `env:"OIDC_ISSUER_URL" required:""`
-	OIDCAudience       string `env:"OIDC_AUDIENCE" required:""`
+	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
+	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
+	// Rendered client-side into the GET /authorize consent page (see
+	// internal/consent) - varies per dev/CI/prod stack, so it isn't
+	// hardcoded into that page's embedded HTML.
+	StytchPublicToken  string `env:"STYTCH_PUBLIC_TOKEN" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
 	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`

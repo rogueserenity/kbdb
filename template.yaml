@@ -41,6 +41,15 @@ Parameters:
       This is the Stytch project ID: Stytch always includes it in aud for
       every token regardless of client type (confirmed empirically against
       a live Stytch test project), so one value covers both flows.
+  StytchPublicToken:
+    Type: String
+    Description: >-
+      This deployment's Stytch public token, rendered client-side into the
+      GET /authorize consent page (see internal/consent) to construct the
+      Stytch SDK client. Safe to embed client-side by design - it
+      authorizes the client-side SDK, not a privileged operation - but
+      still varies per dev/CI/prod stack, so it's a parameter rather than
+      hardcoded into that page's embedded HTML.
   CustomDomainName:
     Type: String
     Default: ''
@@ -249,6 +258,7 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
           OIDC_AUDIENCE: !Ref OidcAudience
+          STYTCH_PUBLIC_TOKEN: !Ref StytchPublicToken
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
