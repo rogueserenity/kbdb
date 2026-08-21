@@ -17,7 +17,19 @@
     import { StytchClient, StytchIdentityProvider, StytchUI, Products } from 'https://esm.sh/@stytch/vanilla-js@6.2.0';
 
     const PUBLIC_TOKEN = {{.StytchPublicToken}};
-    const stytch = new StytchClient(PUBLIC_TOKEN);
+    // customBaseUrl must match this environment's OIDC issuer base URL
+    // (KBDB_OIDC_ISSUER_BASE_URL server-side): Stytch stamps the "iss" it
+    // returns (both in discovery documents and in the RFC 9207 "iss"
+    // authorization-response parameter) based on which domain a request
+    // was made against, not a fixed per-project setting - without this,
+    // the client talks to Stytch's default domain and gets back the
+    // project's non-compliant bare "stytch.com/{project_id}" issuer even
+    // though a custom domain is configured, which OAuth clients enforcing
+    // RFC 9207 (e.g. Claude Code's MCP client) then reject as a mismatch
+    // against the issuer named in discovery.
+    const stytch = new StytchClient(PUBLIC_TOKEN, {
+      customBaseUrl: {{.OIDCIssuerBaseURL}},
+    });
 
     customElements.define('stytch-login', StytchUI);
     customElements.define('stytch-identity-provider', StytchIdentityProvider);

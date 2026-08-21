@@ -50,7 +50,7 @@ func New(
 	// entity route) and not wrapped in validate accordingly. Handles its
 	// own login via Stytch's client-side SDK, so no auth middleware here -
 	// see internal/consent.
-	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken))
+	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken, issuerURL))
 
 	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:
 	// lookup categories are static, deploy-time data (internal/lookup),

@@ -20,7 +20,7 @@ func (s *HandlerSuite) TestGet_RendersPublicToken() {
 	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/authorize", nil)
 	rec := httptest.NewRecorder()
 
-	Handler("public-token-test-abc123").ServeHTTP(rec, req)
+	Handler("public-token-test-abc123", "https://auth.example.com").ServeHTTP(rec, req)
 
 	s.Equal(http.StatusOK, rec.Code)
 	s.Equal("text/html; charset=utf-8", rec.Header().Get("Content-Type"))
@@ -33,7 +33,7 @@ func (s *HandlerSuite) TestGet_EscapesPublicToken() {
 
 	// A token containing a double quote must not break out of the JS
 	// string literal it's rendered into.
-	Handler(`abc"; alert(1); //`).ServeHTTP(rec, req)
+	Handler(`abc"; alert(1); //`, "https://auth.example.com").ServeHTTP(rec, req)
 
 	s.Equal(http.StatusOK, rec.Code)
 	s.Contains(rec.Body.String(), `"abc\"; alert(1); //"`)
@@ -43,7 +43,7 @@ func (s *HandlerSuite) TestNonGet_MethodNotAllowed() {
 	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodPost, "/authorize", nil)
 	rec := httptest.NewRecorder()
 
-	Handler("public-token-test-abc123").ServeHTTP(rec, req)
+	Handler("public-token-test-abc123", "https://auth.example.com").ServeHTTP(rec, req)
 
 	s.Equal(http.StatusMethodNotAllowed, rec.Code)
 	s.Equal(http.MethodGet, rec.Header().Get("Allow"))

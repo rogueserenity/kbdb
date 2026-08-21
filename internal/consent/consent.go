@@ -22,25 +22,28 @@ var authorizeHTML string
 // build-time bug, not a runtime condition to handle gracefully.
 var authorizeTemplate = template.Must(template.New("authorize.html").Parse(authorizeHTML))
 
-// templateData is the data authorize.html's {{.StytchPublicToken}}
-// placeholder renders against. StytchPublicToken is pre-quoted as a Go
-// string literal (via %q) before reaching the template, so it renders
-// directly into the page's JS as a valid, safely-escaped string literal -
-// text/template has no JS-string-context awareness the way html/template
-// has for HTML/URL/JS contexts, so quoting is done by the caller, not left
-// to the template engine.
+// templateData is the data authorize.html's {{.StytchPublicToken}} and
+// {{.OIDCIssuerBaseURL}} placeholders render against. Both fields are
+// pre-quoted as Go string literals (via %q) before reaching the template,
+// so they render directly into the page's JS as valid, safely-escaped
+// string literals - text/template has no JS-string-context awareness the
+// way html/template has for HTML/URL/JS contexts, so quoting is done by
+// the caller, not left to the template engine.
 type templateData struct {
 	StytchPublicToken string
+	OIDCIssuerBaseURL string
 }
 
 // Handler serves GET /authorize: kbdb's Stytch consent/login page.
-// stytchPublicToken is the environment's Stytch public token (safe to
-// embed client-side by design - it authorizes the client-side SDK, not a
-// privileged operation), rendered into the page at handler-construction
-// time since it varies per dev/CI/prod stack.
-func Handler(stytchPublicToken string) http.Handler {
+// oidcIssuerBaseURL is passed to the Stytch SDK as customBaseUrl (see
+// authorize.html) so Stytch stamps this environment's real issuer into the
+// RFC 9207 "iss" it returns, matching what discovery already reports.
+func Handler(stytchPublicToken, oidcIssuerBaseURL string) http.Handler {
 	var buf bytes.Buffer
-	data := templateData{StytchPublicToken: fmt.Sprintf("%q", stytchPublicToken)}
+	data := templateData{
+		StytchPublicToken: fmt.Sprintf("%q", stytchPublicToken),
+		OIDCIssuerBaseURL: fmt.Sprintf("%q", oidcIssuerBaseURL),
+	}
 	if err := authorizeTemplate.Execute(&buf, data); err != nil {
 		// authorize.html and templateData are both fixed at build time;
 		// Execute can only fail here from a programmer error (e.g. a typo'd
