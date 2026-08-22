@@ -22,7 +22,7 @@ import (
 // ListKeycapSets reads the {userId} path value and lists that owner's
 // keycap sets. Anonymous callers are allowed; visibility is scoped to what
 // the caller (if any) may read, per [authz.ReadableVisibilities].
-func ListKeycapSets(repo repository.KeycapSetRepository) http.HandlerFunc {
+func ListKeycapSets(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -40,7 +40,13 @@ func ListKeycapSets(repo repository.KeycapSetRepository) http.HandlerFunc {
 
 		items := make([]api.KeycapSetSummary, len(sets))
 		for i, ks := range sets {
-			items[i] = repoapi.KeycapSetToAPISummary(ks)
+			summary, err := repoapi.KeycapSetToAPISummary(r.Context(), ks, images)
+			if err != nil {
+				log.FromContext(r.Context()).Error("mapping keycap set to API summary", log.Error, err, log.KeycapSetID, ks.ID)
+				problem.Internal(w, "failed to list keycap sets")
+				return
+			}
+			items[i] = summary
 		}
 
 		page := api.KeycapSetListPage{Items: &items}

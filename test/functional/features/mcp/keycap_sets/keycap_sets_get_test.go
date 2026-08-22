@@ -94,6 +94,58 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns the keycap set and it has a primary kit", func() {
+			var kitID string
+
+			BeforeEach(func(ctx SpecContext) {
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the get_keycap_set tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+				})
+
+				It("returns primary_kit_id matching the seeded kit", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeKeycapSetOutput(result)
+					Expect(out.KeycapSet.PrimaryKitID).NotTo(BeNil())
+					Expect(*out.KeycapSet.PrimaryKitID).To(Equal(kitID))
+				})
+			})
+		})
+
+		Context("given the caller owns the keycap set and its primary kit no longer exists", func() {
+			BeforeEach(func(ctx SpecContext) {
+				Expect(db.SeedKeycapSetWithDanglingPrimaryKit(ctx, ownerID, keycapSetID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the get_keycap_set tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+				})
+
+				It("returns a nil primary_kit_id", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeKeycapSetOutput(result)
+					Expect(out.KeycapSet.PrimaryKitID).To(BeNil())
+				})
+			})
+		})
+
 		Context("given the keycap set never existed", func() {
 			When("the get_keycap_set tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {

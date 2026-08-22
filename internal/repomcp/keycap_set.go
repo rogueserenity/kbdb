@@ -20,28 +20,67 @@ func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
 	}
 
 	return schema.KeycapSet{
-		ID:         ks.ID,
-		Brand:      ks.Brand,
-		Name:       ks.Name,
-		Profile:    ks.Profile,
-		Material:   ks.Material,
-		Notes:      ks.Notes,
-		Visibility: string(ks.Visibility),
-		Kits:       kits,
+		ID:           ks.ID,
+		Brand:        ks.Brand,
+		Name:         ks.Name,
+		Profile:      ks.Profile,
+		Material:     ks.Material,
+		Notes:        ks.Notes,
+		Visibility:   string(ks.Visibility),
+		Kits:         kits,
+		PrimaryKitID: validPrimaryKitID(ks.PrimaryKitID, ks.Kits),
 	}
 }
 
-// KeycapSetToMCPSummary lifts nothing extra out of the set - unlike
-// KeyboardToMCPSummary's order_status, a keycap set's own order status lives
-// per-kit, not on the set, so there's nothing meaningful to surface while
-// browsing a list beyond the summary fields themselves.
-func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
-	return schema.KeycapSetSummary{
-		ID:      ks.ID,
-		Brand:   ks.Brand,
-		Name:    ks.Name,
-		Profile: ks.Profile,
+// validPrimaryKitID returns primaryKitID unchanged if it names a kit still
+// present in kits, or nil otherwise (never set, or naming a since-deleted
+// kit) - callers must not surface a dangling reference.
+func validPrimaryKitID(primaryKitID *string, kits []repository.KeycapKit) *string {
+	if primaryKitID == nil {
+		return nil
 	}
+
+	for _, k := range kits {
+		if k.KitID == *primaryKitID {
+			return primaryKitID
+		}
+	}
+
+	return nil
+}
+
+// KeycapSetToMCPSummary lifts nothing extra out of the set beyond the
+// summary fields themselves and PrimaryKitHasImage, which - like
+// KeycapKitToMCP's HasImage - reports presence only, never a presigned
+// URL a list result would then be stuck carrying a short-lived value in.
+func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
+	primaryKitID := validPrimaryKitID(ks.PrimaryKitID, ks.Kits)
+	primaryKit := findKit(primaryKitID, ks.Kits)
+
+	return schema.KeycapSetSummary{
+		ID:                 ks.ID,
+		Brand:              ks.Brand,
+		Name:               ks.Name,
+		Profile:            ks.Profile,
+		PrimaryKitID:       primaryKitID,
+		PrimaryKitHasImage: primaryKit != nil && primaryKit.ImagePath != nil,
+	}
+}
+
+// findKit returns the kit in kits with the given kitID, or nil if kitID
+// is nil or names no kit in kits.
+func findKit(kitID *string, kits []repository.KeycapKit) *repository.KeycapKit {
+	if kitID == nil {
+		return nil
+	}
+
+	for i, k := range kits {
+		if k.KitID == *kitID {
+			return &kits[i]
+		}
+	}
+
+	return nil
 }
 
 // KeycapSetFromMCP maps a create_keycap_set/update_keycap_set tool argument

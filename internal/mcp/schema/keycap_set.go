@@ -14,11 +14,15 @@ type ListKeycapSetsOutput struct {
 }
 
 // KeycapSetSummary is the reduced keycap set shape list_keycap_sets returns.
+// PrimaryKitHasImage mirrors KeycapKit.HasImage's no-URL-in-a-list-result
+// rule - call get_keycap_kit_image_url with PrimaryKitID to fetch it.
 type KeycapSetSummary struct {
-	ID      string  `json:"id" jsonschema:"the keycap set's unique id"`
-	Brand   string  `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
-	Name    string  `json:"name" jsonschema:"the keycap set's name"`
-	Profile *string `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
+	ID                 string  `json:"id" jsonschema:"the keycap set's unique id"`
+	Brand              string  `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
+	Name               string  `json:"name" jsonschema:"the keycap set's name"`
+	Profile            *string `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
+	PrimaryKitID       *string `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit whose image represents this set, if one is designated and it still exists"`
+	PrimaryKitHasImage bool    `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file; call get_keycap_kit_image_url to fetch it"`
 }
 
 // GetKeycapSetInput is the get_keycap_set tool input.
@@ -33,15 +37,18 @@ type GetKeycapSetOutput struct {
 }
 
 // KeycapSet is the full keycap set shape, including its kits.
+// PrimaryKitID is nil if never set, or if the kit it named no longer
+// exists - match it against Kits[].KitID to find that kit's image.
 type KeycapSet struct {
-	ID         string      `json:"id" jsonschema:"the keycap set's unique id"`
-	Brand      string      `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
-	Name       string      `json:"name" jsonschema:"the keycap set's name"`
-	Profile    *string     `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
-	Material   *string     `json:"material,omitempty" jsonschema:"what the keycaps are made of"`
-	Notes      *string     `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility string      `json:"visibility" jsonschema:"who can read this keycap set; one of \"public\", \"authenticated\", \"private\""`
-	Kits       []KeycapKit `json:"kits,omitempty" jsonschema:"the kits purchased as part of this set"`
+	ID           string      `json:"id" jsonschema:"the keycap set's unique id"`
+	Brand        string      `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
+	Name         string      `json:"name" jsonschema:"the keycap set's name"`
+	Profile      *string     `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
+	Material     *string     `json:"material,omitempty" jsonschema:"what the keycaps are made of"`
+	Notes        *string     `json:"notes,omitempty" jsonschema:"free-form notes"`
+	Visibility   string      `json:"visibility" jsonschema:"who can read this keycap set; one of \"public\", \"authenticated\", \"private\""`
+	Kits         []KeycapKit `json:"kits,omitempty" jsonschema:"the kits purchased as part of this set"`
+	PrimaryKitID *string     `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit, among kits, whose image represents this set; match against kits[].kit_id to find its image"`
 }
 
 // KeycapKit is one purchase within a keycap set. HasImage reports whether an

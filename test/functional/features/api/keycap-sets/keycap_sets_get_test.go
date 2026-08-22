@@ -146,6 +146,73 @@ var _ = Describe("Getting a keycap set", func() {
 		})
 	})
 
+	Context("given a public keycap set with a primary kit", func() {
+		var (
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "public-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		When("getting the keycap set", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, keycapSetID, "")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns primary_kit_id matching the seeded kit", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					PrimaryKitID *string `json:"primary_kit_id"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.PrimaryKitID).NotTo(BeNil())
+				Expect(*got.PrimaryKitID).To(Equal(kitID))
+			})
+		})
+	})
+
+	Context("given a public keycap set whose primary kit no longer exists", func() {
+		var keycapSetID string
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "public-keycap-set-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithDanglingPrimaryKit(ctx, ownerID, keycapSetID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		When("getting the keycap set", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, keycapSetID, "")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns a null primary_kit_id", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					PrimaryKitID *string `json:"primary_kit_id"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.PrimaryKitID).To(BeNil())
+			})
+		})
+	})
+
 	Context("given an authenticated-only keycap set", func() {
 		var keycapSetID string
 

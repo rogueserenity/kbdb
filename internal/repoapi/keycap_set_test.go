@@ -131,12 +131,58 @@ func (s *KeycapSetToAPISuite) TestIsOwnerTrue_IncludesKitPrice() {
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() {
 	ks := fullRepoKeycapSet()
 
-	summary := KeycapSetToAPISummary(ks)
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	s.Require().NoError(err)
 
 	s.Equal(&ks.ID, summary.Id)
 	s.Equal(&ks.Brand, summary.Brand)
 	s.Equal(&ks.Name, summary.Name)
 	s.Equal(ks.Profile, summary.Profile)
+	s.Nil(summary.PrimaryKitImage)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_ResolvesImage() {
+	ks := fullRepoKeycapSet()
+	kit := fullRepoKeycapKit()
+	ks.Kits = []repository.KeycapKit{kit}
+	ks.PrimaryKitID = &kit.KitID
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *kit.ImagePath).Return("https://example.com/presigned-get", nil)
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.PrimaryKitImage)
+	s.Equal("https://example.com/presigned-get", summary.PrimaryKitImage.Url)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithNoImage_NilImage() {
+	ks := fullRepoKeycapSet()
+	kit := fullRepoKeycapKit()
+	kit.ImagePath = nil
+	ks.Kits = []repository.KeycapKit{kit}
+	ks.PrimaryKitID = &kit.KitID
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	s.Require().NoError(err)
+	s.Nil(summary.PrimaryKitImage)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitDeleted_NilImage() {
+	ks := fullRepoKeycapSet()
+	danglingID := "no-longer-a-kit"
+	ks.PrimaryKitID = &danglingID
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	s.Require().NoError(err)
+	s.Nil(summary.PrimaryKitImage)
 }
 
 func fullAPIKeycapSetInput() api.KeycapSetInput {

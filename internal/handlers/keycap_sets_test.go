@@ -22,8 +22,9 @@ import (
 type ListKeycapSetsSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestListKeycapSetsSuite(t *testing.T) {
@@ -32,7 +33,8 @@ func TestListKeycapSetsSuite(t *testing.T) {
 
 func (s *ListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = ListKeycapSets(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = ListKeycapSets(s.mockRepo, s.mockImages)
 }
 
 func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -112,6 +114,35 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_ReturnsNextCursor_WhenPresent()
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.NextCursor)
 	s.Equal("next-page-token", *got.NextCursor)
+}
+
+func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPrimaryKitImage() {
+	imagePath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+	kitID := "kit1"
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.KeycapSet{{
+			ID:           "ks1",
+			Brand:        "GMK",
+			Name:         "Laser",
+			PrimaryKitID: &kitID,
+			Kits:         []repository.KeycapKit{{KitID: kitID, ImagePath: &imagePath}},
+		}}, "", nil)
+
+	s.mockImages.EXPECT().PresignGet(mock.Anything, imagePath).Return("https://example.com/presigned-get", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.KeycapSetListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Require().NotNil((*got.Items)[0].PrimaryKitImage)
+	s.Equal("https://example.com/presigned-get", (*got.Items)[0].PrimaryKitImage.Url)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_RepositoryError_Returns500() {

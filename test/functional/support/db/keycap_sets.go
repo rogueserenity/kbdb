@@ -60,3 +60,41 @@ func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []str
 		"version":    0,
 	})
 }
+
+// SeedKeycapSetWithPrimaryKit is SeedKeycapSetWithKit, but also sets
+// primary_kit_id to kitID - there's no write path for it yet (see #247), so
+// specs exercising the read side seed it directly.
+func SeedKeycapSetWithPrimaryKit(ctx context.Context, ownerID, id, kitID, visibility string) error {
+	table := NewDynamoTable(ctx, support.KeycapSetTableName())
+	return table.PutItem(ctx, map[string]any{
+		"user_id": ownerID,
+		"id":      id,
+		"brand":   "GMK",
+		"name":    "Laser",
+		"kits": []map[string]any{
+			{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
+				"vendor": "MechMarket",
+				"price":  85.0,
+			}},
+		},
+		"primary_kit_id": kitID,
+		"visibility":     visibility,
+		"version":        0,
+	})
+}
+
+// SeedKeycapSetWithDanglingPrimaryKit is SeedKeycapSet, but sets
+// primary_kit_id to a kit id absent from Kits - simulates the primary kit
+// having been deleted after being designated.
+func SeedKeycapSetWithDanglingPrimaryKit(ctx context.Context, ownerID, id, visibility string) error {
+	table := NewDynamoTable(ctx, support.KeycapSetTableName())
+	return table.PutItem(ctx, map[string]any{
+		"user_id":        ownerID,
+		"id":             id,
+		"brand":          "GMK",
+		"name":           "Laser",
+		"primary_kit_id": "no-longer-a-kit",
+		"visibility":     visibility,
+		"version":        0,
+	})
+}

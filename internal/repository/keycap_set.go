@@ -40,6 +40,11 @@ type KeycapSet struct {
 	Notes      *string     `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility Visibility  `dynamodbav:"visibility" json:"visibility"`
 	Kits       []KeycapKit `dynamodbav:"kits,omitempty" json:"kits,omitempty"`
+	// PrimaryKitID names the kit (by KitID) whose image represents this set
+	// in a list/grid view. No write path sets this yet - reads must still
+	// treat a dangling reference (kit deleted, or never set) as absent
+	// rather than erroring.
+	PrimaryKitID *string `dynamodbav:"primary_kit_id,omitempty" json:"primary_kit_id,omitempty"`
 	// Version guards kit sub-mutations against a lost update when two
 	// concurrent calls read-modify-write this item's Kits slice - not
 	// exposed via the API, purely a repository-internal CAS mechanism.

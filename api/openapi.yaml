@@ -1386,6 +1386,13 @@ components:
                 Managed via the dedicated kit endpoints below, not via PUT
                 on the set itself — see POST/PUT/DELETE
                 .../keycap-sets/{keycapSetId}/kits[/{kitId}].
+            primary_kit_id:
+              type: [string, "null"]
+              description: >
+                The kit_id, among this set's kits, whose image represents
+                the set in a list view. Null if never set, or if the kit
+                it named no longer exists — match against kits[].kit_id
+                to find that kit's image.
 
     KeycapSetSummary:
       type: object
@@ -1398,6 +1405,14 @@ components:
           type: string
         profile:
           type: string
+        primary_kit_image:
+          oneOf:
+            - $ref: "#/components/schemas/KeycapKitImage"
+            - type: "null"
+          description: >
+            The primary kit's image, if the set has one designated and it
+            has an image set. Null otherwise — including when the
+            designated primary kit no longer exists.
 
     KeycapSetListPage:
       type: object
