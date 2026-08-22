@@ -62,8 +62,8 @@ func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []str
 }
 
 // SeedKeycapSetWithPrimaryKit is SeedKeycapSetWithKit, but also sets
-// primary_kit_id to kitID - there's no write path for it yet (see #247), so
-// specs exercising the read side seed it directly.
+// primary_kit_id to kitID directly, skipping the create/update-kit round
+// trip a spec would otherwise need to designate a primary.
 func SeedKeycapSetWithPrimaryKit(ctx context.Context, ownerID, id, kitID, visibility string) error {
 	table := NewDynamoTable(ctx, support.KeycapSetTableName())
 	return table.PutItem(ctx, map[string]any{

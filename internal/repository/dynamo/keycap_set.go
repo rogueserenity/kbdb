@@ -317,9 +317,6 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 			return fmt.Errorf("adding kit %q to keycap set %q: %w", kit.KitID, setID, errDuplicateKitID)
 		}
 		ks.Kits = append(ks.Kits, kit)
-		// primary == false is a no-op here: a kit that didn't exist until
-		// this call can't already be the set's primary, so there's
-		// nothing to clear.
 		if primary != nil && *primary {
 			ks.PrimaryKitID = &kit.KitID
 		}

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -21,7 +22,11 @@ import (
 
 // ListKeycapSets reads the {userId} path value and lists that owner's
 // keycap sets. Anonymous callers are allowed; visibility is scoped to what
-// the caller (if any) may read, per [authz.ReadableVisibilities].
+// the caller (if any) may read, per [authz.ReadableVisibilities]. Sets are
+// mapped to their summary concurrently - each only touches its own slot in
+// items, and a page can have up to 100 sets, each potentially needing its
+// own S3 presign for its primary kit's image - mirrors
+// [repoapi.KeycapSetToAPI]'s per-kit fan-out.
 func ListKeycapSets(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -39,14 +44,29 @@ func ListKeycapSets(repo repository.KeycapSetRepository, images repository.Keyca
 		}
 
 		items := make([]api.KeycapSetSummary, len(sets))
+		errs := make([]error, len(sets))
+
+		ctx := r.Context()
+		var wg sync.WaitGroup
 		for i, ks := range sets {
-			summary, err := repoapi.KeycapSetToAPISummary(r.Context(), ks, images)
-			if err != nil {
-				log.FromContext(r.Context()).Error("mapping keycap set to API summary", log.Error, err, log.KeycapSetID, ks.ID)
-				problem.Internal(w, "failed to list keycap sets")
-				return
-			}
-			items[i] = summary
+			wg.Add(1)
+			go func(i int, ks repository.KeycapSet) {
+				defer wg.Done()
+
+				summary, err := repoapi.KeycapSetToAPISummary(ctx, ks, images)
+				if err != nil {
+					errs[i] = fmt.Errorf("mapping keycap set %q to API summary: %w", ks.ID, err)
+					return
+				}
+				items[i] = summary
+			}(i, ks)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(r.Context()).Error("mapping keycap sets to API summaries", log.Error, err)
+			problem.Internal(w, "failed to list keycap sets")
+			return
 		}
 
 		page := api.KeycapSetListPage{Items: &items}
