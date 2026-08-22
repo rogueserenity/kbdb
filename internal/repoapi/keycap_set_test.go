@@ -81,6 +81,22 @@ func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 	s.Equal("Extension", (*out.Kits)[1].Name)
 }
 
+func (s *KeycapSetToAPISuite) TestKitsWithDifferingOrderStatus_SetsAggregateOrderStatus() {
+	ks := fullRepoKeycapSet()
+	delivered, ordered := "Delivered", "Ordered"
+	ks.Kits = []repository.KeycapKit{
+		{KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
+		{KitID: "kit2", Name: "Extension", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
+	}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	out, err := KeycapSetToAPI(context.Background(), ks, images, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.OrderStatus)
+	s.Equal("Ordered", *out.OrderStatus)
+}
+
 func (s *KeycapSetToAPISuite) TestMalformedStoredKitPurchaseDate_ReturnsError() {
 	ks := fullRepoKeycapSet()
 	ks.Kits = []repository.KeycapKit{
@@ -141,6 +157,20 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() 
 	s.Equal(&ks.Name, summary.Name)
 	s.Equal(ks.Profile, summary.Profile)
 	s.Nil(summary.PrimaryKitImage)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_SetsAggregateOrderStatus() {
+	ks := fullRepoKeycapSet()
+	shipped := "Shipped"
+	ks.Kits = []repository.KeycapKit{{KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}}}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.OrderStatus)
+	s.Equal("Shipped", *summary.OrderStatus)
 }
 
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_ResolvesImage() {

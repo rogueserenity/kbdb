@@ -33,3 +33,68 @@ func (s *NewKeycapKitImageKeySuite) TestNoUserIDInContext_ReturnsError() {
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
 	s.Empty(key)
 }
+
+type AggregateOrderStatusSuite struct {
+	suite.Suite
+}
+
+func TestAggregateOrderStatusSuite(t *testing.T) {
+	suite.Run(t, new(AggregateOrderStatusSuite))
+}
+
+func kitWithStatus(status string) repository.KeycapKit {
+	s := status
+	return repository.KeycapKit{Purchase: repository.KeycapKitPurchase{OrderStatus: &s}}
+}
+
+func (s *AggregateOrderStatusSuite) TestNoKits_ReturnsNil() {
+	s.Nil(repository.AggregateOrderStatus(nil))
+}
+
+func (s *AggregateOrderStatusSuite) TestNoKitHasStatusSet_ReturnsNil() {
+	kits := []repository.KeycapKit{{}, {}}
+
+	s.Nil(repository.AggregateOrderStatus(kits))
+}
+
+func (s *AggregateOrderStatusSuite) TestAllKitsSameStatus_ReturnsThatStatus() {
+	kits := []repository.KeycapKit{kitWithStatus("Shipped"), kitWithStatus("Shipped")}
+
+	got := repository.AggregateOrderStatus(kits)
+
+	s.Require().NotNil(got)
+	s.Equal("Shipped", *got)
+}
+
+func (s *AggregateOrderStatusSuite) TestMixedStatuses_ReturnsLeastProgressed() {
+	kits := []repository.KeycapKit{kitWithStatus("Delivered"), kitWithStatus("Ordered")}
+
+	got := repository.AggregateOrderStatus(kits)
+
+	s.Require().NotNil(got)
+	s.Equal("Ordered", *got)
+}
+
+func (s *AggregateOrderStatusSuite) TestCancelledKitAmongOthers_IsExcludedFromComparison() {
+	kits := []repository.KeycapKit{kitWithStatus("Delivered"), kitWithStatus("Cancelled")}
+
+	got := repository.AggregateOrderStatus(kits)
+
+	s.Require().NotNil(got)
+	s.Equal("Delivered", *got)
+}
+
+func (s *AggregateOrderStatusSuite) TestAllKitsCancelled_ReturnsCancelled() {
+	kits := []repository.KeycapKit{kitWithStatus("Cancelled"), kitWithStatus("Cancelled")}
+
+	got := repository.AggregateOrderStatus(kits)
+
+	s.Require().NotNil(got)
+	s.Equal("Cancelled", *got)
+}
+
+func (s *AggregateOrderStatusSuite) TestUnrecognizedStatus_ReturnsNil() {
+	kits := []repository.KeycapKit{kitWithStatus("SomethingUnexpected")}
+
+	s.Nil(repository.AggregateOrderStatus(kits))
+}

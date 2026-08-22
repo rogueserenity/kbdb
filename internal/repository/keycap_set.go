@@ -51,6 +51,65 @@ type KeycapSet struct {
 	Version int `dynamodbav:"version" json:"-"`
 }
 
+// orderStatusProgression ranks every non-Cancelled order_status lookup
+// value by how far along the purchase is - lower is less complete. Fixed
+// by app semantics, not by the "order_status" lookup table's own row
+// order, which isn't guaranteed to encode this meaning.
+var orderStatusProgression = map[string]int{
+	"Planned":   0,
+	"Ordered":   1,
+	"Shipped":   2,
+	"Delivered": 3,
+}
+
+// AggregateOrderStatus derives a KeycapSet's overall order status from its
+// kits' individual purchase.order_status values: the least-progressed
+// status wins, so a set isn't shown as Delivered while a kit is still
+// Ordered. "Cancelled" kits are excluded from that comparison - a
+// cancelled kit doesn't drag the set backward - unless every kit is
+// Cancelled, in which case the set is Cancelled too. Returns nil if kits
+// is empty, or if every kit has no order_status set, or if a kit's
+// order_status isn't a recognized value (unvalidated/legacy data - callers
+// should not guess).
+func AggregateOrderStatus(kits []KeycapKit) *string {
+	var least string
+	haveLeast := false
+	sawCancelled := false
+
+	for _, k := range kits {
+		if k.Purchase.OrderStatus == nil {
+			continue
+		}
+		status := *k.Purchase.OrderStatus
+
+		if status == "Cancelled" {
+			sawCancelled = true
+			continue
+		}
+
+		rank, ok := orderStatusProgression[status]
+		if !ok {
+			return nil
+		}
+
+		if !haveLeast || rank < orderStatusProgression[least] {
+			least = status
+			haveLeast = true
+		}
+	}
+
+	if haveLeast {
+		return &least
+	}
+
+	if sawCancelled {
+		cancelled := "Cancelled"
+		return &cancelled
+	}
+
+	return nil
+}
+
 // KeycapSetRepository provides access to keycap sets.
 type KeycapSetRepository interface {
 	// List returns up to limit keycap sets owned by ownerID whose

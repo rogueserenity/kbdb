@@ -146,6 +146,38 @@ var _ = Describe("Getting a keycap set", func() {
 		})
 	})
 
+	Context("given a public keycap set whose kits have differing order statuses", func() {
+		var keycapSetID string
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "public-keycap-set-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithKitOrderStatuses(ctx, ownerID, keycapSetID, []string{"Delivered", "Ordered"}, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		When("getting the keycap set", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, keycapSetID, "")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns the least-progressed status as the aggregate order_status", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					OrderStatus *string `json:"order_status"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.OrderStatus).NotTo(BeNil())
+				Expect(*got.OrderStatus).To(Equal("Ordered"))
+			})
+		})
+	})
+
 	Context("given a public keycap set with a primary kit", func() {
 		var (
 			keycapSetID string

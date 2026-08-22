@@ -1402,6 +1402,17 @@ components:
                 the set in a list view. Null if never set, or if the kit
                 it named no longer exists — match against kits[].kit_id
                 to find that kit's image.
+            order_status:
+              type: [string, "null"]
+              description: >
+                Derived, read-only summary of every kit's
+                purchase.order_status: the least-progressed status among
+                them wins (Planned < Ordered < Shipped < Delivered), so the
+                set isn't shown as Delivered while a kit is still en
+                route. A kit with status Cancelled is excluded from that
+                comparison unless every kit is Cancelled, in which case
+                this is Cancelled too. Null if no kit has an order_status
+                set, or the set has no kits.
 
     KeycapSetSummary:
       type: object
@@ -1414,6 +1425,11 @@ components:
           type: string
         profile:
           type: string
+        order_status:
+          type: [string, "null"]
+          description: >
+            Same derived aggregate as KeycapSet.order_status - see there
+            for the bubble-up rule.
         primary_kit_image:
           oneOf:
             - $ref: "#/components/schemas/KeycapKitImage"

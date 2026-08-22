@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"strconv"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
@@ -46,6 +47,29 @@ func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []str
 		kits[i] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
 			"vendor": "MechMarket",
 			"price":  85.0,
+		}}
+	}
+
+	table := NewDynamoTable(ctx, support.KeycapSetTableName())
+	return table.PutItem(ctx, map[string]any{
+		"user_id":    ownerID,
+		"id":         id,
+		"brand":      "GMK",
+		"name":       "Laser",
+		"kits":       kits,
+		"visibility": visibility,
+		"version":    0,
+	})
+}
+
+// SeedKeycapSetWithKitOrderStatuses is SeedKeycapSet, but includes one kit
+// per given order status, so specs can exercise the derived
+// order_status bubble-up rule across multiple kits.
+func SeedKeycapSetWithKitOrderStatuses(ctx context.Context, ownerID, id string, orderStatuses []string, visibility string) error {
+	kits := make([]map[string]any, len(orderStatuses))
+	for i, status := range orderStatuses {
+		kits[i] = map[string]any{"kit_id": "kit-" + strconv.Itoa(i), "name": "Base", "purchase": map[string]any{
+			"order_status": status,
 		}}
 	}
 
