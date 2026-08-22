@@ -428,6 +428,22 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards/{keyboardId}
             Method: delete
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        AddKeyboardImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/images
+            Method: post
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        DeleteKeyboardImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/images/{imageId}
+            Method: delete
         # Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
         ListKeycapSetsEvent:
           Type: HttpApi

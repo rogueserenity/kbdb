@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -22,6 +23,10 @@ import (
 var errKeyboardNotFound = errors.New("keyboard not found")
 
 var errKeyboardAlreadyExists = errors.New("keyboard already exists")
+
+var errKeyboardImageNotFound = errors.New("keyboard image not found")
+
+var errKeyboardMutationConflict = errors.New("the keyboard is being modified concurrently, please retry")
 
 var listKeyboardsTool = &mcp.Tool{
 	Name:        "list_keyboards",
@@ -46,6 +51,21 @@ var updateKeyboardTool = &mcp.Tool{
 var deleteKeyboardTool = &mcp.Tool{
 	Name:        "delete_keyboard",
 	Description: "Removes a keyboard from your own collection. Idempotent: deleting a keyboard that isn't there succeeds. on_delete controls what happens if a build still references this keyboard: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the keyboard and every referencing build; \"detach\" deletes the keyboard regardless, leaving referencing builds with a dangling keyboard_id.",
+}
+
+var getKeyboardImageURLTool = &mcp.Tool{
+	Name:        "get_keyboard_image_url",
+	Description: "Mints a short-lived URL to fetch one of a keyboard's images. Call this only when you need the image itself; get_keyboard/list_keyboards already report whether any exist via has_images.",
+}
+
+var addKeyboardImageTool = &mcp.Tool{
+	Name:        "add_keyboard_image",
+	Description: "Adds an image to a keyboard in your own collection. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header.",
+}
+
+var deleteKeyboardImageTool = &mcp.Tool{
+	Name:        "delete_keyboard_image",
+	Description: "Removes an image from a keyboard. Idempotent: deleting an image that isn't there succeeds.",
 }
 
 func handleListKeyboards(repo repository.KeyboardRepository) mcp.ToolHandlerFor[schema.ListKeyboardsInput, schema.ListKeyboardsOutput] {
@@ -150,7 +170,8 @@ func handleUpdateKeyboard(
 func handleDeleteKeyboard(
 	keyboardRepo repository.KeyboardRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	keyboardImages repository.KeyboardImageStore,
 ) mcp.ToolHandlerFor[schema.DeleteKeyboardInput, schema.DeleteKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeyboardInput) (*mcp.CallToolResult, schema.DeleteKeyboardOutput, error) {
 		if strings.TrimSpace(in.KeyboardID) == "" {
@@ -167,7 +188,7 @@ func handleDeleteKeyboard(
 			return nil, schema.DeleteKeyboardOutput{}, err
 		}
 
-		result, err := cascadedelete.DeleteKeyboard(ctx, keyboardRepo, buildRepo, images, ownerID, in.KeyboardID, onDelete)
+		result, err := cascadedelete.DeleteKeyboard(ctx, keyboardRepo, buildRepo, buildImages, ownerID, in.KeyboardID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteKeyboardOutput{}, fmt.Errorf("keyboard is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
@@ -176,7 +197,122 @@ func handleDeleteKeyboard(
 			return nil, schema.DeleteKeyboardOutput{}, errors.New("failed to delete keyboard")
 		}
 
+		keyboardImages.BestEffortDelete(ctx, result.ImageKeys)
+
 		return nil, schema.DeleteKeyboardOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
+	}
+}
+
+func handleGetKeyboardImageURL(
+	repo repository.KeyboardRepository,
+	images repository.KeyboardImageStore,
+) mcp.ToolHandlerFor[schema.GetKeyboardImageURLInput, schema.GetKeyboardImageURLOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetKeyboardImageURLInput) (*mcp.CallToolResult, schema.GetKeyboardImageURLOutput, error) {
+		if strings.TrimSpace(in.KeyboardID) == "" {
+			return nil, schema.GetKeyboardImageURLOutput{}, errors.New("keyboard_id must not be blank")
+		}
+		if strings.TrimSpace(in.ImageID) == "" {
+			return nil, schema.GetKeyboardImageURLOutput{}, errors.New("image_id must not be blank")
+		}
+
+		kb, err := ownedReadable(ctx, repo.Get, func(k repository.Keyboard) repository.Visibility { return k.Visibility },
+			"keyboard", errKeyboardNotFound, log.KeyboardID, in.UserID, in.KeyboardID)
+		if err != nil {
+			return nil, schema.GetKeyboardImageURLOutput{}, err
+		}
+
+		idx := slices.IndexFunc(kb.Images, func(i repository.KeyboardImage) bool { return i.ImageID == in.ImageID })
+		if idx == -1 {
+			return nil, schema.GetKeyboardImageURLOutput{}, errKeyboardImageNotFound
+		}
+
+		url, err := images.PresignGetKeyboardImage(ctx, kb.Images[idx].Path)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.GetKeyboardImageURLOutput{}, errors.New("failed to presign keyboard image")
+		}
+
+		return nil, schema.GetKeyboardImageURLOutput{URL: url}, nil
+	}
+}
+
+func handleAddKeyboardImage(
+	keyboardRepo repository.KeyboardRepository,
+	images repository.KeyboardImageStore,
+) mcp.ToolHandlerFor[schema.AddKeyboardImageInput, schema.AddKeyboardImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.AddKeyboardImageInput) (*mcp.CallToolResult, schema.AddKeyboardImageOutput, error) {
+		if strings.TrimSpace(in.KeyboardID) == "" {
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("keyboard_id must not be blank")
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
+			return nil, schema.AddKeyboardImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
+		}
+
+		imageID := uuid.NewString()
+
+		key, err := repository.NewKeyboardImageKey(ctx, in.KeyboardID, imageID)
+		if err != nil {
+			log.FromContext(ctx).Error("building keyboard image key", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
+		}
+
+		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keyboard image upload", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
+		}
+
+		_, err = keyboardRepo.AddImage(ctx, in.KeyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.AddKeyboardImageOutput{}, errKeyboardNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keyboard mutation conflict", log.KeyboardID, in.KeyboardID)
+			return nil, schema.AddKeyboardImageOutput{}, errKeyboardMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("adding keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
+		}
+
+		return nil, schema.AddKeyboardImageOutput{ImageID: imageID, UploadURL: uploadURL}, nil
+	}
+}
+
+func handleDeleteKeyboardImage(
+	keyboardRepo repository.KeyboardRepository,
+	images repository.KeyboardImageStore,
+) mcp.ToolHandlerFor[schema.DeleteKeyboardImageInput, schema.DeleteKeyboardImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteKeyboardImageInput) (*mcp.CallToolResult, schema.DeleteKeyboardImageOutput, error) {
+		if strings.TrimSpace(in.KeyboardID) == "" {
+			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("keyboard_id must not be blank")
+		}
+		if strings.TrimSpace(in.ImageID) == "" {
+			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("image_id must not be blank")
+		}
+
+		removed, err := keyboardRepo.DeleteImage(ctx, in.KeyboardID, in.ImageID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteKeyboardImageOutput{}, errKeyboardNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("keyboard mutation conflict", log.KeyboardID, in.KeyboardID)
+			return nil, schema.DeleteKeyboardImageOutput{}, errKeyboardMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("deleting keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("failed to delete keyboard image")
+		}
+
+		if removed != nil {
+			if err := images.DeleteKeyboardImage(ctx, *removed); err != nil {
+				log.FromContext(ctx).Error("deleting keyboard image object", log.KeyboardID, in.KeyboardID, log.Error, err)
+				return nil, schema.DeleteKeyboardImageOutput{}, errors.New("failed to delete keyboard image")
+			}
+		}
+
+		return nil, schema.DeleteKeyboardImageOutput{}, nil
 	}
 }
 

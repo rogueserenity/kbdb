@@ -32,6 +32,9 @@ packages:
       BuildImageStore:
         config:
           structname: 'MockBuildImageStore'
+      KeyboardImageStore:
+        config:
+          structname: 'MockKeyboardImageStore'
   github.com/rogueserenity/kbdb/internal/repository/dynamo:
     config:
       dir: '{{.InterfaceDir}}/mocks'

@@ -1,6 +1,7 @@
 package repoapi
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -13,9 +14,14 @@ import (
 // KeyboardToAPI maps a repository.Keyboard to its wire representation.
 // isOwner hides purchase.price from non-owners; the rest of purchase is
 // unaffected. Returns an error if a stored Purchase date doesn't match
-// dateLayout.
-func KeyboardToAPI(kb repository.Keyboard, isOwner bool) (api.Keyboard, error) {
+// dateLayout, or an image fails to presign.
+func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool) (api.Keyboard, error) {
 	purchase, err := keyboardPurchaseToAPI(kb.Purchase, isOwner)
+	if err != nil {
+		return api.Keyboard{}, err
+	}
+
+	imgs, err := keyboardImagesToAPI(ctx, kb.Images, images)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -31,7 +37,27 @@ func KeyboardToAPI(kb repository.Keyboard, isOwner bool) (api.Keyboard, error) {
 		Purchase:   purchase,
 		Notes:      kb.Notes,
 		Visibility: api.Visibility(kb.Visibility),
+		Images:     imgs,
 	}, nil
+}
+
+// keyboardImagesToAPI mints a fresh presigned GET URL per image, per
+// request - never persisted, mirroring [buildImagesToAPI].
+func keyboardImagesToAPI(ctx context.Context, images []repository.KeyboardImage, store repository.KeyboardImageStore) (*[]api.KeyboardImage, error) {
+	if images == nil {
+		return nil, nil //nolint:nilnil // no images is a valid, expected result
+	}
+
+	out := make([]api.KeyboardImage, len(images))
+	for i, img := range images {
+		url, err := store.PresignGetKeyboardImage(ctx, img.Path)
+		if err != nil {
+			return nil, fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
+		}
+		out[i] = api.KeyboardImage{ImageId: img.ImageID, Url: url}
+	}
+
+	return &out, nil
 }
 
 // KeyboardToRepo maps a generated KeyboardInput (already schema-validated by
@@ -53,8 +79,19 @@ func KeyboardToRepo(in api.KeyboardInput) repository.Keyboard {
 }
 
 // KeyboardToAPISummary maps a repository.Keyboard to the KeyboardSummary
-// schema returned by the list endpoint.
-func KeyboardToAPISummary(kb repository.Keyboard) api.KeyboardSummary {
+// schema returned by the list endpoint. Image is the first entry of
+// Images, presigned, if any - mirrors [BuildToAPISummary]'s handling of a
+// build's images.
+func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore) (api.KeyboardSummary, error) {
+	var image *api.KeyboardImage
+	if len(kb.Images) > 0 {
+		url, err := images.PresignGetKeyboardImage(ctx, kb.Images[0].Path)
+		if err != nil {
+			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", kb.Images[0].ImageID, err)
+		}
+		image = &api.KeyboardImage{ImageId: kb.Images[0].ImageID, Url: url}
+	}
+
 	return api.KeyboardSummary{
 		Id:          &kb.ID,
 		Brand:       &kb.Brand,
@@ -62,7 +99,8 @@ func KeyboardToAPISummary(kb repository.Keyboard) api.KeyboardSummary {
 		Size:        kb.Size,
 		Layout:      kb.Layout,
 		OrderStatus: kb.Purchase.OrderStatus,
-	}
+		Image:       image,
+	}, nil
 }
 
 func keyboardMaterialColorToAPI(m repository.KeyboardMaterialColor) *api.MaterialColor {

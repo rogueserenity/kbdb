@@ -21,6 +21,7 @@ type KeyboardSummary struct {
 	Size        *string `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
 	Layout      *string `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
 	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, for a keyboard not yet delivered"`
+	HasImages   bool    `json:"has_images" jsonschema:"whether this keyboard has any images on file"`
 }
 
 // GetKeyboardInput is the get_keyboard tool input.
@@ -87,9 +88,13 @@ type KeyboardInput struct {
 	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
 }
 
-// Keyboard is the full keyboard shape. Optional fields are pointers so a
-// recorded zero stays distinguishable from an unset field, which is omitted
-// entirely - matching what REST returns for the same stored keyboard.
+// Keyboard reports HasImages rather than presigned URLs, unlike REST's
+// inline Images array, to avoid handing back a URL that may have expired
+// by the time an agent acts on a held result - call
+// get_keyboard_image_url to fetch one on demand. Optional fields are
+// pointers so a recorded zero stays distinguishable from an unset field,
+// which is omitted entirely - matching what REST returns for the same
+// stored keyboard.
 type Keyboard struct {
 	ID         string            `json:"id" jsonschema:"the keyboard's unique id"`
 	Brand      string            `json:"brand" jsonschema:"the keyboard's brand"`
@@ -101,6 +106,7 @@ type Keyboard struct {
 	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
+	HasImages  bool              `json:"has_images" jsonschema:"whether this keyboard has any images on file"`
 }
 
 // KeyboardDesign is a keyboard's case and plate makeup.
@@ -135,3 +141,41 @@ type KeyboardPurchase struct {
 	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
 	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
 }
+
+// GetKeyboardImageURLInput is the get_keyboard_image_url tool's input.
+type GetKeyboardImageURLInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the image belongs to"`
+	ImageID    string `json:"image_id" jsonschema:"the id of the image to fetch, as returned by add_keyboard_image"`
+	UserID     string `json:"user_id,omitempty" jsonschema:"whose collection to read from; omit for your own"`
+}
+
+// GetKeyboardImageURLOutput is the get_keyboard_image_url tool's output.
+type GetKeyboardImageURLOutput struct {
+	URL string `json:"url" jsonschema:"a freshly-minted, short-lived presigned URL to fetch the image bytes from; do not cache or persist it, it expires within minutes"`
+}
+
+// AddKeyboardImageInput is the add_keyboard_image tool's input. It doesn't
+// carry the image bytes themselves - see UploadURL on the output.
+type AddKeyboardImageInput struct {
+	KeyboardID  string `json:"keyboard_id" jsonschema:"the id of the keyboard to add an image to"`
+	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+}
+
+// AddKeyboardImageOutput is the add_keyboard_image tool's output. UploadURL
+// is a presigned S3 PUT URL - the caller uploads the image bytes directly
+// to it, matching REST's AddKeyboardImage; the tool call itself never
+// carries image bytes.
+type AddKeyboardImageOutput struct {
+	ImageID   string `json:"image_id" jsonschema:"the newly-created image's id"`
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+}
+
+// DeleteKeyboardImageInput is the delete_keyboard_image tool's input.
+type DeleteKeyboardImageInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the image belongs to"`
+	ImageID    string `json:"image_id" jsonschema:"the id of the image to remove, as returned by add_keyboard_image"`
+}
+
+// DeleteKeyboardImageOutput is the delete_keyboard_image tool's output.
+// Deleting is idempotent, so there is no payload.
+type DeleteKeyboardImageOutput struct{}

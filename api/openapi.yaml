@@ -166,6 +166,78 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
+  /v1/users/{userId}/keyboards/{keyboardId}/images:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/KeyboardId"
+    post:
+      tags: [keyboards]
+      summary: Add an image to a keyboard
+      operationId: createKeyboardImage
+      description: >
+        userId must be the caller's own subject; adding an image to
+        another user's keyboard always returns 404. Images are not
+        settable via POST/PUT on the keyboard itself (see KeyboardInput)
+        — this is the only way to attach one. Does not upload the image
+        itself: the response is a presigned S3 PUT URL the client
+        uploads the actual image bytes to directly. The presigned URL
+        requires the exact content_type given here on the upload — this
+        lets the API reject an unsupported content_type up front, before
+        ever issuing a presigned URL, and lets S3 reject an upload that
+        doesn't match what was requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type:
+                  type: string
+                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+      responses:
+        "201":
+          description: >
+            An image slot has been allocated; upload the image bytes to
+            upload_url (HTTP PUT, with a Content-Type header matching the
+            content_type given in the request) to complete it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyboardImageUpload"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /v1/users/{userId}/keyboards/{keyboardId}/images/{imageId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/KeyboardId"
+      - name: imageId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The image_id returned when the image was added.
+    delete:
+      tags: [keyboards]
+      summary: Remove an image from a keyboard
+      operationId: deleteKeyboardImage
+      description: >
+        userId must be the caller's own subject; removing an image from
+        another user's keyboard always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
   /v1/users/{userId}/switches:
     parameters:
       - $ref: "#/components/parameters/UserId"
@@ -1127,6 +1199,34 @@ components:
         visibility:
           $ref: "#/components/schemas/Visibility"
 
+    KeyboardImage:
+      type: object
+      required: [image_id, url]
+      properties:
+        image_id:
+          type: string
+          description: Server-generated identifier for this image, unique within the keyboard.
+        url:
+          type: string
+          format: uri
+          description: >
+            A freshly-minted, short-lived presigned S3 GET URL. Generated
+            new on every fetch of the keyboard — do not cache or persist
+            this value, it expires.
+
+    KeyboardImageUpload:
+      type: object
+      required: [image_id, upload_url]
+      properties:
+        image_id:
+          type: string
+          description: Server-generated identifier for the newly-created image.
+        upload_url:
+          type: string
+          format: uri
+          description: >
+            Presigned S3 PUT URL. Short-lived — upload promptly.
+
     Keyboard:
       allOf:
         - $ref: "#/components/schemas/KeyboardInput"
@@ -1135,6 +1235,14 @@ components:
           properties:
             id:
               type: string
+            images:
+              type: array
+              items:
+                $ref: "#/components/schemas/KeyboardImage"
+              description: >
+                Managed via the dedicated image endpoints below, not via
+                PUT on the keyboard itself — see POST/DELETE
+                .../keyboards/{keyboardId}/images[/{imageId}].
 
     KeyboardSummary:
       type: object
@@ -1152,6 +1260,11 @@ components:
           type: string
         order_status:
           type: string
+        image:
+          oneOf:
+            - $ref: "#/components/schemas/KeyboardImage"
+            - type: "null"
+          description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Keyboard resource).
 
     KeyboardListPage:
       type: object

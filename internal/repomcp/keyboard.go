@@ -21,6 +21,7 @@ func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
 		Purchase:   keyboardPurchaseToMCP(kb.Purchase, isOwner),
 		Notes:      kb.Notes,
 		Visibility: string(kb.Visibility),
+		HasImages:  len(kb.Images) > 0,
 	}
 }
 
@@ -34,6 +35,7 @@ func KeyboardToMCPSummary(kb repository.Keyboard) schema.KeyboardSummary {
 		Size:        kb.Size,
 		Layout:      kb.Layout,
 		OrderStatus: kb.Purchase.OrderStatus,
+		HasImages:   len(kb.Images) > 0,
 	}
 }
 

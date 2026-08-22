@@ -21,11 +21,12 @@ func TestKeyboards(t *testing.T) {
 // the plain keyboard_size check but is wrong for the layout, isolating the
 // cross-field rule from the plain membership check.
 const (
-	approvedSize         = "60%"
-	approvedOtherSize    = "40%"
-	approvedLayout       = "WK"
-	approvedCaseMaterial = "Aluminum"
-	approvedVendor       = "Amazon"
+	approvedSize             = "60%"
+	approvedOtherSize        = "40%"
+	approvedLayout           = "WK"
+	approvedCaseMaterial     = "Aluminum"
+	approvedVendor           = "Amazon"
+	approvedImageContentType = "image/png"
 )
 
 type getOutput struct {
@@ -35,6 +36,7 @@ type getOutput struct {
 		Name       string  `json:"name"`
 		Size       *string `json:"size"`
 		Visibility string  `json:"visibility"`
+		HasImages  bool    `json:"has_images"`
 		Design     *struct {
 			TopCase *struct {
 				Material *string `json:"material"`
@@ -107,4 +109,34 @@ func seededBy(out listOutput, id string) *listKeyboard {
 	}
 
 	return nil
+}
+
+type addImageOutput struct {
+	ImageID   string `json:"image_id"`
+	UploadURL string `json:"upload_url"`
+}
+
+func decodeAddImageOutput(result *sdkmcp.CallToolResult) addImageOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out addImageOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}
+
+func decodeImageURL(result *sdkmcp.CallToolResult) string {
+	GinkgoHelper()
+
+	var out struct {
+		URL string `json:"url"`
+	}
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out.URL
 }

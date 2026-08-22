@@ -38,6 +38,80 @@ func (_m *MockKeyboardRepository) EXPECT() *MockKeyboardRepository_Expecter {
 	return &MockKeyboardRepository_Expecter{mock: &_m.Mock}
 }
 
+// AddImage provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) (*repository.KeyboardImage, error) {
+	ret := _mock.Called(ctx, keyboardID, image)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddImage")
+	}
+
+	var r0 *repository.KeyboardImage
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardImage) (*repository.KeyboardImage, error)); ok {
+		return returnFunc(ctx, keyboardID, image)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardImage) *repository.KeyboardImage); ok {
+		r0 = returnFunc(ctx, keyboardID, image)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeyboardImage)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeyboardImage) error); ok {
+		r1 = returnFunc(ctx, keyboardID, image)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_AddImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddImage'
+type MockKeyboardRepository_AddImage_Call struct {
+	*mock.Call
+}
+
+// AddImage is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - image repository.KeyboardImage
+func (_e *MockKeyboardRepository_Expecter) AddImage(ctx any, keyboardID any, image any) *MockKeyboardRepository_AddImage_Call {
+	return &MockKeyboardRepository_AddImage_Call{Call: _e.mock.On("AddImage", ctx, keyboardID, image)}
+}
+
+func (_c *MockKeyboardRepository_AddImage_Call) Run(run func(ctx context.Context, keyboardID string, image repository.KeyboardImage)) *MockKeyboardRepository_AddImage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.KeyboardImage
+		if args[2] != nil {
+			arg2 = args[2].(repository.KeyboardImage)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_AddImage_Call) Return(keyboardImage *repository.KeyboardImage, err error) *MockKeyboardRepository_AddImage_Call {
+	_c.Call.Return(keyboardImage, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_AddImage_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, image repository.KeyboardImage) (*repository.KeyboardImage, error)) *MockKeyboardRepository_AddImage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockKeyboardRepository
 func (_mock *MockKeyboardRepository) Create(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ret := _mock.Called(ctx, kb)
@@ -107,20 +181,31 @@ func (_c *MockKeyboardRepository_Create_Call) RunAndReturn(run func(ctx context.
 }
 
 // Delete provides a mock function for the type MockKeyboardRepository
-func (_mock *MockKeyboardRepository) Delete(ctx context.Context, id string) error {
+func (_mock *MockKeyboardRepository) Delete(ctx context.Context, id string) ([]repository.KeyboardImageKey, error) {
 	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+	var r0 []repository.KeyboardImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]repository.KeyboardImageKey, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []repository.KeyboardImageKey); ok {
 		r0 = returnFunc(ctx, id)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]repository.KeyboardImageKey)
+		}
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockKeyboardRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
@@ -153,12 +238,86 @@ func (_c *MockKeyboardRepository_Delete_Call) Run(run func(ctx context.Context, 
 	return _c
 }
 
-func (_c *MockKeyboardRepository_Delete_Call) Return(err error) *MockKeyboardRepository_Delete_Call {
-	_c.Call.Return(err)
+func (_c *MockKeyboardRepository_Delete_Call) Return(keyboardImageKeys []repository.KeyboardImageKey, err error) *MockKeyboardRepository_Delete_Call {
+	_c.Call.Return(keyboardImageKeys, err)
 	return _c
 }
 
-func (_c *MockKeyboardRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, id string) error) *MockKeyboardRepository_Delete_Call {
+func (_c *MockKeyboardRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, id string) ([]repository.KeyboardImageKey, error)) *MockKeyboardRepository_Delete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeleteImage provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) DeleteImage(ctx context.Context, keyboardID string, imageID string) (*repository.KeyboardImageKey, error) {
+	ret := _mock.Called(ctx, keyboardID, imageID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeleteImage")
+	}
+
+	var r0 *repository.KeyboardImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*repository.KeyboardImageKey, error)); ok {
+		return returnFunc(ctx, keyboardID, imageID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *repository.KeyboardImageKey); ok {
+		r0 = returnFunc(ctx, keyboardID, imageID)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeyboardImageKey)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
+		r1 = returnFunc(ctx, keyboardID, imageID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_DeleteImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteImage'
+type MockKeyboardRepository_DeleteImage_Call struct {
+	*mock.Call
+}
+
+// DeleteImage is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - imageID string
+func (_e *MockKeyboardRepository_Expecter) DeleteImage(ctx any, keyboardID any, imageID any) *MockKeyboardRepository_DeleteImage_Call {
+	return &MockKeyboardRepository_DeleteImage_Call{Call: _e.mock.On("DeleteImage", ctx, keyboardID, imageID)}
+}
+
+func (_c *MockKeyboardRepository_DeleteImage_Call) Run(run func(ctx context.Context, keyboardID string, imageID string)) *MockKeyboardRepository_DeleteImage_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_DeleteImage_Call) Return(keyboardImageKey *repository.KeyboardImageKey, err error) *MockKeyboardRepository_DeleteImage_Call {
+	_c.Call.Return(keyboardImageKey, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_DeleteImage_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, imageID string) (*repository.KeyboardImageKey, error)) *MockKeyboardRepository_DeleteImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

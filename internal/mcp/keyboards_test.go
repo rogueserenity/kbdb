@@ -374,9 +374,10 @@ func (s *HandleUpdateKeyboardSuite) TestNotFound_ReturnsNotFound() {
 type HandleDeleteKeyboardSuite struct {
 	suite.Suite
 
-	mockKeyboards *mocks.MockKeyboardRepository
-	mockBuilds    *mocks.MockBuildRepository
-	mockImages    *mocks.MockBuildImageStore
+	mockKeyboards      *mocks.MockKeyboardRepository
+	mockBuilds         *mocks.MockBuildRepository
+	mockBuildImages    *mocks.MockBuildImageStore
+	mockKeyboardImages *mocks.MockKeyboardImageStore
 }
 
 func TestHandleDeleteKeyboardSuite(t *testing.T) {
@@ -386,7 +387,8 @@ func TestHandleDeleteKeyboardSuite(t *testing.T) {
 func (s *HandleDeleteKeyboardSuite) SetupTest() {
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
-	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockBuildImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockKeyboardImages = mocks.NewMockKeyboardImageStore(s.T())
 }
 
 func (s *HandleDeleteKeyboardSuite) TestSucceeds() {
@@ -395,9 +397,12 @@ func (s *HandleDeleteKeyboardSuite) TestSucceeds() {
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil)
+		Return(nil, nil)
+	s.mockKeyboardImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
 
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
 
 	s.Require().NoError(err)
@@ -405,14 +410,14 @@ func (s *HandleDeleteKeyboardSuite) TestSucceeds() {
 }
 
 func (s *HandleDeleteKeyboardSuite) TestBlankKeyboardID_ReturnsError() {
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: ""})
 
 	s.Require().Error(err)
 }
 
 func (s *HandleDeleteKeyboardSuite) TestInvalidOnDelete_ReturnsError() {
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "bogus"})
 
 	s.Require().Error(err)
@@ -423,7 +428,7 @@ func (s *HandleDeleteKeyboardSuite) TestBlock_Referenced_ReturnsError() {
 		FindBuildsReferencingKeyboard(mock.Anything, mock.Anything, "kb-1").
 		Return([]string{"build-1"}, nil)
 
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "block"})
 
 	s.Require().ErrorContains(err, "build-1")
@@ -432,9 +437,12 @@ func (s *HandleDeleteKeyboardSuite) TestBlock_Referenced_ReturnsError() {
 func (s *HandleDeleteKeyboardSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil)
+		Return(nil, nil)
+	s.mockKeyboardImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
 
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "detach"})
 
 	s.Require().NoError(err)
@@ -448,14 +456,17 @@ func (s *HandleDeleteKeyboardSuite) TestCascade_Referenced_ReturnsDeletedBuildID
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockImages.EXPECT().
+	s.mockBuildImages.EXPECT().
 		BestEffortDelete(mock.Anything, mock.Anything).
 		Return()
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil)
+		Return(nil, nil)
+	s.mockKeyboardImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
 
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "cascade"})
 
 	s.Require().NoError(err)
@@ -468,9 +479,9 @@ func (s *HandleDeleteKeyboardSuite) TestRepositoryError_ReturnsError() {
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(errors.New("delete failed"))
+		Return(nil, errors.New("delete failed"))
 
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
 
 	s.Require().Error(err)
@@ -532,4 +543,263 @@ func (s *HandleUpdateKeyboardSuite) TestMalformedOrderDate_ReturnsError() {
 	})
 
 	s.Require().ErrorContains(err, "purchase.order_date")
+}
+
+type HandleGetKeyboardImageURLSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockKeyboardRepository
+	mockImages *mocks.MockKeyboardImageStore
+}
+
+func TestHandleGetKeyboardImageURLSuite(t *testing.T) {
+	suite.Run(t, new(HandleGetKeyboardImageURLSuite))
+}
+
+func (s *HandleGetKeyboardImageURLSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+}
+
+func (s *HandleGetKeyboardImageURLSuite) TestSucceeds() {
+	imagePath := repository.KeyboardImageKey("keyboards/caller-0001/kb-1/images/img-1")
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(&repository.Keyboard{
+			ID:         "kb-1",
+			Visibility: repository.VisibilityPrivate,
+			Images:     []repository.KeyboardImage{{ImageID: "img-1", Path: imagePath}},
+		}, nil)
+	s.mockImages.EXPECT().
+		PresignGetKeyboardImage(mock.Anything, imagePath).
+		Return("https://example.com/presigned", nil)
+
+	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{
+		KeyboardID: "kb-1",
+		ImageID:    "img-1",
+	})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/presigned", out.URL)
+}
+
+func (s *HandleGetKeyboardImageURLSuite) TestBlankKeyboardID_ReturnsError() {
+	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: " ", ImageID: "img-1"})
+
+	s.Require().ErrorContains(err, "keyboard_id must not be blank")
+}
+
+func (s *HandleGetKeyboardImageURLSuite) TestBlankImageID_ReturnsError() {
+	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: " "})
+
+	s.Require().ErrorContains(err, "image_id must not be blank")
+}
+
+func (s *HandleGetKeyboardImageURLSuite) TestKeyboardNotFound_ReturnsError() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().ErrorIs(err, errKeyboardNotFound)
+}
+
+func (s *HandleGetKeyboardImageURLSuite) TestImageNotFound_ReturnsError() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(&repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, nil)
+
+	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: "missing"})
+
+	s.Require().ErrorIs(err, errKeyboardImageNotFound)
+}
+
+func (s *HandleGetKeyboardImageURLSuite) TestPresignError_ReturnsError() {
+	imagePath := repository.KeyboardImageKey("keyboards/caller-0001/kb-1/images/img-1")
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(&repository.Keyboard{
+			ID:         "kb-1",
+			Visibility: repository.VisibilityPrivate,
+			Images:     []repository.KeyboardImage{{ImageID: "img-1", Path: imagePath}},
+		}, nil)
+	s.mockImages.EXPECT().
+		PresignGetKeyboardImage(mock.Anything, imagePath).
+		Return("", errors.New("s3: access denied"))
+
+	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().ErrorContains(err, "failed to presign keyboard image")
+}
+
+type HandleAddKeyboardImageSuite struct {
+	suite.Suite
+
+	mockKeyboards *mocks.MockKeyboardRepository
+	mockImages    *mocks.MockKeyboardImageStore
+}
+
+func TestHandleAddKeyboardImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleAddKeyboardImageSuite))
+}
+
+func (s *HandleAddKeyboardImageSuite) SetupTest() {
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+}
+
+func (s *HandleAddKeyboardImageSuite) TestSucceeds() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockKeyboards.EXPECT().
+		AddImage(mock.Anything, "kb-1", mock.MatchedBy(func(img repository.KeyboardImage) bool {
+			return img.ImageID != ""
+		})).
+		Return(&repository.KeyboardImage{ImageID: "img-1"}, nil)
+
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().NoError(err)
+	s.NotEmpty(out.ImageID)
+	s.Equal("https://example.com/upload", out.UploadURL)
+}
+
+func (s *HandleAddKeyboardImageSuite) TestBlankKeyboardID_ReturnsError() {
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  " ",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "keyboard_id must not be blank")
+}
+
+func (s *HandleAddKeyboardImageSuite) TestUnapprovedContentType_ReturnsError() {
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "application/pdf",
+	})
+
+	s.Require().ErrorContains(err, "content_type")
+}
+
+func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockKeyboards.EXPECT().
+		AddImage(mock.Anything, "kb-1", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errKeyboardNotFound)
+}
+
+func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockKeyboards.EXPECT().
+		AddImage(mock.Anything, "kb-1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errKeyboardMutationConflict)
+}
+
+type HandleDeleteKeyboardImageSuite struct {
+	suite.Suite
+
+	mockKeyboards *mocks.MockKeyboardRepository
+	mockImages    *mocks.MockKeyboardImageStore
+}
+
+func TestHandleDeleteKeyboardImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteKeyboardImageSuite))
+}
+
+func (s *HandleDeleteKeyboardImageSuite) SetupTest() {
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+}
+
+func (s *HandleDeleteKeyboardImageSuite) TestSucceeds() {
+	key := repository.KeyboardImageKey("keyboards/u/kb-1/images/img-1")
+	s.mockKeyboards.EXPECT().DeleteImage(mock.Anything, "kb-1", "img-1").Return(&key, nil)
+	s.mockImages.EXPECT().DeleteKeyboardImage(mock.Anything, key).Return(nil)
+
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteKeyboardImageSuite) TestBlankKeyboardID_ReturnsError() {
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: " ", ImageID: "img-1"})
+
+	s.Require().ErrorContains(err, "keyboard_id must not be blank")
+}
+
+func (s *HandleDeleteKeyboardImageSuite) TestBlankImageID_ReturnsError() {
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: " "})
+
+	s.Require().ErrorContains(err, "image_id must not be blank")
+}
+
+func (s *HandleDeleteKeyboardImageSuite) TestNotFound_ReturnsError() {
+	s.mockKeyboards.EXPECT().
+		DeleteImage(mock.Anything, "kb-1", "img-1").
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().ErrorIs(err, errKeyboardNotFound)
+}
+
+func (s *HandleDeleteKeyboardImageSuite) TestMutationConflict_ReturnsError() {
+	s.mockKeyboards.EXPECT().
+		DeleteImage(mock.Anything, "kb-1", "img-1").
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().ErrorIs(err, errKeyboardMutationConflict)
+}
+
+func (s *HandleDeleteKeyboardImageSuite) TestAlreadyAbsent_SucceedsWithoutS3Call() {
+	s.mockKeyboards.EXPECT().
+		DeleteImage(mock.Anything, "kb-1", "img-1").
+		Return(nil, nil)
+
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().NoError(err)
 }

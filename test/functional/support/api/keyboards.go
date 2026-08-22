@@ -82,3 +82,15 @@ func (c *KeyboardsClient) DeleteWithOnDelete(ctx context.Context, ownerID, id, t
 	}
 	return c.client.Do(ctx, http.MethodDelete, path, token, nil)
 }
+
+// AddImage calls POST /v1/users/{ownerID}/keyboards/{id}/images with body as
+// the raw JSON request body and the given bearer token (empty for an
+// anonymous request). The caller owns closing resp.Body.
+func (c *KeyboardsClient) AddImage(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/keyboards/"+id+"/images", token, bytes.NewBufferString(body))
+}
+
+// DeleteImage calls DELETE /v1/users/{ownerID}/keyboards/{id}/images/{imageID}.
+func (c *KeyboardsClient) DeleteImage(ctx context.Context, ownerID, id, imageID, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keyboards/"+id+"/images/"+imageID, token, nil)
+}

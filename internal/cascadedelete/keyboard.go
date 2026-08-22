@@ -7,6 +7,16 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+// KeyboardResult is a DeleteKeyboard call's success return value.
+// ImageKeys are the image keys the deleted keyboard had, or nil if it had
+// none - callers clean them up in a KeyboardImageStore themselves.
+// DeletedBuildIDs (via the embedded Result) is empty except in cascade
+// mode.
+type KeyboardResult struct {
+	Result
+	ImageKeys []repository.KeyboardImageKey
+}
+
 // DeleteKeyboard deletes the keyboard identified by (ownerID, keyboardID),
 // applying onDelete's policy toward any build that still references it:
 //
@@ -28,46 +38,49 @@ func DeleteKeyboard(
 	images repository.BuildImageStore,
 	ownerID, keyboardID string,
 	onDelete OnDelete,
-) (Result, error) {
+) (KeyboardResult, error) {
 	switch onDelete {
 	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
 	default:
-		return Result{}, fmt.Errorf("deleting keyboard %q: unknown on_delete value %q", keyboardID, onDelete)
+		return KeyboardResult{}, fmt.Errorf("deleting keyboard %q: unknown on_delete value %q", keyboardID, onDelete)
 	}
 
 	if onDelete == OnDeleteDetach {
-		if err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
-			return Result{}, fmt.Errorf("detach-deleting keyboard %q: %w", keyboardID, err)
+		imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
+		if err != nil {
+			return KeyboardResult{}, fmt.Errorf("detach-deleting keyboard %q: %w", keyboardID, err)
 		}
-		return Result{}, nil
+		return KeyboardResult{ImageKeys: imageKeys}, nil
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingKeyboard(ctx, ownerID, keyboardID)
 	if err != nil {
-		return Result{}, fmt.Errorf("finding builds referencing keyboard %q: %w", keyboardID, err)
+		return KeyboardResult{}, fmt.Errorf("finding builds referencing keyboard %q: %w", keyboardID, err)
 	}
 
 	if onDelete == OnDeleteBlock {
 		if len(buildIDs) > 0 {
-			return Result{}, &BlockedError{BuildIDs: buildIDs}
+			return KeyboardResult{}, &BlockedError{BuildIDs: buildIDs}
 		}
-		if err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
-			return Result{}, fmt.Errorf("deleting unreferenced keyboard %q: %w", keyboardID, err)
+		imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
+		if err != nil {
+			return KeyboardResult{}, fmt.Errorf("deleting unreferenced keyboard %q: %w", keyboardID, err)
 		}
-		return Result{}, nil
+		return KeyboardResult{ImageKeys: imageKeys}, nil
 	}
 
 	for _, buildID := range buildIDs {
 		imageKeys, err := buildRepo.Delete(ctx, buildID)
 		if err != nil {
-			return Result{}, fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
+			return KeyboardResult{}, fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
 		}
 		images.BestEffortDelete(ctx, imageKeys)
 	}
 
-	if err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
-		return Result{}, fmt.Errorf("deleting keyboard %q after cascading %d build(s): %w", keyboardID, len(buildIDs), err)
+	imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
+	if err != nil {
+		return KeyboardResult{}, fmt.Errorf("deleting keyboard %q after cascading %d build(s): %w", keyboardID, len(buildIDs), err)
 	}
 
-	return Result{DeletedBuildIDs: buildIDs}, nil
+	return KeyboardResult{Result: Result{DeletedBuildIDs: buildIDs}, ImageKeys: imageKeys}, nil
 }

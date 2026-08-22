@@ -22,8 +22,9 @@ import (
 type ListKeyboardsSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeyboardRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeyboardRepository
+	mockImages *mocks.MockKeyboardImageStore
+	handler    http.HandlerFunc
 }
 
 func TestListKeyboardsSuite(t *testing.T) {
@@ -32,7 +33,8 @@ func TestListKeyboardsSuite(t *testing.T) {
 
 func (s *ListKeyboardsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.handler = ListKeyboards(s.mockRepo)
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = ListKeyboards(s.mockRepo, s.mockImages)
 }
 
 func (s *ListKeyboardsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -129,8 +131,9 @@ func (s *ListKeyboardsSuite) TestListKeyboards_RepositoryError_Returns500() {
 type GetKeyboardSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeyboardRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeyboardRepository
+	mockImages *mocks.MockKeyboardImageStore
+	handler    http.HandlerFunc
 }
 
 func TestGetKeyboardSuite(t *testing.T) {
@@ -139,7 +142,8 @@ func TestGetKeyboardSuite(t *testing.T) {
 
 func (s *GetKeyboardSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.handler = GetKeyboard(s.mockRepo)
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = GetKeyboard(s.mockRepo, s.mockImages)
 }
 
 func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
@@ -263,6 +267,7 @@ type CreateKeyboardSuite struct {
 	suite.Suite
 
 	mockKeyboardRepo *mocks.MockKeyboardRepository
+	mockImages       *mocks.MockKeyboardImageStore
 	handler          http.HandlerFunc
 }
 
@@ -272,7 +277,8 @@ func TestCreateKeyboardSuite(t *testing.T) {
 
 func (s *CreateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.handler = CreateKeyboard(s.mockKeyboardRepo)
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = CreateKeyboard(s.mockKeyboardRepo, s.mockImages)
 }
 
 func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -537,6 +543,7 @@ type UpdateKeyboardSuite struct {
 	suite.Suite
 
 	mockKeyboardRepo *mocks.MockKeyboardRepository
+	mockImages       *mocks.MockKeyboardImageStore
 	handler          http.HandlerFunc
 }
 
@@ -546,7 +553,8 @@ func TestUpdateKeyboardSuite(t *testing.T) {
 
 func (s *UpdateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.handler = UpdateKeyboard(s.mockKeyboardRepo)
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = UpdateKeyboard(s.mockKeyboardRepo, s.mockImages)
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -811,10 +819,11 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MalformedStoredDate_Returns500N
 type DeleteKeyboardSuite struct {
 	suite.Suite
 
-	mockKeyboards *mocks.MockKeyboardRepository
-	mockBuilds    *mocks.MockBuildRepository
-	mockImages    *mocks.MockBuildImageStore
-	handler       http.HandlerFunc
+	mockKeyboards      *mocks.MockKeyboardRepository
+	mockBuilds         *mocks.MockBuildRepository
+	mockBuildImages    *mocks.MockBuildImageStore
+	mockKeyboardImages *mocks.MockKeyboardImageStore
+	handler            http.HandlerFunc
 }
 
 func TestDeleteKeyboardSuite(t *testing.T) {
@@ -824,8 +833,9 @@ func TestDeleteKeyboardSuite(t *testing.T) {
 func (s *DeleteKeyboardSuite) SetupTest() {
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
-	s.mockImages = mocks.NewMockBuildImageStore(s.T())
-	s.handler = DeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockImages)
+	s.mockBuildImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockKeyboardImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = DeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 }
 
 func (s *DeleteKeyboardSuite) newRequest(ctx context.Context, onDelete string) *http.Request {
@@ -849,7 +859,10 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_DefaultOnDelete_NoReferen
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil)
+		Return(nil, nil)
+	s.mockKeyboardImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -878,7 +891,10 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Block_Referenced_Returns4
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil)
+		Return(nil, nil)
+	s.mockKeyboardImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
@@ -895,12 +911,15 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Cascade_Referenced_Return
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockImages.EXPECT().
+	s.mockBuildImages.EXPECT().
 		BestEffortDelete(mock.Anything, mock.Anything).
 		Return()
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil)
+		Return(nil, nil)
+	s.mockKeyboardImages.EXPECT().
+		BestEffortDelete(mock.Anything, mock.Anything).
+		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "cascade"))
@@ -945,10 +964,297 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_RepositoryError_Returns500() {
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(errors.New("delete item failed"))
+		Return(nil, errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type AddKeyboardImageSuite struct {
+	suite.Suite
+
+	mockKeyboardRepo *mocks.MockKeyboardRepository
+	mockImages       *mocks.MockKeyboardImageStore
+	handler          http.HandlerFunc
+}
+
+func TestAddKeyboardImageSuite(t *testing.T) {
+	suite.Run(t, new(AddKeyboardImageSuite))
+}
+
+func (s *AddKeyboardImageSuite) SetupTest() {
+	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = AddKeyboardImage(s.mockKeyboardRepo, s.mockImages)
+}
+
+func (s *AddKeyboardImageSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keyboards/kb1/images", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("keyboardId", "kb1")
+	return req
+}
+
+func (s *AddKeyboardImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_Succeeds() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockKeyboardRepo.EXPECT().
+		AddImage(mock.Anything, "kb1", mock.MatchedBy(func(img repository.KeyboardImage) bool {
+			return img.ImageID != ""
+		})).
+		Return(&repository.KeyboardImage{ImageID: "img1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		ImageID   string `json:"image_id"`
+		UploadURL string `json:"upload_url"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.NotEmpty(got.ImageID)
+	s.Equal("https://example.com/presigned-put", got.UploadURL)
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	req := s.newRequest(ctx, `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_Anonymous_Returns404() {
+	req := s.newRequest(s.T().Context(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_UnapprovedContentType_Returns400() {
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"application/pdf"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("content_type", got.InvalidParams[0].Name)
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_PresignError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_NotFound_Returns404() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockKeyboardRepo.EXPECT().
+		AddImage(mock.Anything, "kb1", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_RepositoryError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockKeyboardRepo.EXPECT().
+		AddImage(mock.Anything, "kb1", mock.Anything).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *AddKeyboardImageSuite) TestAddKeyboardImage_MutationConflict_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockKeyboardRepo.EXPECT().
+		AddImage(mock.Anything, "kb1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type DeleteKeyboardImageSuite struct {
+	suite.Suite
+
+	mockKeyboardRepo *mocks.MockKeyboardRepository
+	mockImages       *mocks.MockKeyboardImageStore
+	handler          http.HandlerFunc
+}
+
+func TestDeleteKeyboardImageSuite(t *testing.T) {
+	suite.Run(t, new(DeleteKeyboardImageSuite))
+}
+
+func (s *DeleteKeyboardImageSuite) SetupTest() {
+	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.handler = DeleteKeyboardImage(s.mockKeyboardRepo, s.mockImages)
+}
+
+func (s *DeleteKeyboardImageSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/keyboards/kb1/images/img1", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("keyboardId", "kb1")
+	req.SetPathValue("imageId", "img1")
+	return req
+}
+
+func (s *DeleteKeyboardImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+var deleteKeyboardImageTestKey = repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_Succeeds() {
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(&deleteKeyboardImageTestKey, nil)
+	s.mockImages.EXPECT().
+		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
+		Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_AlreadyAbsent_SucceedsWithoutS3Call() {
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(nil, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_Anonymous_Returns404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_NotFound_Returns404() {
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_MutationConflict_Returns409() {
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(nil, repository.ErrMutationConflict)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_RepositoryError_Returns500() {
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(nil, errors.New("get item failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_S3DeleteError_Returns500() {
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(&deleteKeyboardImageTestKey, nil)
+	s.mockImages.EXPECT().
+		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
+		Return(errors.New("s3: access denied"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
