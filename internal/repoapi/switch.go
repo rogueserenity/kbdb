@@ -1,6 +1,7 @@
 package repoapi
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -8,11 +9,21 @@ import (
 )
 
 // SwitchToAPI maps a repository.Switch to its wire representation. Returns
-// an error if a stored Purchase date doesn't match dateLayout.
-func SwitchToAPI(sw repository.Switch, isOwner bool) (api.Switch, error) {
+// an error if a stored Purchase date doesn't match dateLayout, or an image
+// fails to presign.
+func SwitchToAPI(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool) (api.Switch, error) {
 	purchase, err := switchPurchaseToAPI(sw.Purchase, isOwner)
 	if err != nil {
 		return api.Switch{}, err
+	}
+
+	var image *api.SwitchImage
+	if sw.ImagePath != nil {
+		url, err := images.PresignGet(ctx, *sw.ImagePath)
+		if err != nil {
+			return api.Switch{}, fmt.Errorf("presigning switch image: %w", err)
+		}
+		image = &api.SwitchImage{Url: url}
 	}
 
 	return api.Switch{
@@ -29,6 +40,7 @@ func SwitchToAPI(sw repository.Switch, isOwner bool) (api.Switch, error) {
 		Purchase:     purchase,
 		Notes:        sw.Notes,
 		Visibility:   api.Visibility(sw.Visibility),
+		Image:        image,
 	}, nil
 }
 
@@ -54,14 +66,24 @@ func SwitchToRepo(in api.SwitchInput) repository.Switch {
 }
 
 // SwitchToAPISummary maps a repository.Switch to the SwitchSummary schema
-// returned by the list endpoint.
-func SwitchToAPISummary(sw repository.Switch) api.SwitchSummary {
-	return api.SwitchSummary{
+// returned by the list endpoint, presigning its image if it has one.
+func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore) (api.SwitchSummary, error) {
+	summary := api.SwitchSummary{
 		Id:    &sw.ID,
 		Brand: &sw.Brand,
 		Name:  &sw.Name,
 		Type:  &sw.Type,
 	}
+
+	if sw.ImagePath != nil {
+		url, err := images.PresignGet(ctx, *sw.ImagePath)
+		if err != nil {
+			return api.SwitchSummary{}, fmt.Errorf("presigning switch image: %w", err)
+		}
+		summary.Image = &api.SwitchImage{Url: url}
+	}
+
+	return summary, nil
 }
 
 func switchMaterialToAPI(m repository.SwitchMaterial) *api.SwitchMaterial {

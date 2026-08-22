@@ -1,0 +1,202 @@
+package switches_test
+
+import (
+	"bytes"
+	"io"
+	"net/http"
+
+	"github.com/google/uuid"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/rogueserenity/kbdb/test/functional/support"
+	"github.com/rogueserenity/kbdb/test/functional/support/api"
+	"github.com/rogueserenity/kbdb/test/functional/support/db"
+)
+
+var _ = Describe("Setting a switch's image over MCP", func() {
+	var (
+		client   *api.MCPClient
+		result   *sdkmcp.CallToolResult
+		err      error
+		ownerID  string
+		switchID string
+	)
+
+	BeforeEach(func() {
+		result = nil
+		err = nil
+		switchID = "functional-test-switch-" + uuid.NewString()
+	})
+
+	Context("given a valid bearer token", func() {
+		BeforeEach(func(ctx SpecContext) {
+			token, tokenErr := api.AuthToken(ctx)
+			Expect(tokenErr).NotTo(HaveOccurred())
+
+			ownerID, err = api.TokenSubject(token)
+			Expect(err).NotTo(HaveOccurred())
+
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+		})
+
+		Context("given the caller owns the switch", func() {
+			BeforeEach(func(ctx SpecContext) {
+				Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+			})
+
+			Context("given an approved content_type", func() {
+				When("the set_switch_image tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
+							"switch_id":    switchID,
+							"content_type": approvedImageContentType,
+						})
+					})
+
+					It("mints an upload_url that a real PUT round-trip actually works against", func(ctx SpecContext) {
+						By("returning an upload_url")
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+						out := decodeSetImageOutput(result)
+						Expect(out.UploadURL).NotTo(BeEmpty())
+
+						By("uploading arbitrary bytes to the presigned PUT URL")
+						imageBytes := []byte("fake-image-bytes-for-testing")
+						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
+						Expect(putErr).NotTo(HaveOccurred())
+						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+						By("has_image reflecting it on a follow-up get_switch")
+						check, checkErr := client.CallTool(ctx, "get_switch", map[string]any{"switch_id": switchID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						Expect(check.IsError).To(BeFalse())
+						Expect(decodeGetOutput(check).Switch.HasImage).To(BeTrue())
+
+						By("get_switch_image_url minting a presigned GET URL that returns the exact bytes uploaded")
+						urlResult, urlErr := client.CallTool(ctx, "get_switch_image_url", map[string]any{
+							"switch_id": switchID,
+						})
+						Expect(urlErr).NotTo(HaveOccurred())
+						Expect(urlResult.IsError).To(BeFalse())
+						imageURL := decodeImageURL(urlResult)
+						Expect(imageURL).NotTo(BeEmpty())
+
+						getImageResp, getErr := api.DoPresigned(ctx, http.MethodGet, imageURL, "", nil)
+						Expect(getErr).NotTo(HaveOccurred())
+						Expect(getImageResp.StatusCode).To(Equal(http.StatusOK))
+
+						gotBytes, readErr := io.ReadAll(getImageResp.Body)
+						Expect(readErr).NotTo(HaveOccurred())
+						Expect(gotBytes).To(Equal(imageBytes))
+					})
+				})
+			})
+
+			Context("given an unapproved content_type", func() {
+				When("the set_switch_image tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
+							"switch_id":    switchID,
+							"content_type": "application/x-not-an-image",
+						})
+					})
+
+					It("returns an MCP tool error result", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeTrue())
+					})
+				})
+			})
+
+			Context("given the switch has no image set", func() {
+				When("the get_switch_image_url tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "get_switch_image_url", map[string]any{
+							"switch_id": switchID,
+						})
+					})
+
+					It("returns an MCP tool error result", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeTrue())
+					})
+				})
+			})
+		})
+
+		Context("given another user owns the switch", func() {
+			var otherID string
+
+			BeforeEach(func(ctx SpecContext) {
+				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
+				Expect(tokenErr).NotTo(HaveOccurred())
+
+				otherID, err = api.TokenSubject(otherToken)
+				Expect(err).NotTo(HaveOccurred())
+
+				Expect(db.SeedSwitch(ctx, otherID, switchID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, otherID, switchID)).To(Succeed())
+			})
+
+			When("the set_switch_image tool is called with that switch_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
+						"switch_id":    switchID,
+						"content_type": approvedImageContentType,
+					})
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+
+		Context("given the switch does not exist", func() {
+			When("the set_switch_image tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
+						"switch_id":    "no-such-switch-" + uuid.NewString(),
+						"content_type": approvedImageContentType,
+					})
+				})
+
+				It("returns an MCP tool error result", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+	})
+
+	Context("given no bearer token", func() {
+		BeforeEach(func() {
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
+		})
+
+		When("the set_switch_image tool is called", func() {
+			BeforeEach(func(ctx SpecContext) {
+				result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
+					"switch_id":    "irrelevant-" + uuid.NewString(),
+					"content_type": approvedImageContentType,
+				})
+			})
+
+			It("rejects the call with a real HTTP 401", func() {
+				Expect(result).To(BeNil())
+				Expect(err).To(HaveOccurred())
+			})
+		})
+	})
+})

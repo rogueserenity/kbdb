@@ -11,6 +11,7 @@ import (
 func registerTools(
 	s *sdkmcp.Server,
 	switchRepo repository.SwitchRepository,
+	switchImageStore repository.SwitchImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	keyboardImageStore repository.KeyboardImageStore,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -22,9 +23,12 @@ func registerTools(
 	sdkmcp.AddTool(s, getLookupTool, handleGetLookup())
 	sdkmcp.AddTool(s, listSwitchesTool, handleListSwitches(switchRepo))
 	sdkmcp.AddTool(s, getSwitchTool, handleGetSwitch(switchRepo))
+	sdkmcp.AddTool(s, getSwitchImageURLTool, handleGetSwitchImageURL(switchRepo, switchImageStore))
 	sdkmcp.AddTool(s, createSwitchTool, handleCreateSwitch(switchRepo))
 	sdkmcp.AddTool(s, updateSwitchTool, handleUpdateSwitch(switchRepo))
-	sdkmcp.AddTool(s, deleteSwitchTool, handleDeleteSwitch(switchRepo, buildRepo, buildImageStore))
+	sdkmcp.AddTool(s, deleteSwitchTool, handleDeleteSwitch(switchRepo, buildRepo, buildImageStore, switchImageStore))
+	sdkmcp.AddTool(s, setSwitchImageTool, handleSetSwitchImage(switchRepo, switchImageStore))
+	sdkmcp.AddTool(s, deleteSwitchImageTool, handleDeleteSwitchImage(switchRepo, switchImageStore))
 	sdkmcp.AddTool(s, listKeyboardsTool, handleListKeyboards(keyboardRepo))
 	sdkmcp.AddTool(s, getKeyboardTool, handleGetKeyboard(keyboardRepo))
 	sdkmcp.AddTool(s, getKeyboardImageURLTool, handleGetKeyboardImageURL(keyboardRepo, keyboardImageStore))

@@ -382,6 +382,22 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches/{switchId}
             Method: delete
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateSwitchEvent.
+        SetSwitchImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/switches/{switchId}/image
+            Method: post
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateSwitchEvent.
+        DeleteSwitchImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/switches/{switchId}/image
+            Method: delete
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and

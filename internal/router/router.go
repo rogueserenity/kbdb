@@ -35,6 +35,7 @@ import (
 func New(
 	verifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
+	switchImageStore repository.SwitchImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	keyboardImageStore repository.KeyboardImageStore,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -60,15 +61,19 @@ func New(
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public switches (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/switches",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, switchImageStore))))
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo, switchImageStore))))
 	mux.Handle("POST /v1/users/{userId}/switches",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo, switchImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateSwitch(switchRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateSwitch(switchRepo, switchImageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore, switchImageStore))))
+	mux.Handle("POST /v1/users/{userId}/switches/{switchId}/image",
+		middleware.RequireAuthorizerIdentity(validate(handlers.SetSwitchImage(switchRepo, switchImageStore))))
+	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}/image",
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitchImage(switchRepo, switchImageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
@@ -134,7 +139,7 @@ func New(
 	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
 	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
 	// the REST surface.
-	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
+	mcpHandlers := mcp.New(switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

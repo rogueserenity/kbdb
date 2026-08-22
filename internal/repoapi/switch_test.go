@@ -1,14 +1,17 @@
 package repoapi
 
 import (
+	"errors"
 	"testing"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
+	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
 
 func strPtr(s string) *string     { return &s }
@@ -68,7 +71,7 @@ func TestSwitchToAPISuite(t *testing.T) {
 
 func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	sw := fullRepoSwitch()
-	out, err := SwitchToAPI(sw, true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
 	s.Require().NoError(err)
 
 	s.Equal(sw.ID, out.Id)
@@ -110,7 +113,7 @@ func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *SwitchToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	sw := repository.Switch{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate}
 
-	out, err := SwitchToAPI(sw, true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Manufacturer)
@@ -129,7 +132,7 @@ func (s *SwitchToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 		Material: repository.SwitchMaterial{Stem: strPtr("POM")},
 	}
 
-	out, err := SwitchToAPI(sw, true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
 	s.Require().NoError(err)
 
 	if s.NotNil(out.Material) {
@@ -145,7 +148,7 @@ func (s *SwitchToAPISuite) TestMalformedStoredDate_ReturnsError() {
 		Purchase: repository.SwitchPurchase{OrderDate: strPtr("not-a-date")},
 	}
 
-	_, err := SwitchToAPI(sw, true)
+	_, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
 
 	s.Require().Error(err)
 }
@@ -153,7 +156,7 @@ func (s *SwitchToAPISuite) TestMalformedStoredDate_ReturnsError() {
 func (s *SwitchToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 	sw := fullRepoSwitch()
 
-	out, err := SwitchToAPI(sw, false)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), false)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -170,7 +173,7 @@ func (s *SwitchToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 func (s *SwitchToAPISuite) TestIsOwnerTrue_IncludesPrice() {
 	sw := fullRepoSwitch()
 
-	out, err := SwitchToAPI(sw, true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -179,13 +182,77 @@ func (s *SwitchToAPISuite) TestIsOwnerTrue_IncludesPrice() {
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
 	sw := fullRepoSwitch()
+	images := mocks.NewMockSwitchImageStore(s.T())
 
-	summary := SwitchToAPISummary(sw)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images)
+	s.Require().NoError(err)
 
 	s.Equal(&sw.ID, summary.Id)
 	s.Equal(&sw.Brand, summary.Brand)
 	s.Equal(&sw.Name, summary.Name)
 	s.Equal(&sw.Type, summary.Type)
+	s.Nil(summary.Image, "no image on the switch must map to a nil Image")
+}
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedURL() {
+	sw := fullRepoSwitch()
+	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
+	sw.ImagePath = &switchImageKey
+	images := mocks.NewMockSwitchImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
+
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.Image)
+	s.Equal("https://example.com/img", summary.Image.Url)
+}
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_PresignError_Propagates() {
+	sw := fullRepoSwitch()
+	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
+	sw.ImagePath = &switchImageKey
+	images := mocks.NewMockSwitchImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
+
+	_, err := SwitchToAPISummary(s.T().Context(), sw, images)
+
+	s.Require().Error(err)
+}
+
+func (s *SwitchToAPISuite) TestImagePresent_ReturnsPresignedURL() {
+	sw := fullRepoSwitch()
+	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
+	sw.ImagePath = &switchImageKey
+	images := mocks.NewMockSwitchImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
+
+	out, err := SwitchToAPI(s.T().Context(), sw, images, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Image)
+	s.Equal("https://example.com/img", out.Image.Url)
+}
+
+func (s *SwitchToAPISuite) TestNoImage_ImageFieldNil() {
+	sw := fullRepoSwitch()
+
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	s.Require().NoError(err)
+
+	s.Nil(out.Image)
+}
+
+func (s *SwitchToAPISuite) TestImagePresignError_Propagates() {
+	sw := fullRepoSwitch()
+	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
+	sw.ImagePath = &switchImageKey
+	images := mocks.NewMockSwitchImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
+
+	_, err := SwitchToAPI(s.T().Context(), sw, images, true)
+
+	s.Require().Error(err)
 }
 
 type SwitchToRepoSuite struct {

@@ -38,6 +38,74 @@ func (_m *MockSwitchRepository) EXPECT() *MockSwitchRepository_Expecter {
 	return &MockSwitchRepository_Expecter{mock: &_m.Mock}
 }
 
+// ClearImagePath provides a mock function for the type MockSwitchRepository
+func (_mock *MockSwitchRepository) ClearImagePath(ctx context.Context, id string) (*repository.SwitchImageKey, error) {
+	ret := _mock.Called(ctx, id)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClearImagePath")
+	}
+
+	var r0 *repository.SwitchImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.SwitchImageKey, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.SwitchImageKey); ok {
+		r0 = returnFunc(ctx, id)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.SwitchImageKey)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockSwitchRepository_ClearImagePath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClearImagePath'
+type MockSwitchRepository_ClearImagePath_Call struct {
+	*mock.Call
+}
+
+// ClearImagePath is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+func (_e *MockSwitchRepository_Expecter) ClearImagePath(ctx any, id any) *MockSwitchRepository_ClearImagePath_Call {
+	return &MockSwitchRepository_ClearImagePath_Call{Call: _e.mock.On("ClearImagePath", ctx, id)}
+}
+
+func (_c *MockSwitchRepository_ClearImagePath_Call) Run(run func(ctx context.Context, id string)) *MockSwitchRepository_ClearImagePath_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSwitchRepository_ClearImagePath_Call) Return(switchImageKey *repository.SwitchImageKey, err error) *MockSwitchRepository_ClearImagePath_Call {
+	_c.Call.Return(switchImageKey, err)
+	return _c
+}
+
+func (_c *MockSwitchRepository_ClearImagePath_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.SwitchImageKey, error)) *MockSwitchRepository_ClearImagePath_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockSwitchRepository
 func (_mock *MockSwitchRepository) Create(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ret := _mock.Called(ctx, sw)
@@ -107,20 +175,31 @@ func (_c *MockSwitchRepository_Create_Call) RunAndReturn(run func(ctx context.Co
 }
 
 // Delete provides a mock function for the type MockSwitchRepository
-func (_mock *MockSwitchRepository) Delete(ctx context.Context, id string) error {
+func (_mock *MockSwitchRepository) Delete(ctx context.Context, id string) (*repository.SwitchImageKey, error) {
 	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
+	var r0 *repository.SwitchImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.SwitchImageKey, error)); ok {
+		return returnFunc(ctx, id)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.SwitchImageKey); ok {
 		r0 = returnFunc(ctx, id)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.SwitchImageKey)
+		}
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, id)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockSwitchRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
@@ -153,12 +232,12 @@ func (_c *MockSwitchRepository_Delete_Call) Run(run func(ctx context.Context, id
 	return _c
 }
 
-func (_c *MockSwitchRepository_Delete_Call) Return(err error) *MockSwitchRepository_Delete_Call {
-	_c.Call.Return(err)
+func (_c *MockSwitchRepository_Delete_Call) Return(switchImageKey *repository.SwitchImageKey, err error) *MockSwitchRepository_Delete_Call {
+	_c.Call.Return(switchImageKey, err)
 	return _c
 }
 
-func (_c *MockSwitchRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, id string) error) *MockSwitchRepository_Delete_Call {
+func (_c *MockSwitchRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, id string) (*repository.SwitchImageKey, error)) *MockSwitchRepository_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -325,6 +404,80 @@ func (_c *MockSwitchRepository_List_Call) Return(switches []repository.Switch, n
 }
 
 func (_c *MockSwitchRepository_List_Call) RunAndReturn(run func(ctx context.Context, ownerID string, visibilities []repository.Visibility, limit int, cursor string) ([]repository.Switch, string, error)) *MockSwitchRepository_List_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetImagePath provides a mock function for the type MockSwitchRepository
+func (_mock *MockSwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) (*repository.Switch, error) {
+	ret := _mock.Called(ctx, id, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetImagePath")
+	}
+
+	var r0 *repository.Switch
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.SwitchImageKey) (*repository.Switch, error)); ok {
+		return returnFunc(ctx, id, key)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.SwitchImageKey) *repository.Switch); ok {
+		r0 = returnFunc(ctx, id, key)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.Switch)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.SwitchImageKey) error); ok {
+		r1 = returnFunc(ctx, id, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockSwitchRepository_SetImagePath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetImagePath'
+type MockSwitchRepository_SetImagePath_Call struct {
+	*mock.Call
+}
+
+// SetImagePath is a helper method to define mock.On call
+//   - ctx context.Context
+//   - id string
+//   - key repository.SwitchImageKey
+func (_e *MockSwitchRepository_Expecter) SetImagePath(ctx any, id any, key any) *MockSwitchRepository_SetImagePath_Call {
+	return &MockSwitchRepository_SetImagePath_Call{Call: _e.mock.On("SetImagePath", ctx, id, key)}
+}
+
+func (_c *MockSwitchRepository_SetImagePath_Call) Run(run func(ctx context.Context, id string, key repository.SwitchImageKey)) *MockSwitchRepository_SetImagePath_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.SwitchImageKey
+		if args[2] != nil {
+			arg2 = args[2].(repository.SwitchImageKey)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockSwitchRepository_SetImagePath_Call) Return(switchParam *repository.Switch, err error) *MockSwitchRepository_SetImagePath_Call {
+	_c.Call.Return(switchParam, err)
+	return _c
+}
+
+func (_c *MockSwitchRepository_SetImagePath_Call) RunAndReturn(run func(ctx context.Context, id string, key repository.SwitchImageKey) (*repository.Switch, error)) *MockSwitchRepository_SetImagePath_Call {
 	_c.Call.Return(run)
 	return _c
 }

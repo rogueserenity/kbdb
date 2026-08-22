@@ -27,6 +27,7 @@ func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 		Purchase:     switchPurchaseToMCP(sw.Purchase, isOwner),
 		Notes:        sw.Notes,
 		Visibility:   string(sw.Visibility),
+		HasImage:     sw.ImagePath != nil,
 	}
 }
 
@@ -34,10 +35,11 @@ func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 // list_switches returns.
 func SwitchToMCPSummary(sw repository.Switch) schema.SwitchSummary {
 	return schema.SwitchSummary{
-		ID:    sw.ID,
-		Brand: sw.Brand,
-		Name:  sw.Name,
-		Type:  sw.Type,
+		ID:       sw.ID,
+		Brand:    sw.Brand,
+		Name:     sw.Name,
+		Type:     sw.Type,
+		HasImage: sw.ImagePath != nil,
 	}
 }
 

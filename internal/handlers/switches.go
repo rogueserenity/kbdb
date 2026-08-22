@@ -32,7 +32,7 @@ func parseListLimit(r *http.Request) int {
 // ListSwitches reads the {userId} path value and lists that owner's
 // switches. Anonymous callers are allowed; visibility is scoped to what the
 // caller (if any) may read, per [authz.ReadableVisibilities].
-func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
+func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -50,7 +50,13 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 
 		items := make([]api.SwitchSummary, len(switches))
 		for i, sw := range switches {
-			items[i] = repoapi.SwitchToAPISummary(sw)
+			summary, err := repoapi.SwitchToAPISummary(r.Context(), sw, images)
+			if err != nil {
+				log.FromContext(r.Context()).Error("mapping switch to API summary", log.Error, err, log.SwitchID, sw.ID)
+				problem.Internal(w, "failed to list switches")
+				return
+			}
+			items[i] = summary
 		}
 
 		page := api.SwitchListPage{Items: &items}
@@ -67,7 +73,7 @@ func ListSwitches(repo repository.SwitchRepository) http.HandlerFunc {
 // GetSwitch reads the {userId} and {switchId} path values. Anonymous callers are
 // allowed; a switch that exists but isn't readable by the caller returns
 // 404, not 403, to avoid revealing it exists.
-func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
+func GetSwitch(repo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("switchId")
@@ -89,7 +95,7 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.SwitchToAPI(*sw, authz.IsOwner(r.Context(), ownerID))
+		out, err := repoapi.SwitchToAPI(r.Context(), *sw, images, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to get switch")
@@ -136,7 +142,7 @@ func validateSwitchLookups(ctx context.Context, w http.ResponseWriter, sw reposi
 // CreateSwitch reads the {userId} path value and requires an authenticated
 // caller. userId must be the caller's own subject; creating in another
 // user's collection returns 404, not 403, to avoid revealing it exists.
-func CreateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
+func CreateSwitch(switchRepo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -171,7 +177,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.SwitchToAPI(*created, true)
+		out, err := repoapi.SwitchToAPI(r.Context(), *created, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, created.ID)
 			problem.Internal(w, "failed to create switch")
@@ -188,7 +194,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's switch, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
-func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
+func UpdateSwitch(switchRepo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("switchId")
@@ -221,7 +227,7 @@ func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.SwitchToAPI(*updated, true)
+		out, err := repoapi.SwitchToAPI(r.Context(), *updated, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, updated.ID)
 			problem.Internal(w, "failed to update switch")
@@ -237,12 +243,16 @@ func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 // DeleteSwitch reads the {userId} and {switchId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's switch returns 404, not 403, to avoid revealing it exists.
-// The on_delete query param (default "block") controls what happens if a
-// build still references this switch: see [cascadedelete.DeleteSwitch].
+// Any image the switch had is removed from switchImages best-effort - a
+// failed image delete is logged but doesn't fail the response, since the
+// switch itself has already been deleted by that point. The on_delete
+// query param (default "block") controls what happens if a build still
+// references this switch: see [cascadedelete.DeleteSwitch].
 func DeleteSwitch(
 	switchRepo repository.SwitchRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	switchImages repository.SwitchImageStore,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -259,7 +269,7 @@ func DeleteSwitch(
 			return
 		}
 
-		result, err := cascadedelete.DeleteSwitch(r.Context(), switchRepo, buildRepo, images, ownerID, id, onDelete)
+		result, err := cascadedelete.DeleteSwitch(r.Context(), switchRepo, buildRepo, buildImages, ownerID, id, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			problem.StillReferenced(w, "switch is still referenced by one or more builds", blocked.BuildIDs)
 			return
@@ -270,11 +280,123 @@ func DeleteSwitch(
 			return
 		}
 
+		if result.ImageKey != nil {
+			switchImages.BestEffortDelete(r.Context(), []repository.SwitchImageKey{*result.ImageKey})
+		}
+
 		if onDelete == cascadedelete.OnDeleteCascade {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(api.CascadeDeleteResult{DeletedBuildIds: result.DeletedBuildIDs})
 			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// SetSwitchImage reads the {userId} and {switchId} path values and
+// requires an authenticated caller. userId must be the caller's own
+// subject; setting a switch's image on another user's switch, or one
+// that doesn't exist, both return 404, to avoid revealing it exists.
+// Doesn't upload the image itself - the response is a presigned S3 PUT
+// URL the client uploads directly to.
+func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("switchId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.SetSwitchImageJSONRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(r.Context(), in.ContentType); fieldErr != nil {
+			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
+				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)},
+			})
+			return
+		}
+
+		key, err := repository.NewSwitchImageKey(r.Context(), id)
+		if err != nil {
+			log.FromContext(r.Context()).Error("building switch image key", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to set switch image")
+			return
+		}
+
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning switch image upload", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to set switch image")
+			return
+		}
+
+		_, err = switchRepo.SetImagePath(r.Context(), id, key)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("switch mutation conflict", log.SwitchID, id)
+			problem.Conflict(w, "the switch is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("setting switch image path", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to set switch image")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(api.SwitchImageUpload{UploadUrl: uploadURL})
+	}
+}
+
+// DeleteSwitchImage reads the {userId} and {switchId} path values and
+// requires an authenticated caller. userId must be the caller's own
+// subject; removing a switch's image on another user's switch, or one
+// that doesn't exist, both return 404, to avoid revealing it exists.
+// Idempotent: a switch with no image already set is not an error.
+func DeleteSwitchImage(switchRepo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		id := r.PathValue("switchId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		cleared, err := switchRepo.ClearImagePath(r.Context(), id)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("switch mutation conflict", log.SwitchID, id)
+			problem.Conflict(w, "the switch is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("clearing switch image path", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to delete switch image")
+			return
+		}
+
+		if cleared != nil {
+			if err := images.Delete(r.Context(), *cleared); err != nil {
+				log.FromContext(r.Context()).Error("deleting switch image object", log.Error, err, log.SwitchID, id)
+				problem.Internal(w, "failed to delete switch image")
+				return
+			}
 		}
 
 		w.WriteHeader(http.StatusNoContent)

@@ -22,8 +22,9 @@ import (
 type ListSwitchesSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockSwitchRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockSwitchRepository
+	mockImages *mocks.MockSwitchImageStore
+	handler    http.HandlerFunc
 }
 
 func TestListSwitchesSuite(t *testing.T) {
@@ -32,7 +33,8 @@ func TestListSwitchesSuite(t *testing.T) {
 
 func (s *ListSwitchesSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
-	s.handler = ListSwitches(s.mockRepo)
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = ListSwitches(s.mockRepo, s.mockImages)
 }
 
 func (s *ListSwitchesSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -129,8 +131,9 @@ func (s *ListSwitchesSuite) TestListSwitches_RepositoryError_Returns500() {
 type GetSwitchSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockSwitchRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockSwitchRepository
+	mockImages *mocks.MockSwitchImageStore
+	handler    http.HandlerFunc
 }
 
 func TestGetSwitchSuite(t *testing.T) {
@@ -139,7 +142,8 @@ func TestGetSwitchSuite(t *testing.T) {
 
 func (s *GetSwitchSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
-	s.handler = GetSwitch(s.mockRepo)
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = GetSwitch(s.mockRepo, s.mockImages)
 }
 
 func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
@@ -263,6 +267,7 @@ type CreateSwitchSuite struct {
 	suite.Suite
 
 	mockSwitchRepo *mocks.MockSwitchRepository
+	mockImages     *mocks.MockSwitchImageStore
 	handler        http.HandlerFunc
 }
 
@@ -272,7 +277,8 @@ func TestCreateSwitchSuite(t *testing.T) {
 
 func (s *CreateSwitchSuite) SetupTest() {
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
-	s.handler = CreateSwitch(s.mockSwitchRepo)
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = CreateSwitch(s.mockSwitchRepo, s.mockImages)
 }
 
 func (s *CreateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -472,6 +478,7 @@ type UpdateSwitchSuite struct {
 	suite.Suite
 
 	mockSwitchRepo *mocks.MockSwitchRepository
+	mockImages     *mocks.MockSwitchImageStore
 	handler        http.HandlerFunc
 }
 
@@ -481,7 +488,8 @@ func TestUpdateSwitchSuite(t *testing.T) {
 
 func (s *UpdateSwitchSuite) SetupTest() {
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
-	s.handler = UpdateSwitch(s.mockSwitchRepo)
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = UpdateSwitch(s.mockSwitchRepo, s.mockImages)
 }
 
 func (s *UpdateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -681,10 +689,11 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_MalformedStoredDate_Returns500NotPa
 type DeleteSwitchSuite struct {
 	suite.Suite
 
-	mockSwitches *mocks.MockSwitchRepository
-	mockBuilds   *mocks.MockBuildRepository
-	mockImages   *mocks.MockBuildImageStore
-	handler      http.HandlerFunc
+	mockSwitches     *mocks.MockSwitchRepository
+	mockBuilds       *mocks.MockBuildRepository
+	mockBuildImages  *mocks.MockBuildImageStore
+	mockSwitchImages *mocks.MockSwitchImageStore
+	handler          http.HandlerFunc
 }
 
 func TestDeleteSwitchSuite(t *testing.T) {
@@ -694,8 +703,9 @@ func TestDeleteSwitchSuite(t *testing.T) {
 func (s *DeleteSwitchSuite) SetupTest() {
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
-	s.mockImages = mocks.NewMockBuildImageStore(s.T())
-	s.handler = DeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	s.mockBuildImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockSwitchImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = DeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 }
 
 func (s *DeleteSwitchSuite) newRequest(ctx context.Context, onDelete string) *http.Request {
@@ -719,7 +729,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_DefaultOnDelete_NoReferences_
 		Return(nil, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -748,7 +758,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Block_Referenced_Returns409Wi
 func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
@@ -765,12 +775,12 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Cascade_Referenced_Returns200
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockImages.EXPECT().
+	s.mockBuildImages.EXPECT().
 		BestEffortDelete(mock.Anything, mock.Anything).
 		Return()
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "cascade"))
@@ -815,10 +825,302 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_RepositoryError_Returns500() {
 		Return(nil, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(errors.New("delete item failed"))
+		Return(nil, errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type SetSwitchImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockSwitchRepository
+	mockImages *mocks.MockSwitchImageStore
+	handler    http.HandlerFunc
+}
+
+func TestSetSwitchImageSuite(t *testing.T) {
+	suite.Run(t, new(SetSwitchImageSuite))
+}
+
+func (s *SetSwitchImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = SetSwitchImage(s.mockRepo, s.mockImages)
+}
+
+func (s *SetSwitchImageSuite) newRequest(ctx context.Context, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/switches/sw1/image", strings.NewReader(body))
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("switchId", "sw1")
+	return req
+}
+
+func (s *SetSwitchImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+const setSwitchImageTestKey = repository.SwitchImageKey("switches/alice/sw1/image")
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_Succeeds() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
+		Return(&repository.Switch{ID: "sw1"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		UploadURL string `json:"upload_url"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("https://example.com/presigned-put", got.UploadURL)
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	req := s.newRequest(ctx, `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_Anonymous_Returns404() {
+	req := s.newRequest(s.T().Context(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_InvalidBody_Returns400() {
+	req := s.newRequest(s.ownerCtx(), "not json")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_UnapprovedContentType_Returns400() {
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"application/pdf"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("content_type", got.InvalidParams[0].Name)
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
+		Return(nil, errors.New("put item failed"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetSwitchImageSuite) TestSetSwitchImage_MutationConflict_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockRepo.EXPECT().
+		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type DeleteSwitchImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockSwitchRepository
+	mockImages *mocks.MockSwitchImageStore
+	handler    http.HandlerFunc
+}
+
+func TestDeleteSwitchImageSuite(t *testing.T) {
+	suite.Run(t, new(DeleteSwitchImageSuite))
+}
+
+func (s *DeleteSwitchImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+	s.handler = DeleteSwitchImage(s.mockRepo, s.mockImages)
+}
+
+func (s *DeleteSwitchImageSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/users/alice/switches/sw1/image", nil)
+	req.SetPathValue("userId", "alice")
+	req.SetPathValue("switchId", "sw1")
+	return req
+}
+
+func (s *DeleteSwitchImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "alice")
+}
+
+var deleteSwitchImageTestKey = repository.SwitchImageKey("switches/alice/sw1/image")
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_Succeeds() {
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(&deleteSwitchImageTestKey, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteSwitchImageTestKey).
+		Return(nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_AlreadyAbsent_SucceedsWithoutS3Call() {
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(nil, nil)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_NotOwner_Returns404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+
+	req := s.newRequest(ctx)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_Anonymous_Returns404() {
+	req := s.newRequest(s.T().Context())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_NotFound_Returns404() {
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_MutationConflict_Returns409() {
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_RepositoryError_Returns500() {
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(nil, errors.New("get item failed"))
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_S3DeleteError_Returns500() {
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(&deleteSwitchImageTestKey, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteSwitchImageTestKey).
+		Return(errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
