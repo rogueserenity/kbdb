@@ -374,6 +374,9 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 		}
 		cleared = ks.Kits[idx].ImagePath
 		ks.Kits = slices.Delete(ks.Kits, idx, idx+1)
+		if ks.PrimaryKitID != nil && *ks.PrimaryKitID == kitID {
+			ks.PrimaryKitID = nil
+		}
 		return nil
 	})
 	if errors.Is(err, errKitAlreadyAbsent) {

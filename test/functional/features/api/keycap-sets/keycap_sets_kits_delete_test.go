@@ -229,6 +229,44 @@ var _ = Describe("Deleting a keycap kit", func() {
 		})
 	})
 
+	Context("given a private keycap set whose primary kit is the one being deleted", func() {
+		var (
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "delete-primary-kit-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		When("deleting the primary kit", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.DeleteKit(ctx, ownerID, keycapSetID, kitID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("clears primary_kit_id on a follow-up GetKeycapSet", func(ctx SpecContext) {
+				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
+
+				getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+
+				var set struct {
+					PrimaryKitID *string `json:"primary_kit_id"`
+				}
+				Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+				Expect(set.PrimaryKitID).To(BeNil())
+			})
+		})
+	})
+
 	Context("given the parent keycap set does not exist", func() {
 		When("deleting a kit", func() {
 			BeforeEach(func(ctx SpecContext) {

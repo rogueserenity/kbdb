@@ -95,10 +95,13 @@ type KeycapSetRepository interface {
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
 
 	// DeleteKit removes the kit matching kitID from setID's Kits and
-	// returns the image key that was on it, or nil if it had none.
-	// Idempotent: a kitID not present in the set is not an error, and
-	// returns (nil, nil). Returns ErrNotFound if setID doesn't exist for
-	// the owner, or ErrMutationConflict if concurrent writers exhaust the
+	// returns the image key that was on it, or nil if it had none. If kitID
+	// was the set's PrimaryKitID, that's cleared to nil too, atomically
+	// with the removal - a caller never observes a set whose PrimaryKitID
+	// names a kit that isn't there. Idempotent: a kitID not present in the
+	// set is not an error, and returns (nil, nil). Returns ErrNotFound if
+	// setID doesn't exist for the owner, or ErrMutationConflict if
+	// concurrent writers exhaust the
 	// retry budget.
 	DeleteKit(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
 

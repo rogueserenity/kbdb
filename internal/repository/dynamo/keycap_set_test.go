@@ -669,6 +669,52 @@ func (s *KeycapSetRepositorySuite) getItemOutputWithKitImage() *dynamodb.GetItem
 	return out
 }
 
+func (s *KeycapSetRepositorySuite) getItemOutputWithPrimaryKit(primaryKitID string) *dynamodb.GetItemOutput {
+	out := s.getItemOutputWithKit()
+	out.Item["primary_kit_id"] = &types.AttributeValueMemberS{Value: primaryKitID}
+	return out
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_KitIsPrimary_ClearsPrimaryKitID() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithPrimaryKit("kit1"), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return len(ks.Kits) == 0 && ks.PrimaryKitID == nil
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_KitIsNotPrimary_LeavesPrimaryKitIDUntouched() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithPrimaryKit("some-other-kit"), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return len(ks.Kits) == 0 && ks.PrimaryKitID != nil && *ks.PrimaryKitID == "some-other-kit"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().NoError(err)
+}
+
 func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
