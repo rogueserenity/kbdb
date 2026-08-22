@@ -21,6 +21,8 @@ import (
 // failing the whole request, mirroring [BuildToAPISummary]; any other
 // repository error, or b.BuildDate not matching dateLayout, or an image
 // failing to presign, still fails it.
+//
+// isOwner hides Stabs.Price and TotalCost from non-owners.
 func BuildToAPI(
 	ctx context.Context, b repository.Build,
 	images repository.BuildImageStore,
@@ -28,6 +30,7 @@ func BuildToAPI(
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
+	isOwner bool,
 ) (api.Build, error) {
 	buildDate, err := buildDateToAPI(b.BuildDate)
 	if err != nil {
@@ -39,27 +42,27 @@ func BuildToAPI(
 		return api.Build{}, err
 	}
 
-	keyboardRef, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo)
+	keyboardRef, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	switches, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo)
+	switches, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	keycapKits, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, kitImages)
+	keycapKits, keycapKitsCost, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, kitImages)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	return api.Build{
+	out := api.Build{
 		Id:            b.ID,
 		Keyboard:      keyboardRef,
 		Plate:         b.Plate,
 		CaseMountType: buildCaseMountTypeToAPI(b.CaseMountType),
-		Stabs:         buildStabsToAPI(b.Stabs),
+		Stabs:         buildStabsToAPI(b.Stabs, isOwner),
 		Foam:          b.Foam,
 		Switches:      switches,
 		KeycapKits:    keycapKits,
@@ -67,7 +70,37 @@ func BuildToAPI(
 		Notes:         b.Notes,
 		Visibility:    api.Visibility(b.Visibility),
 		Images:        imgs,
-	}, nil
+	}
+
+	if isOwner {
+		var stabsPrice *float64
+		if b.Stabs != nil {
+			stabsPrice = b.Stabs.Price
+		}
+		out.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
+	}
+
+	return out, nil
+}
+
+// sumKnownCosts sums the non-nil components, treating a nil one as
+// excluded rather than zero. Returns nil if none are set.
+func sumKnownCosts(components ...*float64) *float64 {
+	var total float64
+	var haveAny bool
+	for _, c := range components {
+		if c == nil {
+			continue
+		}
+		total += *c
+		haveAny = true
+	}
+
+	if !haveAny {
+		return nil //nolint:nilnil // no known-priced components is a valid, expected result
+	}
+
+	return &total
 }
 
 // BuildToRepo maps a generated BuildInput (already schema-validated by the
@@ -176,16 +209,20 @@ func buildCaseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.BuildCase
 	}
 }
 
-func buildStabsToAPI(s *repository.BuildStabs) *api.BuildStabs {
+func buildStabsToAPI(s *repository.BuildStabs, isOwner bool) *api.BuildStabs {
 	if s == nil {
 		return nil
 	}
 
-	return &api.BuildStabs{
+	out := &api.BuildStabs{
 		Name:      s.Name,
 		MountType: s.MountType,
-		Price:     s.Price,
 	}
+	if isOwner {
+		out.Price = s.Price
+	}
+
+	return out
 }
 
 func buildStabsToRepo(s *api.BuildStabs) *repository.BuildStabs {
@@ -226,15 +263,16 @@ func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repositor
 	return out
 }
 
-// buildKeyboardRefToAPI resolves keyboardID into a denormalized reference.
-// Returns (nil, nil) if the keyboard no longer exists.
-func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyboardRepo repository.KeyboardRepository) (*api.BuildKeyboardRef, error) {
+// buildKeyboardRefToAPI resolves keyboardID into a denormalized reference
+// plus its purchase price. Returns (nil, nil, nil) if the keyboard no
+// longer exists.
+func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyboardRepo repository.KeyboardRepository) (*api.BuildKeyboardRef, *float64, error) {
 	kb, err := keyboardRepo.Get(ctx, ownerID, keyboardID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
-			return nil, nil //nolint:nilnil // deleted-after-reference is a valid, expected result
+			return nil, nil, nil //nolint:nilnil // deleted-after-reference is a valid, expected result
 		}
-		return nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
+		return nil, nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
 	}
 
 	return &api.BuildKeyboardRef{
@@ -243,7 +281,7 @@ func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyb
 		Name:   kb.Name,
 		Size:   kb.Size,
 		Layout: kb.Layout,
-	}, nil
+	}, kb.Purchase.Price, nil
 }
 
 // buildSwitchEntriesResolvedToAPI resolves each entry's Switch id into a
@@ -251,13 +289,15 @@ func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyb
 // per-item-fetch approach as [BuildToAPISummary]'s keyboard lookup, run
 // concurrently across entries since each only touches its own out[i]. An
 // entry whose switch no longer exists keeps its Count but leaves Switch
-// nil rather than dropping the entry or failing the request.
-func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry, switchRepo repository.SwitchRepository) (*[]api.BuildSwitchEntryResolved, error) {
+// nil rather than dropping the entry or failing the request. Also returns
+// the summed (unit price × count) across entries with a known price.
+func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry, switchRepo repository.SwitchRepository) (*[]api.BuildSwitchEntryResolved, *float64, error) {
 	if entries == nil {
-		return nil, nil //nolint:nilnil // no switches is a valid, expected result
+		return nil, nil, nil //nolint:nilnil // no switches is a valid, expected result
 	}
 
 	out := make([]api.BuildSwitchEntryResolved, len(entries))
+	costs := make([]*float64, len(entries))
 	errs := make([]error, len(entries))
 
 	var wg sync.WaitGroup
@@ -286,15 +326,20 @@ func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entrie
 					Type:         sw.Type,
 				},
 			}
+
+			if sw.Purchase.Price != nil {
+				entryCost := *sw.Purchase.Price * float64(e.Count)
+				costs[i] = &entryCost
+			}
 		}(i, e)
 	}
 	wg.Wait()
 
 	if err := errors.Join(errs...); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &out, nil
+	return &out, sumKnownCosts(costs...), nil
 }
 
 // buildKeycapKitEntriesResolvedToAPI resolves each entry's (KeycapSet, Kit)
@@ -304,15 +349,18 @@ func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entrie
 // same reason. An entry whose keycap set - or whose kit within it - no
 // longer exists keeps its KitId but leaves KeycapSet, KitName, and
 // KitImageUrl nil rather than dropping the entry or failing the request.
+// Also returns the summed price across entries whose kit has a known
+// price.
 func buildKeycapKitEntriesResolvedToAPI(
 	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
 	keycapSetRepo repository.KeycapSetRepository, kitImages repository.KeycapKitImageStore,
-) (*[]api.BuildKeycapKitEntryResolved, error) {
+) (*[]api.BuildKeycapKitEntryResolved, *float64, error) {
 	if entries == nil {
-		return nil, nil //nolint:nilnil // no keycap kits is a valid, expected result
+		return nil, nil, nil //nolint:nilnil // no keycap kits is a valid, expected result
 	}
 
 	out := make([]api.BuildKeycapKitEntryResolved, len(entries))
+	costs := make([]*float64, len(entries))
 	errs := make([]error, len(entries))
 
 	var wg sync.WaitGroup
@@ -343,6 +391,7 @@ func buildKeycapKitEntriesResolvedToAPI(
 				Profile: ks.Profile,
 			}
 			out[i].KitName = &kit.Name
+			costs[i] = kit.Purchase.Price
 
 			if kit.ImagePath != nil {
 				url, err := kitImages.PresignGet(ctx, *kit.ImagePath)
@@ -357,10 +406,10 @@ func buildKeycapKitEntriesResolvedToAPI(
 	wg.Wait()
 
 	if err := errors.Join(errs...); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return &out, nil
+	return &out, sumKnownCosts(costs...), nil
 }
 
 func findKeycapKit(kits []repository.KeycapKit, kitID string) *repository.KeycapKit {

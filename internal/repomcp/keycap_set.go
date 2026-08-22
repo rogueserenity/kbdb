@@ -8,13 +8,14 @@ import (
 // KeycapSetToMCP maps a repository.KeycapSet to its MCP tool shape. Unlike
 // repoapi.KeycapSetToAPI, this never presigns a GET URL for a kit's image -
 // KeycapKitToMCP reports only HasImage, so mapping a set can't fail the way
-// the REST mapping can on a presign error.
-func KeycapSetToMCP(ks repository.KeycapSet) schema.KeycapSet {
+// the REST mapping can on a presign error. isOwner hides each kit's
+// purchase.price from non-owners.
+func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
 	var kits []schema.KeycapKit
 	if ks.Kits != nil {
 		kits = make([]schema.KeycapKit, len(ks.Kits))
 		for i, k := range ks.Kits {
-			kits[i] = KeycapKitToMCP(k)
+			kits[i] = KeycapKitToMCP(k, isOwner)
 		}
 	}
 
@@ -61,13 +62,13 @@ func KeycapSetFromMCP(in schema.KeycapSetInput) repository.KeycapSet {
 
 // KeycapKitToMCP maps a repository.KeycapKit to its MCP tool shape.
 // ImagePath collapses to the HasImage bool, never a URL - see
-// schema.KeycapKit for why.
-func KeycapKitToMCP(k repository.KeycapKit) schema.KeycapKit {
+// schema.KeycapKit for why. isOwner hides purchase.price from non-owners.
+func KeycapKitToMCP(k repository.KeycapKit, isOwner bool) schema.KeycapKit {
 	return schema.KeycapKit{
 		KitID:    k.KitID,
 		Name:     k.Name,
 		HasImage: k.ImagePath != nil,
-		Purchase: keycapKitPurchaseToMCP(k.Purchase),
+		Purchase: keycapKitPurchaseToMCP(k.Purchase, isOwner),
 	}
 }
 
@@ -98,17 +99,21 @@ func keycapKitPurchaseFromMCP(p *schema.KeycapKitPurchase) repository.KeycapKitP
 
 // Dates pass through as strings, unlike repoapi's mapping, so this can't
 // fail on a malformed one. Mirrors [keyboardPurchaseToMCP].
-func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase) *schema.KeycapKitPurchase {
+func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase, isOwner bool) *schema.KeycapKitPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil
 	}
 
-	return &schema.KeycapKitPurchase{
+	out := &schema.KeycapKitPurchase{
 		Vendor:       p.Vendor,
-		Price:        p.Price,
 		OrderDate:    p.OrderDate,
 		DeliveryDate: p.DeliveryDate,
 		OrderStatus:  p.OrderStatus,
 	}
+	if isOwner {
+		out.Price = p.Price
+	}
+
+	return out
 }

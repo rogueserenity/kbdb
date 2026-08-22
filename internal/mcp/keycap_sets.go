@@ -114,13 +114,18 @@ func handleGetKeycapSet(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[
 			return nil, schema.GetKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		if err != nil {
+			return nil, schema.GetKeycapSetOutput{}, err
+		}
+
 		ks, err := ownedReadable(ctx, repo.Get, func(ks repository.KeycapSet) repository.Visibility { return ks.Visibility },
 			"keycap set", errKeycapSetNotFound, log.KeycapSetID, in.UserID, in.KeycapSetID)
 		if err != nil {
 			return nil, schema.GetKeycapSetOutput{}, err
 		}
 
-		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*ks)}, nil
+		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*ks, authz.IsOwner(ctx, ownerID))}, nil
 	}
 }
 
@@ -182,7 +187,8 @@ func handleCreateKeycapSet(
 			return nil, schema.CreateKeycapSetOutput{}, errors.New("failed to create keycap set")
 		}
 
-		return nil, schema.CreateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*created)}, nil
+		// isOwner: true - create always targets the caller's own collection.
+		return nil, schema.CreateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*created, true)}, nil
 	}
 }
 
@@ -216,7 +222,8 @@ func handleUpdateKeycapSet(
 			return nil, schema.UpdateKeycapSetOutput{}, errors.New("failed to update keycap set")
 		}
 
-		return nil, schema.UpdateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*updated)}, nil
+		// isOwner: true - update always targets the caller's own collection.
+		return nil, schema.UpdateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*updated, true)}, nil
 	}
 }
 
@@ -318,7 +325,8 @@ func handleCreateKeycapKit(
 			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to add kit")
 		}
 
-		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*created)}, nil
+		// isOwner: true - a kit is always added to the caller's own set.
+		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*created, true)}, nil
 	}
 }
 
@@ -353,7 +361,8 @@ func handleUpdateKeycapKit(
 			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to update kit")
 		}
 
-		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*updated)}, nil
+		// isOwner: true - a kit is always updated on the caller's own set.
+		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*updated, true)}, nil
 	}
 }
 

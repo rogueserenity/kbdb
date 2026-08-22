@@ -31,6 +31,7 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 		"pcb": map[string]any{"firmware": "QMK/VIA"},
 		"purchase": map[string]any{
 			"vendor":       "Amazon",
+			"price":        329.99,
 			"order_status": "Delivered",
 		},
 	})

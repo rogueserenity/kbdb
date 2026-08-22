@@ -79,7 +79,7 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.KeyboardToAPI(*kb)
+		out, err := repoapi.KeyboardToAPI(*kb, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to get keyboard")
@@ -174,7 +174,8 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 			return
 		}
 
-		out, err := repoapi.KeyboardToAPI(*created)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.KeyboardToAPI(*created, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, created.ID)
 			problem.Internal(w, "failed to create keyboard")
@@ -223,7 +224,8 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 			return
 		}
 
-		out, err := repoapi.KeyboardToAPI(*updated)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.KeyboardToAPI(*updated, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, updated.ID)
 			problem.Internal(w, "failed to update keyboard")

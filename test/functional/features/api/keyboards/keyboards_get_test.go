@@ -56,14 +56,49 @@ var _ = Describe("Getting a keyboard", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the keyboard", func() {
+				It("returns the keyboard without purchase.price", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got struct {
-						ID string `json:"id"`
+						ID       string `json:"id"`
+						Purchase struct {
+							Vendor *string  `json:"vendor"`
+							Price  *float64 `json:"price"`
+						} `json:"purchase"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.ID).To(Equal(keyboardID))
+
+					By("still including non-price purchase fields")
+					Expect(got.Purchase.Vendor).NotTo(BeNil())
+					Expect(*got.Purchase.Vendor).To(Equal("Amazon"))
+
+					By("omitting price")
+					Expect(got.Purchase.Price).To(BeNil())
+				})
+			})
+		})
+
+		Context("given the caller is the owner", func() {
+			When("getting the keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keyboardID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the keyboard with purchase.price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Purchase struct {
+							Price *float64 `json:"price"`
+						} `json:"purchase"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+
+					Expect(got.Purchase.Price).NotTo(BeNil())
+					Expect(*got.Purchase.Price).To(Equal(329.99))
 				})
 			})
 		})

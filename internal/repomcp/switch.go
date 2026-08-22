@@ -11,7 +11,8 @@ import (
 // from unset - the same reason repoapi.SwitchToAPI keeps them. The nested
 // material/force/spring/purchase groups still collapse to nil when every
 // field in them is unset, so an all-empty group is omitted entirely.
-func SwitchToMCP(sw repository.Switch) schema.Switch {
+// isOwner hides purchase.price from non-owners.
+func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 	return schema.Switch{
 		ID:           sw.ID,
 		Brand:        sw.Brand,
@@ -23,7 +24,7 @@ func SwitchToMCP(sw repository.Switch) schema.Switch {
 		Material:     switchMaterialToMCP(sw.Material),
 		Force:        switchForceToMCP(sw.Force),
 		Spring:       switchSpringToMCP(sw.Spring),
-		Purchase:     switchPurchaseToMCP(sw.Purchase),
+		Purchase:     switchPurchaseToMCP(sw.Purchase, isOwner),
 		Notes:        sw.Notes,
 		Visibility:   string(sw.Visibility),
 	}
@@ -77,20 +78,24 @@ func switchSpringToMCP(s repository.SwitchSpring) *schema.SwitchSpring {
 
 // Dates pass through as strings, unlike repoapi.SwitchToAPI, so this can't
 // fail on a malformed one.
-func switchPurchaseToMCP(p repository.SwitchPurchase) *schema.SwitchPurchase {
+func switchPurchaseToMCP(p repository.SwitchPurchase, isOwner bool) *schema.SwitchPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil && p.Quantity == nil {
 		return nil
 	}
 
-	return &schema.SwitchPurchase{
+	out := &schema.SwitchPurchase{
 		Vendor:       p.Vendor,
-		Price:        p.Price,
 		OrderDate:    p.OrderDate,
 		DeliveryDate: p.DeliveryDate,
 		OrderStatus:  p.OrderStatus,
 		Quantity:     p.Quantity,
 	}
+	if isOwner {
+		out.Price = p.Price
+	}
+
+	return out
 }
 
 // SwitchFromMCP maps a create_switch/update_switch tool argument to its

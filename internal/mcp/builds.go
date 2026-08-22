@@ -105,13 +105,18 @@ func handleGetBuild(repo repository.BuildRepository) mcp.ToolHandlerFor[schema.G
 			return nil, schema.GetBuildOutput{}, errors.New("build_id must not be blank")
 		}
 
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		if err != nil {
+			return nil, schema.GetBuildOutput{}, err
+		}
+
 		b, err := ownedReadable(ctx, repo.Get, func(b repository.Build) repository.Visibility { return b.Visibility },
 			"build", errBuildNotFound, log.BuildID, in.UserID, in.BuildID)
 		if err != nil {
 			return nil, schema.GetBuildOutput{}, err
 		}
 
-		return nil, schema.GetBuildOutput{Build: repomcp.BuildToMCP(*b)}, nil
+		return nil, schema.GetBuildOutput{Build: repomcp.BuildToMCP(*b, authz.IsOwner(ctx, ownerID))}, nil
 	}
 }
 
@@ -156,7 +161,8 @@ func handleCreateBuild(
 			return nil, schema.CreateBuildOutput{}, errors.New("failed to create build")
 		}
 
-		return nil, schema.CreateBuildOutput{Build: repomcp.BuildToMCP(*created)}, nil
+		// isOwner: true - create always targets the caller's own collection.
+		return nil, schema.CreateBuildOutput{Build: repomcp.BuildToMCP(*created, true)}, nil
 	}
 }
 
@@ -211,7 +217,8 @@ func handleUpdateBuild(
 			return nil, schema.UpdateBuildOutput{}, errors.New("failed to update build")
 		}
 
-		return nil, schema.UpdateBuildOutput{Build: repomcp.BuildToMCP(*updated)}, nil
+		// isOwner: true - update always targets the caller's own collection.
+		return nil, schema.UpdateBuildOutput{Build: repomcp.BuildToMCP(*updated, true)}, nil
 	}
 }
 

@@ -79,7 +79,7 @@ func GetKeycapSet(repo repository.KeycapSetRepository, images repository.KeycapK
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(r.Context(), *ks, images)
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *ks, images, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to get keycap set")
@@ -178,7 +178,8 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(r.Context(), *created, images)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *created, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, created.ID)
 			problem.Internal(w, "failed to create keycap set")
@@ -234,7 +235,8 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(r.Context(), *updated, images)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *updated, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, updated.ID)
 			problem.Internal(w, "failed to update keycap set")
@@ -348,7 +350,8 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		out, err := repoapi.KeycapKitToAPI(r.Context(), *created, images)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.KeycapKitToAPI(r.Context(), *created, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, created.KitID)
 			problem.Internal(w, "failed to add kit")
@@ -408,7 +411,8 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		out, err := repoapi.KeycapKitToAPI(r.Context(), *updated, images)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.KeycapKitToAPI(r.Context(), *updated, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, updated.KitID)
 			problem.Internal(w, "failed to update kit")

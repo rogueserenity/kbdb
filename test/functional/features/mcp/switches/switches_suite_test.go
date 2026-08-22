@@ -31,6 +31,10 @@ type getOutput struct {
 		Name       string `json:"name"`
 		Type       string `json:"type"`
 		Visibility string `json:"visibility"`
+		Purchase   *struct {
+			Vendor *string  `json:"vendor"`
+			Price  *float64 `json:"price"`
+		} `json:"purchase"`
 	} `json:"switch"`
 }
 

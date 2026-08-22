@@ -53,7 +53,7 @@ func TestKeyboardToAPISuite(t *testing.T) {
 
 func (s *KeyboardToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	kb := fullRepoKeyboard()
-	out, err := KeyboardToAPI(kb)
+	out, err := KeyboardToAPI(kb, true)
 	s.Require().NoError(err)
 
 	s.Equal(kb.ID, out.Id)
@@ -95,7 +95,7 @@ func (s *KeyboardToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeyboardToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	kb := repository.Keyboard{ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPrivate}
 
-	out, err := KeyboardToAPI(kb)
+	out, err := KeyboardToAPI(kb, true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Size)
@@ -112,7 +112,7 @@ func (s *KeyboardToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 		Design: repository.KeyboardDesign{TopCase: repository.KeyboardMaterialColor{Material: strPtr("Aluminum")}},
 	}
 
-	out, err := KeyboardToAPI(kb)
+	out, err := KeyboardToAPI(kb, true)
 	s.Require().NoError(err)
 
 	if s.NotNil(out.Design) {
@@ -130,7 +130,7 @@ func (s *KeyboardToAPISuite) TestPlatesNil_OmittedFromDesign() {
 		Design: repository.KeyboardDesign{TopCase: repository.KeyboardMaterialColor{Material: strPtr("Aluminum")}},
 	}
 
-	out, err := KeyboardToAPI(kb)
+	out, err := KeyboardToAPI(kb, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Design)
@@ -143,7 +143,7 @@ func (s *KeyboardToAPISuite) TestPlatesEmptySlice_PresentNotNil() {
 		Design: repository.KeyboardDesign{Plates: []string{}},
 	}
 
-	out, err := KeyboardToAPI(kb)
+	out, err := KeyboardToAPI(kb, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Design)
@@ -158,9 +158,35 @@ func (s *KeyboardToAPISuite) TestMalformedStoredDate_ReturnsError() {
 		Purchase: repository.KeyboardPurchase{OrderDate: strPtr("not-a-date")},
 	}
 
-	_, err := KeyboardToAPI(kb)
+	_, err := KeyboardToAPI(kb, true)
 
 	s.Require().Error(err)
+}
+
+func (s *KeyboardToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+	kb := fullRepoKeyboard()
+
+	out, err := KeyboardToAPI(kb, false)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Nil(out.Purchase.Price)
+	s.Equal(kb.Purchase.Vendor, out.Purchase.Vendor)
+	s.Equal(kb.Purchase.OrderStatus, out.Purchase.OrderStatus)
+	s.Require().NotNil(out.Purchase.OrderDate)
+	s.Equal(*kb.Purchase.OrderDate, out.Purchase.OrderDate.Format(dateLayout))
+	s.Require().NotNil(out.Purchase.DeliveryDate)
+	s.Equal(*kb.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
+}
+
+func (s *KeyboardToAPISuite) TestIsOwnerTrue_IncludesPrice() {
+	kb := fullRepoKeyboard()
+
+	out, err := KeyboardToAPI(kb, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Equal(kb.Purchase.Price, out.Purchase.Price)
 }
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_MapsOnlySummaryFields() {

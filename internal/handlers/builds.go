@@ -132,7 +132,7 @@ func GetBuild(
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *b, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo)
+		out, err := repoapi.BuildToAPI(r.Context(), *b, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to get build")
@@ -195,7 +195,8 @@ func CreateBuild(
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *created, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.BuildToAPI(r.Context(), *created, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, created.ID)
 			problem.Internal(w, "failed to create build")
@@ -265,7 +266,8 @@ func UpdateBuild(
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *updated, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.BuildToAPI(r.Context(), *updated, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, updated.ID)
 			problem.Internal(w, "failed to update build")

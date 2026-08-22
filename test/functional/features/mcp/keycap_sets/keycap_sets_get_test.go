@@ -64,6 +64,36 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns the keycap set and it has a kit", func() {
+			var kitID string
+
+			BeforeEach(func(ctx SpecContext) {
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the get_keycap_set tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+				})
+
+				It("includes the kit's purchase.price for the owner", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeKeycapSetOutput(result)
+					Expect(out.KeycapSet.Kits).To(HaveLen(1))
+					Expect(out.KeycapSet.Kits[0].Purchase).NotTo(BeNil())
+					Expect(out.KeycapSet.Kits[0].Purchase.Price).NotTo(BeNil())
+					Expect(*out.KeycapSet.Kits[0].Purchase.Price).To(Equal(85.0))
+				})
+			})
+		})
+
 		Context("given the keycap set never existed", func() {
 			When("the get_keycap_set tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {
@@ -138,6 +168,52 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 					Expect(decodeKeycapSetOutput(result).KeycapSet.ID).To(Equal(keycapSetID))
+				})
+			})
+		})
+
+		Context("given another user owns a public keycap set with a kit", func() {
+			var (
+				otherID string
+				kitID   string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
+				Expect(tokenErr).NotTo(HaveOccurred())
+
+				otherID, err = api.TokenSubject(otherToken)
+				Expect(err).NotTo(HaveOccurred())
+
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithKit(ctx, otherID, keycapSetID, kitID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, otherID, keycapSetID)).To(Succeed())
+			})
+
+			When("the get_keycap_set tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keycap_set", map[string]any{
+						"keycap_set_id": keycapSetID,
+						"user_id":       otherID,
+					})
+				})
+
+				It("returns the kit with purchase.price omitted", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeKeycapSetOutput(result)
+					Expect(out.KeycapSet.Kits).To(HaveLen(1))
+
+					By("still including non-price purchase fields")
+					Expect(out.KeycapSet.Kits[0].Purchase).NotTo(BeNil())
+					Expect(*out.KeycapSet.Kits[0].Purchase.Vendor).To(Equal("MechMarket"))
+
+					By("omitting price")
+					Expect(out.KeycapSet.Kits[0].Purchase.Price).To(BeNil())
 				})
 			})
 		})

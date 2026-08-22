@@ -9,8 +9,8 @@ import (
 
 // SwitchToAPI maps a repository.Switch to its wire representation. Returns
 // an error if a stored Purchase date doesn't match dateLayout.
-func SwitchToAPI(sw repository.Switch) (api.Switch, error) {
-	purchase, err := switchPurchaseToAPI(sw.Purchase)
+func SwitchToAPI(sw repository.Switch, isOwner bool) (api.Switch, error) {
+	purchase, err := switchPurchaseToAPI(sw.Purchase, isOwner)
 	if err != nil {
 		return api.Switch{}, err
 	}
@@ -134,7 +134,7 @@ func switchSpringToRepo(s *api.SwitchSpring) repository.SwitchSpring {
 	}
 }
 
-func switchPurchaseToAPI(p repository.SwitchPurchase) (*api.SwitchPurchase, error) {
+func switchPurchaseToAPI(p repository.SwitchPurchase, isOwner bool) (*api.SwitchPurchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil &&
 		p.OrderStatus == nil && p.Quantity == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
@@ -142,9 +142,11 @@ func switchPurchaseToAPI(p repository.SwitchPurchase) (*api.SwitchPurchase, erro
 
 	out := &api.SwitchPurchase{
 		Vendor:      p.Vendor,
-		Price:       p.Price,
 		OrderStatus: p.OrderStatus,
 		Quantity:    p.Quantity,
+	}
+	if isOwner {
+		out.Price = p.Price
 	}
 	if p.OrderDate != nil {
 		d, err := parseAPIDate(*p.OrderDate)
