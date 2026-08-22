@@ -22,7 +22,7 @@ import (
 // ListKeyboards reads the {userId} path value and lists that owner's
 // keyboards. Anonymous callers are allowed; visibility is scoped to what
 // the caller (if any) may read, per [authz.ReadableVisibilities].
-func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
+func ListKeyboards(repo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -40,7 +40,13 @@ func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
 
 		items := make([]api.KeyboardSummary, len(keyboards))
 		for i, kb := range keyboards {
-			items[i] = repoapi.KeyboardToAPISummary(kb)
+			summary, err := repoapi.KeyboardToAPISummary(r.Context(), kb, images)
+			if err != nil {
+				log.FromContext(r.Context()).Error("mapping keyboard to API summary", log.Error, err, log.KeyboardID, kb.ID)
+				problem.Internal(w, "failed to list keyboards")
+				return
+			}
+			items[i] = summary
 		}
 
 		page := api.KeyboardListPage{Items: &items}
@@ -57,7 +63,7 @@ func ListKeyboards(repo repository.KeyboardRepository) http.HandlerFunc {
 // GetKeyboard reads the {userId} and {keyboardId} path values. Anonymous callers
 // are allowed; a keyboard that exists but isn't readable by the caller
 // returns 404, not 403, to avoid revealing it exists.
-func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
+func GetKeyboard(repo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keyboardId")
@@ -79,7 +85,7 @@ func GetKeyboard(repo repository.KeyboardRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.KeyboardToAPI(*kb, authz.IsOwner(r.Context(), ownerID))
+		out, err := repoapi.KeyboardToAPI(r.Context(), *kb, images, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to get keyboard")
@@ -140,7 +146,7 @@ func keyboardFieldErrorToInvalidParam(fe lookup.FieldError, size *string) proble
 // authenticated caller. userId must be the caller's own subject; creating
 // in another user's collection returns 404, not 403, to avoid revealing it
 // exists.
-func CreateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
+func CreateKeyboard(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -175,7 +181,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.KeyboardToAPI(*created, true)
+		out, err := repoapi.KeyboardToAPI(r.Context(), *created, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, created.ID)
 			problem.Internal(w, "failed to create keyboard")
@@ -192,7 +198,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 // authenticated caller. userId must be the caller's own subject; updating
 // another user's keyboard, or one that doesn't exist, both return 404, to
 // avoid revealing it exists.
-func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc {
+func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keyboardId")
@@ -225,7 +231,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.KeyboardToAPI(*updated, true)
+		out, err := repoapi.KeyboardToAPI(r.Context(), *updated, images, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, updated.ID)
 			problem.Internal(w, "failed to update keyboard")
@@ -241,13 +247,17 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository) http.HandlerFunc
 // DeleteKeyboard reads the {userId} and {keyboardId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keyboard returns 404, not 403, to avoid revealing it
-// exists. The on_delete query param (default "block") controls what
+// exists. Any images the keyboard had are removed from keyboardImages
+// best-effort - a failed image delete is logged but doesn't fail the
+// response, since the keyboard itself has already been deleted by that
+// point. The on_delete query param (default "block") controls what
 // happens if a build still references this keyboard: see
 // [cascadedelete.DeleteKeyboard].
 func DeleteKeyboard(
 	keyboardRepo repository.KeyboardRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	keyboardImages repository.KeyboardImageStore,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -264,7 +274,7 @@ func DeleteKeyboard(
 			return
 		}
 
-		result, err := cascadedelete.DeleteKeyboard(r.Context(), keyboardRepo, buildRepo, images, ownerID, id, onDelete)
+		result, err := cascadedelete.DeleteKeyboard(r.Context(), keyboardRepo, buildRepo, buildImages, ownerID, id, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			problem.StillReferenced(w, "keyboard is still referenced by one or more builds", blocked.BuildIDs)
 			return
@@ -275,11 +285,123 @@ func DeleteKeyboard(
 			return
 		}
 
+		keyboardImages.BestEffortDelete(r.Context(), result.ImageKeys)
+
 		if onDelete == cascadedelete.OnDeleteCascade {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(api.CascadeDeleteResult{DeletedBuildIds: result.DeletedBuildIDs})
 			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// AddKeyboardImage reads the {userId} and {keyboardId} path values and
+// requires an authenticated caller. userId must be the caller's own
+// subject; adding an image to another user's keyboard, or one that
+// doesn't exist, both return 404. Doesn't upload the image itself - the
+// response is a presigned S3 PUT URL the client uploads directly to.
+func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		keyboardID := r.PathValue("keyboardId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.CreateKeyboardImageJSONRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(r.Context(), in.ContentType); fieldErr != nil {
+			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
+				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)},
+			})
+			return
+		}
+
+		imageID := uuid.NewString()
+
+		key, err := repository.NewKeyboardImageKey(r.Context(), keyboardID, imageID)
+		if err != nil {
+			log.FromContext(r.Context()).Error("building keyboard image key", log.Error, err, log.KeyboardID, keyboardID)
+			problem.Internal(w, "failed to add keyboard image")
+			return
+		}
+
+		uploadURL, err := images.PresignPutKeyboardImage(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning keyboard image upload", log.Error, err, log.KeyboardID, keyboardID)
+			problem.Internal(w, "failed to add keyboard image")
+			return
+		}
+
+		_, err = keyboardRepo.AddImage(r.Context(), keyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("keyboard mutation conflict", log.KeyboardID, keyboardID)
+			problem.Conflict(w, "the keyboard is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("adding keyboard image", log.Error, err, log.KeyboardID, keyboardID)
+			problem.Internal(w, "failed to add keyboard image")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(api.KeyboardImageUpload{ImageId: imageID, UploadUrl: uploadURL})
+	}
+}
+
+// DeleteKeyboardImage reads the {userId}, {keyboardId}, and {imageId} path
+// values and requires an authenticated caller. userId must be the
+// caller's own subject; removing an image from another user's keyboard
+// always returns 404. Idempotent: an imageId not present on the keyboard
+// is not an error.
+func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ownerID := r.PathValue("userId")
+		keyboardID := r.PathValue("keyboardId")
+		imageID := r.PathValue("imageId")
+
+		if !authz.IsOwner(r.Context(), ownerID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		removed, err := keyboardRepo.DeleteImage(r.Context(), keyboardID, imageID)
+		if errors.Is(err, repository.ErrNotFound) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("keyboard mutation conflict", log.KeyboardID, keyboardID)
+			problem.Conflict(w, "the keyboard is being modified concurrently, please retry")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("deleting keyboard image", log.Error, err, log.KeyboardID, keyboardID)
+			problem.Internal(w, "failed to delete keyboard image")
+			return
+		}
+
+		if removed != nil {
+			if err := images.DeleteKeyboardImage(r.Context(), *removed); err != nil {
+				log.FromContext(r.Context()).Error("deleting keyboard image object", log.Error, err, log.KeyboardID, keyboardID)
+				problem.Internal(w, "failed to delete keyboard image")
+				return
+			}
 		}
 
 		w.WriteHeader(http.StatusNoContent)

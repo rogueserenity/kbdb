@@ -39,7 +39,7 @@ func (s *DeleteKeyboardSuite) TestBlock_NoReferencingBuilds_DeletesKeyboard() {
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
@@ -48,6 +48,23 @@ func (s *DeleteKeyboardSuite) TestBlock_NoReferencingBuilds_DeletesKeyboard() {
 
 	s.Require().NoError(err)
 	s.Empty(result.DeletedBuildIDs)
+}
+
+func (s *DeleteKeyboardSuite) TestBlock_KeyboardHadImages_ReturnsTheirImageKeys() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
+		Return(nil, nil)
+	s.mockKeyboards.EXPECT().
+		Delete(s.ctx, "kb1").
+		Return([]repository.KeyboardImageKey{"keyboards/alice/kb1/images/img1"}, nil)
+
+	result, err := cascadedelete.DeleteKeyboard(
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		"alice", "kb1", cascadedelete.OnDeleteBlock,
+	)
+
+	s.Require().NoError(err)
+	s.Equal([]repository.KeyboardImageKey{"keyboards/alice/kb1/images/img1"}, result.ImageKeys)
 }
 
 func (s *DeleteKeyboardSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_DeletesNothing() {
@@ -76,7 +93,7 @@ func (s *DeleteKeyboardSuite) TestDetach_ReferencingBuilds_DeletesKeyboardAnyway
 	// doesn't care about references.
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
@@ -93,7 +110,7 @@ func (s *DeleteKeyboardSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKeyboar
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
@@ -122,7 +139,7 @@ func (s *DeleteKeyboardSuite) TestCascade_ReferencingBuilds_DeletesEachBuildThen
 		Return()
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,

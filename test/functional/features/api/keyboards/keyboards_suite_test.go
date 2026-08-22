@@ -13,11 +13,12 @@ import (
 // a size that passes the plain keyboard_size check but is wrong for
 // approvedLayout, isolating the layout/size cross-check.
 const (
-	approvedSize         = "60%"
-	approvedOtherSize    = "40%"
-	approvedLayout       = "WK"
-	approvedCaseMaterial = "Aluminum"
-	approvedVendor       = "Amazon"
+	approvedSize             = "60%"
+	approvedOtherSize        = "40%"
+	approvedLayout           = "WK"
+	approvedCaseMaterial     = "Aluminum"
+	approvedVendor           = "Amazon"
+	approvedImageContentType = "image/png"
 )
 
 func TestKeyboards(t *testing.T) {

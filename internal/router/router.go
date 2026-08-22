@@ -36,6 +36,7 @@ func New(
 	verifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
 	keyboardRepo repository.KeyboardRepository,
+	keyboardImageStore repository.KeyboardImageStore,
 	keycapSetRepo repository.KeycapSetRepository,
 	imageStore repository.KeycapKitImageStore,
 	buildRepo repository.BuildRepository,
@@ -72,15 +73,19 @@ func New(
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, keyboardImageStore))))
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo, keyboardImageStore))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo, keyboardImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeyboard(keyboardRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeyboard(keyboardRepo, keyboardImageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore, keyboardImageStore))))
+	mux.Handle("POST /v1/users/{userId}/keyboards/{keyboardId}/images",
+		middleware.RequireAuthorizerIdentity(validate(handlers.AddKeyboardImage(keyboardRepo, keyboardImageStore))))
+	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}/images/{imageId}",
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboardImage(keyboardRepo, keyboardImageStore))))
 
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
@@ -129,7 +134,7 @@ func New(
 	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
 	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
 	// the REST surface.
-	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
+	mcpHandlers := mcp.New(switchRepo, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)
