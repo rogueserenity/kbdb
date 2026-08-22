@@ -64,14 +64,37 @@ var _ = Describe("Getting a build", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the build", func() {
+				It("returns the build without total_cost", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got struct {
-						ID string `json:"id"`
+						ID        string   `json:"id"`
+						TotalCost *float64 `json:"total_cost"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.ID).To(Equal(buildID))
+					Expect(got.TotalCost).To(BeNil())
+				})
+			})
+		})
+
+		Context("given the caller is the owner", func() {
+			When("getting the build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the build with total_cost derived from the referenced keyboard's price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						TotalCost *float64 `json:"total_cost"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.TotalCost).NotTo(BeNil())
+					Expect(*got.TotalCost).To(Equal(329.99))
 				})
 			})
 		})

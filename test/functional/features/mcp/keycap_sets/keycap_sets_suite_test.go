@@ -28,8 +28,9 @@ const (
 )
 
 type keycapKitPurchase struct {
-	Vendor      *string `json:"vendor"`
-	OrderStatus *string `json:"order_status"`
+	Vendor      *string  `json:"vendor"`
+	Price       *float64 `json:"price"`
+	OrderStatus *string  `json:"order_status"`
 }
 
 type keycapKit struct {

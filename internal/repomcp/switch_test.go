@@ -53,7 +53,7 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 		Visibility:   repository.VisibilityPublic,
 	}
 
-	out := SwitchToMCP(sw)
+	out := SwitchToMCP(sw, true)
 
 	s.Equal("sw-1", out.ID)
 	s.Require().NotNil(out.Manufacturer)
@@ -84,7 +84,7 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 // An all-unset group collapses to nil so it's omitted from the tool result
 // entirely, rather than appearing as an object of zero values.
 func (s *SwitchToMCPSuite) TestEmptyGroups_CollapseToNil() {
-	out := SwitchToMCP(repository.Switch{ID: "sw-1", Visibility: repository.VisibilityPrivate})
+	out := SwitchToMCP(repository.Switch{ID: "sw-1", Visibility: repository.VisibilityPrivate}, true)
 
 	s.Nil(out.Material)
 	s.Nil(out.Force)
@@ -103,7 +103,7 @@ func (s *SwitchToMCPSuite) TestPartiallySetGroup_IsRetained() {
 
 	out := SwitchToMCP(repository.Switch{
 		Force: repository.SwitchForce{BottomOut: &bottomOut},
-	})
+	}, true)
 
 	s.Require().NotNil(out.Force)
 	s.Require().NotNil(out.Force.BottomOut)
@@ -122,7 +122,7 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	out := SwitchToMCP(repository.Switch{
 		Pins:     &pins,
 		Purchase: repository.SwitchPurchase{Price: &price, Quantity: &quantity},
-	})
+	}, true)
 
 	s.Require().NotNil(out.Pins)
 	s.Zero(*out.Pins)
@@ -138,6 +138,37 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 		`{"id":"","brand":"","name":"","type":"","pins":0,"purchase":{"price":0,"quantity":0},"visibility":""}`,
 		string(raw),
 	)
+}
+
+func (s *SwitchToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+	vendor := "Divinikey"
+	status := "Delivered"
+	price := 65.0
+
+	out := SwitchToMCP(repository.Switch{
+		ID:         "sw-1",
+		Purchase:   repository.SwitchPurchase{Vendor: &vendor, OrderStatus: &status, Price: &price},
+		Visibility: repository.VisibilityPublic,
+	}, false)
+
+	s.Require().NotNil(out.Purchase)
+	s.Nil(out.Purchase.Price)
+	s.Equal(&vendor, out.Purchase.Vendor)
+	s.Equal(&status, out.Purchase.OrderStatus)
+}
+
+func (s *SwitchToMCPSuite) TestIsOwnerTrue_IncludesPrice() {
+	price := 65.0
+
+	out := SwitchToMCP(repository.Switch{
+		ID:         "sw-1",
+		Purchase:   repository.SwitchPurchase{Price: &price},
+		Visibility: repository.VisibilityPublic,
+	}, true)
+
+	s.Require().NotNil(out.Purchase)
+	s.Require().NotNil(out.Purchase.Price)
+	s.InDelta(price, *out.Purchase.Price, 0.0001)
 }
 
 type SwitchToMCPSummarySuite struct {

@@ -37,7 +37,7 @@ func TestKeycapSetToAPISuite(t *testing.T) {
 func (s *KeycapSetToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	ks := fullRepoKeycapSet()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images)
+	out, err := KeycapSetToAPI(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 
 	s.Equal(ks.ID, out.Id)
@@ -53,7 +53,7 @@ func (s *KeycapSetToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	ks := repository.KeycapSet{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPrivate}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images)
+	out, err := KeycapSetToAPI(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Profile)
@@ -70,7 +70,7 @@ func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 	}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images)
+	out, err := KeycapSetToAPI(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Kits)
@@ -88,9 +88,44 @@ func (s *KeycapSetToAPISuite) TestMalformedStoredKitPurchaseDate_ReturnsError() 
 	}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	_, err := KeycapSetToAPI(context.Background(), ks, images)
+	_, err := KeycapSetToAPI(context.Background(), ks, images, true)
 
 	s.Require().Error(err)
+}
+
+func (s *KeycapSetToAPISuite) TestIsOwnerFalse_OmitsKitPriceKeepsRestOfPurchase() {
+	ks := fullRepoKeycapSet()
+	ks.Kits = []repository.KeycapKit{fullRepoKeycapKit()}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *ks.Kits[0].ImagePath).Return("https://example.com/presigned-get", nil)
+
+	out, err := KeycapSetToAPI(context.Background(), ks, images, false)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Kits)
+	s.Require().Len(*out.Kits, 1)
+	kit := (*out.Kits)[0]
+	s.Require().NotNil(kit.Purchase)
+	s.Nil(kit.Purchase.Price)
+	s.Equal(ks.Kits[0].Purchase.Vendor, kit.Purchase.Vendor)
+	s.Equal(ks.Kits[0].Purchase.OrderStatus, kit.Purchase.OrderStatus)
+}
+
+func (s *KeycapSetToAPISuite) TestIsOwnerTrue_IncludesKitPrice() {
+	ks := fullRepoKeycapSet()
+	ks.Kits = []repository.KeycapKit{fullRepoKeycapKit()}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *ks.Kits[0].ImagePath).Return("https://example.com/presigned-get", nil)
+
+	out, err := KeycapSetToAPI(context.Background(), ks, images, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Kits)
+	s.Require().Len(*out.Kits, 1)
+	s.Require().NotNil((*out.Kits)[0].Purchase)
+	s.Equal(ks.Kits[0].Purchase.Price, (*out.Kits)[0].Purchase.Price)
 }
 
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() {
@@ -175,7 +210,7 @@ func (s *KeycapKitToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapKitToAPI(context.Background(), k, images)
+	out, err := KeycapKitToAPI(context.Background(), k, images, true)
 	s.Require().NoError(err)
 
 	s.Equal(k.KitID, out.KitId)
@@ -196,7 +231,7 @@ func (s *KeycapKitToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	k := repository.KeycapKit{KitID: "kit1", Name: "Base"}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapKitToAPI(context.Background(), k, images)
+	out, err := KeycapKitToAPI(context.Background(), k, images, true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Purchase)
@@ -210,9 +245,35 @@ func (s *KeycapKitToAPISuite) TestMalformedStoredDate_ReturnsError() {
 	}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	_, err := KeycapKitToAPI(context.Background(), k, images)
+	_, err := KeycapKitToAPI(context.Background(), k, images, true)
 
 	s.Require().Error(err)
+}
+
+func (s *KeycapKitToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+	k := fullRepoKeycapKit()
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
+
+	out, err := KeycapKitToAPI(context.Background(), k, images, false)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Nil(out.Purchase.Price)
+	s.Equal(k.Purchase.Vendor, out.Purchase.Vendor)
+	s.Equal(k.Purchase.OrderStatus, out.Purchase.OrderStatus)
+}
+
+func (s *KeycapKitToAPISuite) TestIsOwnerTrue_IncludesPrice() {
+	k := fullRepoKeycapKit()
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
+
+	out, err := KeycapKitToAPI(context.Background(), k, images, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Equal(k.Purchase.Price, out.Purchase.Price)
 }
 
 func (s *KeycapKitToAPISuite) TestPresignGetFails_ReturnsError() {
@@ -221,7 +282,7 @@ func (s *KeycapKitToAPISuite) TestPresignGetFails_ReturnsError() {
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("", errors.New("s3: access denied"))
 
-	_, err := KeycapKitToAPI(context.Background(), k, images)
+	_, err := KeycapKitToAPI(context.Background(), k, images, true)
 
 	s.Require().Error(err)
 }

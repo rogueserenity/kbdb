@@ -78,13 +78,18 @@ func handleGetKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[sc
 			return nil, schema.GetKeyboardOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		if err != nil {
+			return nil, schema.GetKeyboardOutput{}, err
+		}
+
 		kb, err := ownedReadable(ctx, repo.Get, func(k repository.Keyboard) repository.Visibility { return k.Visibility },
 			"keyboard", errKeyboardNotFound, log.KeyboardID, in.UserID, in.KeyboardID)
 		if err != nil {
 			return nil, schema.GetKeyboardOutput{}, err
 		}
 
-		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*kb)}, nil
+		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*kb, authz.IsOwner(ctx, ownerID))}, nil
 	}
 }
 
@@ -108,7 +113,8 @@ func handleCreateKeyboard(
 			return nil, schema.CreateKeyboardOutput{}, errors.New("failed to create keyboard")
 		}
 
-		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*created)}, nil
+		// isOwner: true - create always targets the caller's own collection.
+		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*created, true)}, nil
 	}
 }
 
@@ -136,7 +142,8 @@ func handleUpdateKeyboard(
 			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to update keyboard")
 		}
 
-		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*updated)}, nil
+		// isOwner: true - update always targets the caller's own collection.
+		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*updated, true)}, nil
 	}
 }
 

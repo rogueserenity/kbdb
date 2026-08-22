@@ -70,6 +70,8 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 					Expect(*out.Keyboard.PCB.Firmware).To(Equal("QMK/VIA"))
 					Expect(out.Keyboard.Purchase).NotTo(BeNil())
 					Expect(*out.Keyboard.Purchase.Vendor).To(Equal("Amazon"))
+					Expect(out.Keyboard.Purchase.Price).NotTo(BeNil())
+					Expect(*out.Keyboard.Purchase.Price).To(Equal(329.99))
 
 					By("omitting a group whose fields are all unset")
 					Expect(out.Keyboard.Design.BottomCase).To(BeNil())
@@ -147,10 +149,19 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 					})
 				})
 
-				It("returns the keyboard", func() {
+				It("returns the keyboard with purchase.price omitted", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(decodeGetOutput(result).Keyboard.ID).To(Equal(keyboardID))
+
+					out := decodeGetOutput(result)
+					Expect(out.Keyboard.ID).To(Equal(keyboardID))
+
+					By("still including non-price purchase fields")
+					Expect(out.Keyboard.Purchase).NotTo(BeNil())
+					Expect(*out.Keyboard.Purchase.Vendor).To(Equal("Amazon"))
+
+					By("omitting price")
+					Expect(out.Keyboard.Purchase.Price).To(BeNil())
 				})
 			})
 		})

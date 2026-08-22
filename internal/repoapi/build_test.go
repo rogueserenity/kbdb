@@ -73,7 +73,7 @@ func newBuildToAPIDeps(t interface {
 }
 
 func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build, error) {
-	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo)
+	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
 }
 
 // expectFullyResolvable sets up every dependency in fullRepoBuild() (kb1,
@@ -387,6 +387,142 @@ func (s *BuildToAPISuite) TestKitImagePresignFails_ReturnsError() {
 
 	_, err := d.call(context.Background(), b)
 	s.Require().Error(err)
+}
+
+func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+
+	// fullRepoBuild: 70 switches at 0.5 each = 35; stabs price 12.5.
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+}
+
+func (s *BuildToAPISuite) TestTotalCost_UnknownComponentsExcludedNotZeroed() {
+	b := fullRepoBuild()
+	b.Stabs = nil
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}},
+		}, nil)
+
+	// Keyboard has no purchase price, keycap kit has no purchase price, and
+	// Stabs is nil - only the switches' 70*0.5 = 35 should be counted.
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(35, *out.TotalCost, 0.0001)
+}
+
+func (s *BuildToAPISuite) TestTotalCost_NoPricedComponents_OmitsField() {
+	b := repository.Build{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate}
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
+}
+
+func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+
+	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, false)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Stabs)
+	s.Nil(out.Stabs.Price)
+	s.Equal(b.Stabs.Name, out.Stabs.Name)
+	s.Equal(b.Stabs.MountType, out.Stabs.MountType)
+	s.Nil(out.TotalCost)
+}
+
+func (s *BuildToAPISuite) TestIsOwnerTrue_IncludesStabsPriceAndTotalCost() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+
+	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Stabs)
+	s.Equal(b.Stabs.Price, out.Stabs.Price)
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
 }
 
 func fullAPIBuildInput() api.BuildInput {

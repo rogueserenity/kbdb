@@ -25,11 +25,18 @@ const (
 	approvedDurometer       = "70A"
 )
 
+type buildStabs struct {
+	Name      *string  `json:"name"`
+	MountType *string  `json:"mount_type"`
+	Price     *float64 `json:"price"`
+}
+
 type build struct {
-	ID         string `json:"id"`
-	Keyboard   string `json:"keyboard"`
-	Visibility string `json:"visibility"`
-	HasImages  bool   `json:"has_images"`
+	ID         string      `json:"id"`
+	Keyboard   string      `json:"keyboard"`
+	Visibility string      `json:"visibility"`
+	HasImages  bool        `json:"has_images"`
+	Stabs      *buildStabs `json:"stabs"`
 }
 
 type createOutput struct {

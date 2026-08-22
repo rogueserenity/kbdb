@@ -89,7 +89,7 @@ func GetSwitch(repo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.SwitchToAPI(*sw)
+		out, err := repoapi.SwitchToAPI(*sw, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to get switch")
@@ -170,7 +170,8 @@ func CreateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.SwitchToAPI(*created)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.SwitchToAPI(*created, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, created.ID)
 			problem.Internal(w, "failed to create switch")
@@ -219,7 +220,8 @@ func UpdateSwitch(switchRepo repository.SwitchRepository) http.HandlerFunc {
 			return
 		}
 
-		out, err := repoapi.SwitchToAPI(*updated)
+		// isOwner: true - already gated by authz.IsOwner above.
+		out, err := repoapi.SwitchToAPI(*updated, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, updated.ID)
 			problem.Internal(w, "failed to update switch")

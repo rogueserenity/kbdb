@@ -56,7 +56,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 		Images: []repository.BuildImage{
 			{ImageID: "img-1", Path: repository.BuildImageKey("builds/u-1/build-1/images/img-1")},
 		},
-	})
+	}, true)
 
 	s.Equal("build-1", out.ID)
 	s.Equal("kb-1", out.Keyboard)
@@ -66,6 +66,8 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 	s.Equal("70A", *out.CaseMountType.Durometer)
 	s.Require().NotNil(out.Stabs)
 	s.Equal("Durock v3", *out.Stabs.Name)
+	s.Require().NotNil(out.Stabs.Price)
+	s.InDelta(12.5, *out.Stabs.Price, 0.0001)
 	s.Require().Len(out.Switches, 1)
 	s.Equal("sw-1", out.Switches[0].Switch)
 	s.Equal(70, out.Switches[0].Count)
@@ -77,8 +79,24 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 	s.True(out.HasImages)
 }
 
+func (s *BuildToMCPSuite) TestIsOwnerFalse_OmitsStabsPrice() {
+	out := BuildToMCP(repository.Build{
+		ID:       "build-1",
+		Keyboard: "kb-1",
+		Stabs: &repository.BuildStabs{
+			Name:  strPtr("Durock v3"),
+			Price: floatPtr(12.5),
+		},
+		Visibility: repository.VisibilityPublic,
+	}, false)
+
+	s.Require().NotNil(out.Stabs)
+	s.Nil(out.Stabs.Price)
+	s.Equal(strPtr("Durock v3"), out.Stabs.Name)
+}
+
 func (s *BuildToMCPSuite) TestNoImages_HasImagesFalse() {
-	out := BuildToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate})
+	out := BuildToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}, true)
 
 	s.False(out.HasImages)
 	s.Nil(out.Switches)

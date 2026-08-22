@@ -7,8 +7,10 @@ import (
 
 // KeyboardToMCP maps a repository.Keyboard to its MCP tool shape. Pointers
 // pass through undereferenced so a recorded zero survives, as
-// repoapi.KeyboardToAPI does.
-func KeyboardToMCP(kb repository.Keyboard) schema.Keyboard {
+// repoapi.KeyboardToAPI does. isOwner gates purchase.price the same way
+// repoapi.KeyboardToAPI's does: a non-owner never sees the dollar amount,
+// though the rest of purchase is unaffected.
+func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
 	return schema.Keyboard{
 		ID:         kb.ID,
 		Brand:      kb.Brand,
@@ -17,7 +19,7 @@ func KeyboardToMCP(kb repository.Keyboard) schema.Keyboard {
 		Layout:     kb.Layout,
 		Design:     keyboardDesignToMCP(kb.Design),
 		PCB:        keyboardPCBToMCP(kb.PCB),
-		Purchase:   keyboardPurchaseToMCP(kb.Purchase),
+		Purchase:   keyboardPurchaseToMCP(kb.Purchase, isOwner),
 		Notes:      kb.Notes,
 		Visibility: string(kb.Visibility),
 	}
@@ -79,19 +81,23 @@ func keyboardPCBToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
 
 // Dates pass through as strings, unlike repoapi.KeyboardToAPI, so this can't
 // fail on a malformed one.
-func keyboardPurchaseToMCP(p repository.KeyboardPurchase) *schema.KeyboardPurchase {
+func keyboardPurchaseToMCP(p repository.KeyboardPurchase, isOwner bool) *schema.KeyboardPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil
 	}
 
-	return &schema.KeyboardPurchase{
+	out := &schema.KeyboardPurchase{
 		Vendor:       p.Vendor,
-		Price:        p.Price,
 		OrderDate:    p.OrderDate,
 		DeliveryDate: p.DeliveryDate,
 		OrderStatus:  p.OrderStatus,
 	}
+	if isOwner {
+		out.Price = p.Price
+	}
+
+	return out
 }
 
 // KeyboardFromMCP maps a create_keyboard/update_keyboard tool argument to

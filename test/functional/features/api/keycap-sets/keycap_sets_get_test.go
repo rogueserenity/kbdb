@@ -69,6 +69,83 @@ var _ = Describe("Getting a keycap set", func() {
 		})
 	})
 
+	Context("given a public keycap set with a kit", func() {
+		var (
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "public-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		Context("given the caller is anonymous", func() {
+			When("getting the keycap set", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keycapSetID, "")
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the kit without purchase.price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Kits []struct {
+							KitID    string `json:"kit_id"`
+							Purchase struct {
+								Vendor *string  `json:"vendor"`
+								Price  *float64 `json:"price"`
+							} `json:"purchase"`
+						} `json:"kits"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Kits).To(HaveLen(1))
+
+					By("still including non-price purchase fields")
+					Expect(got.Kits[0].Purchase.Vendor).NotTo(BeNil())
+					Expect(*got.Kits[0].Purchase.Vendor).To(Equal("MechMarket"))
+
+					By("omitting price")
+					Expect(got.Kits[0].Purchase.Price).To(BeNil())
+				})
+			})
+		})
+
+		Context("given the caller is the owner", func() {
+			When("getting the keycap set", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keycapSetID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the kit with purchase.price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Kits []struct {
+							Purchase struct {
+								Price *float64 `json:"price"`
+							} `json:"purchase"`
+						} `json:"kits"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Kits).To(HaveLen(1))
+
+					Expect(got.Kits[0].Purchase.Price).NotTo(BeNil())
+					Expect(*got.Kits[0].Purchase.Price).To(Equal(85.0))
+				})
+			})
+		})
+	})
+
 	Context("given an authenticated-only keycap set", func() {
 		var keycapSetID string
 

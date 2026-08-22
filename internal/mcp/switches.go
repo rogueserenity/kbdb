@@ -77,13 +77,18 @@ func handleGetSwitch(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema
 			return nil, schema.GetSwitchOutput{}, errors.New("switch_id must not be blank")
 		}
 
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		if err != nil {
+			return nil, schema.GetSwitchOutput{}, err
+		}
+
 		sw, err := ownedReadable(ctx, repo.Get, func(sw repository.Switch) repository.Visibility { return sw.Visibility },
 			"switch", errSwitchNotFound, log.SwitchID, in.UserID, in.SwitchID)
 		if err != nil {
 			return nil, schema.GetSwitchOutput{}, err
 		}
 
-		return nil, schema.GetSwitchOutput{Switch: repomcp.SwitchToMCP(*sw)}, nil
+		return nil, schema.GetSwitchOutput{Switch: repomcp.SwitchToMCP(*sw, authz.IsOwner(ctx, ownerID))}, nil
 	}
 }
 
@@ -111,7 +116,8 @@ func handleCreateSwitch(
 			return nil, schema.CreateSwitchOutput{}, errors.New("failed to create switch")
 		}
 
-		return nil, schema.CreateSwitchOutput{Switch: repomcp.SwitchToMCP(*created)}, nil
+		// isOwner: true - create always targets the caller's own collection.
+		return nil, schema.CreateSwitchOutput{Switch: repomcp.SwitchToMCP(*created, true)}, nil
 	}
 }
 
@@ -139,7 +145,8 @@ func handleUpdateSwitch(
 			return nil, schema.UpdateSwitchOutput{}, errors.New("failed to update switch")
 		}
 
-		return nil, schema.UpdateSwitchOutput{Switch: repomcp.SwitchToMCP(*updated)}, nil
+		// isOwner: true - update always targets the caller's own collection.
+		return nil, schema.UpdateSwitchOutput{Switch: repomcp.SwitchToMCP(*updated, true)}, nil
 	}
 }
 

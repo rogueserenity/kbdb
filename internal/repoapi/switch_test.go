@@ -68,7 +68,7 @@ func TestSwitchToAPISuite(t *testing.T) {
 
 func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	sw := fullRepoSwitch()
-	out, err := SwitchToAPI(sw)
+	out, err := SwitchToAPI(sw, true)
 	s.Require().NoError(err)
 
 	s.Equal(sw.ID, out.Id)
@@ -110,7 +110,7 @@ func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *SwitchToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	sw := repository.Switch{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate}
 
-	out, err := SwitchToAPI(sw)
+	out, err := SwitchToAPI(sw, true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Manufacturer)
@@ -129,7 +129,7 @@ func (s *SwitchToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 		Material: repository.SwitchMaterial{Stem: strPtr("POM")},
 	}
 
-	out, err := SwitchToAPI(sw)
+	out, err := SwitchToAPI(sw, true)
 	s.Require().NoError(err)
 
 	if s.NotNil(out.Material) {
@@ -145,9 +145,36 @@ func (s *SwitchToAPISuite) TestMalformedStoredDate_ReturnsError() {
 		Purchase: repository.SwitchPurchase{OrderDate: strPtr("not-a-date")},
 	}
 
-	_, err := SwitchToAPI(sw)
+	_, err := SwitchToAPI(sw, true)
 
 	s.Require().Error(err)
+}
+
+func (s *SwitchToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+	sw := fullRepoSwitch()
+
+	out, err := SwitchToAPI(sw, false)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Nil(out.Purchase.Price)
+	s.Equal(sw.Purchase.Vendor, out.Purchase.Vendor)
+	s.Equal(sw.Purchase.OrderStatus, out.Purchase.OrderStatus)
+	s.Equal(sw.Purchase.Quantity, out.Purchase.Quantity)
+	s.Require().NotNil(out.Purchase.OrderDate)
+	s.Equal(*sw.Purchase.OrderDate, out.Purchase.OrderDate.Format(dateLayout))
+	s.Require().NotNil(out.Purchase.DeliveryDate)
+	s.Equal(*sw.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
+}
+
+func (s *SwitchToAPISuite) TestIsOwnerTrue_IncludesPrice() {
+	sw := fullRepoSwitch()
+
+	out, err := SwitchToAPI(sw, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Equal(sw.Purchase.Price, out.Purchase.Price)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {

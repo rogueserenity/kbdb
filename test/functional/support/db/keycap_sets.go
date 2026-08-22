@@ -43,7 +43,10 @@ func SeedKeycapSetWithKit(ctx context.Context, ownerID, id, kitID, visibility st
 func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []string, visibility string) error {
 	kits := make([]map[string]any, len(kitIDs))
 	for i, kitID := range kitIDs {
-		kits[i] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{}}
+		kits[i] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
+			"vendor": "MechMarket",
+			"price":  85.0,
+		}}
 	}
 
 	table := NewDynamoTable(ctx, support.KeycapSetTableName())

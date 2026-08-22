@@ -60,6 +60,11 @@ var _ = Describe("Getting a switch over MCP", func() {
 					Expect(out.Switch.ID).To(Equal(switchID))
 					Expect(out.Switch.Brand).To(Equal("Gateron"))
 					Expect(out.Switch.Visibility).To(Equal("private"))
+
+					By("including purchase.price for the owner")
+					Expect(out.Switch.Purchase).NotTo(BeNil())
+					Expect(out.Switch.Purchase.Price).NotTo(BeNil())
+					Expect(*out.Switch.Purchase.Price).To(Equal(0.35))
 				})
 			})
 		})
@@ -134,10 +139,19 @@ var _ = Describe("Getting a switch over MCP", func() {
 					})
 				})
 
-				It("returns the switch", func() {
+				It("returns the switch with purchase.price omitted", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(decodeGetOutput(result).Switch.ID).To(Equal(switchID))
+
+					out := decodeGetOutput(result)
+					Expect(out.Switch.ID).To(Equal(switchID))
+
+					By("still including non-price purchase fields")
+					Expect(out.Switch.Purchase).NotTo(BeNil())
+					Expect(*out.Switch.Purchase.Vendor).To(Equal("NovelKeys"))
+
+					By("omitting price")
+					Expect(out.Switch.Purchase.Price).To(BeNil())
 				})
 			})
 		})

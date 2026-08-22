@@ -11,9 +11,13 @@ import (
 )
 
 // KeyboardToAPI maps a repository.Keyboard to its wire representation.
-// Returns an error if a stored Purchase date doesn't match dateLayout.
-func KeyboardToAPI(kb repository.Keyboard) (api.Keyboard, error) {
-	purchase, err := keyboardPurchaseToAPI(kb.Purchase)
+// isOwner gates purchase.price: a non-owner (including an anonymous caller)
+// never sees the dollar amount, though the rest of purchase (vendor, dates,
+// order_status) is unaffected - price is the only field callers agreed is
+// sensitive. Returns an error if a stored Purchase date doesn't match
+// dateLayout.
+func KeyboardToAPI(kb repository.Keyboard, isOwner bool) (api.Keyboard, error) {
+	purchase, err := keyboardPurchaseToAPI(kb.Purchase, isOwner)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -152,15 +156,17 @@ func keyboardPCBToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
 // dateLayout matches how openapi_types.Date marshals/unmarshals.
 const dateLayout = "2006-01-02"
 
-func keyboardPurchaseToAPI(p repository.KeyboardPurchase) (*api.Purchase, error) {
+func keyboardPurchaseToAPI(p repository.KeyboardPurchase, isOwner bool) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
 
 	out := &api.Purchase{
 		Vendor:      p.Vendor,
-		Price:       p.Price,
 		OrderStatus: p.OrderStatus,
+	}
+	if isOwner {
+		out.Price = p.Price
 	}
 	if p.OrderDate != nil {
 		d, err := parseAPIDate(*p.OrderDate)
