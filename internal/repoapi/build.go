@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -11,10 +12,23 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// BuildToAPI maps a repository.Build to its wire representation. Returns an
-// error if b.BuildDate doesn't match dateLayout, or if an image's Path fails
-// to presign via images.PresignGetBuildImage.
-func BuildToAPI(ctx context.Context, b repository.Build, images repository.BuildImageStore) (api.Build, error) {
+// BuildToAPI maps a repository.Build to its wire representation, resolving
+// the Keyboard/Switch/KeycapSet references it carries into denormalized
+// objects so a client can render the build without follow-up requests. A
+// reference that can't be resolved (repository.ErrNotFound - e.g. deleted
+// after the build referenced it, see
+// https://github.com/rogueserenity/kbdb/issues/172) is left nil rather than
+// failing the whole request, mirroring [BuildToAPISummary]; any other
+// repository error, or b.BuildDate not matching dateLayout, or an image
+// failing to presign, still fails it.
+func BuildToAPI(
+	ctx context.Context, b repository.Build,
+	images repository.BuildImageStore,
+	kitImages repository.KeycapKitImageStore,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+) (api.Build, error) {
 	buildDate, err := buildDateToAPI(b.BuildDate)
 	if err != nil {
 		return api.Build{}, err
@@ -25,15 +39,30 @@ func BuildToAPI(ctx context.Context, b repository.Build, images repository.Build
 		return api.Build{}, err
 	}
 
+	keyboardRef, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo)
+	if err != nil {
+		return api.Build{}, err
+	}
+
+	switches, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo)
+	if err != nil {
+		return api.Build{}, err
+	}
+
+	keycapKits, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, kitImages)
+	if err != nil {
+		return api.Build{}, err
+	}
+
 	return api.Build{
 		Id:            b.ID,
-		Keyboard:      b.Keyboard,
+		Keyboard:      keyboardRef,
 		Plate:         b.Plate,
 		CaseMountType: buildCaseMountTypeToAPI(b.CaseMountType),
 		Stabs:         buildStabsToAPI(b.Stabs),
 		Foam:          b.Foam,
-		Switches:      buildSwitchEntriesToAPI(b.Switches),
-		KeycapKits:    buildKeycapKitEntriesToAPI(b.KeycapKits),
+		Switches:      switches,
+		KeycapKits:    keycapKits,
 		BuildDate:     buildDate,
 		Notes:         b.Notes,
 		Visibility:    api.Visibility(b.Visibility),
@@ -171,19 +200,6 @@ func buildStabsToRepo(s *api.BuildStabs) *repository.BuildStabs {
 	}
 }
 
-func buildSwitchEntriesToAPI(entries []repository.BuildSwitchEntry) *[]api.BuildSwitchEntry {
-	if entries == nil {
-		return nil
-	}
-
-	out := make([]api.BuildSwitchEntry, len(entries))
-	for i, e := range entries {
-		out[i] = api.BuildSwitchEntry{Switch: e.Switch, Count: e.Count}
-	}
-
-	return &out
-}
-
 func buildSwitchEntriesToRepo(entries *[]api.BuildSwitchEntry) []repository.BuildSwitchEntry {
 	if entries == nil {
 		return nil
@@ -197,19 +213,6 @@ func buildSwitchEntriesToRepo(entries *[]api.BuildSwitchEntry) []repository.Buil
 	return out
 }
 
-func buildKeycapKitEntriesToAPI(entries []repository.BuildKeycapKitEntry) *[]api.BuildKeycapKitEntry {
-	if entries == nil {
-		return nil
-	}
-
-	out := make([]api.BuildKeycapKitEntry, len(entries))
-	for i, e := range entries {
-		out[i] = api.BuildKeycapKitEntry{KeycapSet: e.KeycapSet, Kit: e.Kit}
-	}
-
-	return &out
-}
-
 func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repository.BuildKeycapKitEntry {
 	if entries == nil {
 		return nil
@@ -221,6 +224,152 @@ func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repositor
 	}
 
 	return out
+}
+
+// buildKeyboardRefToAPI resolves keyboardID into a denormalized reference.
+// Returns (nil, nil) if the keyboard no longer exists.
+func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyboardRepo repository.KeyboardRepository) (*api.BuildKeyboardRef, error) {
+	kb, err := keyboardRepo.Get(ctx, ownerID, keyboardID)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, nil //nolint:nilnil // deleted-after-reference is a valid, expected result
+		}
+		return nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
+	}
+
+	return &api.BuildKeyboardRef{
+		Id:     kb.ID,
+		Brand:  kb.Brand,
+		Name:   kb.Name,
+		Size:   kb.Size,
+		Layout: kb.Layout,
+	}, nil
+}
+
+// buildSwitchEntriesResolvedToAPI resolves each entry's Switch id into a
+// denormalized reference via a per-entry switchRepo.Get call - same
+// per-item-fetch approach as [BuildToAPISummary]'s keyboard lookup, run
+// concurrently across entries since each only touches its own out[i]. An
+// entry whose switch no longer exists keeps its Count but leaves Switch
+// nil rather than dropping the entry or failing the request.
+func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry, switchRepo repository.SwitchRepository) (*[]api.BuildSwitchEntryResolved, error) {
+	if entries == nil {
+		return nil, nil //nolint:nilnil // no switches is a valid, expected result
+	}
+
+	out := make([]api.BuildSwitchEntryResolved, len(entries))
+	errs := make([]error, len(entries))
+
+	var wg sync.WaitGroup
+	for i, e := range entries {
+		wg.Add(1)
+		go func(i int, e repository.BuildSwitchEntry) {
+			defer wg.Done()
+
+			sw, err := switchRepo.Get(ctx, ownerID, e.Switch)
+			if err != nil {
+				if !errors.Is(err, repository.ErrNotFound) {
+					errs[i] = fmt.Errorf("getting switch %q: %w", e.Switch, err)
+					return
+				}
+				out[i] = api.BuildSwitchEntryResolved{Count: e.Count}
+				return
+			}
+
+			out[i] = api.BuildSwitchEntryResolved{
+				Count: e.Count,
+				Switch: &api.BuildSwitchRef{
+					Id:           sw.ID,
+					Brand:        sw.Brand,
+					Manufacturer: sw.Manufacturer,
+					Name:         sw.Name,
+					Type:         sw.Type,
+				},
+			}
+		}(i, e)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+// buildKeycapKitEntriesResolvedToAPI resolves each entry's (KeycapSet, Kit)
+// pair into a denormalized reference plus the kit's own name/image, via a
+// per-entry keycapSetRepo.Get call - same per-item-fetch approach as
+// [buildSwitchEntriesResolvedToAPI], run concurrently across entries for the
+// same reason. An entry whose keycap set - or whose kit within it - no
+// longer exists keeps its KitId but leaves KeycapSet, KitName, and
+// KitImageUrl nil rather than dropping the entry or failing the request.
+func buildKeycapKitEntriesResolvedToAPI(
+	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
+	keycapSetRepo repository.KeycapSetRepository, kitImages repository.KeycapKitImageStore,
+) (*[]api.BuildKeycapKitEntryResolved, error) {
+	if entries == nil {
+		return nil, nil //nolint:nilnil // no keycap kits is a valid, expected result
+	}
+
+	out := make([]api.BuildKeycapKitEntryResolved, len(entries))
+	errs := make([]error, len(entries))
+
+	var wg sync.WaitGroup
+	for i, e := range entries {
+		wg.Add(1)
+		go func(i int, e repository.BuildKeycapKitEntry) {
+			defer wg.Done()
+
+			out[i] = api.BuildKeycapKitEntryResolved{KitId: e.Kit}
+
+			ks, err := keycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
+			if err != nil {
+				if !errors.Is(err, repository.ErrNotFound) {
+					errs[i] = fmt.Errorf("getting keycap set %q: %w", e.KeycapSet, err)
+				}
+				return
+			}
+
+			kit := findKeycapKit(ks.Kits, e.Kit)
+			if kit == nil {
+				return
+			}
+
+			out[i].KeycapSet = &api.BuildKeycapSetRef{
+				Id:      ks.ID,
+				Brand:   ks.Brand,
+				Name:    ks.Name,
+				Profile: ks.Profile,
+			}
+			out[i].KitName = &kit.Name
+
+			if kit.ImagePath != nil {
+				url, err := kitImages.PresignGet(ctx, *kit.ImagePath)
+				if err != nil {
+					errs[i] = fmt.Errorf("presigning kit image for kit %q: %w", e.Kit, err)
+					return
+				}
+				out[i].KitImageUrl = &url
+			}
+		}(i, e)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
+	}
+
+	return &out, nil
+}
+
+func findKeycapKit(kits []repository.KeycapKit, kitID string) *repository.KeycapKit {
+	for i := range kits {
+		if kits[i].KitID == kitID {
+			return &kits[i]
+		}
+	}
+	return nil
 }
 
 // buildImagesToAPI mints a fresh presigned GET URL per image, per request -

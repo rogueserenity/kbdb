@@ -19,6 +19,7 @@ var _ = Describe("Deleting a keycap kit that is still referenced by a build", fu
 		builds     *api.BuildsClient
 		ownerID    string
 		ownerToken string
+		keyboardID string
 		setID      string
 		kitID      string
 		buildID    string
@@ -39,21 +40,24 @@ var _ = Describe("Deleting a keycap kit that is still referenced by a build", fu
 		ownerID, err = api.TokenSubject(ownerToken)
 		Expect(err).NotTo(HaveOccurred())
 
+		keyboardID = "cascade-fixture-keyboard-" + uuid.NewString()
 		setID = "cascade-keycap-set-" + uuid.NewString()
 		kitID = "cascade-kit-" + uuid.NewString()
 		buildID = "cascade-build-" + uuid.NewString()
 
+		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
 		Expect(db.SeedKeycapSetWithKit(ctx, ownerID, setID, kitID, "private")).To(Succeed())
-		Expect(db.SeedBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID, "private")).To(Succeed())
+		Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, setID, kitID, "private")).To(Succeed())
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		if !buildGone {
-			Expect(db.DeleteBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID)).To(Succeed())
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, setID, kitID)).To(Succeed())
 		}
 		if !kitGone {
 			Expect(db.DeleteKeycapSet(ctx, ownerID, setID)).To(Succeed())
 		}
+		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})
 
 	Context("given on_delete is omitted (defaults to block)", func() {
@@ -189,14 +193,16 @@ var _ = Describe("Deleting a keycap kit that is still referenced by a build", fu
 
 				var buildBody struct {
 					KeycapKits []struct {
-						KeycapSet string `json:"keycap_set"`
-						Kit       string `json:"kit"`
+						KeycapSet *struct{} `json:"keycap_set"`
+						KitID     string    `json:"kit_id"`
+						KitName   *string   `json:"kit_name"`
 					} `json:"keycap_kits"`
 				}
 				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
 				Expect(buildBody.KeycapKits).To(HaveLen(1))
-				Expect(buildBody.KeycapKits[0].KeycapSet).To(Equal(setID))
-				Expect(buildBody.KeycapKits[0].Kit).To(Equal(kitID))
+				Expect(buildBody.KeycapKits[0].KeycapSet).To(BeNil(), "the kit no longer exists in the set, so the entry can't resolve")
+				Expect(buildBody.KeycapKits[0].KitID).To(Equal(kitID))
+				Expect(buildBody.KeycapKits[0].KitName).To(BeNil())
 			})
 		})
 	})

@@ -163,4 +163,366 @@ var _ = Describe("Getting a build", func() {
 			})
 		})
 	})
+
+	Context("given a build referencing a keyboard that still exists", func() {
+		var buildID string
+
+		BeforeEach(func(ctx SpecContext) {
+			buildID = seedBuild(ctx, "private")
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("denormalizes the referenced keyboard's brand and name", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Keyboard *struct {
+						ID    string `json:"id"`
+						Brand string `json:"brand"`
+						Name  string `json:"name"`
+					} `json:"keyboard"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Keyboard).NotTo(BeNil())
+				Expect(got.Keyboard.ID).To(Equal(keyboardID))
+				Expect(got.Keyboard.Brand).To(Equal("Keychron"))
+				Expect(got.Keyboard.Name).To(Equal("Q1"))
+			})
+		})
+	})
+
+	Context("given a build referencing a keyboard that no longer exists", func() {
+		var (
+			buildID     string
+			deletedKbID string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			deletedKbID = "deleted-keyboard-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedBuild(ctx, ownerID, buildID, deletedKbID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, deletedKbID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("omits the keyboard field rather than failing", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Keyboard *struct{} `json:"keyboard"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Keyboard).To(BeNil())
+			})
+		})
+	})
+
+	Context("given a build referencing a switch that still exists", func() {
+		var (
+			buildID  string
+			switchID string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			switchID = "build-fixture-switch-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
+			Expect(db.SeedBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID)).To(Succeed())
+			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("denormalizes the referenced switch's brand and name", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Switches []struct {
+						Switch *struct {
+							ID    string `json:"id"`
+							Brand string `json:"brand"`
+							Name  string `json:"name"`
+						} `json:"switch"`
+						Count int `json:"count"`
+					} `json:"switches"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Switches).To(HaveLen(1))
+				Expect(got.Switches[0].Switch).NotTo(BeNil())
+				Expect(got.Switches[0].Switch.ID).To(Equal(switchID))
+				Expect(got.Switches[0].Switch.Brand).To(Equal("Gateron"))
+				Expect(got.Switches[0].Switch.Name).To(Equal("Yellow"))
+				Expect(got.Switches[0].Count).To(Equal(1))
+			})
+		})
+	})
+
+	Context("given a build referencing a switch that no longer exists", func() {
+		var (
+			buildID  string
+			switchID string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			switchID = "deleted-switch-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("keeps the entry's count but omits the switch field", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Switches []struct {
+						Switch *struct{} `json:"switch"`
+						Count  int       `json:"count"`
+					} `json:"switches"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Switches).To(HaveLen(1))
+				Expect(got.Switches[0].Switch).To(BeNil())
+				Expect(got.Switches[0].Count).To(Equal(1))
+			})
+		})
+	})
+
+	Context("given a build referencing a keycap kit that still exists", func() {
+		var (
+			buildID     string
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "build-fixture-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+			Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, keycapSetID, kitID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, keycapSetID, kitID)).To(Succeed())
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("denormalizes the referenced keycap set and kit name", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					KeycapKits []struct {
+						KeycapSet *struct {
+							ID    string `json:"id"`
+							Brand string `json:"brand"`
+							Name  string `json:"name"`
+						} `json:"keycap_set"`
+						KitID   string  `json:"kit_id"`
+						KitName *string `json:"kit_name"`
+					} `json:"keycap_kits"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.KeycapKits).To(HaveLen(1))
+				Expect(got.KeycapKits[0].KeycapSet).NotTo(BeNil())
+				Expect(got.KeycapKits[0].KeycapSet.ID).To(Equal(keycapSetID))
+				Expect(got.KeycapKits[0].KeycapSet.Brand).To(Equal("GMK"))
+				Expect(got.KeycapKits[0].KeycapSet.Name).To(Equal("Laser"))
+				Expect(got.KeycapKits[0].KitID).To(Equal(kitID))
+				Expect(got.KeycapKits[0].KitName).NotTo(BeNil())
+				Expect(*got.KeycapKits[0].KitName).To(Equal("Base"))
+			})
+		})
+	})
+
+	Context("given a build referencing a keycap set that no longer exists", func() {
+		var (
+			buildID     string
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "deleted-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, keycapSetID, kitID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, keycapSetID, kitID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("keeps the entry's kit_id but omits keycap_set and kit_name", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					KeycapKits []struct {
+						KeycapSet *struct{} `json:"keycap_set"`
+						KitID     string    `json:"kit_id"`
+						KitName   *string   `json:"kit_name"`
+					} `json:"keycap_kits"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.KeycapKits).To(HaveLen(1))
+				Expect(got.KeycapKits[0].KeycapSet).To(BeNil())
+				Expect(got.KeycapKits[0].KitID).To(Equal(kitID))
+				Expect(got.KeycapKits[0].KitName).To(BeNil())
+			})
+		})
+	})
+
+	Context("given a build referencing a keycap set that exists but no longer has the referenced kit", func() {
+		var (
+			buildID     string
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "build-fixture-keycap-set-" + uuid.NewString()
+			kitID = "removed-kit-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			// The set exists, but its kit list doesn't include kitID - as if
+			// the kit itself had been deleted independently of its set.
+			Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, "some-other-kit-"+uuid.NewString(), "private")).To(Succeed())
+			Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, keycapSetID, kitID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, keycapSetID, kitID)).To(Succeed())
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("keeps the entry's kit_id but omits keycap_set and kit_name", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					KeycapKits []struct {
+						KeycapSet *struct{} `json:"keycap_set"`
+						KitID     string    `json:"kit_id"`
+						KitName   *string   `json:"kit_name"`
+					} `json:"keycap_kits"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.KeycapKits).To(HaveLen(1))
+				Expect(got.KeycapKits[0].KeycapSet).To(BeNil())
+				Expect(got.KeycapKits[0].KitID).To(Equal(kitID))
+				Expect(got.KeycapKits[0].KitName).To(BeNil())
+			})
+		})
+	})
+
+	Context("given a build referencing two switches, one deleted and one still existing", func() {
+		var (
+			buildID          string
+			resolvableSwitch string
+			deletedSwitch    string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			resolvableSwitch = "build-fixture-switch-" + uuid.NewString()
+			deletedSwitch = "deleted-switch-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedSwitch(ctx, ownerID, resolvableSwitch, "private")).To(Succeed())
+			Expect(db.SeedBuildWithSwitchesAndKeyboard(ctx, ownerID, buildID, keyboardID,
+				[]string{deletedSwitch, resolvableSwitch}, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithSwitchesAndKeyboard(ctx, ownerID, buildID, keyboardID,
+				[]string{deletedSwitch, resolvableSwitch})).To(Succeed())
+			Expect(db.DeleteSwitch(ctx, ownerID, resolvableSwitch)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("resolves the existing switch's entry without disturbing the deleted one's", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Switches []struct {
+						Switch *struct {
+							ID    string `json:"id"`
+							Brand string `json:"brand"`
+							Name  string `json:"name"`
+						} `json:"switch"`
+						Count int `json:"count"`
+					} `json:"switches"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Switches).To(HaveLen(2))
+
+				Expect(got.Switches[0].Switch).To(BeNil())
+
+				Expect(got.Switches[1].Switch).NotTo(BeNil())
+				Expect(got.Switches[1].Switch.ID).To(Equal(resolvableSwitch))
+				Expect(got.Switches[1].Switch.Brand).To(Equal("Gateron"))
+				Expect(got.Switches[1].Switch.Name).To(Equal("Yellow"))
+			})
+		})
+	})
 })

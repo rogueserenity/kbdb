@@ -19,6 +19,7 @@ var _ = Describe("Deleting a switch that is still referenced by a build", func()
 		builds     *api.BuildsClient
 		ownerID    string
 		ownerToken string
+		keyboardID string
 		switchID   string
 		buildID    string
 		switchGone bool
@@ -38,20 +39,23 @@ var _ = Describe("Deleting a switch that is still referenced by a build", func()
 		ownerID, err = api.TokenSubject(ownerToken)
 		Expect(err).NotTo(HaveOccurred())
 
+		keyboardID = "cascade-fixture-keyboard-" + uuid.NewString()
 		switchID = "cascade-switch-" + uuid.NewString()
 		buildID = "cascade-build-" + uuid.NewString()
 
+		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
 		Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
-		Expect(db.SeedBuildWithSwitch(ctx, ownerID, buildID, switchID, "private")).To(Succeed())
+		Expect(db.SeedBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID, "private")).To(Succeed())
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		if !buildGone {
-			Expect(db.DeleteBuildWithSwitch(ctx, ownerID, buildID, switchID)).To(Succeed())
+			Expect(db.DeleteBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID)).To(Succeed())
 		}
 		if !switchGone {
 			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
 		}
+		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})
 
 	Context("given on_delete is omitted (defaults to block)", func() {
@@ -162,12 +166,13 @@ var _ = Describe("Deleting a switch that is still referenced by a build", func()
 
 				var buildBody struct {
 					Switches []struct {
-						Switch string `json:"switch"`
+						Switch *struct{} `json:"switch"`
+						Count  int       `json:"count"`
 					} `json:"switches"`
 				}
 				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
 				Expect(buildBody.Switches).To(HaveLen(1))
-				Expect(buildBody.Switches[0].Switch).To(Equal(switchID))
+				Expect(buildBody.Switches[0].Switch).To(BeNil(), "the referenced switch was just deleted, so it can't resolve")
 			})
 		})
 	})

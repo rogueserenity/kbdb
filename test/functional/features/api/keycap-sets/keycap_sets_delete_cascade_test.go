@@ -19,6 +19,7 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 		builds     *api.BuildsClient
 		ownerID    string
 		ownerToken string
+		keyboardID string
 		setID      string
 		kitID      string
 		buildID    string
@@ -39,21 +40,24 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 		ownerID, err = api.TokenSubject(ownerToken)
 		Expect(err).NotTo(HaveOccurred())
 
+		keyboardID = "cascade-fixture-keyboard-" + uuid.NewString()
 		setID = "cascade-keycap-set-" + uuid.NewString()
 		kitID = "cascade-kit-" + uuid.NewString()
 		buildID = "cascade-build-" + uuid.NewString()
 
+		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
 		Expect(db.SeedKeycapSetWithKit(ctx, ownerID, setID, kitID, "private")).To(Succeed())
-		Expect(db.SeedBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID, "private")).To(Succeed())
+		Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, setID, kitID, "private")).To(Succeed())
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		if !buildGone {
-			Expect(db.DeleteBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID)).To(Succeed())
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, setID, kitID)).To(Succeed())
 		}
 		if !setGone {
 			Expect(db.DeleteKeycapSet(ctx, ownerID, setID)).To(Succeed())
 		}
+		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})
 
 	Context("given on_delete is omitted (defaults to block)", func() {
@@ -164,14 +168,14 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 
 				var buildBody struct {
 					KeycapKits []struct {
-						KeycapSet string `json:"keycap_set"`
-						Kit       string `json:"kit"`
+						KeycapSet *struct{} `json:"keycap_set"`
+						KitID     string    `json:"kit_id"`
 					} `json:"keycap_kits"`
 				}
 				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
 				Expect(buildBody.KeycapKits).To(HaveLen(1))
-				Expect(buildBody.KeycapKits[0].KeycapSet).To(Equal(setID))
-				Expect(buildBody.KeycapKits[0].Kit).To(Equal(kitID))
+				Expect(buildBody.KeycapKits[0].KeycapSet).To(BeNil(), "the referenced set was just deleted, so it can't resolve")
+				Expect(buildBody.KeycapKits[0].KitID).To(Equal(kitID))
 			})
 		})
 	})
@@ -198,6 +202,7 @@ var _ = Describe("Deleting a keycap set with multiple kits referenced by differe
 		builds     *api.BuildsClient
 		ownerID    string
 		ownerToken string
+		keyboardID string
 		setID      string
 		kitID1     string
 		kitID2     string
@@ -222,27 +227,30 @@ var _ = Describe("Deleting a keycap set with multiple kits referenced by differe
 		ownerID, err = api.TokenSubject(ownerToken)
 		Expect(err).NotTo(HaveOccurred())
 
+		keyboardID = "cascade-multi-fixture-keyboard-" + uuid.NewString()
 		setID = "cascade-multi-keycap-set-" + uuid.NewString()
 		kitID1 = "cascade-kit-1-" + uuid.NewString()
 		kitID2 = "cascade-kit-2-" + uuid.NewString()
 		buildID1 = "cascade-build-1-" + uuid.NewString()
 		buildID2 = "cascade-build-2-" + uuid.NewString()
 
+		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
 		Expect(db.SeedKeycapSetWithKits(ctx, ownerID, setID, []string{kitID1, kitID2}, "private")).To(Succeed())
-		Expect(db.SeedBuildWithKeycapKit(ctx, ownerID, buildID1, setID, kitID1, "private")).To(Succeed())
-		Expect(db.SeedBuildWithKeycapKit(ctx, ownerID, buildID2, setID, kitID2, "private")).To(Succeed())
+		Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID1, keyboardID, setID, kitID1, "private")).To(Succeed())
+		Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID2, keyboardID, setID, kitID2, "private")).To(Succeed())
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		if !build1Gone {
-			Expect(db.DeleteBuildWithKeycapKit(ctx, ownerID, buildID1, setID, kitID1)).To(Succeed())
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID1, keyboardID, setID, kitID1)).To(Succeed())
 		}
 		if !build2Gone {
-			Expect(db.DeleteBuildWithKeycapKit(ctx, ownerID, buildID2, setID, kitID2)).To(Succeed())
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID2, keyboardID, setID, kitID2)).To(Succeed())
 		}
 		if !setGone {
 			Expect(db.DeleteKeycapSet(ctx, ownerID, setID)).To(Succeed())
 		}
+		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})
 
 	Context("given on_delete=cascade", func() {
