@@ -312,7 +312,7 @@ func handleCreateKeycapKit(
 
 		kit.KitID = uuid.NewString()
 
-		created, err := keycapSetRepo.AddKit(ctx, in.KeycapSetID, kit)
+		created, err := keycapSetRepo.AddKit(ctx, in.KeycapSetID, kit, in.Primary)
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.CreateKeycapKitOutput{}, errKeycapSetNotFound
 		}
@@ -348,7 +348,7 @@ func handleUpdateKeycapKit(
 
 		kit.KitID = in.KitID
 
-		updated, err := keycapSetRepo.UpdateKit(ctx, in.KeycapSetID, kit)
+		updated, err := keycapSetRepo.UpdateKit(ctx, in.KeycapSetID, kit, in.Primary)
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.UpdateKeycapKitOutput{}, errKeycapKitNotFound
 		}

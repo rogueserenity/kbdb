@@ -40,6 +40,11 @@ type KeycapSet struct {
 	Notes      *string     `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility Visibility  `dynamodbav:"visibility" json:"visibility"`
 	Kits       []KeycapKit `dynamodbav:"kits,omitempty" json:"kits,omitempty"`
+	// PrimaryKitID names the kit (by KitID) whose image represents this set
+	// in a list/grid view. No write path sets this yet - reads must still
+	// treat a dangling reference (kit deleted, or never set) as absent
+	// rather than erroring.
+	PrimaryKitID *string `dynamodbav:"primary_kit_id,omitempty" json:"primary_kit_id,omitempty"`
 	// Version guards kit sub-mutations against a lost update when two
 	// concurrent calls read-modify-write this item's Kits slice - not
 	// exposed via the API, purely a repository-internal CAS mechanism.
@@ -81,20 +86,28 @@ type KeycapSetRepository interface {
 
 	// AddKit appends kit to the set's Kits (kit.KitID must already be set)
 	// and returns the stored kit, matching Create's shape for every other
-	// entity. Returns ErrNotFound if the parent set doesn't exist, or
+	// entity. primary controls the set's PrimaryKitID, applied atomically
+	// with the add: nil leaves it untouched, true makes the new kit
+	// primary. Returns ErrNotFound if the parent set doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	AddKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
+	AddKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
 	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
+	// primary controls the set's PrimaryKitID, applied atomically with the
+	// update: nil leaves it untouched, true makes this kit primary
+	// (replacing whichever kit held it before), false clears it but only
+	// if this kit is the current primary.
+	UpdateKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
 	// DeleteKit removes the kit matching kitID from setID's Kits and
-	// returns the image key that was on it, or nil if it had none.
-	// Idempotent: a kitID not present in the set is not an error, and
-	// returns (nil, nil). Returns ErrNotFound if setID doesn't exist for
-	// the owner, or ErrMutationConflict if concurrent writers exhaust the
-	// retry budget.
+	// returns the image key that was on it, or nil if it had none. If kitID
+	// was the set's PrimaryKitID, that's cleared to nil too, atomically
+	// with the removal - a caller never observes a set whose PrimaryKitID
+	// names a kit that isn't there. Idempotent: a kitID not present in the
+	// set is not an error, and returns (nil, nil). Returns ErrNotFound if
+	// setID doesn't exist for the owner, or ErrMutationConflict if
+	// concurrent writers exhaust the retry budget.
 	DeleteKit(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
 
 	// SetKitImagePath sets the kit matching kitID's ImagePath and returns

@@ -498,12 +498,54 @@ func (s *KeycapSetRepositorySuite) TestAddKit_Succeeds() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
 	s.Equal("kit1", kit.KitID)
 	s.Equal("Base", kit.Name)
+}
+
+func (s *KeycapSetRepositorySuite) TestAddKit_PrimaryTrue_SetsPrimaryKitID() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutput(0), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.PrimaryKitID != nil && *ks.PrimaryKitID == "kit1"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	primary := true
+	_, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, &primary)
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestAddKit_PrimaryFalse_LeavesPrimaryKitIDUnset() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutput(0), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.PrimaryKitID == nil
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	primary := false
+	_, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, &primary)
+
+	s.Require().NoError(err)
 }
 
 func (s *KeycapSetRepositorySuite) TestAddKit_ParentSetNotFound_ReturnsErrNotFound() {
@@ -512,7 +554,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_ParentSetNotFound_ReturnsErrNotFou
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "missing", repository.KeycapKit{KitID: "kit1", Name: "Base"})
+	kit, err := s.repo.AddKit(ctx, "missing", repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(kit)
@@ -558,7 +600,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflict_RetriesThenSucceeds() 
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
@@ -575,7 +617,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflictExhausted_ReturnsError(
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
 
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
@@ -585,7 +627,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_CASConflictExhausted_ReturnsError(
 func (s *KeycapSetRepositorySuite) TestAddKit_EmptyKitID_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - caught before any DynamoDB call.
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{Name: "Base"})
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{Name: "Base"}, nil)
 
 	s.Require().ErrorIs(err, errEmptyKitID)
 	s.Nil(kit)
@@ -609,7 +651,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_DuplicateKitID_ReturnsError() {
 	// closure, before any write is attempted.
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	s.Require().ErrorIs(err, errDuplicateKitID)
 	s.Nil(kit)
@@ -624,7 +666,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_PutItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"})
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
@@ -632,7 +674,7 @@ func (s *KeycapSetRepositorySuite) TestAddKit_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestAddKit_NoUserIDInContext_ReturnsError() {
-	kit, err := s.repo.AddKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"})
+	kit, err := s.repo.AddKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"}, nil)
 
 	s.Require().Error(err)
 	s.Nil(kit)
@@ -669,6 +711,52 @@ func (s *KeycapSetRepositorySuite) getItemOutputWithKitImage() *dynamodb.GetItem
 	return out
 }
 
+func (s *KeycapSetRepositorySuite) getItemOutputWithPrimaryKit(primaryKitID string) *dynamodb.GetItemOutput {
+	out := s.getItemOutputWithKit()
+	out.Item["primary_kit_id"] = &types.AttributeValueMemberS{Value: primaryKitID}
+	return out
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_KitIsPrimary_ClearsPrimaryKitID() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithPrimaryKit("kit1"), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return len(ks.Kits) == 0 && ks.PrimaryKitID == nil
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestDeleteKit_KitIsNotPrimary_LeavesPrimaryKitIDUntouched() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithPrimaryKit("some-other-kit"), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return len(ks.Kits) == 0 && ks.PrimaryKitID != nil && *ks.PrimaryKitID == "some-other-kit"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.DeleteKit(ctx, "ks1", "kit1")
+
+	s.Require().NoError(err)
+}
+
 func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
@@ -691,7 +779,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 		KitID:    "kit1",
 		Name:     "Extension",
 		Purchase: repository.KeycapKitPurchase{Vendor: &vendor},
-	})
+	}, nil)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
@@ -699,6 +787,103 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_Succeeds() {
 	s.Equal("Extension", kit.Name)
 	s.Require().NotNil(kit.Purchase.Vendor)
 	s.Equal("CannonKeys", *kit.Purchase.Vendor)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryTrue_ReplacesExistingPrimary() {
+	out := s.getItemOutputWithPrimaryKit("kit1")
+	// A second kit alongside kit1, so setting kit2 primary is a genuine
+	// replacement, not a no-op re-assignment of the same id.
+	out.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit1"},
+				"name":     &types.AttributeValueMemberS{Value: "Base"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit2"},
+				"name":     &types.AttributeValueMemberS{Value: "Extension"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(out, nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.PrimaryKitID != nil && *ks.PrimaryKitID == "kit2"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	primary := true
+	_, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit2", Name: "Extension"}, &primary)
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalseOnCurrentPrimary_ClearsPrimaryKitID() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(s.getItemOutputWithPrimaryKit("kit1"), nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.PrimaryKitID == nil
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	primary := false
+	_, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, &primary)
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalseOnDifferentKit_LeavesPrimaryKitIDUntouched() {
+	out := s.getItemOutputWithPrimaryKit("kit1")
+	out.Item["kits"] = &types.AttributeValueMemberL{
+		Value: []types.AttributeValue{
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit1"},
+				"name":     &types.AttributeValueMemberS{Value: "Base"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"kit_id":   &types.AttributeValueMemberS{Value: "kit2"},
+				"name":     &types.AttributeValueMemberS{Value: "Extension"},
+				"purchase": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}},
+			}},
+		},
+	}
+
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(out, nil)
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			var ks repository.KeycapSet
+			if err := attributevalue.UnmarshalMap(in.Item, &ks); err != nil {
+				return false
+			}
+			return ks.PrimaryKitID != nil && *ks.PrimaryKitID == "kit1"
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	primary := false
+	_, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit2", Name: "Extension"}, &primary)
+
+	s.Require().NoError(err)
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
@@ -728,7 +913,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PreservesImagePath() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
@@ -744,7 +929,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_KitNotFoundInExistingSet_Return
 	// closure, before any write is attempted.
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "missing-kit", Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "missing-kit", Name: "Extension"}, nil)
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(kit)
@@ -756,7 +941,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_ParentSetNotFound_ReturnsErrNot
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "missing", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "missing", repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(kit)
@@ -807,7 +992,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflict_RetriesThenSucceeds
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(kit)
@@ -823,7 +1008,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflictExhausted_ReturnsErr
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
@@ -833,7 +1018,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_CASConflictExhausted_ReturnsErr
 func (s *KeycapSetRepositorySuite) TestUpdateKit_EmptyKitID_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - caught before any DynamoDB call.
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{Name: "Extension"}, nil)
 
 	s.Require().ErrorIs(err, errEmptyKitID)
 	s.Nil(kit)
@@ -848,7 +1033,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PutItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"})
+	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
@@ -856,7 +1041,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PutItemError_Propagates() {
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_NoUserIDInContext_ReturnsError() {
-	kit, err := s.repo.UpdateKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"})
+	kit, err := s.repo.UpdateKit(s.T().Context(), "ks1", repository.KeycapKit{KitID: "kit1"}, nil)
 
 	s.Require().Error(err)
 	s.Nil(kit)

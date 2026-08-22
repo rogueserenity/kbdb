@@ -123,6 +123,79 @@ var _ = Describe("Creating a keycap kit", func() {
 				})
 			})
 
+			Context("given primary is true", func() {
+				When("creating a kit", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.CreateKit(ctx, ownerID, keycapSetID, ownerToken, `{"name":"Base","primary":true}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("makes the new kit the set's primary_kit_id", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+						var created struct {
+							KitID string `json:"kit_id"`
+						}
+						Expect(json.NewDecoder(resp.Body).Decode(&created)).To(Succeed())
+
+						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var set struct {
+							PrimaryKitID *string `json:"primary_kit_id"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+						Expect(set.PrimaryKitID).NotTo(BeNil())
+						Expect(*set.PrimaryKitID).To(Equal(created.KitID))
+					})
+				})
+			})
+
+			Context("given the set already has a primary kit and primary is true on a new kit", func() {
+				var existingPrimaryKitID string
+
+				BeforeEach(func(ctx SpecContext) {
+					createResp, err := client.CreateKit(ctx, ownerID, keycapSetID, ownerToken, `{"name":"Base","primary":true}`)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(createResp.StatusCode).To(Equal(http.StatusCreated))
+
+					var created struct {
+						KitID string `json:"kit_id"`
+					}
+					Expect(json.NewDecoder(createResp.Body).Decode(&created)).To(Succeed())
+					existingPrimaryKitID = created.KitID
+				})
+
+				When("creating a second kit with primary true", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.CreateKit(ctx, ownerID, keycapSetID, ownerToken, `{"name":"Extension","primary":true}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("replaces the previous primary kit designation", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+						var created struct {
+							KitID string `json:"kit_id"`
+						}
+						Expect(json.NewDecoder(resp.Body).Decode(&created)).To(Succeed())
+						Expect(created.KitID).NotTo(Equal(existingPrimaryKitID))
+
+						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var set struct {
+							PrimaryKitID *string `json:"primary_kit_id"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+						Expect(set.PrimaryKitID).NotTo(BeNil())
+						Expect(*set.PrimaryKitID).To(Equal(created.KitID))
+					})
+				})
+			})
+
 			Context("given required fields are missing", func() {
 				When("creating a kit", func() {
 					BeforeEach(func(ctx SpecContext) {

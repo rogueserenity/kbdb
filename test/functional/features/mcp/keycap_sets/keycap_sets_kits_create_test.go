@@ -130,6 +130,70 @@ var _ = Describe("Creating a keycap kit over MCP", func() {
 				})
 			})
 
+			Context("given primary is true", func() {
+				When("the create_keycap_kit tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "create_keycap_kit", map[string]any{
+							"keycap_set_id": keycapSetID,
+							"name":          "Base",
+							"primary":       true,
+						})
+					})
+
+					It("makes the new kit the set's primary_kit_id", func(ctx SpecContext) {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+
+						kitID := decodeKeycapKitOutput(result).KeycapKit.KitID
+
+						check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						primaryKitID := decodeKeycapSetOutput(check).KeycapSet.PrimaryKitID
+						Expect(primaryKitID).NotTo(BeNil())
+						Expect(*primaryKitID).To(Equal(kitID))
+					})
+				})
+			})
+
+			Context("given the set already has a primary kit and primary is true on a new kit", func() {
+				var existingPrimaryKitID string
+
+				BeforeEach(func(ctx SpecContext) {
+					createResult, createErr := client.CallTool(ctx, "create_keycap_kit", map[string]any{
+						"keycap_set_id": keycapSetID,
+						"name":          "Base",
+						"primary":       true,
+					})
+					Expect(createErr).NotTo(HaveOccurred())
+					Expect(createResult.IsError).To(BeFalse())
+					existingPrimaryKitID = decodeKeycapKitOutput(createResult).KeycapKit.KitID
+				})
+
+				When("the create_keycap_kit tool is called for a second kit with primary true", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "create_keycap_kit", map[string]any{
+							"keycap_set_id": keycapSetID,
+							"name":          "Extension",
+							"primary":       true,
+						})
+					})
+
+					It("replaces the previous primary kit designation", func(ctx SpecContext) {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+
+						newKitID := decodeKeycapKitOutput(result).KeycapKit.KitID
+						Expect(newKitID).NotTo(Equal(existingPrimaryKitID))
+
+						check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						primaryKitID := decodeKeycapSetOutput(check).KeycapSet.PrimaryKitID
+						Expect(primaryKitID).NotTo(BeNil())
+						Expect(*primaryKitID).To(Equal(newKitID))
+					})
+				})
+			})
+
 			Context("given the set already has one kit", func() {
 				BeforeEach(func(ctx SpecContext) {
 					createResult, createErr := client.CallTool(ctx, "create_keycap_kit", map[string]any{

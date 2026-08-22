@@ -188,6 +188,36 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns a keycap set whose primary kit is the one being deleted", func() {
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "delete-primary-kit-set-" + uuid.NewString()
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the delete_keycap_kit tool is called for the primary kit", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "delete_keycap_kit", map[string]any{
+						"keycap_set_id": keycapSetID,
+						"kit_id":        kitID,
+					})
+				})
+
+				It("clears primary_kit_id on a follow-up get_keycap_set", func(ctx SpecContext) {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+					Expect(checkErr).NotTo(HaveOccurred())
+					Expect(decodeKeycapSetOutput(check).KeycapSet.PrimaryKitID).To(BeNil())
+				})
+			})
+		})
+
 		Context("given another user owns the keycap set", func() {
 			var otherID string
 

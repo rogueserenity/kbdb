@@ -85,7 +85,7 @@ func New(
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, imageStore))))
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",

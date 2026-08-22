@@ -41,14 +41,15 @@ type keycapKit struct {
 }
 
 type keycapSet struct {
-	ID         string      `json:"id"`
-	Brand      string      `json:"brand"`
-	Name       string      `json:"name"`
-	Profile    *string     `json:"profile"`
-	Material   *string     `json:"material"`
-	Notes      *string     `json:"notes"`
-	Visibility string      `json:"visibility"`
-	Kits       []keycapKit `json:"kits"`
+	ID           string      `json:"id"`
+	Brand        string      `json:"brand"`
+	Name         string      `json:"name"`
+	Profile      *string     `json:"profile"`
+	Material     *string     `json:"material"`
+	Notes        *string     `json:"notes"`
+	Visibility   string      `json:"visibility"`
+	Kits         []keycapKit `json:"kits"`
+	PrimaryKitID *string     `json:"primary_kit_id"`
 }
 
 type getOutput struct {
@@ -84,10 +85,12 @@ func decodeKeycapKitOutput(result *sdkmcp.CallToolResult) kitOutput {
 }
 
 type listedKeycapSet struct {
-	ID      string  `json:"id"`
-	Brand   string  `json:"brand"`
-	Name    string  `json:"name"`
-	Profile *string `json:"profile"`
+	ID                 string  `json:"id"`
+	Brand              string  `json:"brand"`
+	Name               string  `json:"name"`
+	Profile            *string `json:"profile"`
+	PrimaryKitID       *string `json:"primary_kit_id"`
+	PrimaryKitHasImage bool    `json:"primary_kit_has_image"`
 }
 
 type listOutput struct {
@@ -105,6 +108,32 @@ func decodeListOutput(result *sdkmcp.CallToolResult) listOutput {
 	Expect(json.Unmarshal(raw, &out)).To(Succeed())
 
 	return out
+}
+
+func decodeUploadURL(result *sdkmcp.CallToolResult) string {
+	GinkgoHelper()
+
+	var out struct {
+		UploadURL string `json:"upload_url"`
+	}
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out.UploadURL
+}
+
+func decodeImageURL(result *sdkmcp.CallToolResult) string {
+	GinkgoHelper()
+
+	var out struct {
+		URL string `json:"url"`
+	}
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out.URL
 }
 
 func idsOf(out listOutput) []string {

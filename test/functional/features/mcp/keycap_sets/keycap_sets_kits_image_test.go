@@ -2,7 +2,6 @@ package keycapsets_test
 
 import (
 	"bytes"
-	"encoding/json"
 	"io"
 	"net/http"
 
@@ -31,28 +30,6 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 		result = nil
 		err = nil
 	})
-
-	decodeUploadURL := func(r *sdkmcp.CallToolResult) string {
-		GinkgoHelper()
-		var out struct {
-			UploadURL string `json:"upload_url"`
-		}
-		raw, marshalErr := json.Marshal(r.StructuredContent)
-		Expect(marshalErr).NotTo(HaveOccurred())
-		Expect(json.Unmarshal(raw, &out)).To(Succeed())
-		return out.UploadURL
-	}
-
-	decodeImageURL := func(r *sdkmcp.CallToolResult) string {
-		GinkgoHelper()
-		var out struct {
-			URL string `json:"url"`
-		}
-		raw, marshalErr := json.Marshal(r.StructuredContent)
-		Expect(marshalErr).NotTo(HaveOccurred())
-		Expect(json.Unmarshal(raw, &out)).To(Succeed())
-		return out.URL
-	}
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {

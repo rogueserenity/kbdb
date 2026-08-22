@@ -22,8 +22,9 @@ import (
 type ListKeycapSetsSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
-	handler  http.HandlerFunc
+	mockRepo   *mocks.MockKeycapSetRepository
+	mockImages *mocks.MockKeycapKitImageStore
+	handler    http.HandlerFunc
 }
 
 func TestListKeycapSetsSuite(t *testing.T) {
@@ -32,7 +33,8 @@ func TestListKeycapSetsSuite(t *testing.T) {
 
 func (s *ListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = ListKeycapSets(s.mockRepo)
+	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.handler = ListKeycapSets(s.mockRepo, s.mockImages)
 }
 
 func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -112,6 +114,35 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_ReturnsNextCursor_WhenPresent()
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.NextCursor)
 	s.Equal("next-page-token", *got.NextCursor)
+}
+
+func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPrimaryKitImage() {
+	imagePath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+	kitID := "kit1"
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.KeycapSet{{
+			ID:           "ks1",
+			Brand:        "GMK",
+			Name:         "Laser",
+			PrimaryKitID: &kitID,
+			Kits:         []repository.KeycapKit{{KitID: kitID, ImagePath: &imagePath}},
+		}}, "", nil)
+
+	s.mockImages.EXPECT().PresignGet(mock.Anything, imagePath).Return("https://example.com/presigned-get", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.KeycapSetListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Require().NotNil((*got.Items)[0].PrimaryKitImage)
+	s.Equal("https://example.com/presigned-get", (*got.Items)[0].PrimaryKitImage.Url)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_RepositoryError_Returns500() {
@@ -874,7 +905,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
 	s.mockRepo.EXPECT().
 		AddKit(mock.Anything, "ks1", mock.MatchedBy(func(k repository.KeycapKit) bool {
 			return k.KitID != "" && k.Name == "Base"
-		})).
+		}), mock.Anything).
 		Return(&repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
@@ -888,6 +919,34 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("kit1", got.KitId)
 	s.Equal("Base", got.Name)
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_PrimaryTrue_PassesPrimaryToRepo() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.Anything, mock.MatchedBy(func(primary *bool) bool {
+			return primary != nil && *primary
+		})).
+		Return(&repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base","primary":true}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
+func (s *CreateKeycapKitSuite) TestCreateKeycapKit_PrimaryOmitted_PassesNilToRepo() {
+	s.mockRepo.EXPECT().
+		AddKit(mock.Anything, "ks1", mock.Anything, mock.MatchedBy(func(primary *bool) bool {
+			return primary == nil
+		})).
+		Return(&repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
 }
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ValidatesOpenVocabularyFields() {
@@ -951,7 +1010,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_InvalidBody_Returns400() {
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ParentSetNotFound_Returns404() {
 	s.mockRepo.EXPECT().
-		AddKit(mock.Anything, "ks1", mock.Anything).
+		AddKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
@@ -964,7 +1023,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ParentSetNotFound_Returns404(
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		AddKit(mock.Anything, "ks1", mock.Anything).
+		AddKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
 		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
@@ -977,7 +1036,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_RepositoryError_Returns500() 
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409() {
 	s.mockRepo.EXPECT().
-		AddKit(mock.Anything, "ks1", mock.Anything).
+		AddKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
@@ -1022,7 +1081,7 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Succeeds() {
 	s.mockRepo.EXPECT().
 		UpdateKit(mock.Anything, "ks1", mock.MatchedBy(func(k repository.KeycapKit) bool {
 			return k.KitID == "kit1" && k.Name == "Extension"
-		})).
+		}), mock.Anything).
 		Return(&repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Extension"}`)
@@ -1036,6 +1095,34 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("kit1", got.KitId)
 	s.Equal("Extension", got.Name)
+}
+
+func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_PrimaryFalse_PassesPrimaryToRepo() {
+	s.mockRepo.EXPECT().
+		UpdateKit(mock.Anything, "ks1", mock.Anything, mock.MatchedBy(func(primary *bool) bool {
+			return primary != nil && !*primary
+		})).
+		Return(&repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Extension","primary":false}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_PrimaryOmitted_PassesNilToRepo() {
+	s.mockRepo.EXPECT().
+		UpdateKit(mock.Anything, "ks1", mock.Anything, mock.MatchedBy(func(primary *bool) bool {
+			return primary == nil
+		})).
+		Return(&repository.KeycapKit{KitID: "kit1", Name: "Extension"}, nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"name":"Extension"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
 }
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_ValidatesOpenVocabularyFields() {
@@ -1099,7 +1186,7 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_InvalidBody_Returns400() {
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_NotFound_Returns404() {
 	s.mockRepo.EXPECT().
-		UpdateKit(mock.Anything, "ks1", mock.Anything).
+		UpdateKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Extension"}`)
@@ -1112,7 +1199,7 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_NotFound_Returns404() {
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		UpdateKit(mock.Anything, "ks1", mock.Anything).
+		UpdateKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
 		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Extension"}`)
@@ -1125,7 +1212,7 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_RepositoryError_Returns500() 
 
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_MutationConflict_Returns409() {
 	s.mockRepo.EXPECT().
-		UpdateKit(mock.Anything, "ks1", mock.Anything).
+		UpdateKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"name":"Extension"}`)

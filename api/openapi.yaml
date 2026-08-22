@@ -1305,6 +1305,15 @@ components:
           description: e.g. "Base", "Extension", "Accents".
         purchase:
           $ref: "#/components/schemas/Purchase"
+        primary:
+          type: boolean
+          description: >
+            Omit to leave the set's primary kit designation untouched.
+            true makes this kit the set's primary kit, replacing whichever
+            kit held that designation before. false clears the
+            designation, but only if this kit is the current primary -
+            otherwise it's a no-op. Deliberately has no default: a missing
+            field must stay distinguishable from an explicit false.
 
     KeycapKitImage:
       type: object
@@ -1386,6 +1395,13 @@ components:
                 Managed via the dedicated kit endpoints below, not via PUT
                 on the set itself — see POST/PUT/DELETE
                 .../keycap-sets/{keycapSetId}/kits[/{kitId}].
+            primary_kit_id:
+              type: [string, "null"]
+              description: >
+                The kit_id, among this set's kits, whose image represents
+                the set in a list view. Null if never set, or if the kit
+                it named no longer exists — match against kits[].kit_id
+                to find that kit's image.
 
     KeycapSetSummary:
       type: object
@@ -1398,6 +1414,14 @@ components:
           type: string
         profile:
           type: string
+        primary_kit_image:
+          oneOf:
+            - $ref: "#/components/schemas/KeycapKitImage"
+            - type: "null"
+          description: >
+            The primary kit's image, if the set has one designated and it
+            has an image set. Null otherwise — including when the
+            designated primary kit no longer exists.
 
     KeycapSetListPage:
       type: object

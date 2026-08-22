@@ -60,6 +60,33 @@ func (s *KeycapSetToMCPSuite) TestMapsAllFields() {
 	s.Nil(out.Kits[1].Purchase)
 }
 
+func (s *KeycapSetToMCPSuite) TestPrimaryKitID_StillExists_IsPreserved() {
+	kitID := "kit-1"
+
+	out := KeycapSetToMCP(repository.KeycapSet{
+		ID:           "ks-1",
+		Visibility:   repository.VisibilityPrivate,
+		PrimaryKitID: &kitID,
+		Kits:         []repository.KeycapKit{{KitID: "kit-1", Name: "Base"}},
+	}, true)
+
+	s.Require().NotNil(out.PrimaryKitID)
+	s.Equal("kit-1", *out.PrimaryKitID)
+}
+
+func (s *KeycapSetToMCPSuite) TestPrimaryKitID_KitDeleted_IsNil() {
+	dangling := "no-longer-a-kit"
+
+	out := KeycapSetToMCP(repository.KeycapSet{
+		ID:           "ks-1",
+		Visibility:   repository.VisibilityPrivate,
+		PrimaryKitID: &dangling,
+		Kits:         []repository.KeycapKit{{KitID: "kit-1", Name: "Base"}},
+	}, true)
+
+	s.Nil(out.PrimaryKitID)
+}
+
 func (s *KeycapSetToMCPSuite) TestNilKits_MapsToNilSlice() {
 	out := KeycapSetToMCP(repository.KeycapSet{ID: "ks-1", Visibility: repository.VisibilityPrivate}, true)
 
@@ -114,6 +141,33 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary() {
 	s.Equal("GMK", out.Brand)
 	s.Require().NotNil(out.Profile)
 	s.Equal("OEM", *out.Profile)
+	s.Nil(out.PrimaryKitID)
+	s.False(out.PrimaryKitHasImage)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitWithImage_ReportsHasImageTrue() {
+	imagePath := repository.KeycapKitImageKey("keycap-sets/u-1/ks-1/kits/kit-1/image")
+
+	out := KeycapSetToMCPSummary(repository.KeycapSet{
+		ID:           "ks-1",
+		PrimaryKitID: strPtr("kit-1"),
+		Kits:         []repository.KeycapKit{{KitID: "kit-1", ImagePath: &imagePath}},
+	})
+
+	s.Require().NotNil(out.PrimaryKitID)
+	s.Equal("kit-1", *out.PrimaryKitID)
+	s.True(out.PrimaryKitHasImage)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitDeleted_NilAndFalse() {
+	out := KeycapSetToMCPSummary(repository.KeycapSet{
+		ID:           "ks-1",
+		PrimaryKitID: strPtr("no-longer-a-kit"),
+		Kits:         []repository.KeycapKit{{KitID: "kit-1"}},
+	})
+
+	s.Nil(out.PrimaryKitID)
+	s.False(out.PrimaryKitHasImage)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NoPurchaseFields_OmitsPurchase() {

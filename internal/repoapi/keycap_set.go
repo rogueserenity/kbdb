@@ -46,15 +46,33 @@ func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images reposit
 	}
 
 	return api.KeycapSet{
-		Id:         ks.ID,
-		Brand:      ks.Brand,
-		Name:       ks.Name,
-		Profile:    ks.Profile,
-		Material:   ks.Material,
-		Notes:      ks.Notes,
-		Visibility: api.Visibility(ks.Visibility),
-		Kits:       kits,
+		Id:           ks.ID,
+		Brand:        ks.Brand,
+		Name:         ks.Name,
+		Profile:      ks.Profile,
+		Material:     ks.Material,
+		Notes:        ks.Notes,
+		Visibility:   api.Visibility(ks.Visibility),
+		Kits:         kits,
+		PrimaryKitId: validPrimaryKitID(ks.PrimaryKitID, ks.Kits),
 	}, nil
+}
+
+// validPrimaryKitID returns primaryKitID unchanged if it names a kit still
+// present in kits, or nil otherwise (never set, or naming a since-deleted
+// kit) - callers must not surface a dangling reference.
+func validPrimaryKitID(primaryKitID *string, kits []repository.KeycapKit) *string {
+	if primaryKitID == nil {
+		return nil
+	}
+
+	for _, k := range kits {
+		if k.KitID == *primaryKitID {
+			return primaryKitID
+		}
+	}
+
+	return nil
 }
 
 // KeycapSetToRepo maps a generated KeycapSetInput (already schema-validated
@@ -73,14 +91,44 @@ func KeycapSetToRepo(in api.KeycapSetInput) repository.KeycapSet {
 }
 
 // KeycapSetToAPISummary maps a repository.KeycapSet to the
-// KeycapSetSummary schema returned by the list endpoint.
-func KeycapSetToAPISummary(ks repository.KeycapSet) api.KeycapSetSummary {
-	return api.KeycapSetSummary{
+// KeycapSetSummary schema returned by the list endpoint. PrimaryKitImage
+// is nil unless PrimaryKitID names a kit still present in Kits and that
+// kit has an ImagePath set, in which case it's a freshly minted presigned
+// GET URL - never persisted, never cached, mirroring KeycapKitToAPI.
+func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore) (api.KeycapSetSummary, error) {
+	summary := api.KeycapSetSummary{
 		Id:      &ks.ID,
 		Brand:   &ks.Brand,
 		Name:    &ks.Name,
 		Profile: ks.Profile,
 	}
+
+	primaryKit := findKit(validPrimaryKitID(ks.PrimaryKitID, ks.Kits), ks.Kits)
+	if primaryKit != nil && primaryKit.ImagePath != nil {
+		url, err := images.PresignGet(ctx, *primaryKit.ImagePath)
+		if err != nil {
+			return api.KeycapSetSummary{}, fmt.Errorf("presigning primary kit image: %w", err)
+		}
+		summary.PrimaryKitImage = &api.KeycapKitImage{Url: url}
+	}
+
+	return summary, nil
+}
+
+// findKit returns the kit in kits with the given kitID, or nil if kitID
+// is nil or names no kit in kits.
+func findKit(kitID *string, kits []repository.KeycapKit) *repository.KeycapKit {
+	if kitID == nil {
+		return nil
+	}
+
+	for i, k := range kits {
+		if k.KitID == *kitID {
+			return &kits[i]
+		}
+	}
+
+	return nil
 }
 
 // KeycapKitToAPI maps a repository.KeycapKit to its wire representation.

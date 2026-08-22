@@ -1,6 +1,9 @@
 package keycapsets_test
 
 import (
+	"bytes"
+	"net/http"
+
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/google/uuid"
@@ -83,6 +86,95 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 				Entry("below the minimum", 0),
 				Entry("above the maximum", 101),
 			)
+		})
+
+		Context("given the owner has a keycap set with a primary kit that has an image", func() {
+			var (
+				keycapSetID string
+				kitID       string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "primary-kit-image-keycap-set-" + uuid.NewString()
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+
+				setResult, setErr := client.CallTool(ctx, "set_keycap_kit_image", map[string]any{
+					"keycap_set_id": keycapSetID,
+					"kit_id":        kitID,
+					"content_type":  approvedImageContentType,
+				})
+				Expect(setErr).NotTo(HaveOccurred())
+				Expect(setResult.IsError).To(BeFalse())
+
+				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, decodeUploadURL(setResult), approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes-for-list-testing")))
+				Expect(putErr).NotTo(HaveOccurred())
+				Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the list_keycap_sets tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{})
+				})
+
+				It("reports primary_kit_id and primary_kit_has_image true, without a URL", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					found := false
+					for _, ks := range out.KeycapSets {
+						if ks.ID != keycapSetID {
+							continue
+						}
+						found = true
+						Expect(ks.PrimaryKitID).NotTo(BeNil())
+						Expect(*ks.PrimaryKitID).To(Equal(kitID))
+						Expect(ks.PrimaryKitHasImage).To(BeTrue())
+					}
+					Expect(found).To(BeTrue(), "expected to find seeded keycap set %q in the list", keycapSetID)
+				})
+			})
+		})
+
+		Context("given the owner has a keycap set whose primary kit no longer exists", func() {
+			var keycapSetID string
+
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "dangling-primary-kit-keycap-set-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithDanglingPrimaryKit(ctx, ownerID, keycapSetID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the list_keycap_sets tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{})
+				})
+
+				It("reports a nil primary_kit_id and primary_kit_has_image false", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					found := false
+					for _, ks := range out.KeycapSets {
+						if ks.ID != keycapSetID {
+							continue
+						}
+						found = true
+						Expect(ks.PrimaryKitID).To(BeNil())
+						Expect(ks.PrimaryKitHasImage).To(BeFalse())
+					}
+					Expect(found).To(BeTrue(), "expected to find seeded keycap set %q in the list", keycapSetID)
+				})
+			})
 		})
 
 		Context("given another user owns keycap sets at every visibility tier", func() {
