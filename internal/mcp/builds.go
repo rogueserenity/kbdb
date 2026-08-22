@@ -296,6 +296,19 @@ func handleAddBuildImage(
 			return nil, schema.AddBuildImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		ownerID, ok := kbdbctx.UserID(ctx)
+		if !ok {
+			return nil, schema.AddBuildImageOutput{}, errNoCaller
+		}
+
+		if _, err := buildRepo.Get(ctx, ownerID, in.BuildID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return nil, schema.AddBuildImageOutput{}, errBuildNotFound
+			}
+			log.FromContext(ctx).Error("getting build", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		}
+
 		imageID := uuid.NewString()
 
 		key, err := repository.NewBuildImageKey(ctx, in.BuildID, imageID)

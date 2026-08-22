@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -525,7 +526,8 @@ func DeleteKeycapKit(
 // set that doesn't exist, or a kitId that doesn't exist within it, all
 // return 404, to avoid revealing it exists. Doesn't upload the image
 // itself - the response is a presigned S3 PUT URL the client uploads
-// directly to.
+// directly to. Existence/ownership of the set and kit is checked via Get
+// before presigning, so a 404 doesn't pay for a wasted S3 round trip.
 func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -547,6 +549,21 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
 				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)},
 			})
+			return
+		}
+
+		set, err := keycapSetRepo.Get(r.Context(), ownerID, setID)
+		if err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				problem.NotFound(w, "resource not found")
+				return
+			}
+			log.FromContext(r.Context()).Error("getting keycap set", log.Error, err, log.KeycapSetID, setID)
+			problem.Internal(w, "failed to set kit image")
+			return
+		}
+		if !slices.ContainsFunc(set.Kits, func(kit repository.KeycapKit) bool { return kit.KitID == kitID }) {
+			problem.NotFound(w, "resource not found")
 			return
 		}
 

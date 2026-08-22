@@ -11,6 +11,7 @@ import (
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -247,6 +248,19 @@ func handleSetSwitchImage(
 
 		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
 			return nil, schema.SetSwitchImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
+		}
+
+		ownerID, ok := kbdbctx.UserID(ctx)
+		if !ok {
+			return nil, schema.SetSwitchImageOutput{}, errNoCallerIdentity
+		}
+
+		if _, err := switchRepo.Get(ctx, ownerID, in.SwitchID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return nil, schema.SetSwitchImageOutput{}, errSwitchNotFound
+			}
+			log.FromContext(ctx).Error("getting switch", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
 		}
 
 		key, err := repository.NewSwitchImageKey(ctx, in.SwitchID)

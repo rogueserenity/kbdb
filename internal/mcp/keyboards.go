@@ -13,6 +13,7 @@ import (
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -247,6 +248,19 @@ func handleAddKeyboardImage(
 
 		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
 			return nil, schema.AddKeyboardImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
+		}
+
+		ownerID, ok := kbdbctx.UserID(ctx)
+		if !ok {
+			return nil, schema.AddKeyboardImageOutput{}, errNoCallerIdentity
+		}
+
+		if _, err := keyboardRepo.Get(ctx, ownerID, in.KeyboardID); err != nil {
+			if errors.Is(err, repository.ErrNotFound) {
+				return nil, schema.AddKeyboardImageOutput{}, errKeyboardNotFound
+			}
+			log.FromContext(ctx).Error("getting keyboard", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 
 		imageID := uuid.NewString()

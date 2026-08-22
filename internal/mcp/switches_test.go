@@ -652,6 +652,9 @@ func (s *HandleSetSwitchImageSuite) SetupTest() {
 }
 
 func (s *HandleSetSwitchImageSuite) TestSucceeds() {
+	s.mockSwitches.EXPECT().
+		Get(mock.Anything, callerID, "sw-1").
+		Return(&repository.Switch{ID: "sw-1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/upload", nil)
@@ -689,12 +692,9 @@ func (s *HandleSetSwitchImageSuite) TestUnapprovedContentType_ReturnsError() {
 	s.Require().ErrorContains(err, "content_type")
 }
 
-func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
+func (s *HandleSetSwitchImageSuite) TestGetNotFound_ReturnsError() {
 	s.mockSwitches.EXPECT().
-		SetImagePath(mock.Anything, "sw-1", mock.Anything).
+		Get(mock.Anything, callerID, "sw-1").
 		Return(nil, repository.ErrNotFound)
 
 	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
@@ -707,6 +707,9 @@ func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 }
 
 func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
+	s.mockSwitches.EXPECT().
+		Get(mock.Anything, callerID, "sw-1").
+		Return(&repository.Switch{ID: "sw-1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/upload", nil)
