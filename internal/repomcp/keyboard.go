@@ -7,9 +7,8 @@ import (
 
 // KeyboardToMCP maps a repository.Keyboard to its MCP tool shape. Pointers
 // pass through undereferenced so a recorded zero survives, as
-// repoapi.KeyboardToAPI does. isOwner gates purchase.price the same way
-// repoapi.KeyboardToAPI's does: a non-owner never sees the dollar amount,
-// though the rest of purchase is unaffected.
+// repoapi.KeyboardToAPI does. isOwner hides purchase.price from
+// non-owners.
 func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
 	return schema.Keyboard{
 		ID:         kb.ID,

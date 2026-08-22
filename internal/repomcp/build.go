@@ -11,8 +11,8 @@ import (
 
 // BuildToMCP never presigns an image URL, unlike
 // [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPI] - it reports
-// only HasImages, so this can't fail on a presign error. isOwner gates
-// Stabs.Price the same way repoapi.BuildToAPI's does.
+// only HasImages, so this can't fail on a presign error. isOwner hides
+// Stabs.Price from non-owners.
 func BuildToMCP(b repository.Build, isOwner bool) schema.Build {
 	return schema.Build{
 		ID:            b.ID,

@@ -11,7 +11,7 @@ import (
 // from unset - the same reason repoapi.SwitchToAPI keeps them. The nested
 // material/force/spring/purchase groups still collapse to nil when every
 // field in them is unset, so an all-empty group is omitted entirely.
-// isOwner gates purchase.price the same way repoapi.SwitchToAPI's does.
+// isOwner hides purchase.price from non-owners.
 func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 	return schema.Switch{
 		ID:           sw.ID,

@@ -8,8 +8,8 @@ import (
 // KeycapSetToMCP maps a repository.KeycapSet to its MCP tool shape. Unlike
 // repoapi.KeycapSetToAPI, this never presigns a GET URL for a kit's image -
 // KeycapKitToMCP reports only HasImage, so mapping a set can't fail the way
-// the REST mapping can on a presign error. isOwner gates each kit's
-// purchase.price the same way repoapi.KeycapSetToAPI's does.
+// the REST mapping can on a presign error. isOwner hides each kit's
+// purchase.price from non-owners.
 func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
 	var kits []schema.KeycapKit
 	if ks.Kits != nil {
@@ -62,8 +62,7 @@ func KeycapSetFromMCP(in schema.KeycapSetInput) repository.KeycapSet {
 
 // KeycapKitToMCP maps a repository.KeycapKit to its MCP tool shape.
 // ImagePath collapses to the HasImage bool, never a URL - see
-// schema.KeycapKit for why. isOwner gates purchase.price the same way
-// repoapi.KeycapKitToAPI's does.
+// schema.KeycapKit for why. isOwner hides purchase.price from non-owners.
 func KeycapKitToMCP(k repository.KeycapKit, isOwner bool) schema.KeycapKit {
 	return schema.KeycapKit{
 		KitID:    k.KitID,

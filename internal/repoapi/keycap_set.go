@@ -11,12 +11,11 @@ import (
 )
 
 // KeycapSetToAPI maps a repository.KeycapSet to its wire representation.
-// isOwner gates each kit's purchase.price the same way [KeyboardToAPI]
-// gates Keyboard's - see its doc. Returns an error if a stored kit's
-// Purchase date doesn't match dateLayout, or if a kit has an ImagePath and
-// images.PresignGet fails. Kits are mapped concurrently - each only touches
-// its own slot in mapped, and a set can have an unbounded number of kits,
-// each potentially needing its own S3 presign.
+// Returns an error if a stored kit's Purchase date doesn't match dateLayout,
+// or if a kit has an ImagePath and images.PresignGet fails. Kits are mapped
+// concurrently - each only touches its own slot in mapped, and a set can
+// have an unbounded number of kits, each potentially needing its own S3
+// presign.
 func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapSet, error) {
 	var kits *[]api.KeycapKit
 	if ks.Kits != nil {
@@ -85,8 +84,7 @@ func KeycapSetToAPISummary(ks repository.KeycapSet) api.KeycapSetSummary {
 }
 
 // KeycapKitToAPI maps a repository.KeycapKit to its wire representation.
-// isOwner gates purchase.price the same way [KeyboardToAPI] does - see its
-// doc. Image is nil unless k.ImagePath is set, in which case it's a freshly
+// Image is nil unless k.ImagePath is set, in which case it's a freshly
 // minted presigned GET URL - never persisted, never cached.
 func KeycapKitToAPI(ctx context.Context, k repository.KeycapKit, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapKit, error) {
 	purchase, err := keycapKitPurchaseToAPI(k.Purchase, isOwner)

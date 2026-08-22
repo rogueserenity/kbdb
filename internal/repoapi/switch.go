@@ -7,9 +7,8 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// SwitchToAPI maps a repository.Switch to its wire representation. isOwner
-// gates purchase.price the same way [KeyboardToAPI] does - see its doc.
-// Returns an error if a stored Purchase date doesn't match dateLayout.
+// SwitchToAPI maps a repository.Switch to its wire representation. Returns
+// an error if a stored Purchase date doesn't match dateLayout.
 func SwitchToAPI(sw repository.Switch, isOwner bool) (api.Switch, error) {
 	purchase, err := switchPurchaseToAPI(sw.Purchase, isOwner)
 	if err != nil {

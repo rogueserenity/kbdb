@@ -11,10 +11,8 @@ import (
 )
 
 // KeyboardToAPI maps a repository.Keyboard to its wire representation.
-// isOwner gates purchase.price: a non-owner (including an anonymous caller)
-// never sees the dollar amount, though the rest of purchase (vendor, dates,
-// order_status) is unaffected - price is the only field callers agreed is
-// sensitive. Returns an error if a stored Purchase date doesn't match
+// isOwner hides purchase.price from non-owners; the rest of purchase is
+// unaffected. Returns an error if a stored Purchase date doesn't match
 // dateLayout.
 func KeyboardToAPI(kb repository.Keyboard, isOwner bool) (api.Keyboard, error) {
 	purchase, err := keyboardPurchaseToAPI(kb.Purchase, isOwner)
