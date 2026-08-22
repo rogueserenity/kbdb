@@ -58,8 +58,8 @@ var _ = Describe("Creating a keycap kit", func() {
 
 						By("returning a server-generated kit_id and null image")
 						var got struct {
-							KitID string `json:"kit_id"`
-							Name  string `json:"name"`
+							KitID string    `json:"kit_id"`
+							Name  string    `json:"name"`
 							Image *struct{} `json:"image"`
 						}
 						Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())

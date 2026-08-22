@@ -1437,6 +1437,90 @@ components:
           pattern: "\\S"
           description: kit_id of one of that keycap set's kits (see KeycapKit.kit_id).
 
+    BuildKeyboardRef:
+      type: object
+      description: A build's denormalized Keyboard reference.
+      required: [id, brand, name]
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        size:
+          type: string
+        layout:
+          type: string
+
+    BuildSwitchRef:
+      type: object
+      description: A build's denormalized Switch reference.
+      required: [id, brand, name, type]
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        manufacturer:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+
+    BuildSwitchEntryResolved:
+      type: object
+      required: [count]
+      properties:
+        switch:
+          $ref: "#/components/schemas/BuildSwitchRef"
+          description: >
+            Omitted if the referenced Switch no longer exists (e.g. deleted
+            after the build referenced it).
+        count:
+          type: integer
+          minimum: 1
+
+    BuildKeycapSetRef:
+      type: object
+      description: A build's denormalized KeycapSet reference.
+      required: [id, brand, name]
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        profile:
+          type: string
+
+    BuildKeycapKitEntryResolved:
+      type: object
+      required: [kit_id]
+      properties:
+        keycap_set:
+          $ref: "#/components/schemas/BuildKeycapSetRef"
+          description: >
+            Omitted if the referenced KeycapSet (or the kit within it) no
+            longer exists (e.g. deleted after the build referenced it) - in
+            that case kit_name and kit_image_url are omitted too.
+        kit_id:
+          type: string
+          description: kit_id of the referenced keycap set's kit (see KeycapKit.kit_id).
+        kit_name:
+          type: string
+          description: Denormalized name of the referenced kit.
+        kit_image_url:
+          type: string
+          format: uri
+          description: >
+            A freshly-minted, short-lived presigned S3 GET URL for the
+            referenced kit's image, if it has one. Generated new on every
+            fetch of the build — do not cache or persist this value, it
+            expires.
+
     BuildStabs:
       type: object
       properties:
@@ -1535,21 +1619,53 @@ components:
           type: string
 
     Build:
-      allOf:
-        - $ref: "#/components/schemas/BuildInput"
-        - type: object
-          required: [id]
-          properties:
-            id:
-              type: string
-            images:
-              type: array
-              items:
-                $ref: "#/components/schemas/BuildImage"
-              description: >
-                Managed via the dedicated image endpoints below, not via
-                PUT on the build itself — see POST/DELETE
-                .../builds/{buildId}/images[/{imageId}].
+      type: object
+      description: >
+        The read representation of a build. Unlike BuildInput, keyboard,
+        switches[].switch, and keycap_kits[].keycap_set are denormalized
+        into resolved reference objects rather than bare ids, so a client
+        can render a build without follow-up requests.
+      required: [id, visibility]
+      properties:
+        id:
+          type: string
+        keyboard:
+          $ref: "#/components/schemas/BuildKeyboardRef"
+          description: >
+            Omitted if the referenced Keyboard no longer exists (e.g.
+            deleted after the build referenced it).
+        plate:
+          type: string
+          description: Which of the keyboard's design.plates options is installed.
+        case_mount_type:
+          $ref: "#/components/schemas/BuildCaseMountType"
+        stabs:
+          $ref: "#/components/schemas/BuildStabs"
+        foam:
+          type: boolean
+        switches:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildSwitchEntryResolved"
+        keycap_kits:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildKeycapKitEntryResolved"
+        build_date:
+          type: string
+          format: date
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/BuildImage"
+          description: >
+            Managed via the dedicated image endpoints below, not via
+            PUT on the build itself — see POST/DELETE
+            .../builds/{buildId}/images[/{imageId}].
 
     BuildSummary:
       type: object

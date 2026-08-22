@@ -103,7 +103,14 @@ func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.Keyboar
 
 // GetBuild returns 404, not 403, for a build that exists but isn't
 // readable by the caller, to avoid revealing it exists.
-func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
+func GetBuild(
+	repo repository.BuildRepository,
+	images repository.BuildImageStore,
+	kitImages repository.KeycapKitImageStore,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("buildId")
@@ -125,7 +132,7 @@ func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *b, images)
+		out, err := repoapi.BuildToAPI(r.Context(), *b, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to get build")
@@ -143,6 +150,7 @@ func GetBuild(repo repository.BuildRepository, images repository.BuildImageStore
 func CreateBuild(
 	buildRepo repository.BuildRepository,
 	images repository.BuildImageStore,
+	kitImages repository.KeycapKitImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -187,7 +195,7 @@ func CreateBuild(
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *created, images)
+		out, err := repoapi.BuildToAPI(r.Context(), *created, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, created.ID)
 			problem.Internal(w, "failed to create build")
@@ -207,6 +215,7 @@ func CreateBuild(
 func UpdateBuild(
 	buildRepo repository.BuildRepository,
 	images repository.BuildImageStore,
+	kitImages repository.KeycapKitImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -256,7 +265,7 @@ func UpdateBuild(
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *updated, images)
+		out, err := repoapi.BuildToAPI(r.Context(), *updated, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, updated.ID)
 			problem.Internal(w, "failed to update build")

@@ -49,15 +49,63 @@ func TestBuildToAPISuite(t *testing.T) {
 	suite.Run(t, new(BuildToAPISuite))
 }
 
+// buildToAPIDeps bundles the mocks BuildToAPI needs; the returned
+// EXPECT()s must be set up by the caller before invoking BuildToAPI.
+type buildToAPIDeps struct {
+	images        *mocks.MockBuildImageStore
+	kitImages     *mocks.MockKeycapKitImageStore
+	keyboardRepo  *mocks.MockKeyboardRepository
+	switchRepo    *mocks.MockSwitchRepository
+	keycapSetRepo *mocks.MockKeycapSetRepository
+}
+
+func newBuildToAPIDeps(t interface {
+	mock.TestingT
+	Cleanup(func())
+}) buildToAPIDeps {
+	return buildToAPIDeps{
+		images:        mocks.NewMockBuildImageStore(t),
+		kitImages:     mocks.NewMockKeycapKitImageStore(t),
+		keyboardRepo:  mocks.NewMockKeyboardRepository(t),
+		switchRepo:    mocks.NewMockSwitchRepository(t),
+		keycapSetRepo: mocks.NewMockKeycapSetRepository(t),
+	}
+}
+
+func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build, error) {
+	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo)
+}
+
+// expectFullyResolvable sets up every dependency in fullRepoBuild() (kb1,
+// sw1, ks1/kit1) to resolve successfully.
+func (d buildToAPIDeps) expectFullyResolvable() {
+	d.keyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1", Size: strPtr("75%"), Layout: strPtr("ANSI")}, nil)
+	d.switchRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Profile: strPtr("Cherry"),
+			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}},
+		}, nil)
+}
+
 func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	b := fullRepoBuild()
-	images := mocks.NewMockBuildImageStore(s.T())
+	d := newBuildToAPIDeps(s.T())
+	d.expectFullyResolvable()
 
-	out, err := BuildToAPI(context.Background(), b, images)
+	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Equal(b.ID, out.Id)
-	s.Equal(b.Keyboard, out.Keyboard)
+	s.Require().NotNil(out.Keyboard)
+	s.Equal("kb1", out.Keyboard.Id)
+	s.Equal("Keychron", out.Keyboard.Brand)
+	s.Equal("Q1", out.Keyboard.Name)
 	s.Equal(b.Plate, out.Plate)
 	s.Require().NotNil(out.CaseMountType)
 	s.Equal(b.CaseMountType.Type, out.CaseMountType.Type)
@@ -69,12 +117,17 @@ func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(b.Foam, out.Foam)
 	s.Require().NotNil(out.Switches)
 	s.Require().Len(*out.Switches, 1)
-	s.Equal("sw1", (*out.Switches)[0].Switch)
+	s.Require().NotNil((*out.Switches)[0].Switch)
+	s.Equal("sw1", (*out.Switches)[0].Switch.Id)
+	s.Equal("Oil King", (*out.Switches)[0].Switch.Name)
 	s.Equal(70, (*out.Switches)[0].Count)
 	s.Require().NotNil(out.KeycapKits)
 	s.Require().Len(*out.KeycapKits, 1)
-	s.Equal("ks1", (*out.KeycapKits)[0].KeycapSet)
-	s.Equal("kit1", (*out.KeycapKits)[0].Kit)
+	s.Require().NotNil((*out.KeycapKits)[0].KeycapSet)
+	s.Equal("ks1", (*out.KeycapKits)[0].KeycapSet.Id)
+	s.Equal("kit1", (*out.KeycapKits)[0].KitId)
+	s.Require().NotNil((*out.KeycapKits)[0].KitName)
+	s.Equal("Base", *(*out.KeycapKits)[0].KitName)
 	s.Require().NotNil(out.BuildDate)
 	s.Equal(*b.BuildDate, out.BuildDate.Format(dateLayout))
 	s.Equal(b.Notes, out.Notes)
@@ -82,10 +135,14 @@ func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 }
 
 func (s *BuildToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
-	b := repository.Build{ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate}
+	b := repository.Build{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate}
 
-	images := mocks.NewMockBuildImageStore(s.T())
-	out, err := BuildToAPI(context.Background(), b, images)
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Nil(out.Plate)
@@ -103,8 +160,8 @@ func (s *BuildToAPISuite) TestMalformedStoredBuildDate_ReturnsError() {
 	b := fullRepoBuild()
 	b.BuildDate = strPtr("not-a-date")
 
-	images := mocks.NewMockBuildImageStore(s.T())
-	_, err := BuildToAPI(context.Background(), b, images)
+	d := newBuildToAPIDeps(s.T())
+	_, err := d.call(context.Background(), b)
 
 	s.Require().Error(err)
 }
@@ -116,11 +173,12 @@ func (s *BuildToAPISuite) TestImagesPopulated_MintsFreshPresignedURLPerImage() {
 		{ImageID: "img2", Path: repository.BuildImageKey("builds/alice/build1/images/img2")},
 	}
 
-	images := mocks.NewMockBuildImageStore(s.T())
-	images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("https://example.com/img1", nil)
-	images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[1].Path).Return("https://example.com/img2", nil)
+	d := newBuildToAPIDeps(s.T())
+	d.expectFullyResolvable()
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("https://example.com/img1", nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[1].Path).Return("https://example.com/img2", nil)
 
-	out, err := BuildToAPI(context.Background(), b, images)
+	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Images)
@@ -137,11 +195,197 @@ func (s *BuildToAPISuite) TestPresignFails_ReturnsError() {
 		{ImageID: "img1", Path: repository.BuildImageKey("builds/alice/build1/images/img1")},
 	}
 
-	images := mocks.NewMockBuildImageStore(s.T())
-	images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("", errors.New("s3: access denied"))
+	d := newBuildToAPIDeps(s.T())
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("", errors.New("s3: access denied"))
 
-	_, err := BuildToAPI(context.Background(), b, images)
+	_, err := d.call(context.Background(), b)
 
+	s.Require().Error(err)
+}
+
+func (s *BuildToAPISuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFailing() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").Return(nil, repository.ErrNotFound)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Nil(out.Keyboard)
+}
+
+func (s *BuildToAPISuite) TestKeyboardRepositoryError_ReturnsError() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").Return(nil, errors.New("dynamo unavailable"))
+
+	_, err := d.call(context.Background(), b)
+	s.Require().Error(err)
+}
+
+func (s *BuildToAPISuite) TestSwitchNotFound_KeepsCountOmitsSwitch() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").Return(nil, repository.ErrNotFound)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Switches)
+	s.Require().Len(*out.Switches, 1)
+	s.Nil((*out.Switches)[0].Switch)
+	s.Equal(70, (*out.Switches)[0].Count)
+}
+
+func (s *BuildToAPISuite) TestMultipleSwitchEntries_ResolvesEachIndependently() {
+	b := fullRepoBuild()
+	b.Switches = []repository.BuildSwitchEntry{
+		{Switch: "sw-missing", Count: 1},
+		{Switch: "sw1", Count: 70},
+	}
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw-missing").Return(nil, repository.ErrNotFound)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Switches)
+	s.Require().Len(*out.Switches, 2)
+	s.Nil((*out.Switches)[0].Switch)
+	s.Equal(1, (*out.Switches)[0].Count)
+	s.Require().NotNil((*out.Switches)[1].Switch)
+	s.Equal("sw1", (*out.Switches)[1].Switch.Id)
+	s.Equal(70, (*out.Switches)[1].Count)
+}
+
+func (s *BuildToAPISuite) TestSwitchRepositoryError_ReturnsError() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").Return(nil, errors.New("dynamo unavailable"))
+
+	_, err := d.call(context.Background(), b)
+	s.Require().Error(err)
+}
+
+func (s *BuildToAPISuite) TestKeycapSetNotFound_KeepsKitIDOmitsRest() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").Return(nil, repository.ErrNotFound)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.KeycapKits)
+	s.Require().Len(*out.KeycapKits, 1)
+	s.Equal("kit1", (*out.KeycapKits)[0].KitId)
+	s.Nil((*out.KeycapKits)[0].KeycapSet)
+	s.Nil((*out.KeycapKits)[0].KitName)
+	s.Nil((*out.KeycapKits)[0].KitImageUrl)
+}
+
+func (s *BuildToAPISuite) TestKeycapSetRepositoryError_ReturnsError() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").Return(nil, errors.New("dynamo unavailable"))
+
+	_, err := d.call(context.Background(), b)
+	s.Require().Error(err)
+}
+
+func (s *BuildToAPISuite) TestKitNotFoundInResolvedKeycapSet_KeepsKitIDOmitsRest() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "other-kit", Name: "Base"}}}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.KeycapKits)
+	s.Require().Len(*out.KeycapKits, 1)
+	s.Equal("kit1", (*out.KeycapKits)[0].KitId)
+	s.Nil((*out.KeycapKits)[0].KeycapSet)
+	s.Nil((*out.KeycapKits)[0].KitName)
+}
+
+func (s *BuildToAPISuite) TestKitWithImage_MintsFreshPresignedURL() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	imgPath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
+		}, nil)
+	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/kit1.png", nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.KeycapKits)
+	s.Require().Len(*out.KeycapKits, 1)
+	s.Require().NotNil((*out.KeycapKits)[0].KitImageUrl)
+	s.Equal("https://example.com/kit1.png", *(*out.KeycapKits)[0].KitImageUrl)
+}
+
+func (s *BuildToAPISuite) TestKitImagePresignFails_ReturnsError() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	imgPath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
+		}, nil)
+	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+
+	_, err := d.call(context.Background(), b)
 	s.Require().Error(err)
 }
 

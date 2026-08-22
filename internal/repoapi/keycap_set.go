@@ -2,7 +2,9 @@ package repoapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -10,18 +12,36 @@ import (
 
 // KeycapSetToAPI maps a repository.KeycapSet to its wire representation.
 // Returns an error if a stored kit's Purchase date doesn't match dateLayout,
-// or if a kit has an ImagePath and images.PresignGet fails.
+// or if a kit has an ImagePath and images.PresignGet fails. Kits are mapped
+// concurrently - each only touches its own slot in mapped, and a set can
+// have an unbounded number of kits, each potentially needing its own S3
+// presign.
 func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore) (api.KeycapSet, error) {
 	var kits *[]api.KeycapKit
 	if ks.Kits != nil {
 		mapped := make([]api.KeycapKit, len(ks.Kits))
+		errs := make([]error, len(ks.Kits))
+
+		var wg sync.WaitGroup
 		for i, k := range ks.Kits {
-			apiKit, err := KeycapKitToAPI(ctx, k, images)
-			if err != nil {
-				return api.KeycapSet{}, err
-			}
-			mapped[i] = apiKit
+			wg.Add(1)
+			go func(i int, k repository.KeycapKit) {
+				defer wg.Done()
+
+				apiKit, err := KeycapKitToAPI(ctx, k, images)
+				if err != nil {
+					errs[i] = err
+					return
+				}
+				mapped[i] = apiKit
+			}(i, k)
 		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			return api.KeycapSet{}, err
+		}
+
 		kits = &mapped
 	}
 

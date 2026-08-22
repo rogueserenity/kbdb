@@ -24,6 +24,7 @@ type CreateBuildSuite struct {
 
 	mockBuildRepo     *mocks.MockBuildRepository
 	mockImages        *mocks.MockBuildImageStore
+	mockKitImages     *mocks.MockKeycapKitImageStore
 	mockKeyboardRepo  *mocks.MockKeyboardRepository
 	mockSwitchRepo    *mocks.MockSwitchRepository
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
@@ -37,10 +38,11 @@ func TestCreateBuildSuite(t *testing.T) {
 func (s *CreateBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing
@@ -341,6 +343,7 @@ type UpdateBuildSuite struct {
 
 	mockBuildRepo     *mocks.MockBuildRepository
 	mockImages        *mocks.MockBuildImageStore
+	mockKitImages     *mocks.MockKeycapKitImageStore
 	mockKeyboardRepo  *mocks.MockKeyboardRepository
 	mockSwitchRepo    *mocks.MockSwitchRepository
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
@@ -354,10 +357,11 @@ func TestUpdateBuildSuite(t *testing.T) {
 func (s *UpdateBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = UpdateBuild(s.mockBuildRepo, s.mockImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	s.handler = UpdateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 func (s *UpdateBuildSuite) stubOwnedKeyboard() {
@@ -712,9 +716,13 @@ func (s *ListBuildsSuite) TestListBuilds_RepositoryError_Returns500() {
 type GetBuildSuite struct {
 	suite.Suite
 
-	mockBuildRepo *mocks.MockBuildRepository
-	mockImages    *mocks.MockBuildImageStore
-	handler       http.HandlerFunc
+	mockBuildRepo     *mocks.MockBuildRepository
+	mockImages        *mocks.MockBuildImageStore
+	mockKitImages     *mocks.MockKeycapKitImageStore
+	mockKeyboardRepo  *mocks.MockKeyboardRepository
+	mockSwitchRepo    *mocks.MockSwitchRepository
+	mockKeycapSetRepo *mocks.MockKeycapSetRepository
+	handler           http.HandlerFunc
 }
 
 func TestGetBuildSuite(t *testing.T) {
@@ -724,7 +732,22 @@ func TestGetBuildSuite(t *testing.T) {
 func (s *GetBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
-	s.handler = GetBuild(s.mockBuildRepo, s.mockImages)
+	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.handler = GetBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+}
+
+// stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing -
+// the default BuildToAPI keyboard-resolution outcome most tests below want,
+// so the get path under test can proceed to the behavior they're actually
+// asserting on.
+func (s *GetBuildSuite) stubOwnedKeyboard() {
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", mock.Anything).
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil).
+		Maybe()
 }
 
 func (s *GetBuildSuite) newRequest(ctx context.Context, buildID string) *http.Request {
@@ -735,6 +758,7 @@ func (s *GetBuildSuite) newRequest(ctx context.Context, buildID string) *http.Re
 }
 
 func (s *GetBuildSuite) TestGetBuild_Found_ReturnsBuild() {
+	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
 		Return(&repository.Build{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}, nil)
@@ -779,6 +803,7 @@ func (s *GetBuildSuite) TestGetBuild_NotOwnedAndNotShared_Returns404() {
 
 func (s *GetBuildSuite) TestGetBuild_SharedVisibility_ReturnsBuild() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
 		Return(&repository.Build{UserID: "alice", ID: "build1", Visibility: repository.VisibilityAuthenticated}, nil)

@@ -161,10 +161,10 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build", func
 				Expect(getBuild.StatusCode).To(Equal(http.StatusOK))
 
 				var buildBody struct {
-					Keyboard string `json:"keyboard"`
+					Keyboard *struct{} `json:"keyboard"`
 				}
 				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
-				Expect(buildBody.Keyboard).To(Equal(keyboardID))
+				Expect(buildBody.Keyboard).To(BeNil(), "the referenced keyboard was just deleted, so it can't resolve")
 			})
 		})
 	})
