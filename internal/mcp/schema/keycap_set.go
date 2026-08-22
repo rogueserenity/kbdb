@@ -145,9 +145,12 @@ type DeleteKeycapSetOutput struct {
 // KeycapKitInput is the writable half of a kit, shared by create_keycap_kit
 // and update_keycap_kit. It has no HasImage/image field - a kit's image is
 // managed entirely through set_keycap_kit_image/delete_keycap_kit_image.
+// Primary is a pointer, not a plain bool, so omitted can stay
+// distinguishable from explicit false - see the field's own doc.
 type KeycapKitInput struct {
 	Name     string             `json:"name" jsonschema:"the kit's name, e.g. Base or Novelties"`
 	Purchase *KeycapKitPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Primary  *bool              `json:"primary,omitempty" jsonschema:"omit to leave the set's primary kit designation untouched; true makes this kit primary, replacing whichever kit held it before; false clears the designation, but only if this kit is the current primary"`
 }
 
 // CreateKeycapKitInput is the create_keycap_kit tool input.

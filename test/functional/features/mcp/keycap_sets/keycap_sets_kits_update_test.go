@@ -82,6 +82,63 @@ var _ = Describe("Updating a keycap kit over MCP", func() {
 				})
 			})
 
+			Context("given primary is true", func() {
+				When("the update_keycap_kit tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "update_keycap_kit", map[string]any{
+							"keycap_set_id": keycapSetID,
+							"kit_id":        kitID,
+							"name":          "Base V2",
+							"primary":       true,
+						})
+					})
+
+					It("makes the kit the set's primary_kit_id", func(ctx SpecContext) {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+
+						check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						primaryKitID := decodeKeycapSetOutput(check).KeycapSet.PrimaryKitID
+						Expect(primaryKitID).NotTo(BeNil())
+						Expect(*primaryKitID).To(Equal(kitID))
+					})
+				})
+			})
+
+			Context("given the kit is the set's current primary kit and primary is false", func() {
+				BeforeEach(func(ctx SpecContext) {
+					setPrimaryResult, setPrimaryErr := client.CallTool(ctx, "update_keycap_kit", map[string]any{
+						"keycap_set_id": keycapSetID,
+						"kit_id":        kitID,
+						"name":          "Base",
+						"primary":       true,
+					})
+					Expect(setPrimaryErr).NotTo(HaveOccurred())
+					Expect(setPrimaryResult.IsError).To(BeFalse())
+				})
+
+				When("the update_keycap_kit tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "update_keycap_kit", map[string]any{
+							"keycap_set_id": keycapSetID,
+							"kit_id":        kitID,
+							"name":          "Base V2",
+							"primary":       false,
+						})
+					})
+
+					It("clears the set's primary_kit_id", func(ctx SpecContext) {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+
+						check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						Expect(decodeKeycapSetOutput(check).KeycapSet.PrimaryKitID).To(BeNil())
+					})
+				})
+			})
+
 			Context("given a required field is present but blank", func() {
 				When("the update_keycap_kit tool is called", func() {
 					BeforeEach(func(ctx SpecContext) {

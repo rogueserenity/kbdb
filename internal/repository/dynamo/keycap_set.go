@@ -302,7 +302,7 @@ func (r *KeycapSetRepository) mutateSet(
 }
 
 // AddKit implements repository.KeycapSetRepository.
-func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool) (*repository.KeycapKit, error) {
 	if kit.KitID == "" {
 		return nil, fmt.Errorf("adding kit to keycap set %q: %w", setID, errEmptyKitID)
 	}
@@ -317,6 +317,12 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 			return fmt.Errorf("adding kit %q to keycap set %q: %w", kit.KitID, setID, errDuplicateKitID)
 		}
 		ks.Kits = append(ks.Kits, kit)
+		// primary == false is a no-op here: a kit that didn't exist until
+		// this call can't already be the set's primary, so there's
+		// nothing to clear.
+		if primary != nil && *primary {
+			ks.PrimaryKitID = &kit.KitID
+		}
 		return nil
 	})
 	if err != nil {
@@ -332,7 +338,7 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 }
 
 // UpdateKit implements repository.KeycapSetRepository.
-func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
+func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool) (*repository.KeycapKit, error) {
 	if kit.KitID == "" {
 		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, errEmptyKitID)
 	}
@@ -350,6 +356,13 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 		}
 		kit.ImagePath = ks.Kits[idx].ImagePath
 		ks.Kits[idx] = kit
+		if primary != nil {
+			if *primary {
+				ks.PrimaryKitID = &kit.KitID
+			} else if ks.PrimaryKitID != nil && *ks.PrimaryKitID == kit.KitID {
+				ks.PrimaryKitID = nil
+			}
+		}
 		return nil
 	})
 	if err != nil {

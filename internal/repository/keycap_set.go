@@ -86,13 +86,21 @@ type KeycapSetRepository interface {
 
 	// AddKit appends kit to the set's Kits (kit.KitID must already be set)
 	// and returns the stored kit, matching Create's shape for every other
-	// entity. Returns ErrNotFound if the parent set doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	AddKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
+	// entity. primary controls the set's PrimaryKitID, applied atomically
+	// with the add: nil leaves it untouched, true makes the new kit
+	// primary, false is a no-op (a kit that doesn't exist yet can't
+	// already be the primary, so there's nothing to clear). Returns
+	// ErrNotFound if the parent set doesn't exist, or ErrMutationConflict
+	// if concurrent writers exhaust the retry budget.
+	AddKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
 	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	UpdateKit(ctx context.Context, setID string, kit KeycapKit) (*KeycapKit, error)
+	// primary controls the set's PrimaryKitID, applied atomically with the
+	// update: nil leaves it untouched, true makes this kit primary
+	// (replacing whichever kit held it before), false clears it but only
+	// if this kit is the current primary.
+	UpdateKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
 	// DeleteKit removes the kit matching kitID from setID's Kits and
 	// returns the image key that was on it, or nil if it had none. If kitID

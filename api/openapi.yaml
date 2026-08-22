@@ -1305,6 +1305,15 @@ components:
           description: e.g. "Base", "Extension", "Accents".
         purchase:
           $ref: "#/components/schemas/Purchase"
+        primary:
+          type: boolean
+          description: >
+            Omit to leave the set's primary kit designation untouched.
+            true makes this kit the set's primary kit, replacing whichever
+            kit held that designation before. false clears the
+            designation, but only if this kit is the current primary -
+            otherwise it's a no-op. Deliberately has no default: a missing
+            field must stay distinguishable from an explicit false.
 
     KeycapKitImage:
       type: object

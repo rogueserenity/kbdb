@@ -39,8 +39,8 @@ func (_m *MockKeycapSetRepository) EXPECT() *MockKeycapSetRepository_Expecter {
 }
 
 // AddKit provides a mock function for the type MockKeycapSetRepository
-func (_mock *MockKeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
-	ret := _mock.Called(ctx, setID, kit)
+func (_mock *MockKeycapSetRepository) AddKit(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool) (*repository.KeycapKit, error) {
+	ret := _mock.Called(ctx, setID, kit, primary)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AddKit")
@@ -48,18 +48,18 @@ func (_mock *MockKeycapSetRepository) AddKit(ctx context.Context, setID string, 
 
 	var r0 *repository.KeycapKit
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit) (*repository.KeycapKit, error)); ok {
-		return returnFunc(ctx, setID, kit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit, *bool) (*repository.KeycapKit, error)); ok {
+		return returnFunc(ctx, setID, kit, primary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit) *repository.KeycapKit); ok {
-		r0 = returnFunc(ctx, setID, kit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit, *bool) *repository.KeycapKit); ok {
+		r0 = returnFunc(ctx, setID, kit, primary)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*repository.KeycapKit)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeycapKit) error); ok {
-		r1 = returnFunc(ctx, setID, kit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeycapKit, *bool) error); ok {
+		r1 = returnFunc(ctx, setID, kit, primary)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -75,11 +75,12 @@ type MockKeycapSetRepository_AddKit_Call struct {
 //   - ctx context.Context
 //   - setID string
 //   - kit repository.KeycapKit
-func (_e *MockKeycapSetRepository_Expecter) AddKit(ctx any, setID any, kit any) *MockKeycapSetRepository_AddKit_Call {
-	return &MockKeycapSetRepository_AddKit_Call{Call: _e.mock.On("AddKit", ctx, setID, kit)}
+//   - primary *bool
+func (_e *MockKeycapSetRepository_Expecter) AddKit(ctx any, setID any, kit any, primary any) *MockKeycapSetRepository_AddKit_Call {
+	return &MockKeycapSetRepository_AddKit_Call{Call: _e.mock.On("AddKit", ctx, setID, kit, primary)}
 }
 
-func (_c *MockKeycapSetRepository_AddKit_Call) Run(run func(ctx context.Context, setID string, kit repository.KeycapKit)) *MockKeycapSetRepository_AddKit_Call {
+func (_c *MockKeycapSetRepository_AddKit_Call) Run(run func(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool)) *MockKeycapSetRepository_AddKit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -93,10 +94,15 @@ func (_c *MockKeycapSetRepository_AddKit_Call) Run(run func(ctx context.Context,
 		if args[2] != nil {
 			arg2 = args[2].(repository.KeycapKit)
 		}
+		var arg3 *bool
+		if args[3] != nil {
+			arg3 = args[3].(*bool)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -107,7 +113,7 @@ func (_c *MockKeycapSetRepository_AddKit_Call) Return(keycapKit *repository.Keyc
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_AddKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error)) *MockKeycapSetRepository_AddKit_Call {
+func (_c *MockKeycapSetRepository_AddKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool) (*repository.KeycapKit, error)) *MockKeycapSetRepository_AddKit_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -711,8 +717,8 @@ func (_c *MockKeycapSetRepository_Update_Call) RunAndReturn(run func(ctx context
 }
 
 // UpdateKit provides a mock function for the type MockKeycapSetRepository
-func (_mock *MockKeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error) {
-	ret := _mock.Called(ctx, setID, kit)
+func (_mock *MockKeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool) (*repository.KeycapKit, error) {
+	ret := _mock.Called(ctx, setID, kit, primary)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UpdateKit")
@@ -720,18 +726,18 @@ func (_mock *MockKeycapSetRepository) UpdateKit(ctx context.Context, setID strin
 
 	var r0 *repository.KeycapKit
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit) (*repository.KeycapKit, error)); ok {
-		return returnFunc(ctx, setID, kit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit, *bool) (*repository.KeycapKit, error)); ok {
+		return returnFunc(ctx, setID, kit, primary)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit) *repository.KeycapKit); ok {
-		r0 = returnFunc(ctx, setID, kit)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeycapKit, *bool) *repository.KeycapKit); ok {
+		r0 = returnFunc(ctx, setID, kit, primary)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*repository.KeycapKit)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeycapKit) error); ok {
-		r1 = returnFunc(ctx, setID, kit)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeycapKit, *bool) error); ok {
+		r1 = returnFunc(ctx, setID, kit, primary)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -747,11 +753,12 @@ type MockKeycapSetRepository_UpdateKit_Call struct {
 //   - ctx context.Context
 //   - setID string
 //   - kit repository.KeycapKit
-func (_e *MockKeycapSetRepository_Expecter) UpdateKit(ctx any, setID any, kit any) *MockKeycapSetRepository_UpdateKit_Call {
-	return &MockKeycapSetRepository_UpdateKit_Call{Call: _e.mock.On("UpdateKit", ctx, setID, kit)}
+//   - primary *bool
+func (_e *MockKeycapSetRepository_Expecter) UpdateKit(ctx any, setID any, kit any, primary any) *MockKeycapSetRepository_UpdateKit_Call {
+	return &MockKeycapSetRepository_UpdateKit_Call{Call: _e.mock.On("UpdateKit", ctx, setID, kit, primary)}
 }
 
-func (_c *MockKeycapSetRepository_UpdateKit_Call) Run(run func(ctx context.Context, setID string, kit repository.KeycapKit)) *MockKeycapSetRepository_UpdateKit_Call {
+func (_c *MockKeycapSetRepository_UpdateKit_Call) Run(run func(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool)) *MockKeycapSetRepository_UpdateKit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -765,10 +772,15 @@ func (_c *MockKeycapSetRepository_UpdateKit_Call) Run(run func(ctx context.Conte
 		if args[2] != nil {
 			arg2 = args[2].(repository.KeycapKit)
 		}
+		var arg3 *bool
+		if args[3] != nil {
+			arg3 = args[3].(*bool)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -779,7 +791,7 @@ func (_c *MockKeycapSetRepository_UpdateKit_Call) Return(keycapKit *repository.K
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_UpdateKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kit repository.KeycapKit) (*repository.KeycapKit, error)) *MockKeycapSetRepository_UpdateKit_Call {
+func (_c *MockKeycapSetRepository_UpdateKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kit repository.KeycapKit, primary *bool) (*repository.KeycapKit, error)) *MockKeycapSetRepository_UpdateKit_Call {
 	_c.Call.Return(run)
 	return _c
 }

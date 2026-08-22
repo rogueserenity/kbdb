@@ -142,6 +142,59 @@ var _ = Describe("Updating a keycap kit", func() {
 				})
 			})
 
+			Context("given primary is true", func() {
+				When("updating the kit", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.UpdateKit(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"name":"Base V2","primary":true}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("makes the kit the set's primary_kit_id", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var set struct {
+							PrimaryKitID *string `json:"primary_kit_id"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+						Expect(set.PrimaryKitID).NotTo(BeNil())
+						Expect(*set.PrimaryKitID).To(Equal(kitID))
+					})
+				})
+			})
+
+			Context("given the kit is the set's current primary kit and primary is false", func() {
+				BeforeEach(func(ctx SpecContext) {
+					setPrimaryResp, err := client.UpdateKit(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"name":"Base","primary":true}`)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(setPrimaryResp.StatusCode).To(Equal(http.StatusOK))
+				})
+
+				When("updating the kit", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.UpdateKit(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"name":"Base V2","primary":false}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("clears the set's primary_kit_id", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var set struct {
+							PrimaryKitID *string `json:"primary_kit_id"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+						Expect(set.PrimaryKitID).To(BeNil())
+					})
+				})
+			})
+
 			Context("given required fields are missing", func() {
 				When("updating the kit", func() {
 					BeforeEach(func(ctx SpecContext) {

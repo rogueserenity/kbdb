@@ -338,7 +338,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 
 		kit.KitID = uuid.NewString()
 
-		created, err := keycapSetRepo.AddKit(r.Context(), setID, kit)
+		created, err := keycapSetRepo.AddKit(r.Context(), setID, kit, in.Primary)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
 			return
@@ -401,7 +401,7 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 
 		kit.KitID = kitID
 
-		updated, err := keycapSetRepo.UpdateKit(r.Context(), setID, kit)
+		updated, err := keycapSetRepo.UpdateKit(r.Context(), setID, kit, in.Primary)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
 			return
