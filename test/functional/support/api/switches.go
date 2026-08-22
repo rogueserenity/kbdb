@@ -81,3 +81,15 @@ func (c *SwitchesClient) DeleteWithOnDelete(ctx context.Context, ownerID, id, to
 	}
 	return c.client.Do(ctx, http.MethodDelete, path, token, nil)
 }
+
+// SetImage calls POST /v1/users/{ownerID}/switches/{id}/image with body as
+// the raw JSON request body and the given bearer token (empty for an
+// anonymous request). The caller owns closing resp.Body.
+func (c *SwitchesClient) SetImage(ctx context.Context, ownerID, id, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/switches/"+id+"/image", token, bytes.NewBufferString(body))
+}
+
+// DeleteImage calls DELETE /v1/users/{ownerID}/switches/{id}/image.
+func (c *SwitchesClient) DeleteImage(ctx context.Context, ownerID, id, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/switches/"+id+"/image", token, nil)
+}

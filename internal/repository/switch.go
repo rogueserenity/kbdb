@@ -1,6 +1,11 @@
 package repository
 
-import "context"
+import (
+	"context"
+	"fmt"
+
+	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
+)
 
 // SwitchMaterial is the housing/stem material makeup of a switch.
 type SwitchMaterial struct {
@@ -42,20 +47,24 @@ type SwitchPurchase struct {
 // SwitchPurchase) is a pointer so nil ("not provided") round-trips
 // distinctly from an explicit zero value.
 type Switch struct {
-	UserID       string         `dynamodbav:"user_id" json:"-"`
-	ID           string         `dynamodbav:"id" json:"id"`
-	Brand        string         `dynamodbav:"brand" json:"brand"`
-	Manufacturer *string        `dynamodbav:"manufacturer,omitempty" json:"manufacturer,omitempty"`
-	Name         string         `dynamodbav:"name" json:"name"`
-	Type         string         `dynamodbav:"type" json:"type"`
-	Pins         *int           `dynamodbav:"pins,omitempty" json:"pins,omitempty"`
-	FactoryLubed *bool          `dynamodbav:"factory_lubed,omitempty" json:"factory_lubed,omitempty"`
-	Material     SwitchMaterial `dynamodbav:"material" json:"material"`
-	Force        SwitchForce    `dynamodbav:"force" json:"force"`
-	Spring       SwitchSpring   `dynamodbav:"spring" json:"spring"`
-	Purchase     SwitchPurchase `dynamodbav:"purchase" json:"purchase"`
-	Notes        *string        `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
-	Visibility   Visibility     `dynamodbav:"visibility" json:"visibility"`
+	UserID       string          `dynamodbav:"user_id" json:"-"`
+	ID           string          `dynamodbav:"id" json:"id"`
+	Brand        string          `dynamodbav:"brand" json:"brand"`
+	Manufacturer *string         `dynamodbav:"manufacturer,omitempty" json:"manufacturer,omitempty"`
+	Name         string          `dynamodbav:"name" json:"name"`
+	Type         string          `dynamodbav:"type" json:"type"`
+	Pins         *int            `dynamodbav:"pins,omitempty" json:"pins,omitempty"`
+	FactoryLubed *bool           `dynamodbav:"factory_lubed,omitempty" json:"factory_lubed,omitempty"`
+	Material     SwitchMaterial  `dynamodbav:"material" json:"material"`
+	Force        SwitchForce     `dynamodbav:"force" json:"force"`
+	Spring       SwitchSpring    `dynamodbav:"spring" json:"spring"`
+	Purchase     SwitchPurchase  `dynamodbav:"purchase" json:"purchase"`
+	Notes        *string         `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
+	Visibility   Visibility      `dynamodbav:"visibility" json:"visibility"`
+	ImagePath    *SwitchImageKey `dynamodbav:"image_path,omitempty" json:"-"`
+	// Version is a repository-internal CAS guard against lost updates on
+	// concurrent ImagePath mutations, not exposed via the API.
+	Version int `dynamodbav:"version" json:"-"`
 }
 
 // SwitchRepository provides access to switches. List/Get take an explicit
@@ -86,7 +95,59 @@ type SwitchRepository interface {
 	// if no switch with that id exists for the caller.
 	Update(ctx context.Context, sw Switch) (*Switch, error)
 
-	// Delete removes the caller's switch with the given id. Idempotent: a
+	// Delete removes the caller's switch with the given id and returns the
+	// SwitchImageKey it had, or nil if it had none, so callers can clean up
+	// the corresponding object in a SwitchImageStore. Idempotent: a
 	// nonexistent id is not an error.
-	Delete(ctx context.Context, id string) error
+	Delete(ctx context.Context, id string) (*SwitchImageKey, error)
+
+	// SetImagePath sets the caller's switch's ImagePath and returns the
+	// updated switch. Returns ErrNotFound if id doesn't exist, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	SetImagePath(ctx context.Context, id string, key SwitchImageKey) (*Switch, error)
+
+	// ClearImagePath clears the caller's switch's ImagePath and returns the
+	// key that was cleared, or nil if it was already unset. Idempotent: a
+	// switch with no ImagePath already set is not an error. Returns
+	// ErrNotFound if id doesn't exist, or ErrMutationConflict if concurrent
+	// writers exhaust the retry budget.
+	ClearImagePath(ctx context.Context, id string) (*SwitchImageKey, error)
+}
+
+// SwitchImageKey is the object key a switch's image is stored under in a
+// SwitchImageStore.
+type SwitchImageKey string
+
+// NewSwitchImageKey builds the deterministic object key for switchID's
+// image. ownerID comes from ctx, not a parameter, so a caller can't build a
+// key addressing anyone else's prefix. Fixed, no extension - a re-upload
+// overwrites the same object, so there's no orphan accumulation from
+// repeated uploads.
+func NewSwitchImageKey(ctx context.Context, switchID string) (SwitchImageKey, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return "", ErrNoUserID
+	}
+
+	return SwitchImageKey(fmt.Sprintf("switches/%s/%s/image", ownerID, switchID)), nil
+}
+
+// SwitchImageStore stores a switch's image object in a private object
+// store, addressed by SwitchImageKey. Never called with the caller-facing
+// presigned URL - that's minted fresh per request, never persisted.
+type SwitchImageStore interface {
+	// PresignGet returns a short-lived presigned GET URL for key.
+	PresignGet(ctx context.Context, key SwitchImageKey) (url string, err error)
+
+	// PresignPut returns a short-lived presigned PUT URL for key, locked to
+	// contentType via the Content-Type header the upload must match.
+	PresignPut(ctx context.Context, key SwitchImageKey, contentType string) (url string, err error)
+
+	// Delete removes the object at key. Idempotent: a nonexistent key is
+	// not an error, matching S3's own DeleteObject semantics.
+	Delete(ctx context.Context, key SwitchImageKey) error
+
+	// BestEffortDelete deletes each of keys, logging rather than returning
+	// any per-key failure.
+	BestEffortDelete(ctx context.Context, keys []SwitchImageKey)
 }

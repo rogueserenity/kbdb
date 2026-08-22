@@ -13,10 +13,11 @@ import (
 // approvedType/approvedStem/approvedSpringMaterial/approvedVendor are real
 // values from internal/lookup/data/.
 const (
-	approvedType           = "Linear"
-	approvedStem           = "POM"
-	approvedSpringMaterial = "Stainless Steel"
-	approvedVendor         = "Amazon"
+	approvedType             = "Linear"
+	approvedStem             = "POM"
+	approvedSpringMaterial   = "Stainless Steel"
+	approvedVendor           = "Amazon"
+	approvedImageContentType = "image/png"
 )
 
 func TestSwitches(t *testing.T) {
@@ -31,6 +32,7 @@ type getOutput struct {
 		Name       string `json:"name"`
 		Type       string `json:"type"`
 		Visibility string `json:"visibility"`
+		HasImage   bool   `json:"has_image"`
 		Purchase   *struct {
 			Vendor *string  `json:"vendor"`
 			Price  *float64 `json:"price"`
@@ -48,4 +50,33 @@ func decodeGetOutput(result *sdkmcp.CallToolResult) getOutput {
 	Expect(json.Unmarshal(raw, &out)).To(Succeed())
 
 	return out
+}
+
+type setImageOutput struct {
+	UploadURL string `json:"upload_url"`
+}
+
+func decodeSetImageOutput(result *sdkmcp.CallToolResult) setImageOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out setImageOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}
+
+func decodeImageURL(result *sdkmcp.CallToolResult) string {
+	GinkgoHelper()
+
+	var out struct {
+		URL string `json:"url"`
+	}
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out.URL
 }

@@ -39,7 +39,7 @@ func (s *DeleteSwitchSuite) TestBlock_NoReferencingBuilds_DeletesSwitch() {
 		Return(nil, nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockImages,
@@ -48,6 +48,25 @@ func (s *DeleteSwitchSuite) TestBlock_NoReferencingBuilds_DeletesSwitch() {
 
 	s.Require().NoError(err)
 	s.Empty(result.DeletedBuildIDs)
+}
+
+func (s *DeleteSwitchSuite) TestBlock_SwitchHadImage_ReturnsImageKey() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingSwitch(s.ctx, "alice", "sw1").
+		Return(nil, nil)
+	key := repository.SwitchImageKey("switches/alice/sw1/image")
+	s.mockSwitches.EXPECT().
+		Delete(s.ctx, "sw1").
+		Return(&key, nil)
+
+	result, err := cascadedelete.DeleteSwitch(
+		s.ctx, s.mockSwitches, s.mockBuilds, s.mockImages,
+		"alice", "sw1", cascadedelete.OnDeleteBlock,
+	)
+
+	s.Require().NoError(err)
+	s.Require().NotNil(result.ImageKey)
+	s.Equal(key, *result.ImageKey)
 }
 
 func (s *DeleteSwitchSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_DeletesNothing() {
@@ -76,7 +95,7 @@ func (s *DeleteSwitchSuite) TestDetach_ReferencingBuilds_DeletesSwitchAnyway() {
 	// care about references.
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockImages,
@@ -93,7 +112,7 @@ func (s *DeleteSwitchSuite) TestCascade_NoReferencingBuilds_DeletesOnlySwitch() 
 		Return(nil, nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockImages,
@@ -122,7 +141,7 @@ func (s *DeleteSwitchSuite) TestCascade_ReferencingBuilds_DeletesEachBuildThenSw
 		Return()
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil)
+		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockImages,

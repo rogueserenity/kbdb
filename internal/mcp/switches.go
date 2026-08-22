@@ -22,6 +22,10 @@ var errSwitchNotFound = errors.New("switch not found")
 
 var errSwitchAlreadyExists = errors.New("switch already exists")
 
+var errSwitchHasNoImage = errors.New("switch has no image")
+
+var errSwitchMutationConflict = errors.New("the switch is being modified concurrently, please retry")
+
 var listSwitchesTool = &mcp.Tool{
 	Name:        "list_switches",
 	Description: "Lists switches in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_switch for a single switch's full details. Omit user_id to list your own switches.",
@@ -45,6 +49,21 @@ var updateSwitchTool = &mcp.Tool{
 var deleteSwitchTool = &mcp.Tool{
 	Name:        "delete_switch",
 	Description: "Removes a switch from your own collection. Idempotent: deleting a switch that isn't there succeeds. on_delete controls what happens if a build still references this switch: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the switch and every referencing build; \"detach\" deletes the switch regardless, leaving referencing builds with a dangling switches[].switch id.",
+}
+
+var getSwitchImageURLTool = &mcp.Tool{
+	Name:        "get_switch_image_url",
+	Description: "Mints a short-lived URL to fetch a switch's image. Call this only when you need the image itself; get_switch/list_switches already report whether one exists via has_image.",
+}
+
+var setSwitchImageTool = &mcp.Tool{
+	Name:        "set_switch_image",
+	Description: "Mints a presigned URL to upload a switch's image to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header.",
+}
+
+var deleteSwitchImageTool = &mcp.Tool{
+	Name:        "delete_switch_image",
+	Description: "Removes a switch's image. Idempotent: deleting a switch's image when it doesn't have one succeeds.",
 }
 
 func handleListSwitches(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema.ListSwitchesInput, schema.ListSwitchesOutput] {
@@ -153,7 +172,8 @@ func handleUpdateSwitch(
 func handleDeleteSwitch(
 	switchRepo repository.SwitchRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	switchImages repository.SwitchImageStore,
 ) mcp.ToolHandlerFor[schema.DeleteSwitchInput, schema.DeleteSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteSwitchInput) (*mcp.CallToolResult, schema.DeleteSwitchOutput, error) {
 		if strings.TrimSpace(in.SwitchID) == "" {
@@ -170,7 +190,7 @@ func handleDeleteSwitch(
 			return nil, schema.DeleteSwitchOutput{}, err
 		}
 
-		result, err := cascadedelete.DeleteSwitch(ctx, switchRepo, buildRepo, images, ownerID, in.SwitchID, onDelete)
+		result, err := cascadedelete.DeleteSwitch(ctx, switchRepo, buildRepo, buildImages, ownerID, in.SwitchID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteSwitchOutput{}, fmt.Errorf("switch is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
@@ -179,7 +199,115 @@ func handleDeleteSwitch(
 			return nil, schema.DeleteSwitchOutput{}, errors.New("failed to delete switch")
 		}
 
+		if result.ImageKey != nil {
+			switchImages.BestEffortDelete(ctx, []repository.SwitchImageKey{*result.ImageKey})
+		}
+
 		return nil, schema.DeleteSwitchOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
+	}
+}
+
+func handleGetSwitchImageURL(
+	repo repository.SwitchRepository,
+	images repository.SwitchImageStore,
+) mcp.ToolHandlerFor[schema.GetSwitchImageURLInput, schema.GetSwitchImageURLOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetSwitchImageURLInput) (*mcp.CallToolResult, schema.GetSwitchImageURLOutput, error) {
+		if strings.TrimSpace(in.SwitchID) == "" {
+			return nil, schema.GetSwitchImageURLOutput{}, errors.New("switch_id must not be blank")
+		}
+
+		sw, err := ownedReadable(ctx, repo.Get, func(sw repository.Switch) repository.Visibility { return sw.Visibility },
+			"switch", errSwitchNotFound, log.SwitchID, in.UserID, in.SwitchID)
+		if err != nil {
+			return nil, schema.GetSwitchImageURLOutput{}, err
+		}
+
+		if sw.ImagePath == nil {
+			return nil, schema.GetSwitchImageURLOutput{}, errSwitchHasNoImage
+		}
+
+		url, err := images.PresignGet(ctx, *sw.ImagePath)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning switch image", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.GetSwitchImageURLOutput{}, errors.New("failed to presign switch image")
+		}
+
+		return nil, schema.GetSwitchImageURLOutput{URL: url}, nil
+	}
+}
+
+func handleSetSwitchImage(
+	switchRepo repository.SwitchRepository,
+	images repository.SwitchImageStore,
+) mcp.ToolHandlerFor[schema.SetSwitchImageInput, schema.SetSwitchImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.SetSwitchImageInput) (*mcp.CallToolResult, schema.SetSwitchImageOutput, error) {
+		if strings.TrimSpace(in.SwitchID) == "" {
+			return nil, schema.SetSwitchImageOutput{}, errors.New("switch_id must not be blank")
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
+			return nil, schema.SetSwitchImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
+		}
+
+		key, err := repository.NewSwitchImageKey(ctx, in.SwitchID)
+		if err != nil {
+			log.FromContext(ctx).Error("building switch image key", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
+		}
+
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning switch image upload", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
+		}
+
+		_, err = switchRepo.SetImagePath(ctx, in.SwitchID, key)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.SetSwitchImageOutput{}, errSwitchNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("switch mutation conflict", log.SwitchID, in.SwitchID)
+			return nil, schema.SetSwitchImageOutput{}, errSwitchMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("setting switch image path", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
+		}
+
+		return nil, schema.SetSwitchImageOutput{UploadURL: uploadURL}, nil
+	}
+}
+
+func handleDeleteSwitchImage(
+	switchRepo repository.SwitchRepository,
+	images repository.SwitchImageStore,
+) mcp.ToolHandlerFor[schema.DeleteSwitchImageInput, schema.DeleteSwitchImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.DeleteSwitchImageInput) (*mcp.CallToolResult, schema.DeleteSwitchImageOutput, error) {
+		if strings.TrimSpace(in.SwitchID) == "" {
+			return nil, schema.DeleteSwitchImageOutput{}, errors.New("switch_id must not be blank")
+		}
+
+		cleared, err := switchRepo.ClearImagePath(ctx, in.SwitchID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteSwitchImageOutput{}, errSwitchNotFound
+		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("switch mutation conflict", log.SwitchID, in.SwitchID)
+			return nil, schema.DeleteSwitchImageOutput{}, errSwitchMutationConflict
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("clearing switch image path", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
+		}
+
+		if cleared != nil {
+			if err := images.Delete(ctx, *cleared); err != nil {
+				log.FromContext(ctx).Error("deleting switch image object", log.SwitchID, in.SwitchID, log.Error, err)
+				return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
+			}
+		}
+
+		return nil, schema.DeleteSwitchImageOutput{}, nil
 	}
 }
 

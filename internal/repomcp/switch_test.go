@@ -49,8 +49,8 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 			OrderDate: &orderDate, DeliveryDate: &deliveryDate, OrderStatus: &status,
 			Quantity: &quantity,
 		},
-		Notes:        &notes,
-		Visibility:   repository.VisibilityPublic,
+		Notes:      &notes,
+		Visibility: repository.VisibilityPublic,
 	}
 
 	out := SwitchToMCP(sw, true)
@@ -135,9 +135,23 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	raw, err := json.Marshal(out)
 	s.Require().NoError(err)
 	s.JSONEq(
-		`{"id":"","brand":"","name":"","type":"","pins":0,"purchase":{"price":0,"quantity":0},"visibility":""}`,
+		`{"id":"","brand":"","name":"","type":"","pins":0,"purchase":{"price":0,"quantity":0},"visibility":"","has_image":false}`,
 		string(raw),
 	)
+}
+
+func (s *SwitchToMCPSuite) TestNoImagePath_HasImageFalse() {
+	out := SwitchToMCP(repository.Switch{}, true)
+
+	s.False(out.HasImage)
+}
+
+func (s *SwitchToMCPSuite) TestImagePathSet_HasImageTrue() {
+	key := repository.SwitchImageKey("switches/u/sw-1/image")
+
+	out := SwitchToMCP(repository.Switch{ImagePath: &key}, true)
+
+	s.True(out.HasImage)
 }
 
 func (s *SwitchToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
@@ -194,6 +208,15 @@ func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 	s.Equal("Gateron", out.Brand)
 	s.Equal("Oil King", out.Name)
 	s.Equal("linear", out.Type)
+	s.False(out.HasImage)
+}
+
+func (s *SwitchToMCPSummarySuite) TestImagePathSet_HasImageTrue() {
+	key := repository.SwitchImageKey("switches/u/sw-1/image")
+
+	out := SwitchToMCPSummary(repository.Switch{ImagePath: &key})
+
+	s.True(out.HasImage)
 }
 
 type SwitchFromMCPSuite struct {

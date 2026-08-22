@@ -16,10 +16,11 @@ type ListSwitchesOutput struct {
 // SwitchSummary is the abbreviated switch shape returned by list_switches.
 // Call get_switch for the remaining fields.
 type SwitchSummary struct {
-	ID    string `json:"id" jsonschema:"the switch's unique id"`
-	Brand string `json:"brand" jsonschema:"the switch's brand"`
-	Name  string `json:"name" jsonschema:"the switch's name"`
-	Type  string `json:"type" jsonschema:"the switch type, e.g. linear or tactile"`
+	ID       string `json:"id" jsonschema:"the switch's unique id"`
+	Brand    string `json:"brand" jsonschema:"the switch's brand"`
+	Name     string `json:"name" jsonschema:"the switch's name"`
+	Type     string `json:"type" jsonschema:"the switch type, e.g. linear or tactile"`
+	HasImage bool   `json:"has_image" jsonschema:"whether this switch has an image on file; call get_switch_image_url to fetch it"`
 }
 
 // GetSwitchInput is the get_switch tool arguments.
@@ -93,10 +94,13 @@ type SwitchInput struct {
 	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
 }
 
-// Switch is the full switch shape. Optional fields are pointers so a
-// recorded zero (a free purchase, a 0g force) stays distinguishable from an
-// unset field, which is omitted entirely - matching what REST returns for
-// the same stored switch.
+// Switch reports HasImage rather than a presigned URL, unlike REST's
+// inline image field, to avoid handing back a URL that may have expired
+// by the time an agent acts on a held result - call get_switch_image_url
+// to fetch one on demand. Optional fields are pointers so a recorded zero
+// (a free purchase, a 0g force) stays distinguishable from an unset
+// field, which is omitted entirely - matching what REST returns for the
+// same stored switch.
 type Switch struct {
 	ID           string          `json:"id" jsonschema:"the switch's unique id"`
 	Brand        string          `json:"brand" jsonschema:"the switch's brand"`
@@ -111,6 +115,7 @@ type Switch struct {
 	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
+	HasImage     bool            `json:"has_image" jsonschema:"whether this switch has an image on file; call get_switch_image_url to fetch it"`
 }
 
 // SwitchMaterial is a switch's housing and stem materials.
@@ -144,3 +149,38 @@ type SwitchPurchase struct {
 	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
 	Quantity     *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
 }
+
+// GetSwitchImageURLInput is the get_switch_image_url tool's input.
+type GetSwitchImageURLInput struct {
+	SwitchID string `json:"switch_id" jsonschema:"the switch's unique id"`
+	UserID   string `json:"user_id,omitempty" jsonschema:"whose collection to read from; omit for your own"`
+}
+
+// GetSwitchImageURLOutput is the get_switch_image_url tool's output.
+type GetSwitchImageURLOutput struct {
+	URL string `json:"url" jsonschema:"a freshly-minted, short-lived presigned URL to fetch the image bytes from; do not cache or persist it, it expires within minutes"`
+}
+
+// SetSwitchImageInput is the set_switch_image tool's input. It doesn't
+// carry the image bytes themselves - see UploadURL on the output.
+type SetSwitchImageInput struct {
+	SwitchID    string `json:"switch_id" jsonschema:"the id of the switch to set the image on"`
+	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+}
+
+// SetSwitchImageOutput is the set_switch_image tool's output. UploadURL is
+// a presigned S3 PUT URL - the caller uploads the image bytes directly to
+// it, matching REST's SetSwitchImage; the tool call itself never carries
+// image bytes.
+type SetSwitchImageOutput struct {
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+}
+
+// DeleteSwitchImageInput is the delete_switch_image tool's input.
+type DeleteSwitchImageInput struct {
+	SwitchID string `json:"switch_id" jsonschema:"the id of the switch to remove the image from"`
+}
+
+// DeleteSwitchImageOutput is the delete_switch_image tool's output.
+// Deleting is idempotent, so there is no payload.
+type DeleteSwitchImageOutput struct{}

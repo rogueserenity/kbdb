@@ -373,6 +373,70 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
+  /v1/users/{userId}/switches/{switchId}/image:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/SwitchId"
+    post:
+      tags: [switches]
+      summary: Set (or replace) a switch's image
+      operationId: setSwitchImage
+      description: >
+        userId must be the caller's own subject; setting a switch's image on
+        another user's switch always returns 404. A switch has at most one
+        image — calling this again replaces it, no need to delete first.
+        Does not upload the image itself: the response is a presigned S3
+        PUT URL the client uploads the actual image bytes to directly. The
+        presigned URL requires the exact content_type given here on the
+        upload — this lets the API reject an unsupported content_type up
+        front, before ever issuing a presigned URL, and lets S3 reject an
+        upload that doesn't match what was requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type:
+                  type: string
+                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+      responses:
+        "201":
+          description: >
+            An image slot has been allocated; upload the image bytes to
+            upload_url (HTTP PUT, with a Content-Type header matching the
+            content_type given in the request) to complete it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SwitchImageUpload"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [switches]
+      summary: Remove a switch's image
+      operationId: deleteSwitchImage
+      description: >
+        userId must be the caller's own subject; removing a switch's image
+        on another user's switch always returns 404.
+      responses:
+        "204":
+          description: Deleted.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
   /v1/users/{userId}/keycap-sets:
     parameters:
       - $ref: "#/components/parameters/UserId"
@@ -1375,6 +1439,29 @@ components:
         visibility:
           $ref: "#/components/schemas/Visibility"
 
+    SwitchImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: >
+            A freshly-minted, short-lived presigned S3 GET URL. Generated
+            new on every fetch — do not cache or persist this value, it
+            expires. A switch has at most one image (its vendor render/
+            product shot) — see POST/DELETE .../switches/{switchId}/image.
+
+    SwitchImageUpload:
+      type: object
+      required: [upload_url]
+      properties:
+        upload_url:
+          type: string
+          format: uri
+          description: >
+            Presigned S3 PUT URL. Short-lived — upload promptly.
+
     Switch:
       allOf:
         - $ref: "#/components/schemas/SwitchInput"
@@ -1383,6 +1470,14 @@ components:
           properties:
             id:
               type: string
+            image:
+              oneOf:
+                - $ref: "#/components/schemas/SwitchImage"
+                - type: "null"
+              description: >
+                Managed via the dedicated image endpoint, not via PUT on
+                the switch itself — see POST/DELETE
+                .../switches/{switchId}/image.
 
     SwitchSummary:
       type: object
@@ -1396,6 +1491,11 @@ components:
         type:
           type: string
           description: Open vocabulary — validated against the "switch_type" lookup at request time.
+        image:
+          oneOf:
+            - $ref: "#/components/schemas/SwitchImage"
+            - type: "null"
+          description: A freshly-minted presigned URL to the switch's image, if it has one set.
 
     SwitchListPage:
       type: object

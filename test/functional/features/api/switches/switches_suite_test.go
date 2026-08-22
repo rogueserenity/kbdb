@@ -10,10 +10,11 @@ import (
 // approvedType/approvedStem/approvedSpringMaterial/approvedVendor are real
 // values from internal/lookup/data/.
 const (
-	approvedType           = "Linear"
-	approvedStem           = "POM"
-	approvedSpringMaterial = "Stainless Steel"
-	approvedVendor         = "Amazon"
+	approvedType             = "Linear"
+	approvedStem             = "POM"
+	approvedSpringMaterial   = "Stainless Steel"
+	approvedVendor           = "Amazon"
+	approvedImageContentType = "image/png"
 )
 
 func TestSwitches(t *testing.T) {

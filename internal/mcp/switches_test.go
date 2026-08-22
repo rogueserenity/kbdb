@@ -455,9 +455,10 @@ func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {
 type HandleDeleteSwitchSuite struct {
 	suite.Suite
 
-	mockSwitches *mocks.MockSwitchRepository
-	mockBuilds   *mocks.MockBuildRepository
-	mockImages   *mocks.MockBuildImageStore
+	mockSwitches     *mocks.MockSwitchRepository
+	mockBuilds       *mocks.MockBuildRepository
+	mockBuildImages  *mocks.MockBuildImageStore
+	mockSwitchImages *mocks.MockSwitchImageStore
 }
 
 func TestHandleDeleteSwitchSuite(t *testing.T) {
@@ -467,16 +468,17 @@ func TestHandleDeleteSwitchSuite(t *testing.T) {
 func (s *HandleDeleteSwitchSuite) SetupTest() {
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
-	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockBuildImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockSwitchImages = mocks.NewMockSwitchImageStore(s.T())
 }
 
 func (s *HandleDeleteSwitchSuite) TestSucceeds() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
 		Return(nil, nil)
-	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
+	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil, nil)
 
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1"})
 
 	s.Require().NoError(err)
@@ -484,14 +486,14 @@ func (s *HandleDeleteSwitchSuite) TestSucceeds() {
 }
 
 func (s *HandleDeleteSwitchSuite) TestBlankSwitchID_ReturnsError() {
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: ""})
 
 	s.Require().ErrorContains(err, "switch_id must not be blank")
 }
 
 func (s *HandleDeleteSwitchSuite) TestInvalidOnDelete_ReturnsError() {
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "bogus"})
 
 	s.Require().Error(err)
@@ -502,16 +504,16 @@ func (s *HandleDeleteSwitchSuite) TestBlock_Referenced_ReturnsError() {
 		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
 		Return([]string{"build-1"}, nil)
 
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "block"})
 
 	s.Require().ErrorContains(err, "build-1")
 }
 
 func (s *HandleDeleteSwitchSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
-	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
+	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil, nil)
 
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "detach"})
 
 	s.Require().NoError(err)
@@ -525,12 +527,12 @@ func (s *HandleDeleteSwitchSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs(
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockImages.EXPECT().
+	s.mockBuildImages.EXPECT().
 		BestEffortDelete(mock.Anything, mock.Anything).
 		Return()
-	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
+	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil, nil)
 
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "cascade"})
 
 	s.Require().NoError(err)
@@ -541,10 +543,263 @@ func (s *HandleDeleteSwitchSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").
 		Return(nil, nil)
-	s.mockSwitches.EXPECT().Delete(mock.Anything, mock.Anything).Return(errors.New("delete failed"))
+	s.mockSwitches.EXPECT().Delete(mock.Anything, mock.Anything).Return(nil, errors.New("delete failed"))
 
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockImages)
+	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1"})
 
 	s.Require().ErrorContains(err, "failed to delete switch")
+}
+
+type HandleGetSwitchImageURLSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockSwitchRepository
+	mockImages *mocks.MockSwitchImageStore
+}
+
+func TestHandleGetSwitchImageURLSuite(t *testing.T) {
+	suite.Run(t, new(HandleGetSwitchImageURLSuite))
+}
+
+func (s *HandleGetSwitchImageURLSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+}
+
+func (s *HandleGetSwitchImageURLSuite) TestSucceeds() {
+	imagePath := repository.SwitchImageKey("switches/caller-0001/sw-1/image")
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "sw-1").
+		Return(&repository.Switch{
+			ID:         "sw-1",
+			Visibility: repository.VisibilityPrivate,
+			ImagePath:  &imagePath,
+		}, nil)
+	s.mockImages.EXPECT().
+		PresignGet(mock.Anything, imagePath).
+		Return("https://example.com/presigned", nil)
+
+	handler := handleGetSwitchImageURL(s.mockRepo, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetSwitchImageURLInput{SwitchID: "sw-1"})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/presigned", out.URL)
+}
+
+func (s *HandleGetSwitchImageURLSuite) TestBlankSwitchID_ReturnsError() {
+	handler := handleGetSwitchImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetSwitchImageURLInput{SwitchID: " "})
+
+	s.Require().ErrorContains(err, "switch_id must not be blank")
+}
+
+func (s *HandleGetSwitchImageURLSuite) TestSwitchNotFound_ReturnsError() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "sw-1").
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleGetSwitchImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetSwitchImageURLInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorIs(err, errSwitchNotFound)
+}
+
+func (s *HandleGetSwitchImageURLSuite) TestNoImageSet_ReturnsError() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "sw-1").
+		Return(&repository.Switch{ID: "sw-1", Visibility: repository.VisibilityPrivate}, nil)
+
+	handler := handleGetSwitchImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetSwitchImageURLInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorIs(err, errSwitchHasNoImage)
+}
+
+func (s *HandleGetSwitchImageURLSuite) TestPresignError_ReturnsError() {
+	imagePath := repository.SwitchImageKey("switches/caller-0001/sw-1/image")
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "sw-1").
+		Return(&repository.Switch{
+			ID:         "sw-1",
+			Visibility: repository.VisibilityPrivate,
+			ImagePath:  &imagePath,
+		}, nil)
+	s.mockImages.EXPECT().
+		PresignGet(mock.Anything, imagePath).
+		Return("", errors.New("s3: access denied"))
+
+	handler := handleGetSwitchImageURL(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetSwitchImageURLInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorContains(err, "failed to presign switch image")
+}
+
+type HandleSetSwitchImageSuite struct {
+	suite.Suite
+
+	mockSwitches *mocks.MockSwitchRepository
+	mockImages   *mocks.MockSwitchImageStore
+}
+
+func TestHandleSetSwitchImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleSetSwitchImageSuite))
+}
+
+func (s *HandleSetSwitchImageSuite) SetupTest() {
+	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+}
+
+func (s *HandleSetSwitchImageSuite) TestSucceeds() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockSwitches.EXPECT().
+		SetImagePath(mock.Anything, "sw-1", mock.Anything).
+		Return(&repository.Switch{ID: "sw-1"}, nil)
+
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    "sw-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/upload", out.UploadURL)
+}
+
+func (s *HandleSetSwitchImageSuite) TestBlankSwitchID_ReturnsError() {
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    " ",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorContains(err, "switch_id must not be blank")
+}
+
+func (s *HandleSetSwitchImageSuite) TestUnapprovedContentType_ReturnsError() {
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    "sw-1",
+		ContentType: "application/x-not-an-image",
+	})
+
+	s.Require().ErrorContains(err, "content_type")
+}
+
+func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockSwitches.EXPECT().
+		SetImagePath(mock.Anything, "sw-1", mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    "sw-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errSwitchNotFound)
+}
+
+func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockSwitches.EXPECT().
+		SetImagePath(mock.Anything, "sw-1", mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    "sw-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().ErrorIs(err, errSwitchMutationConflict)
+}
+
+type HandleDeleteSwitchImageSuite struct {
+	suite.Suite
+
+	mockSwitches *mocks.MockSwitchRepository
+	mockImages   *mocks.MockSwitchImageStore
+}
+
+func TestHandleDeleteSwitchImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteSwitchImageSuite))
+}
+
+func (s *HandleDeleteSwitchImageSuite) SetupTest() {
+	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
+	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestSucceeds() {
+	key := repository.SwitchImageKey("switches/u/sw-1/image")
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(&key, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestBlankSwitchID_ReturnsError() {
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: " "})
+
+	s.Require().ErrorContains(err, "switch_id must not be blank")
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestAlreadyCleared_StillSucceeds() {
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(nil, nil)
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().NoError(err, "clearing an already-unset image is not an error")
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestNotFound_ReturnsNotFound() {
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorIs(err, errSwitchNotFound)
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(nil, repository.ErrMutationConflict)
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorIs(err, errSwitchMutationConflict)
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestRepositoryError_ReturnsError() {
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(nil, errors.New("get item failed"))
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorContains(err, "failed to delete switch image")
+}
+
+func (s *HandleDeleteSwitchImageSuite) TestS3DeleteError_ReturnsError() {
+	key := repository.SwitchImageKey("switches/u/sw-1/image")
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(&key, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3: access denied"))
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().ErrorContains(err, "failed to delete switch image")
 }
