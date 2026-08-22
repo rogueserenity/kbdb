@@ -55,6 +55,7 @@ func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images reposit
 		Visibility:   api.Visibility(ks.Visibility),
 		Kits:         kits,
 		PrimaryKitId: validPrimaryKitID(ks.PrimaryKitID, ks.Kits),
+		OrderStatus:  repository.AggregateOrderStatus(ks.Kits),
 	}, nil
 }
 
@@ -97,10 +98,11 @@ func KeycapSetToRepo(in api.KeycapSetInput) repository.KeycapSet {
 // GET URL - never persisted, never cached, mirroring KeycapKitToAPI.
 func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore) (api.KeycapSetSummary, error) {
 	summary := api.KeycapSetSummary{
-		Id:      &ks.ID,
-		Brand:   &ks.Brand,
-		Name:    &ks.Name,
-		Profile: ks.Profile,
+		Id:          &ks.ID,
+		Brand:       &ks.Brand,
+		Name:        &ks.Name,
+		Profile:     ks.Profile,
+		OrderStatus: repository.AggregateOrderStatus(ks.Kits),
 	}
 
 	primaryKit := findKit(validPrimaryKitID(ks.PrimaryKitID, ks.Kits), ks.Kits)

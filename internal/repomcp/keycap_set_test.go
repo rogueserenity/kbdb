@@ -87,6 +87,23 @@ func (s *KeycapSetToMCPSuite) TestPrimaryKitID_KitDeleted_IsNil() {
 	s.Nil(out.PrimaryKitID)
 }
 
+func (s *KeycapSetToMCPSuite) TestOrderStatus_SetsAggregateFromKits() {
+	ordered := "Ordered"
+	shipped := "Shipped"
+
+	out := KeycapSetToMCP(repository.KeycapSet{
+		ID:         "ks-1",
+		Visibility: repository.VisibilityPrivate,
+		Kits: []repository.KeycapKit{
+			{KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}},
+			{KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
+		},
+	}, true)
+
+	s.Require().NotNil(out.OrderStatus)
+	s.Equal("Ordered", *out.OrderStatus)
+}
+
 func (s *KeycapSetToMCPSuite) TestNilKits_MapsToNilSlice() {
 	out := KeycapSetToMCP(repository.KeycapSet{ID: "ks-1", Visibility: repository.VisibilityPrivate}, true)
 
@@ -143,6 +160,22 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary() {
 	s.Equal("OEM", *out.Profile)
 	s.Nil(out.PrimaryKitID)
 	s.False(out.PrimaryKitHasImage)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_OrderStatus_SetsAggregateFromKits() {
+	delivered := "Delivered"
+	cancelled := "Cancelled"
+
+	out := KeycapSetToMCPSummary(repository.KeycapSet{
+		ID: "ks-1",
+		Kits: []repository.KeycapKit{
+			{KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
+			{KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &cancelled}},
+		},
+	})
+
+	s.Require().NotNil(out.OrderStatus)
+	s.Equal("Delivered", *out.OrderStatus)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitWithImage_ReportsHasImageTrue() {

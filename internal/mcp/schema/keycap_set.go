@@ -23,6 +23,7 @@ type KeycapSetSummary struct {
 	Profile            *string `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
 	PrimaryKitID       *string `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit whose image represents this set, if one is designated and it still exists"`
 	PrimaryKitHasImage bool    `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file; call get_keycap_kit_image_url to fetch it"`
+	OrderStatus        *string `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
 }
 
 // GetKeycapSetInput is the get_keycap_set tool input.
@@ -49,6 +50,7 @@ type KeycapSet struct {
 	Visibility   string      `json:"visibility" jsonschema:"who can read this keycap set; one of \"public\", \"authenticated\", \"private\""`
 	Kits         []KeycapKit `json:"kits,omitempty" jsonschema:"the kits purchased as part of this set"`
 	PrimaryKitID *string     `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit, among kits, whose image represents this set; match against kits[].kit_id to find its image"`
+	OrderStatus  *string     `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
 }
 
 // KeycapKit is one purchase within a keycap set. HasImage reports whether an

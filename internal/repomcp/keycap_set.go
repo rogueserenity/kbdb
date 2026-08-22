@@ -29,6 +29,7 @@ func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
 		Visibility:   string(ks.Visibility),
 		Kits:         kits,
 		PrimaryKitID: validPrimaryKitID(ks.PrimaryKitID, ks.Kits),
+		OrderStatus:  repository.AggregateOrderStatus(ks.Kits),
 	}
 }
 
@@ -64,6 +65,7 @@ func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
 		Profile:            ks.Profile,
 		PrimaryKitID:       primaryKitID,
 		PrimaryKitHasImage: primaryKit != nil && primaryKit.ImagePath != nil,
+		OrderStatus:        repository.AggregateOrderStatus(ks.Kits),
 	}
 }
 
