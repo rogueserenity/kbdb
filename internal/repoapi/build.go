@@ -290,7 +290,11 @@ func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyb
 // concurrently across entries since each only touches its own out[i]. An
 // entry whose switch no longer exists keeps its Count but leaves Switch
 // nil rather than dropping the entry or failing the request. Also returns
-// the summed (unit price × count) across entries with a known price.
+// the summed cost across entries with a known per-unit price: switches are
+// bought in bulk (SwitchPurchase.Price is the total for Quantity units, not
+// a per-unit price - see SwitchPurchase's doc), so an entry contributes
+// (Price/Quantity)*Count only when Quantity is set and non-zero; otherwise
+// its cost is unknown and excluded rather than guessed at.
 func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry, switchRepo repository.SwitchRepository) (*[]api.BuildSwitchEntryResolved, *float64, error) {
 	if entries == nil {
 		return nil, nil, nil //nolint:nilnil // no switches is a valid, expected result
@@ -327,8 +331,9 @@ func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entrie
 				},
 			}
 
-			if sw.Purchase.Price != nil {
-				entryCost := *sw.Purchase.Price * float64(e.Count)
+			if sw.Purchase.Price != nil && sw.Purchase.Quantity != nil && *sw.Purchase.Quantity != 0 {
+				unitPrice := *sw.Purchase.Price / float64(*sw.Purchase.Quantity)
+				entryCost := unitPrice * float64(e.Count)
 				costs[i] = &entryCost
 			}
 		}(i, e)

@@ -401,7 +401,7 @@ func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{
 			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
-			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
 		}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
@@ -412,12 +412,42 @@ func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
 			}},
 		}, nil)
 
-	// fullRepoBuild: 70 switches at 0.5 each = 35; stabs price 12.5.
+	// fullRepoBuild: 70 switches, bulk price 45 for a 90-count order =
+	// 0.5/unit -> 35 for this build; stabs price 12.5.
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+}
+
+// TestTotalCost_SwitchPriceWithoutQuantity_ExcludedFromSum guards against
+// treating SwitchPurchase.Price as a per-unit price - it's the price paid
+// for the whole bulk order (see SwitchPurchase.Quantity), so without a
+// quantity to divide by, the per-build cost can't be derived and must be
+// excluded rather than multiplied by the build's count directly.
+func (s *BuildToAPISuite) TestTotalCost_SwitchPriceWithoutQuantity_ExcludedFromSum() {
+	b := fullRepoBuild()
+	b.Stabs = nil
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}},
+		}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
 }
 
 func (s *BuildToAPISuite) TestTotalCost_UnknownComponentsExcludedNotZeroed() {
@@ -430,7 +460,7 @@ func (s *BuildToAPISuite) TestTotalCost_UnknownComponentsExcludedNotZeroed() {
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{
 			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
-			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
 		}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
@@ -439,7 +469,7 @@ func (s *BuildToAPISuite) TestTotalCost_UnknownComponentsExcludedNotZeroed() {
 		}, nil)
 
 	// Keyboard has no purchase price, keycap kit has no purchase price, and
-	// Stabs is nil - only the switches' 70*0.5 = 35 should be counted.
+	// Stabs is nil - only the switches' 70 * (45/90) = 35 should be counted.
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
@@ -472,7 +502,7 @@ func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{
 			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
-			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
 		}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
@@ -505,7 +535,7 @@ func (s *BuildToAPISuite) TestIsOwnerTrue_IncludesStabsPriceAndTotalCost() {
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{
 			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
-			Purchase: repository.SwitchPurchase{Price: floatPtr(0.5)},
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
 		}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
