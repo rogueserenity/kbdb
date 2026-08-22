@@ -141,7 +141,7 @@ type Build struct {
 	Stabs    *BuildStabs                 `json:"stabs,omitempty"`
 	Switches *[]BuildSwitchEntryResolved `json:"switches,omitempty"`
 
-	// TotalCost Sum of the keyboard's, each switch entry's (unit price × count), each keycap kit's, and the stabs' purchase price. Components with no price set, or whose referenced entity no longer exists, are silently excluded from the sum rather than treated as zero-cost - so this may undercount. foam has no price field in the data model and is never included.
+	// TotalCost Total cost of the build's priced components (keyboard, switches, keycap kits, stabs). Components with no known price are excluded rather than treated as zero, so this may undercount.
 	TotalCost *Money `json:"total_cost,omitempty"`
 
 	// Visibility Who can read this item via its GET routes (create/update/delete always require the caller to be the item's owner, regardless of visibility). "public": readable with no authentication at all. "authenticated": readable by any signed-in user, but not anonymous callers. "private": readable only by the owner. There is no per-user allowlist/sharing mechanism beyond these three tiers — visibility is not scoped to specific other users.

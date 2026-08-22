@@ -1669,16 +1669,10 @@ components:
         total_cost:
           $ref: "#/components/schemas/Money"
           description: >
-            Sum of the keyboard's, each switch entry's, each keycap kit's,
-            and the stabs' purchase price. A switch entry's contribution is
-            (purchase.price / purchase.quantity) × count, since switches
-            are bought in bulk and purchase.price is the total paid for
-            purchase.quantity units, not a per-unit price; if quantity is
-            unset the entry's cost can't be derived and is excluded.
-            Components with no price set, or whose referenced entity no
-            longer exists, are silently excluded from the sum rather than
-            treated as zero-cost - so this may undercount. foam has no
-            price field in the data model and is never included.
+            Total cost of the build's priced components (keyboard,
+            switches, keycap kits, stabs). Components with no known price
+            are excluded rather than treated as zero, so this may
+            undercount.
 
     BuildSummary:
       type: object
