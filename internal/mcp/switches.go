@@ -255,12 +255,6 @@ func handleSetSwitchImage(
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
 		}
 
-		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning switch image upload", log.SwitchID, in.SwitchID, log.Error, err)
-			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
-		}
-
 		_, err = switchRepo.SetImagePath(ctx, in.SwitchID, key)
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.SetSwitchImageOutput{}, errSwitchNotFound
@@ -271,6 +265,12 @@ func handleSetSwitchImage(
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("setting switch image path", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
+		}
+
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning switch image upload", log.SwitchID, in.SwitchID, log.Error, err)
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
 		}
 

@@ -304,12 +304,6 @@ func handleAddBuildImage(
 			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
 		}
 
-		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning build image upload", log.BuildID, in.BuildID, log.Error, err)
-			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
-		}
-
 		_, err = buildRepo.AddImage(ctx, in.BuildID, repository.BuildImage{ImageID: imageID, Path: key})
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.AddBuildImageOutput{}, errBuildNotFound
@@ -320,6 +314,12 @@ func handleAddBuildImage(
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("adding build image", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		}
+
+		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning build image upload", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
 		}
 

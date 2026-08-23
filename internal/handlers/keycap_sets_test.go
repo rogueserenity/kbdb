@@ -1490,12 +1490,12 @@ func (s *SetKeycapKitImageSuite) ownerCtx() context.Context {
 const setKeycapKitImageTestKey = repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1556,23 +1556,7 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Ret
 	s.Equal("content_type", got.InvalidParams[0].Name)
 }
 
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("", errors.New("s3: access denied"))
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, repository.ErrNotFound)
@@ -1585,10 +1569,23 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
+		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
+		Return("", errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, errors.New("put item failed"))
@@ -1602,9 +1599,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, repository.ErrMutationConflict)

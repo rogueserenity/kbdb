@@ -525,7 +525,9 @@ func DeleteKeycapKit(
 // set that doesn't exist, or a kitId that doesn't exist within it, all
 // return 404, to avoid revealing it exists. Doesn't upload the image
 // itself - the response is a presigned S3 PUT URL the client uploads
-// directly to.
+// directly to. The repository mutation (which checks existence/ownership
+// of both the set and the kit) runs before presigning, so a 404 doesn't
+// pay for a wasted S3 round trip.
 func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -557,13 +559,6 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 			return
 		}
 
-		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
-		if err != nil {
-			log.FromContext(r.Context()).Error("presigning keycap kit image upload", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Internal(w, "failed to set kit image")
-			return
-		}
-
 		_, err = keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
 		if errors.Is(err, repository.ErrNotFound) {
 			problem.NotFound(w, "resource not found")
@@ -576,6 +571,13 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("setting keycap kit image path", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Internal(w, "failed to set kit image")
+			return
+		}
+
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning keycap kit image upload", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Internal(w, "failed to set kit image")
 			return
 		}

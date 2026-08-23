@@ -257,12 +257,6 @@ func handleAddKeyboardImage(
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 
-		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning keyboard image upload", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
-		}
-
 		_, err = keyboardRepo.AddImage(ctx, in.KeyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.AddKeyboardImageOutput{}, errKeyboardNotFound
@@ -273,6 +267,12 @@ func handleAddKeyboardImage(
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("adding keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
+		}
+
+		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keyboard image upload", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 

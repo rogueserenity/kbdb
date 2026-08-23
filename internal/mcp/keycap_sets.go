@@ -438,12 +438,6 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
-		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
-		}
-
 		_, err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, schema.SetKeycapKitImageOutput{}, errKeycapKitNotFound
@@ -454,6 +448,12 @@ func handleSetKeycapKitImage(
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("setting keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		}
+
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
