@@ -3,12 +3,10 @@ package s3
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -68,20 +66,4 @@ func (s *BuildImageStore) DeleteBuildImage(ctx context.Context, key repository.B
 	}
 
 	return nil
-}
-
-// BestEffortDelete implements repository.BuildImageStore.
-func (s *BuildImageStore) BestEffortDelete(ctx context.Context, keys []repository.BuildImageKey) {
-	var wg sync.WaitGroup
-	for _, key := range keys {
-		wg.Add(1)
-		go func(key repository.BuildImageKey) {
-			defer wg.Done()
-
-			if err := s.DeleteBuildImage(ctx, key); err != nil {
-				log.FromContext(ctx).Warn("deleting build image object", log.Error, err)
-			}
-		}(key)
-	}
-	wg.Wait()
 }

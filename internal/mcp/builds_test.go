@@ -583,8 +583,10 @@ func (s *HandleDeleteBuildSuite) SetupTest() {
 }
 
 func (s *HandleDeleteBuildSuite) TestSucceeds() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil, nil)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).Return()
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
@@ -600,8 +602,9 @@ func (s *HandleDeleteBuildSuite) TestBlankBuildID_ReturnsError() {
 }
 
 func (s *HandleDeleteBuildSuite) TestNotFound_StillSucceeds() {
-	s.mockBuilds.EXPECT().Delete(mock.Anything, "missing").Return(nil, repository.ErrNotFound)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).Return()
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "missing").
+		Return(nil, repository.ErrNotFound)
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "missing"})
@@ -609,10 +612,18 @@ func (s *HandleDeleteBuildSuite) TestNotFound_StillSucceeds() {
 	s.Require().NoError(err, "delete is idempotent: a nonexistent id is not an error")
 }
 
-func (s *HandleDeleteBuildSuite) TestImageKeysAreBestEffortCleanedUp() {
-	keys := []repository.BuildImageKey{"builds/u/build-1/images/img-1", "builds/u/build-1/images/img-2"}
-	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(keys, nil)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, keys).Return()
+func (s *HandleDeleteBuildSuite) TestImagesAreDeletedFromS3BeforeDB() {
+	key1 := repository.BuildImageKey("builds/u/build-1/images/img-1")
+	key2 := repository.BuildImageKey("builds/u/build-1/images/img-2")
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img-1", Path: key1},
+			{ImageID: "img-2", Path: key2},
+		}}, nil)
+	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key1).Return(nil)
+	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key2).Return(nil)
+	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil, nil)
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
@@ -620,7 +631,27 @@ func (s *HandleDeleteBuildSuite) TestImageKeysAreBestEffortCleanedUp() {
 	s.Require().NoError(err)
 }
 
+func (s *HandleDeleteBuildSuite) TestImageDeleteFails_ReturnsError_DoesNotDeleteBuild() {
+	key1 := repository.BuildImageKey("builds/u/build-1/images/img-1")
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img-1", Path: key1},
+		}}, nil)
+	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key1).Return(errors.New("s3 unavailable"))
+
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
+
+	s.Require().Error(err)
+	// mockBuilds has no .EXPECT() for Delete - verifies the DB record was
+	// never touched.
+}
+
 func (s *HandleDeleteBuildSuite) TestRepositoryError_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().Delete(mock.Anything, mock.Anything).Return(nil, errors.New("delete failed"))
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
@@ -764,8 +795,13 @@ func (s *HandleDeleteBuildImageSuite) SetupTest() {
 
 func (s *HandleDeleteBuildImageSuite) TestSucceeds() {
 	key := repository.BuildImageKey("builds/u/build-1/images/img-1")
-	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(&key, nil)
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img-1", Path: key},
+		}}, nil)
 	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key).Return(nil)
+	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(&key, nil)
 
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
@@ -788,7 +824,9 @@ func (s *HandleDeleteBuildImageSuite) TestBlankImageID_ReturnsError() {
 }
 
 func (s *HandleDeleteBuildImageSuite) TestAlreadyAbsent_StillSucceeds() {
-	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(nil, nil)
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
 
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
@@ -797,7 +835,9 @@ func (s *HandleDeleteBuildImageSuite) TestAlreadyAbsent_StillSucceeds() {
 }
 
 func (s *HandleDeleteBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
-	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "missing", "img-1").Return(nil, repository.ErrNotFound)
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "missing").
+		Return(nil, repository.ErrNotFound)
 
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "missing", ImageID: "img-1"})
@@ -806,6 +846,13 @@ func (s *HandleDeleteBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 }
 
 func (s *HandleDeleteBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
+	key := repository.BuildImageKey("builds/u/build-1/images/img-1")
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img-1", Path: key},
+		}}, nil)
+	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key).Return(nil)
 	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(nil, repository.ErrMutationConflict)
 
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
@@ -815,7 +862,9 @@ func (s *HandleDeleteBuildImageSuite) TestMutationConflict_ReturnsConflictError(
 }
 
 func (s *HandleDeleteBuildImageSuite) TestRepositoryError_ReturnsError() {
-	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(nil, errors.New("delete failed"))
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(nil, errors.New("get failed"))
 
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
@@ -823,13 +872,19 @@ func (s *HandleDeleteBuildImageSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorIs(err, errMutationFailed)
 }
 
-func (s *HandleDeleteBuildImageSuite) TestImageDeleteFailure_ReturnsError() {
+func (s *HandleDeleteBuildImageSuite) TestImageDeleteFailure_ReturnsError_DoesNotDeleteDBRecord() {
 	key := repository.BuildImageKey("builds/u/build-1/images/img-1")
-	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(&key, nil)
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img-1", Path: key},
+		}}, nil)
 	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key).Return(errors.New("s3 delete failed"))
 
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
 
 	s.Require().ErrorContains(err, "failed to delete build image")
+	// mockBuilds has no .EXPECT() for DeleteImage - verifies the DB record
+	// was never touched.
 }

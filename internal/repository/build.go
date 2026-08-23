@@ -140,8 +140,4 @@ type BuildImageStore interface {
 
 	// DeleteBuildImage is idempotent, matching S3's own DeleteObject.
 	DeleteBuildImage(ctx context.Context, key BuildImageKey) error
-
-	// BestEffortDelete deletes each of keys, logging rather than returning
-	// any per-key failure.
-	BestEffortDelete(ctx context.Context, keys []BuildImageKey)
 }

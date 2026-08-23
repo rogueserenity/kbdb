@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -274,13 +275,42 @@ func handleDeleteBuild(
 			return nil, schema.DeleteBuildOutput{}, errors.New("build_id must not be blank")
 		}
 
-		imageKeys, err := buildRepo.Delete(ctx, in.BuildID)
-		if err != nil && !errors.Is(err, repository.ErrNotFound) {
-			log.FromContext(ctx).Error("deleting build", log.BuildID, in.BuildID, log.Error, err)
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteBuildOutput{}, err
+		}
+
+		b, err := buildRepo.Get(ctx, ownerID, in.BuildID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteBuildOutput{}, nil
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("getting build", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
 		}
 
-		images.BestEffortDelete(ctx, imageKeys)
+		errs := make([]error, len(b.Images))
+		var wg sync.WaitGroup
+		for i, img := range b.Images {
+			wg.Add(1)
+			go func(i int, key repository.BuildImageKey) {
+				defer wg.Done()
+				if err := images.DeleteBuildImage(ctx, key); err != nil {
+					errs[i] = err
+				}
+			}(i, img.Path)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(ctx).Error("deleting build images", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
+		}
+
+		if _, err := buildRepo.Delete(ctx, in.BuildID); err != nil && !errors.Is(err, repository.ErrNotFound) {
+			log.FromContext(ctx).Error("deleting build", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
+		}
 
 		return nil, schema.DeleteBuildOutput{}, nil
 	}
@@ -334,16 +364,29 @@ func handleDeleteBuildImage(
 			return nil, schema.DeleteBuildImageOutput{}, errors.New("image_id must not be blank")
 		}
 
-		removed, err := buildRepo.DeleteImage(ctx, in.BuildID, in.ImageID)
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteBuildImageOutput{}, err
+		}
+
+		b, err := buildRepo.Get(ctx, ownerID, in.BuildID)
 		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
 			return nil, schema.DeleteBuildImageOutput{}, mutErr
 		}
 
-		if removed != nil {
-			if err := images.DeleteBuildImage(ctx, *removed); err != nil {
-				log.FromContext(ctx).Error("deleting build image object", log.BuildID, in.BuildID, log.Error, err)
-				return nil, schema.DeleteBuildImageOutput{}, errors.New("failed to delete build image")
-			}
+		idx := slices.IndexFunc(b.Images, func(img repository.BuildImage) bool { return img.ImageID == in.ImageID })
+		if idx == -1 {
+			return nil, schema.DeleteBuildImageOutput{}, nil
+		}
+
+		if err := images.DeleteBuildImage(ctx, b.Images[idx].Path); err != nil {
+			log.FromContext(ctx).Error("deleting build image object", log.BuildID, in.BuildID, log.Error, err)
+			return nil, schema.DeleteBuildImageOutput{}, errors.New("failed to delete build image")
+		}
+
+		_, err = buildRepo.DeleteImage(ctx, in.BuildID, in.ImageID)
+		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
+			return nil, schema.DeleteBuildImageOutput{}, mutErr
 		}
 
 		return nil, schema.DeleteBuildImageOutput{}, nil

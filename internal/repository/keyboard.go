@@ -151,8 +151,4 @@ type KeyboardImageStore interface {
 	// nonexistent key is not an error, matching S3's own DeleteObject
 	// semantics.
 	DeleteKeyboardImage(ctx context.Context, key KeyboardImageKey) error
-
-	// BestEffortDelete deletes each of keys, logging rather than returning
-	// any per-key failure.
-	BestEffortDelete(ctx context.Context, keys []KeyboardImageKey)
 }

@@ -38,52 +38,6 @@ func (_m *MockSwitchImageStore) EXPECT() *MockSwitchImageStore_Expecter {
 	return &MockSwitchImageStore_Expecter{mock: &_m.Mock}
 }
 
-// BestEffortDelete provides a mock function for the type MockSwitchImageStore
-func (_mock *MockSwitchImageStore) BestEffortDelete(ctx context.Context, keys []repository.SwitchImageKey) {
-	_mock.Called(ctx, keys)
-	return
-}
-
-// MockSwitchImageStore_BestEffortDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BestEffortDelete'
-type MockSwitchImageStore_BestEffortDelete_Call struct {
-	*mock.Call
-}
-
-// BestEffortDelete is a helper method to define mock.On call
-//   - ctx context.Context
-//   - keys []repository.SwitchImageKey
-func (_e *MockSwitchImageStore_Expecter) BestEffortDelete(ctx any, keys any) *MockSwitchImageStore_BestEffortDelete_Call {
-	return &MockSwitchImageStore_BestEffortDelete_Call{Call: _e.mock.On("BestEffortDelete", ctx, keys)}
-}
-
-func (_c *MockSwitchImageStore_BestEffortDelete_Call) Run(run func(ctx context.Context, keys []repository.SwitchImageKey)) *MockSwitchImageStore_BestEffortDelete_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		var arg0 context.Context
-		if args[0] != nil {
-			arg0 = args[0].(context.Context)
-		}
-		var arg1 []repository.SwitchImageKey
-		if args[1] != nil {
-			arg1 = args[1].([]repository.SwitchImageKey)
-		}
-		run(
-			arg0,
-			arg1,
-		)
-	})
-	return _c
-}
-
-func (_c *MockSwitchImageStore_BestEffortDelete_Call) Return() *MockSwitchImageStore_BestEffortDelete_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *MockSwitchImageStore_BestEffortDelete_Call) RunAndReturn(run func(ctx context.Context, keys []repository.SwitchImageKey)) *MockSwitchImageStore_BestEffortDelete_Call {
-	_c.Run(run)
-	return _c
-}
-
 // Delete provides a mock function for the type MockSwitchImageStore
 func (_mock *MockSwitchImageStore) Delete(ctx context.Context, key repository.SwitchImageKey) error {
 	ret := _mock.Called(ctx, key)

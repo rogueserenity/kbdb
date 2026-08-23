@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -343,7 +344,10 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 // DeleteBuildImage reads the {userId}, {buildId}, and {imageId} path values
 // and requires an authenticated caller. userId must be the caller's own
 // subject; removing an image from another user's build always returns 404.
-// Idempotent: an imageId not present on the build is not an error.
+// Idempotent: an imageId not present on the build is not an error. Deletes
+// the S3 object before the DB record, so a failure at either step can be
+// safely retried to completion: S3's DeleteObject is idempotent, so nothing
+// is orphaned and no failure is masked by a false-success retry.
 func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -355,17 +359,26 @@ func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.Bu
 			return
 		}
 
-		removed, err := buildRepo.DeleteImage(r.Context(), buildID, imageID)
+		b, err := buildRepo.Get(r.Context(), ownerID, buildID)
 		if handleMutationError(w, r, err, log.BuildID, buildID) {
 			return
 		}
 
-		if removed != nil {
-			if err := images.DeleteBuildImage(r.Context(), *removed); err != nil {
-				log.FromContext(r.Context()).Error("deleting build image object", log.Error, err, log.BuildID, buildID)
-				problem.Internal(w, "failed to delete build image")
-				return
-			}
+		idx := slices.IndexFunc(b.Images, func(img repository.BuildImage) bool { return img.ImageID == imageID })
+		if idx == -1 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if err := images.DeleteBuildImage(r.Context(), b.Images[idx].Path); err != nil {
+			log.FromContext(r.Context()).Error("deleting build image object", log.Error, err, log.BuildID, buildID)
+			problem.Internal(w, "failed to delete build image")
+			return
+		}
+
+		_, err = buildRepo.DeleteImage(r.Context(), buildID, imageID)
+		if handleMutationError(w, r, err, log.BuildID, buildID) {
+			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
@@ -375,7 +388,9 @@ func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.Bu
 // DeleteBuild reads the {userId} and {buildId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's build always returns 404. Deleting is idempotent: a build
-// that doesn't exist returns 204.
+// that doesn't exist returns 204. Deletes every image's S3 object before
+// the DB record, aborting before the DB delete if any S3 delete fails, so
+// a failure at either step can be safely retried to completion.
 func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -386,14 +401,43 @@ func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildIm
 			return
 		}
 
-		imageKeys, err := buildRepo.Delete(r.Context(), id)
-		if err != nil && !errors.Is(err, repository.ErrNotFound) {
-			log.FromContext(r.Context()).Error("deleting build", log.Error, err, log.BuildID, id)
+		ctx := r.Context()
+
+		b, err := buildRepo.Get(ctx, ownerID, id)
+		if errors.Is(err, repository.ErrNotFound) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("getting build", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to delete build")
 			return
 		}
 
-		images.BestEffortDelete(r.Context(), imageKeys)
+		errs := make([]error, len(b.Images))
+		var wg sync.WaitGroup
+		for i, img := range b.Images {
+			wg.Add(1)
+			go func(i int, key repository.BuildImageKey) {
+				defer wg.Done()
+				if err := images.DeleteBuildImage(ctx, key); err != nil {
+					errs[i] = err
+				}
+			}(i, img.Path)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(ctx).Error("deleting build images", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to delete build")
+			return
+		}
+
+		if _, err := buildRepo.Delete(ctx, id); err != nil && !errors.Is(err, repository.ErrNotFound) {
+			log.FromContext(ctx).Error("deleting build", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to delete build")
+			return
+		}
 
 		w.WriteHeader(http.StatusNoContent)
 	}
