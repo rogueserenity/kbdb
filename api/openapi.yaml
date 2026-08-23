@@ -1945,6 +1945,14 @@ components:
           description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Build resource).
         keyboard:
           $ref: "#/components/schemas/BuildSummaryKeyboard"
+        total_cost:
+          $ref: "#/components/schemas/Money"
+          description: >
+            Total cost of the build's priced components (keyboard,
+            switches, keycap kits, stabs). Components with no known price
+            are excluded rather than treated as zero, so this may
+            undercount. Omitted for a build the caller doesn't own, same
+            as Build.total_cost.
 
     BuildListPage:
       type: object

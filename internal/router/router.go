@@ -118,7 +118,7 @@ func New(
 	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, buildImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, buildImageStore, imageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",

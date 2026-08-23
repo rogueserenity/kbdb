@@ -3,6 +3,7 @@ package builds_test
 import (
 	"encoding/json"
 	"net/http"
+	"slices"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -45,6 +46,7 @@ var _ = Describe("Listing builds", func() {
 			Brand string `json:"brand"`
 			Name  string `json:"name"`
 		} `json:"keyboard"`
+		TotalCost *float64 `json:"total_cost"`
 	}
 
 	decodeItems := func(r *http.Response) []listItem {
@@ -162,6 +164,66 @@ var _ = Describe("Listing builds", func() {
 					ids := itemIDs(decodeItems(resp))
 					Expect(ids).To(ContainElements(publicID, authenticatedID))
 					Expect(ids).NotTo(ContainElement(privateID))
+				})
+			})
+		})
+	})
+
+	Context("given the owner has a build with priced components", func() {
+		var buildID string
+
+		BeforeEach(func(ctx SpecContext) {
+			buildID = "priced-build-" + uuid.NewString()
+			Expect(db.SeedBuildWithStabs(ctx, ownerID, buildID, keyboardID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("listing builds", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("includes total_cost derived from the keyboard's price and the stabs' price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					items := decodeItems(resp)
+					idx := slices.IndexFunc(items, func(i listItem) bool { return i.ID == buildID })
+					Expect(idx).To(BeNumerically(">=", 0))
+					Expect(items[idx].TotalCost).NotTo(BeNil())
+					Expect(*items[idx].TotalCost).To(Equal(329.99 + 12.5))
+				})
+			})
+		})
+
+		Context("given the caller is a different authenticated user", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, err = api.SecondUserAuthToken(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("listing builds", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, token, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("omits total_cost even though the build itself is visible", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					items := decodeItems(resp)
+					idx := slices.IndexFunc(items, func(i listItem) bool { return i.ID == buildID })
+					Expect(idx).To(BeNumerically(">=", 0))
+					Expect(items[idx].TotalCost).To(BeNil())
 				})
 			})
 		})

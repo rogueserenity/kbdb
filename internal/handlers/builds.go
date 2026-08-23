@@ -65,7 +65,13 @@ func validateBuildReferences(
 }
 
 // ListBuilds handles GET /v1/users/{userId}/builds.
-func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) http.HandlerFunc {
+func ListBuilds(
+	repo repository.BuildRepository,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+	images repository.BuildImageStore,
+) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -85,13 +91,14 @@ func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.Keyboar
 		errs := make([]error, len(builds))
 
 		ctx := r.Context()
+		isOwner := authz.IsOwner(ctx, ownerID)
 		var wg sync.WaitGroup
 		for i, b := range builds {
 			wg.Add(1)
 			go func(i int, b repository.Build) {
 				defer wg.Done()
 
-				summary, err := repoapi.BuildToAPISummary(ctx, b, keyboardRepo, images)
+				summary, err := repoapi.BuildToAPISummary(ctx, b, keyboardRepo, switchRepo, keycapSetRepo, images, isOwner)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping build %q to API summary: %w", b.ID, err)
 					return

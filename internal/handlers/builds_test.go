@@ -19,6 +19,9 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
 
+func floatPtr(f float64) *float64 { return &f }
+func intPtr(i int) *int           { return &i }
+
 type CreateBuildSuite struct {
 	suite.Suite
 
@@ -540,10 +543,12 @@ func (s *UpdateBuildSuite) TestUpdateBuild_RepositoryError_Returns500() {
 type ListBuildsSuite struct {
 	suite.Suite
 
-	mockBuildRepo    *mocks.MockBuildRepository
-	mockKeyboardRepo *mocks.MockKeyboardRepository
-	mockImages       *mocks.MockBuildImageStore
-	handler          http.HandlerFunc
+	mockBuildRepo     *mocks.MockBuildRepository
+	mockKeyboardRepo  *mocks.MockKeyboardRepository
+	mockSwitchRepo    *mocks.MockSwitchRepository
+	mockKeycapSetRepo *mocks.MockKeycapSetRepository
+	mockImages        *mocks.MockBuildImageStore
+	handler           http.HandlerFunc
 }
 
 func TestListBuildsSuite(t *testing.T) {
@@ -553,8 +558,10 @@ func TestListBuildsSuite(t *testing.T) {
 func (s *ListBuildsSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
+	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
-	s.handler = ListBuilds(s.mockBuildRepo, s.mockKeyboardRepo, s.mockImages)
+	s.handler = ListBuilds(s.mockBuildRepo, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo, s.mockImages)
 }
 
 func (s *ListBuildsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -604,6 +611,81 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 	s.Equal("Keychron", *item.Keyboard.Brand)
 	s.Require().NotNil(item.Keyboard.Name)
 	s.Equal("Q1", *item.Keyboard.Name)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_Owner_IncludesTotalCost() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{
+			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate,
+			Switches:   []repository.BuildSwitchEntry{{Switch: "sw1", Count: 70}},
+			KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks1", Kit: "kit1"}},
+			Stabs:      &repository.BuildStabs{Price: floatPtr(12.5)},
+		}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	s.mockSwitchRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
+		}, nil)
+	s.mockKeycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: []repository.KeycapKit{{
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+
+	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "alice"), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	item := (*got.Items)[0]
+	s.Require().NotNil(item.TotalCost)
+	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_NonOwner_OmitsTotalCost() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{
+			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic,
+			Switches:   []repository.BuildSwitchEntry{{Switch: "sw1", Count: 70}},
+			KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks1", Kit: "kit1"}},
+			Stabs:      &repository.BuildStabs{Price: floatPtr(12.5)},
+		}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+
+	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "bob"), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Nil((*got.Items)[0].TotalCost)
 }
 
 func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {

@@ -52,7 +52,7 @@ func BuildToAPI(
 		return api.Build{}, err
 	}
 
-	keycapKits, keycapKitsCost, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, kitImages)
+	keycapKits, keycapKitsCost, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, kitImages, true)
 	if err != nil {
 		return api.Build{}, err
 	}
@@ -131,7 +131,18 @@ func BuildToRepo(in api.BuildInput) repository.Build {
 // (repository.ErrNotFound - e.g. deleted after the build was created, see
 // https://github.com/rogueserenity/kbdb/issues/172), Keyboard is left nil
 // rather than failing the whole request; any other error still fails it.
-func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository, images repository.BuildImageStore) (api.BuildSummary, error) {
+//
+// TotalCost mirrors [BuildToAPI]'s calculation and isOwner gating; unlike
+// keyboardPrice, switches/keycap kits are only resolved when isOwner,
+// since cost is the only thing this uses them for.
+func BuildToAPISummary(
+	ctx context.Context, b repository.Build,
+	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+	images repository.BuildImageStore,
+	isOwner bool,
+) (api.BuildSummary, error) {
 	buildDate, err := buildDateToAPI(b.BuildDate)
 	if err != nil {
 		return api.BuildSummary{}, err
@@ -152,14 +163,30 @@ func BuildToAPISummary(ctx context.Context, b repository.Build, keyboardRepo rep
 		Image:     image,
 	}
 
-	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
+	kb, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo)
 	if err != nil {
-		if !errors.Is(err, repository.ErrNotFound) {
-			return api.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
-		}
-		// Leave summary.Keyboard nil.
-	} else {
+		return api.BuildSummary{}, err
+	}
+	if kb != nil {
 		summary.Keyboard = &api.BuildSummaryKeyboard{Brand: &kb.Brand, Name: &kb.Name}
+	}
+
+	if isOwner {
+		_, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo)
+		if err != nil {
+			return api.BuildSummary{}, err
+		}
+
+		_, keycapKitsCost, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, nil, false)
+		if err != nil {
+			return api.BuildSummary{}, err
+		}
+
+		var stabsPrice *float64
+		if b.Stabs != nil {
+			stabsPrice = b.Stabs.Price
+		}
+		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
 
 	return summary, nil
@@ -356,9 +383,13 @@ func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entrie
 // KitImageUrl nil rather than dropping the entry or failing the request.
 // Also returns the summed price across entries whose kit has a known
 // price.
+//
+// resolveImages false skips presigning KitImageUrl; kitImages may be nil
+// in that case.
 func buildKeycapKitEntriesResolvedToAPI(
 	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
 	keycapSetRepo repository.KeycapSetRepository, kitImages repository.KeycapKitImageStore,
+	resolveImages bool,
 ) (*[]api.BuildKeycapKitEntryResolved, *float64, error) {
 	if entries == nil {
 		return nil, nil, nil //nolint:nilnil // no keycap kits is a valid, expected result
@@ -398,7 +429,7 @@ func buildKeycapKitEntriesResolvedToAPI(
 			out[i].KitName = &kit.Name
 			costs[i] = kit.Purchase.Price
 
-			if kit.ImagePath != nil {
+			if resolveImages && kit.ImagePath != nil {
 				url, err := kitImages.PresignGet(ctx, *kit.ImagePath)
 				if err != nil {
 					errs[i] = fmt.Errorf("presigning kit image for kit %q: %w", e.Kit, err)
