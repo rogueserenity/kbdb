@@ -76,6 +76,38 @@ func ownedReadable[T any](
 	return item, nil
 }
 
+// errMutationNotFound, errMutationConflict, and errMutationFailed are
+// returned by handleMutationError. Generic rather than per-entity: the
+// calling tool is already known to whatever invoked it (unlike REST, MCP
+// has no separate URL/status side channel, but the tool name itself serves
+// the same role), so an entity name in the message would be redundant.
+var (
+	errMutationNotFound = errors.New("resource not found")
+	errMutationConflict = errors.New("the resource is being modified concurrently, please retry")
+	errMutationFailed   = errors.New("failed to mutate resource")
+)
+
+// handleMutationError is the standard error tail for a mutating repository
+// call: repository.ErrNotFound -> errMutationNotFound,
+// repository.ErrMutationConflict -> errMutationConflict (logged as a
+// warning), any other non-nil error -> errMutationFailed (logged as an
+// error). logFields are passed through to the log call for correlation
+// (e.g. log.SwitchID, id). Returns nil if err was nil.
+func handleMutationError(ctx context.Context, err error, logFields ...any) error {
+	if errors.Is(err, repository.ErrNotFound) {
+		return errMutationNotFound
+	}
+	if errors.Is(err, repository.ErrMutationConflict) {
+		log.FromContext(ctx).Warn("mutation conflict", logFields...)
+		return errMutationConflict
+	}
+	if err != nil {
+		log.FromContext(ctx).Error("mutation failed", append([]any{log.Error, err}, logFields...)...)
+		return errMutationFailed
+	}
+	return nil
+}
+
 func clampListLimit(limit int) int {
 	if limit < 1 {
 		return defaultListLimit

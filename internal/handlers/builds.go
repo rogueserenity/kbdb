@@ -249,20 +249,7 @@ func UpdateBuild(
 		b.ID = id
 
 		updated, err := buildRepo.Update(r.Context(), b)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			// Warn, not Error: expected contention under retry, not a bug -
-			// still worth a trace if one build sees this repeatedly.
-			log.FromContext(r.Context()).Warn("build mutation conflict", log.BuildID, id)
-			problem.Conflict(w, "the build is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("updating build", log.Error, err, log.BuildID, id)
-			problem.Internal(w, "failed to update build")
+		if handleMutationError(w, r, err, log.BuildID, id) {
 			return
 		}
 
@@ -320,18 +307,7 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 		}
 
 		_, err = buildRepo.AddImage(r.Context(), buildID, repository.BuildImage{ImageID: imageID, Path: key})
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("build mutation conflict", log.BuildID, buildID)
-			problem.Conflict(w, "the build is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("adding build image", log.Error, err, log.BuildID, buildID)
-			problem.Internal(w, "failed to add build image")
+		if handleMutationError(w, r, err, log.BuildID, buildID) {
 			return
 		}
 
@@ -364,18 +340,7 @@ func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.Bu
 		}
 
 		removed, err := buildRepo.DeleteImage(r.Context(), buildID, imageID)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("build mutation conflict", log.BuildID, buildID)
-			problem.Conflict(w, "the build is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("deleting build image", log.Error, err, log.BuildID, buildID)
-			problem.Internal(w, "failed to delete build image")
+		if handleMutationError(w, r, err, log.BuildID, buildID) {
 			return
 		}
 

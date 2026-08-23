@@ -527,7 +527,7 @@ func (s *HandleUpdateKeycapSetSuite) TestNotFound_ReturnsNotFound() {
 		KeycapSetInput: validKeycapSetInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeycapSetNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleUpdateKeycapSetSuite) TestMutationConflict_ReturnsConflictError() {
@@ -541,7 +541,7 @@ func (s *HandleUpdateKeycapSetSuite) TestMutationConflict_ReturnsConflictError()
 		KeycapSetInput: validKeycapSetInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleUpdateKeycapSetSuite) TestRepositoryError_ReturnsError() {
@@ -555,7 +555,7 @@ func (s *HandleUpdateKeycapSetSuite) TestRepositoryError_ReturnsError() {
 		KeycapSetInput: validKeycapSetInput(),
 	})
 
-	s.Require().ErrorContains(err, "failed to update keycap set")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 type HandleDeleteKeycapSetSuite struct {
@@ -833,7 +833,7 @@ func (s *HandleCreateKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
 		KeycapKitInput: validKeycapKitInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeycapSetNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleCreateKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
@@ -847,7 +847,7 @@ func (s *HandleCreateKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 		KeycapKitInput: validKeycapKitInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleCreateKeycapKitSuite) TestRepositoryError_ReturnsError() {
@@ -861,7 +861,7 @@ func (s *HandleCreateKeycapKitSuite) TestRepositoryError_ReturnsError() {
 		KeycapKitInput: validKeycapKitInput(),
 	})
 
-	s.Require().ErrorContains(err, "failed to add kit")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 type HandleUpdateKeycapKitSuite struct {
@@ -988,7 +988,7 @@ func (s *HandleUpdateKeycapKitSuite) TestKitNotFound_ReturnsNotFound() {
 		KeycapKitInput: validKeycapKitInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeycapKitNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleUpdateKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
@@ -1003,7 +1003,7 @@ func (s *HandleUpdateKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 		KeycapKitInput: validKeycapKitInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleUpdateKeycapKitSuite) TestRepositoryError_ReturnsError() {
@@ -1018,7 +1018,7 @@ func (s *HandleUpdateKeycapKitSuite) TestRepositoryError_ReturnsError() {
 		KeycapKitInput: validKeycapKitInput(),
 	})
 
-	s.Require().ErrorContains(err, "failed to update kit")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 type HandleDeleteKeycapKitSuite struct {
@@ -1090,7 +1090,7 @@ func (s *HandleDeleteKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "missing", KitID: "kit-1"})
 
-	s.Require().ErrorIs(err, errKeycapSetNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleDeleteKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
@@ -1100,7 +1100,7 @@ func (s *HandleDeleteKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteKeycapKitSuite) TestImageIsCleanedUp() {
@@ -1134,7 +1134,7 @@ func (s *HandleDeleteKeycapKitSuite) TestRepositoryError_ReturnsError() {
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().ErrorContains(err, "failed to delete kit")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 func (s *HandleDeleteKeycapKitSuite) TestBlock_Referenced_ReturnsError() {
@@ -1258,7 +1258,7 @@ func (s *HandleSetKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errKeycapKitNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
@@ -1273,7 +1273,7 @@ func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleSetKeycapKitImageSuite) TestPresignError_ReturnsError() {
@@ -1350,7 +1350,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "missing-kit"})
 
-	s.Require().ErrorIs(err, errKeycapKitNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
@@ -1359,7 +1359,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestMutationConflict_ReturnsConflictEr
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().ErrorIs(err, errKeycapSetMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestRepositoryError_ReturnsError() {
@@ -1368,7 +1368,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestRepositoryError_ReturnsError() {
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().ErrorContains(err, "failed to delete kit image")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestImageDeleteFailure_ReturnsError() {

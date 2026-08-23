@@ -220,13 +220,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, images repositor
 		kb.ID = id
 
 		updated, err := keyboardRepo.Update(r.Context(), kb)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("updating keyboard", log.Error, err, log.KeyboardID, id)
-			problem.Internal(w, "failed to update keyboard")
+		if handleMutationError(w, r, err, log.KeyboardID, id) {
 			return
 		}
 
@@ -338,18 +332,7 @@ func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images reposit
 		}
 
 		_, err = keyboardRepo.AddImage(r.Context(), keyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keyboard mutation conflict", log.KeyboardID, keyboardID)
-			problem.Conflict(w, "the keyboard is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("adding keyboard image", log.Error, err, log.KeyboardID, keyboardID)
-			problem.Internal(w, "failed to add keyboard image")
+		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
 			return
 		}
 
@@ -383,18 +366,7 @@ func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repo
 		}
 
 		removed, err := keyboardRepo.DeleteImage(r.Context(), keyboardID, imageID)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keyboard mutation conflict", log.KeyboardID, keyboardID)
-			problem.Conflict(w, "the keyboard is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("deleting keyboard image", log.Error, err, log.KeyboardID, keyboardID)
-			problem.Internal(w, "failed to delete keyboard image")
+		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
 			return
 		}
 

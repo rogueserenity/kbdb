@@ -24,8 +24,6 @@ var errBuildAlreadyExists = errors.New("build already exists")
 
 var errBuildNotFound = errors.New("build not found")
 
-var errBuildMutationConflict = errors.New("the build is being modified concurrently, please retry")
-
 // errNoCaller mirrors [errNoTokenInfo]'s fail-closed shape: unreachable in
 // practice since [identityMiddleware] always sets a caller ID before a tool
 // handler runs, but this fails closed rather than validating references
@@ -203,18 +201,8 @@ func handleUpdateBuild(
 		b.ID = in.BuildID
 
 		updated, err := buildRepo.Update(ctx, b)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.UpdateBuildOutput{}, errBuildNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			// Warn, not Error: expected contention under retry, not a bug -
-			// still worth a trace if one build sees this repeatedly.
-			log.FromContext(ctx).Warn("build mutation conflict", log.BuildID, b.ID)
-			return nil, schema.UpdateBuildOutput{}, errBuildMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("updating build", log.BuildID, b.ID, log.Error, err)
-			return nil, schema.UpdateBuildOutput{}, errors.New("failed to update build")
+		if mutErr := handleMutationError(ctx, err, log.BuildID, b.ID); mutErr != nil {
+			return nil, schema.UpdateBuildOutput{}, mutErr
 		}
 
 		// isOwner: true - update always targets the caller's own collection.
@@ -305,16 +293,8 @@ func handleAddBuildImage(
 		}
 
 		_, err = buildRepo.AddImage(ctx, in.BuildID, repository.BuildImage{ImageID: imageID, Path: key})
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.AddBuildImageOutput{}, errBuildNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("build mutation conflict", log.BuildID, in.BuildID)
-			return nil, schema.AddBuildImageOutput{}, errBuildMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("adding build image", log.BuildID, in.BuildID, log.Error, err)
-			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
+			return nil, schema.AddBuildImageOutput{}, mutErr
 		}
 
 		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType)
@@ -340,16 +320,8 @@ func handleDeleteBuildImage(
 		}
 
 		removed, err := buildRepo.DeleteImage(ctx, in.BuildID, in.ImageID)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.DeleteBuildImageOutput{}, errBuildNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("build mutation conflict", log.BuildID, in.BuildID)
-			return nil, schema.DeleteBuildImageOutput{}, errBuildMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("deleting build image", log.BuildID, in.BuildID, log.Error, err)
-			return nil, schema.DeleteBuildImageOutput{}, errors.New("failed to delete build image")
+		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
+			return nil, schema.DeleteBuildImageOutput{}, mutErr
 		}
 
 		if removed != nil {
