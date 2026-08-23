@@ -259,8 +259,17 @@ func (r *BuildRepository) Delete(ctx context.Context, id string) error {
 			return err
 		}
 
+		// existing.Version is 0 both for a real version:0 item and for a
+		// pre-Version item with no version attribute at all (Get/UnmarshalMap
+		// defaults a missing attribute to the zero value) - attribute_not_exists
+		// covers the latter, since DynamoDB never matches an equality condition
+		// against an absent attribute.
+		versionCondition := expression.Name("version").Equal(expression.Value(existing.Version))
+		if existing.Version == 0 {
+			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
+		}
 		expr, err := expression.NewBuilder().
-			WithCondition(expression.Name("version").Equal(expression.Value(existing.Version))).
+			WithCondition(versionCondition).
 			Build()
 		if err != nil {
 			return fmt.Errorf("building build delete condition for build %q: %w", id, err)
@@ -331,8 +340,17 @@ func (r *BuildRepository) mutateBuild(
 			return nil, fmt.Errorf("marshalling build %q for owner %q: %w", buildID, ownerID, err)
 		}
 
+		// expectedVersion is 0 both for a real version:0 item and for a
+		// pre-Version item with no version attribute at all (Get/UnmarshalMap
+		// defaults a missing attribute to the zero value) - attribute_not_exists
+		// covers the latter, since DynamoDB never matches an equality condition
+		// against an absent attribute.
+		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
+		if expectedVersion == 0 {
+			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
+		}
 		expr, err := expression.NewBuilder().
-			WithCondition(expression.Name("version").Equal(expression.Value(expectedVersion))).
+			WithCondition(versionCondition).
 			Build()
 		if err != nil {
 			return nil, fmt.Errorf("building build mutation condition for build %q: %w", buildID, err)
