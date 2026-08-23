@@ -19,9 +19,8 @@ type KeyboardResult struct {
 }
 
 // deleteBuildImages deletes every image build had, in parallel, returning
-// a joined error if any failed. Used to gate a build's own DB delete on
-// its images being gone from S3 first - see DeleteKeyboard's doc comment
-// for why.
+// a joined error if any failed - see [DeleteKeyboard]'s doc comment for
+// why this gates the build's own DB delete.
 func deleteBuildImages(ctx context.Context, images repository.BuildImageStore, build *repository.Build) error {
 	errs := make([]error, len(build.Images))
 	var wg sync.WaitGroup
@@ -39,7 +38,8 @@ func deleteBuildImages(ctx context.Context, images repository.BuildImageStore, b
 }
 
 // deleteKeyboardImages deletes every image kb had, in parallel, returning
-// a joined error if any failed.
+// a joined error if any failed - see [DeleteKeyboard]'s doc comment for
+// why this gates the keyboard's own DB delete.
 func deleteKeyboardImages(ctx context.Context, images repository.KeyboardImageStore, kb *repository.Keyboard) error {
 	errs := make([]error, len(kb.Images))
 	var wg sync.WaitGroup
