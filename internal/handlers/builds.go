@@ -389,8 +389,8 @@ func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.Bu
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's build always returns 404. Deleting is idempotent: a build
 // that doesn't exist returns 204. Deletes every image's S3 object before
-// the DB record, aborting before the DB delete if any S3 delete fails, so
-// a failure at either step can be safely retried to completion.
+// the DB record, aborting before the DB delete if any S3 delete fails,
+// same retry-safety reasoning as [DeleteBuildImage].
 func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
