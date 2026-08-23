@@ -444,10 +444,9 @@ func (s *KeyboardRepositorySuite) TestAddImage_Succeeds() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"})
+	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"})
 
 	s.Require().NoError(err)
-	s.Equal("img1", image.ImageID)
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_ParentKeyboardNotFound_ReturnsErrNotFound() {
@@ -456,10 +455,9 @@ func (s *KeyboardRepositorySuite) TestAddImage_ParentKeyboardNotFound_ReturnsErr
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
+	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(image)
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_CASConflictExhausted_ReturnsError() {
@@ -471,18 +469,16 @@ func (s *KeyboardRepositorySuite) TestAddImage_CASConflictExhausted_ReturnsError
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxKeyboardMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
+	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
 
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(image)
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_EmptyImageID_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - caught before any repo call.
-	image, err := s.repo.AddImage(kbdbctx.WithUserID(s.T().Context(), "alice"), "kb1", repository.KeyboardImage{Path: "p"})
+	err := s.repo.AddImage(kbdbctx.WithUserID(s.T().Context(), "alice"), "kb1", repository.KeyboardImage{Path: "p"})
 
 	s.Require().Error(err)
-	s.Nil(image)
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
@@ -500,18 +496,16 @@ func (s *KeyboardRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
 		Return(getOutput, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p2"})
+	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p2"})
 
 	s.Require().Error(err)
-	s.Nil(image)
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
-	image, err := s.repo.AddImage(s.T().Context(), "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
+	err := s.repo.AddImage(s.T().Context(), "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
 
 	s.Require().Error(err)
-	s.Nil(image)
 }
 
 func (s *KeyboardRepositorySuite) TestDeleteImage_Succeeds() {

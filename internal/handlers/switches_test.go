@@ -901,7 +901,7 @@ const setSwitchImageTestKey = repository.SwitchImageKey("switches/alice/sw1/imag
 func (s *SetSwitchImageSuite) TestSetSwitchImage_Succeeds() {
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(&repository.Switch{ID: "sw1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
@@ -968,7 +968,7 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_UnapprovedContentType_Returns40
 func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(nil, repository.ErrNotFound)
+		Return(repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -981,7 +981,7 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
 func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(&repository.Switch{ID: "sw1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -997,7 +997,7 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
 func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(nil, errors.New("put item failed"))
+		Return(errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1010,7 +1010,7 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
 func (s *SetSwitchImageSuite) TestSetSwitchImage_MutationConflict_Returns409() {
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()

@@ -607,14 +607,12 @@ func (s *BuildRepositorySuite) TestAddImage_Succeeds() {
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
 		ImageID: "img1",
 		Path:    "builds/alice/b1/images/img1",
 	})
 
 	s.Require().NoError(err)
-	s.Require().NotNil(image)
-	s.Equal("img1", image.ImageID)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_ParentBuildNotFound_ReturnsErrNotFound() {
@@ -623,10 +621,9 @@ func (s *BuildRepositorySuite) TestAddImage_ParentBuildNotFound_ReturnsErrNotFou
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "missing", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(ctx, "missing", repository.BuildImage{ImageID: "img1"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(image)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_CASConflict_RetriesThenSucceeds() {
@@ -669,14 +666,12 @@ func (s *BuildRepositorySuite) TestAddImage_CASConflict_RetriesThenSucceeds() {
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
 		ImageID: "img1",
 		Path:    "builds/alice/b1/images/img1",
 	})
 
 	s.Require().NoError(err)
-	s.Require().NotNil(image)
-	s.Equal("img1", image.ImageID)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_CASConflictExhausted_ReturnsError() {
@@ -690,20 +685,18 @@ func (s *BuildRepositorySuite) TestAddImage_CASConflictExhausted_ReturnsError() 
 		}).Times(maxBuildMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1"})
 
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(image)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_EmptyImageID_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - caught before any DynamoDB call.
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "b1", repository.BuildImage{})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{})
 
 	s.Require().ErrorIs(err, errEmptyImageID)
-	s.Nil(image)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
@@ -715,13 +708,12 @@ func (s *BuildRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
 	// closure, before any write is attempted.
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
 		ImageID: "img1",
 		Path:    "builds/alice/b1/images/img1",
 	})
 
 	s.Require().ErrorIs(err, errDuplicateImageID)
-	s.Nil(image)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_TransactWriteItemsError_Propagates() {
@@ -733,18 +725,16 @@ func (s *BuildRepositorySuite) TestAddImage_TransactWriteItemsError_Propagates()
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	image, err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1"})
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(image)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_NoUserIDInContext_ReturnsError() {
-	image, err := s.repo.AddImage(s.T().Context(), "b1", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(s.T().Context(), "b1", repository.BuildImage{ImageID: "img1"})
 
 	s.Require().Error(err)
-	s.Nil(image)
 }
 
 func (s *BuildRepositorySuite) TestDeleteImage_Succeeds() {

@@ -245,7 +245,7 @@ func handleSetSwitchImage(
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
 		}
 
-		_, err = switchRepo.SetImagePath(ctx, in.SwitchID, key)
+		err = switchRepo.SetImagePath(ctx, in.SwitchID, key)
 		if mutErr := handleMutationError(ctx, err, log.SwitchID, in.SwitchID); mutErr != nil {
 			return nil, schema.SetSwitchImageOutput{}, mutErr
 		}

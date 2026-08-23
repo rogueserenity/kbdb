@@ -249,7 +249,7 @@ func handleAddKeyboardImage(
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 
-		_, err = keyboardRepo.AddImage(ctx, in.KeyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
+		err = keyboardRepo.AddImage(ctx, in.KeyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
 		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
 			return nil, schema.AddKeyboardImageOutput{}, mutErr
 		}

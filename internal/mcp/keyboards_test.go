@@ -684,7 +684,7 @@ func (s *HandleAddKeyboardImageSuite) TestSucceeds() {
 		AddImage(mock.Anything, "kb-1", mock.MatchedBy(func(img repository.KeyboardImage) bool {
 			return img.ImageID != ""
 		})).
-		Return(&repository.KeyboardImage{ImageID: "img-1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/upload", nil)
@@ -723,7 +723,7 @@ func (s *HandleAddKeyboardImageSuite) TestUnapprovedContentType_ReturnsError() {
 func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 	s.mockKeyboards.EXPECT().
 		AddImage(mock.Anything, "kb-1", mock.Anything).
-		Return(nil, repository.ErrNotFound)
+		Return(repository.ErrNotFound)
 
 	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
@@ -737,7 +737,7 @@ func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
 	s.mockKeyboards.EXPECT().
 		AddImage(mock.Anything, "kb-1", mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{

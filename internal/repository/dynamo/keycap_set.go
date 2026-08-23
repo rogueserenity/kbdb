@@ -383,26 +383,21 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 }
 
 // SetKitImagePath implements repository.KeycapSetRepository.
-func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKit, error) {
+func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("setting kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
+		return fmt.Errorf("setting kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	var idx int
-	updated, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
-		idx = slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
+	_, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
+		idx := slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
 		if idx == -1 {
 			return repository.ErrNotFound
 		}
 		ks.Kits[idx].ImagePath = &key
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return &updated.Kits[idx], nil
+	return err
 }
 
 // ClearKitImagePath implements repository.KeycapSetRepository.

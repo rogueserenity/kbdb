@@ -394,7 +394,7 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
-		_, err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
+		err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
 		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
 			return nil, schema.SetKeycapKitImageOutput{}, mutErr
 		}

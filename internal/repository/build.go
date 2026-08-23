@@ -86,7 +86,7 @@ type BuildRepository interface {
 
 	// AddImage returns ErrNotFound if the parent build doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	AddImage(ctx context.Context, buildID string, image BuildImage) (*BuildImage, error)
+	AddImage(ctx context.Context, buildID string, image BuildImage) error
 
 	// DeleteImage is idempotent: an imageID not present in the build
 	// returns (nil, nil), not an error.

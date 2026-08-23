@@ -998,7 +998,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_Succeeds() {
 		AddImage(mock.Anything, "build1", mock.MatchedBy(func(img repository.BuildImage) bool {
 			return img.ImageID != ""
 		})).
-		Return(&repository.BuildImage{ImageID: "img1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/presigned-put", nil)
@@ -1067,7 +1067,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_UnapprovedContentType_Returns400(
 func (s *AddBuildImageSuite) TestAddBuildImage_NotFound_Returns404() {
 	s.mockBuildRepo.EXPECT().
 		AddImage(mock.Anything, "build1", mock.Anything).
-		Return(nil, repository.ErrNotFound)
+		Return(repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1080,7 +1080,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_NotFound_Returns404() {
 func (s *AddBuildImageSuite) TestAddBuildImage_PresignError_Returns500() {
 	s.mockBuildRepo.EXPECT().
 		AddImage(mock.Anything, "build1", mock.Anything).
-		Return(&repository.BuildImage{ImageID: "img1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1096,7 +1096,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_PresignError_Returns500() {
 func (s *AddBuildImageSuite) TestAddBuildImage_RepositoryError_Returns500() {
 	s.mockBuildRepo.EXPECT().
 		AddImage(mock.Anything, "build1", mock.Anything).
-		Return(nil, errors.New("put item failed"))
+		Return(errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1109,7 +1109,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_RepositoryError_Returns500() {
 func (s *AddBuildImageSuite) TestAddBuildImage_MutationConflict_Returns409() {
 	s.mockBuildRepo.EXPECT().
 		AddImage(mock.Anything, "build1", mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()

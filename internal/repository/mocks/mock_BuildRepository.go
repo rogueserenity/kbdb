@@ -39,31 +39,20 @@ func (_m *MockBuildRepository) EXPECT() *MockBuildRepository_Expecter {
 }
 
 // AddImage provides a mock function for the type MockBuildRepository
-func (_mock *MockBuildRepository) AddImage(ctx context.Context, buildID string, image repository.BuildImage) (*repository.BuildImage, error) {
+func (_mock *MockBuildRepository) AddImage(ctx context.Context, buildID string, image repository.BuildImage) error {
 	ret := _mock.Called(ctx, buildID, image)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AddImage")
 	}
 
-	var r0 *repository.BuildImage
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.BuildImage) (*repository.BuildImage, error)); ok {
-		return returnFunc(ctx, buildID, image)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.BuildImage) *repository.BuildImage); ok {
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.BuildImage) error); ok {
 		r0 = returnFunc(ctx, buildID, image)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*repository.BuildImage)
-		}
+		r0 = ret.Error(0)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.BuildImage) error); ok {
-		r1 = returnFunc(ctx, buildID, image)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
+	return r0
 }
 
 // MockBuildRepository_AddImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddImage'
@@ -102,12 +91,12 @@ func (_c *MockBuildRepository_AddImage_Call) Run(run func(ctx context.Context, b
 	return _c
 }
 
-func (_c *MockBuildRepository_AddImage_Call) Return(buildImage *repository.BuildImage, err error) *MockBuildRepository_AddImage_Call {
-	_c.Call.Return(buildImage, err)
+func (_c *MockBuildRepository_AddImage_Call) Return(err error) *MockBuildRepository_AddImage_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockBuildRepository_AddImage_Call) RunAndReturn(run func(ctx context.Context, buildID string, image repository.BuildImage) (*repository.BuildImage, error)) *MockBuildRepository_AddImage_Call {
+func (_c *MockBuildRepository_AddImage_Call) RunAndReturn(run func(ctx context.Context, buildID string, image repository.BuildImage) error) *MockBuildRepository_AddImage_Call {
 	_c.Call.Return(run)
 	return _c
 }
