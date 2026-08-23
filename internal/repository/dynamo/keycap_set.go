@@ -155,8 +155,7 @@ func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSe
 		ConditionExpression: aws.String("attribute_not_exists(id)"),
 	})
 	if err != nil {
-		var condErr *types.ConditionalCheckFailedException
-		if errors.As(err, &condErr) {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
 			return nil, repository.ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("creating keycap set %q for owner %q: %w", ks.ID, ks.UserID, err)
@@ -273,8 +272,7 @@ func (r *KeycapSetRepository) mutateSet(
 			return ks, nil
 		}
 
-		var condErr *types.ConditionalCheckFailedException
-		if !errors.As(err, &condErr) {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); !ok {
 			return nil, fmt.Errorf("mutating set %q owner %q: %w", setID, ownerID, err)
 		}
 		// Lost the CAS race - another writer updated Version first. Loop

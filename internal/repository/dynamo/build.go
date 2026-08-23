@@ -191,8 +191,8 @@ func (r *BuildRepository) Create(ctx context.Context, b repository.Build) (*repo
 // reasons, not the ConditionalCheckFailedException a plain PutItem/DeleteItem
 // would return.
 func isConditionalCheckFailed(err error) bool {
-	var txErr *types.TransactionCanceledException
-	if !errors.As(err, &txErr) {
+	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
+	if !ok {
 		return false
 	}
 	for _, reason := range txErr.CancellationReasons {
