@@ -1195,14 +1195,11 @@ func (s *HandleSetKeycapKitImageSuite) SetupTest() {
 
 func (s *HandleSetKeycapKitImageSuite) TestSucceeds() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{{KitID: "kit-1"}}}, nil)
+		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
+		Return(&repository.KeycapKit{KitID: "kit-1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/upload", nil)
-	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
-		Return(&repository.KeycapKit{KitID: "kit-1"}, nil)
 
 	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
@@ -1249,9 +1246,9 @@ func (s *HandleSetKeycapKitImageSuite) TestUnapprovedContentType_ReturnsError() 
 	s.Require().ErrorContains(err, "not an approved")
 }
 
-func (s *HandleSetKeycapKitImageSuite) TestSetNotFound_ReturnsNotFound() {
+func (s *HandleSetKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "ks-1").
+		SetKitImagePath(mock.Anything, "ks-1", "missing-kit", mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
 	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
@@ -1264,43 +1261,7 @@ func (s *HandleSetKeycapKitImageSuite) TestSetNotFound_ReturnsNotFound() {
 	s.Require().ErrorIs(err, errKeycapKitNotFound)
 }
 
-func (s *HandleSetKeycapKitImageSuite) TestGetError_ReturnsError() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "ks-1").
-		Return(nil, errors.New("get item failed"))
-
-	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
-		KeycapSetID: "ks-1",
-		KitID:       "kit-1",
-		ContentType: "image/png",
-	})
-
-	s.Require().ErrorContains(err, "failed to set kit image")
-}
-
-func (s *HandleSetKeycapKitImageSuite) TestKitNotInSet_ReturnsNotFound() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{{KitID: "other-kit"}}}, nil)
-
-	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
-		KeycapSetID: "ks-1",
-		KitID:       "missing-kit",
-		ContentType: "image/png",
-	})
-
-	s.Require().ErrorIs(err, errKeycapKitNotFound)
-}
-
 func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{{KitID: "kit-1"}}}, nil)
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
@@ -1317,8 +1278,8 @@ func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError
 
 func (s *HandleSetKeycapKitImageSuite) TestPresignError_ReturnsError() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{{KitID: "kit-1"}}}, nil)
+		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
+		Return(&repository.KeycapKit{KitID: "kit-1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("presign failed"))

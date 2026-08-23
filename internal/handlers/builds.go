@@ -284,8 +284,9 @@ func UpdateBuild(
 // an authenticated caller. userId must be the caller's own subject; adding
 // an image to another user's build, or one that doesn't exist, both return
 // 404. Doesn't upload the image itself - the response is a presigned S3 PUT
-// URL the client uploads directly to. Existence/ownership is checked via
-// Get before presigning, so a 404 doesn't pay for a wasted S3 round trip.
+// URL the client uploads directly to. The repository mutation (which
+// checks existence/ownership) runs before presigning, so a 404 doesn't
+// pay for a wasted S3 round trip.
 func AddBuildImage(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -309,28 +310,11 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 			return
 		}
 
-		if _, err := buildRepo.Get(r.Context(), ownerID, buildID); err != nil {
-			if errors.Is(err, repository.ErrNotFound) {
-				problem.NotFound(w, "resource not found")
-				return
-			}
-			log.FromContext(r.Context()).Error("getting build", log.Error, err, log.BuildID, buildID)
-			problem.Internal(w, "failed to add build image")
-			return
-		}
-
 		imageID := uuid.NewString()
 
 		key, err := repository.NewBuildImageKey(r.Context(), buildID, imageID)
 		if err != nil {
 			log.FromContext(r.Context()).Error("building build image key", log.Error, err, log.BuildID, buildID)
-			problem.Internal(w, "failed to add build image")
-			return
-		}
-
-		uploadURL, err := images.PresignPutBuildImage(r.Context(), key, in.ContentType)
-		if err != nil {
-			log.FromContext(r.Context()).Error("presigning build image upload", log.Error, err, log.BuildID, buildID)
 			problem.Internal(w, "failed to add build image")
 			return
 		}
@@ -347,6 +331,13 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("adding build image", log.Error, err, log.BuildID, buildID)
+			problem.Internal(w, "failed to add build image")
+			return
+		}
+
+		uploadURL, err := images.PresignPutBuildImage(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning build image upload", log.Error, err, log.BuildID, buildID)
 			problem.Internal(w, "failed to add build image")
 			return
 		}

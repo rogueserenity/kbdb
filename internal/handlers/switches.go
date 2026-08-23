@@ -300,8 +300,9 @@ func DeleteSwitch(
 // subject; setting a switch's image on another user's switch, or one
 // that doesn't exist, both return 404, to avoid revealing it exists.
 // Doesn't upload the image itself - the response is a presigned S3 PUT
-// URL the client uploads directly to. Existence/ownership is checked via
-// Get before presigning, so a 404 doesn't pay for a wasted S3 round trip.
+// URL the client uploads directly to. The repository mutation (which
+// checks existence/ownership) runs before presigning, so a 404 doesn't
+// pay for a wasted S3 round trip.
 func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -325,26 +326,9 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 			return
 		}
 
-		if _, err := switchRepo.Get(r.Context(), ownerID, id); err != nil {
-			if errors.Is(err, repository.ErrNotFound) {
-				problem.NotFound(w, "resource not found")
-				return
-			}
-			log.FromContext(r.Context()).Error("getting switch", log.Error, err, log.SwitchID, id)
-			problem.Internal(w, "failed to set switch image")
-			return
-		}
-
 		key, err := repository.NewSwitchImageKey(r.Context(), id)
 		if err != nil {
 			log.FromContext(r.Context()).Error("building switch image key", log.Error, err, log.SwitchID, id)
-			problem.Internal(w, "failed to set switch image")
-			return
-		}
-
-		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
-		if err != nil {
-			log.FromContext(r.Context()).Error("presigning switch image upload", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to set switch image")
 			return
 		}
@@ -361,6 +345,13 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("setting switch image path", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to set switch image")
+			return
+		}
+
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning switch image upload", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to set switch image")
 			return
 		}

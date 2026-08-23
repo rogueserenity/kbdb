@@ -12,7 +12,6 @@ import (
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
-	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -433,32 +432,9 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
-		ownerID, ok := kbdbctx.UserID(ctx)
-		if !ok {
-			return nil, schema.SetKeycapKitImageOutput{}, errNoCallerIdentity
-		}
-
-		set, err := keycapSetRepo.Get(ctx, ownerID, in.KeycapSetID)
-		if err != nil {
-			if errors.Is(err, repository.ErrNotFound) {
-				return nil, schema.SetKeycapKitImageOutput{}, errKeycapKitNotFound
-			}
-			log.FromContext(ctx).Error("getting keycap set", log.KeycapSetID, in.KeycapSetID, log.Error, err)
-			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
-		}
-		if !slices.ContainsFunc(set.Kits, func(kit repository.KeycapKit) bool { return kit.KitID == in.KitID }) {
-			return nil, schema.SetKeycapKitImageOutput{}, errKeycapKitNotFound
-		}
-
 		key, err := repository.NewKeycapKitImageKey(ctx, in.KeycapSetID, in.KitID)
 		if err != nil {
 			log.FromContext(ctx).Error("building keycap kit image key", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
-		}
-
-		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
@@ -472,6 +448,12 @@ func handleSetKeycapKitImage(
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("setting keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		}
+
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 

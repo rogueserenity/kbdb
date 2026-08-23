@@ -13,7 +13,6 @@ import (
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
-	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -250,30 +249,11 @@ func handleAddKeyboardImage(
 			return nil, schema.AddKeyboardImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
-		ownerID, ok := kbdbctx.UserID(ctx)
-		if !ok {
-			return nil, schema.AddKeyboardImageOutput{}, errNoCallerIdentity
-		}
-
-		if _, err := keyboardRepo.Get(ctx, ownerID, in.KeyboardID); err != nil {
-			if errors.Is(err, repository.ErrNotFound) {
-				return nil, schema.AddKeyboardImageOutput{}, errKeyboardNotFound
-			}
-			log.FromContext(ctx).Error("getting keyboard", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
-		}
-
 		imageID := uuid.NewString()
 
 		key, err := repository.NewKeyboardImageKey(ctx, in.KeyboardID, imageID)
 		if err != nil {
 			log.FromContext(ctx).Error("building keyboard image key", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
-		}
-
-		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning keyboard image upload", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 
@@ -287,6 +267,12 @@ func handleAddKeyboardImage(
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("adding keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
+		}
+
+		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning keyboard image upload", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 

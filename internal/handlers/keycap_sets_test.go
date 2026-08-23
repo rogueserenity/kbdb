@@ -1491,14 +1491,11 @@ const setKeycapKitImageTestKey = repository.KeycapKitImageKey("keycap-sets/alice
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{{KitID: "kit1"}}}, nil)
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
+		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1559,36 +1556,10 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Ret
 	s.Equal("content_type", got.InvalidParams[0].Name)
 }
 
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_GetSetNotFound_Returns404() {
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_GetError_Returns500() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(nil, errors.New("get item failed"))
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_KitNotInSet_Returns404() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{{KitID: "other-kit"}}}, nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1600,8 +1571,8 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_KitNotInSet_Returns404() 
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{{KitID: "kit1"}}}, nil)
+		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
+		Return(&repository.KeycapKit{KitID: "kit1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1616,12 +1587,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500()
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{{KitID: "kit1"}}}, nil)
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, errors.New("put item failed"))
 
@@ -1634,12 +1599,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{{KitID: "kit1"}}}, nil)
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(nil, repository.ErrMutationConflict)

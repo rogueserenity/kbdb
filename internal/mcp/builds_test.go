@@ -647,16 +647,13 @@ func (s *HandleAddBuildImageSuite) SetupTest() {
 
 func (s *HandleAddBuildImageSuite) TestSucceeds() {
 	s.mockBuilds.EXPECT().
-		Get(mock.Anything, callerID, "build-1").
-		Return(&repository.Build{ID: "build-1"}, nil)
-	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
-	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.MatchedBy(func(img repository.BuildImage) bool {
 			return img.ImageID != ""
 		})).
 		Return(&repository.BuildImage{ImageID: "img-1"}, nil)
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
@@ -692,7 +689,7 @@ func (s *HandleAddBuildImageSuite) TestUnapprovedContentType_ReturnsError() {
 
 func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	s.mockBuilds.EXPECT().
-		Get(mock.Anything, callerID, "missing").
+		AddImage(mock.Anything, "missing", mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
@@ -704,27 +701,7 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	s.Require().ErrorIs(err, errBuildNotFound)
 }
 
-func (s *HandleAddBuildImageSuite) TestGetError_ReturnsError() {
-	s.mockBuilds.EXPECT().
-		Get(mock.Anything, callerID, "build-1").
-		Return(nil, errors.New("get item failed"))
-
-	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
-		BuildID:     "build-1",
-		ContentType: "image/png",
-	})
-
-	s.Require().ErrorContains(err, "failed to add build image")
-}
-
 func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
-	s.mockBuilds.EXPECT().
-		Get(mock.Anything, callerID, "build-1").
-		Return(&repository.Build{ID: "build-1"}, nil)
-	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
@@ -740,8 +717,8 @@ func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
 
 func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 	s.mockBuilds.EXPECT().
-		Get(mock.Anything, callerID, "build-1").
-		Return(&repository.Build{ID: "build-1"}, nil)
+		AddImage(mock.Anything, "build-1", mock.Anything).
+		Return(&repository.BuildImage{ImageID: "img-1"}, nil)
 	s.mockImages.EXPECT().
 		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -756,12 +733,6 @@ func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 }
 
 func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
-	s.mockBuilds.EXPECT().
-		Get(mock.Anything, callerID, "build-1").
-		Return(&repository.Build{ID: "build-1"}, nil)
-	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
 		Return(nil, errors.New("put item failed"))
