@@ -161,8 +161,7 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 		ConditionExpression: aws.String("attribute_not_exists(id)"),
 	})
 	if err != nil {
-		var condErr *types.ConditionalCheckFailedException
-		if errors.As(err, &condErr) {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
 			return nil, repository.ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("creating keyboard %q for owner %q: %w", kb.ID, kb.UserID, err)
@@ -276,8 +275,7 @@ func (r *KeyboardRepository) mutateKeyboard(
 			return kb, nil
 		}
 
-		var condErr *types.ConditionalCheckFailedException
-		if !errors.As(err, &condErr) {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); !ok {
 			return nil, fmt.Errorf("mutating keyboard %q owner %q: %w", keyboardID, ownerID, err)
 		}
 		// Lost the CAS race - another writer updated Version first. Loop

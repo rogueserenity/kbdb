@@ -150,8 +150,7 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 		ConditionExpression: aws.String("attribute_not_exists(id)"),
 	})
 	if err != nil {
-		var condErr *types.ConditionalCheckFailedException
-		if errors.As(err, &condErr) {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
 			return nil, repository.ErrAlreadyExists
 		}
 		return nil, fmt.Errorf("creating switch %q for owner %q: %w", sw.ID, sw.UserID, err)
@@ -266,8 +265,7 @@ func (r *SwitchRepository) mutateSwitch(
 			return sw, nil
 		}
 
-		var condErr *types.ConditionalCheckFailedException
-		if !errors.As(err, &condErr) {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); !ok {
 			return nil, fmt.Errorf("mutating switch %q owner %q: %w", switchID, ownerID, err)
 		}
 		// Lost the CAS race - another writer updated Version first. Loop
