@@ -434,12 +434,26 @@ func buildImagesToAPI(ctx context.Context, images []repository.BuildImage, store
 	}
 
 	out := make([]api.BuildImage, len(images))
+	errs := make([]error, len(images))
+
+	var wg sync.WaitGroup
 	for i, img := range images {
-		url, err := store.PresignGetBuildImage(ctx, img.Path)
-		if err != nil {
-			return nil, fmt.Errorf("presigning build image %q: %w", img.ImageID, err)
-		}
-		out[i] = api.BuildImage{ImageId: img.ImageID, Url: url}
+		wg.Add(1)
+		go func(i int, img repository.BuildImage) {
+			defer wg.Done()
+
+			url, err := store.PresignGetBuildImage(ctx, img.Path)
+			if err != nil {
+				errs[i] = fmt.Errorf("presigning build image %q: %w", img.ImageID, err)
+				return
+			}
+			out[i] = api.BuildImage{ImageId: img.ImageID, Url: url}
+		}(i, img)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
 
 	return &out, nil

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -39,14 +40,29 @@ func ListKeyboards(repo repository.KeyboardRepository, images repository.Keyboar
 		}
 
 		items := make([]api.KeyboardSummary, len(keyboards))
+		errs := make([]error, len(keyboards))
+
+		ctx := r.Context()
+		var wg sync.WaitGroup
 		for i, kb := range keyboards {
-			summary, err := repoapi.KeyboardToAPISummary(r.Context(), kb, images)
-			if err != nil {
-				log.FromContext(r.Context()).Error("mapping keyboard to API summary", log.Error, err, log.KeyboardID, kb.ID)
-				problem.Internal(w, "failed to list keyboards")
-				return
-			}
-			items[i] = summary
+			wg.Add(1)
+			go func(i int, kb repository.Keyboard) {
+				defer wg.Done()
+
+				summary, err := repoapi.KeyboardToAPISummary(ctx, kb, images)
+				if err != nil {
+					errs[i] = fmt.Errorf("mapping keyboard %q to API summary: %w", kb.ID, err)
+					return
+				}
+				items[i] = summary
+			}(i, kb)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(r.Context()).Error("mapping keyboards to API summaries", log.Error, err)
+			problem.Internal(w, "failed to list keyboards")
+			return
 		}
 
 		page := api.KeyboardListPage{Items: &items}

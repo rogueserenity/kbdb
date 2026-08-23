@@ -2,7 +2,9 @@ package cascadedelete
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -68,12 +70,25 @@ func DeleteSwitch(
 		return SwitchResult{ImageKey: imageKey}, nil
 	}
 
-	for _, buildID := range buildIDs {
-		imageKeys, err := buildRepo.Delete(ctx, buildID)
-		if err != nil {
-			return SwitchResult{}, fmt.Errorf("cascade-deleting build %q referencing switch %q: %w", buildID, switchID, err)
-		}
-		images.BestEffortDelete(ctx, imageKeys)
+	errs := make([]error, len(buildIDs))
+	var wg sync.WaitGroup
+	for i, buildID := range buildIDs {
+		wg.Add(1)
+		go func(i int, buildID string) {
+			defer wg.Done()
+
+			imageKeys, err := buildRepo.Delete(ctx, buildID)
+			if err != nil {
+				errs[i] = fmt.Errorf("cascade-deleting build %q referencing switch %q: %w", buildID, switchID, err)
+				return
+			}
+			images.BestEffortDelete(ctx, imageKeys)
+		}(i, buildID)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return SwitchResult{}, err
 	}
 
 	imageKey, err := switchRepo.Delete(ctx, switchID)

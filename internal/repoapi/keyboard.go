@@ -2,7 +2,9 @@ package repoapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -49,12 +51,26 @@ func keyboardImagesToAPI(ctx context.Context, images []repository.KeyboardImage,
 	}
 
 	out := make([]api.KeyboardImage, len(images))
+	errs := make([]error, len(images))
+
+	var wg sync.WaitGroup
 	for i, img := range images {
-		url, err := store.PresignGetKeyboardImage(ctx, img.Path)
-		if err != nil {
-			return nil, fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
-		}
-		out[i] = api.KeyboardImage{ImageId: img.ImageID, Url: url}
+		wg.Add(1)
+		go func(i int, img repository.KeyboardImage) {
+			defer wg.Done()
+
+			url, err := store.PresignGetKeyboardImage(ctx, img.Path)
+			if err != nil {
+				errs[i] = fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
+				return
+			}
+			out[i] = api.KeyboardImage{ImageId: img.ImageID, Url: url}
+		}(i, img)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, err
 	}
 
 	return &out, nil
