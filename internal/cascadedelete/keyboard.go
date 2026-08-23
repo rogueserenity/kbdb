@@ -10,13 +10,50 @@ import (
 )
 
 // KeyboardResult is a DeleteKeyboard call's success return value.
-// ImageKeys are the image keys the deleted keyboard had, or nil if it had
-// none - callers clean them up in a KeyboardImageStore themselves.
 // DeletedBuildIDs (via the embedded Result) is empty except in cascade
-// mode.
+// mode. Image cleanup (both the keyboard's own and any cascaded builds')
+// happens inside DeleteKeyboard itself, before the corresponding DB
+// record is deleted, so there's nothing left for the caller to clean up.
 type KeyboardResult struct {
 	Result
-	ImageKeys []repository.KeyboardImageKey
+}
+
+// deleteBuildImages deletes every image build had, in parallel, returning
+// a joined error if any failed. Used to gate a build's own DB delete on
+// its images being gone from S3 first - see DeleteKeyboard's doc comment
+// for why.
+func deleteBuildImages(ctx context.Context, images repository.BuildImageStore, build *repository.Build) error {
+	errs := make([]error, len(build.Images))
+	var wg sync.WaitGroup
+	for i, img := range build.Images {
+		wg.Add(1)
+		go func(i int, key repository.BuildImageKey) {
+			defer wg.Done()
+			if err := images.DeleteBuildImage(ctx, key); err != nil {
+				errs[i] = err
+			}
+		}(i, img.Path)
+	}
+	wg.Wait()
+	return errors.Join(errs...)
+}
+
+// deleteKeyboardImages deletes every image kb had, in parallel, returning
+// a joined error if any failed.
+func deleteKeyboardImages(ctx context.Context, images repository.KeyboardImageStore, kb *repository.Keyboard) error {
+	errs := make([]error, len(kb.Images))
+	var wg sync.WaitGroup
+	for i, img := range kb.Images {
+		wg.Add(1)
+		go func(i int, key repository.KeyboardImageKey) {
+			defer wg.Done()
+			if err := images.DeleteKeyboardImage(ctx, key); err != nil {
+				errs[i] = err
+			}
+		}(i, img.Path)
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 // DeleteKeyboard deletes the keyboard identified by (ownerID, keyboardID),
@@ -30,6 +67,13 @@ type KeyboardResult struct {
 //     checking for references, leaving any referencing build's keyboard
 //     field dangling.
 //
+// Every delete (the keyboard's own, and any cascaded build's) removes the
+// item's S3 image object(s) before the DynamoDB record, not the reverse -
+// this makes the whole operation safely retryable: S3's DeleteObject is
+// idempotent, so a failure at either step (S3 or DB) can be retried to
+// completion with nothing orphaned and no failure masked by a
+// false-success retry.
+//
 // onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
 // DeleteKeyboard does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
@@ -37,7 +81,8 @@ func DeleteKeyboard(
 	ctx context.Context,
 	keyboardRepo repository.KeyboardRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	keyboardImages repository.KeyboardImageStore,
 	ownerID, keyboardID string,
 	onDelete OnDelete,
 ) (KeyboardResult, error) {
@@ -47,12 +92,25 @@ func DeleteKeyboard(
 		return KeyboardResult{}, fmt.Errorf("deleting keyboard %q: unknown on_delete value %q", keyboardID, onDelete)
 	}
 
-	if onDelete == OnDeleteDetach {
-		imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
-		if err != nil {
-			return KeyboardResult{}, fmt.Errorf("detach-deleting keyboard %q: %w", keyboardID, err)
+	deleteKeyboard := func() (KeyboardResult, error) {
+		kb, err := keyboardRepo.Get(ctx, ownerID, keyboardID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return KeyboardResult{}, nil
 		}
-		return KeyboardResult{ImageKeys: imageKeys}, nil
+		if err != nil {
+			return KeyboardResult{}, fmt.Errorf("getting keyboard %q for image cleanup: %w", keyboardID, err)
+		}
+		if err := deleteKeyboardImages(ctx, keyboardImages, kb); err != nil {
+			return KeyboardResult{}, fmt.Errorf("deleting images for keyboard %q: %w", keyboardID, err)
+		}
+		if _, err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
+			return KeyboardResult{}, fmt.Errorf("deleting keyboard %q: %w", keyboardID, err)
+		}
+		return KeyboardResult{}, nil
+	}
+
+	if onDelete == OnDeleteDetach {
+		return deleteKeyboard()
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingKeyboard(ctx, ownerID, keyboardID)
@@ -64,11 +122,7 @@ func DeleteKeyboard(
 		if len(buildIDs) > 0 {
 			return KeyboardResult{}, &BlockedError{BuildIDs: buildIDs}
 		}
-		imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
-		if err != nil {
-			return KeyboardResult{}, fmt.Errorf("deleting unreferenced keyboard %q: %w", keyboardID, err)
-		}
-		return KeyboardResult{ImageKeys: imageKeys}, nil
+		return deleteKeyboard()
 	}
 
 	errs := make([]error, len(buildIDs))
@@ -78,12 +132,21 @@ func DeleteKeyboard(
 		go func(i int, buildID string) {
 			defer wg.Done()
 
-			imageKeys, err := buildRepo.Delete(ctx, buildID)
-			if err != nil {
-				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
+			b, err := buildRepo.Get(ctx, ownerID, buildID)
+			if errors.Is(err, repository.ErrNotFound) {
 				return
 			}
-			images.BestEffortDelete(ctx, imageKeys)
+			if err != nil {
+				errs[i] = fmt.Errorf("getting build %q for image cleanup: %w", buildID, err)
+				return
+			}
+			if err := deleteBuildImages(ctx, buildImages, b); err != nil {
+				errs[i] = fmt.Errorf("deleting images for build %q referencing keyboard %q: %w", buildID, keyboardID, err)
+				return
+			}
+			if _, err := buildRepo.Delete(ctx, buildID); err != nil {
+				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
+			}
 		}(i, buildID)
 	}
 	wg.Wait()
@@ -92,10 +155,11 @@ func DeleteKeyboard(
 		return KeyboardResult{}, err
 	}
 
-	imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
+	result, err := deleteKeyboard()
 	if err != nil {
 		return KeyboardResult{}, fmt.Errorf("deleting keyboard %q after cascading %d build(s): %w", keyboardID, len(buildIDs), err)
 	}
+	result.DeletedBuildIDs = buildIDs
 
-	return KeyboardResult{Result: Result{DeletedBuildIDs: buildIDs}, ImageKeys: imageKeys}, nil
+	return result, nil
 }

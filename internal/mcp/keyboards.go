@@ -182,7 +182,7 @@ func handleDeleteKeyboard(
 			return nil, schema.DeleteKeyboardOutput{}, err
 		}
 
-		result, err := cascadedelete.DeleteKeyboard(ctx, keyboardRepo, buildRepo, buildImages, ownerID, in.KeyboardID, onDelete)
+		result, err := cascadedelete.DeleteKeyboard(ctx, keyboardRepo, buildRepo, buildImages, keyboardImages, ownerID, in.KeyboardID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteKeyboardOutput{}, fmt.Errorf("keyboard is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
@@ -190,8 +190,6 @@ func handleDeleteKeyboard(
 			log.FromContext(ctx).Error("deleting keyboard", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.DeleteKeyboardOutput{}, errors.New("failed to delete keyboard")
 		}
-
-		keyboardImages.BestEffortDelete(ctx, result.ImageKeys)
 
 		return nil, schema.DeleteKeyboardOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
 	}
@@ -278,16 +276,29 @@ func handleDeleteKeyboardImage(
 			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("image_id must not be blank")
 		}
 
-		removed, err := keyboardRepo.DeleteImage(ctx, in.KeyboardID, in.ImageID)
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteKeyboardImageOutput{}, err
+		}
+
+		kb, err := keyboardRepo.Get(ctx, ownerID, in.KeyboardID)
 		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
 			return nil, schema.DeleteKeyboardImageOutput{}, mutErr
 		}
 
-		if removed != nil {
-			if err := images.DeleteKeyboardImage(ctx, *removed); err != nil {
-				log.FromContext(ctx).Error("deleting keyboard image object", log.KeyboardID, in.KeyboardID, log.Error, err)
-				return nil, schema.DeleteKeyboardImageOutput{}, errors.New("failed to delete keyboard image")
-			}
+		idx := slices.IndexFunc(kb.Images, func(img repository.KeyboardImage) bool { return img.ImageID == in.ImageID })
+		if idx == -1 {
+			return nil, schema.DeleteKeyboardImageOutput{}, nil
+		}
+
+		if err := images.DeleteKeyboardImage(ctx, kb.Images[idx].Path); err != nil {
+			log.FromContext(ctx).Error("deleting keyboard image object", log.KeyboardID, in.KeyboardID, log.Error, err)
+			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("failed to delete keyboard image")
+		}
+
+		_, err = keyboardRepo.DeleteImage(ctx, in.KeyboardID, in.ImageID)
+		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
+			return nil, schema.DeleteKeyboardImageOutput{}, mutErr
 		}
 
 		return nil, schema.DeleteKeyboardImageOutput{}, nil

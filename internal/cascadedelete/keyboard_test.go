@@ -5,7 +5,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
@@ -16,10 +15,11 @@ import (
 type DeleteKeyboardSuite struct {
 	suite.Suite
 
-	mockKeyboards *mocks.MockKeyboardRepository
-	mockBuilds    *mocks.MockBuildRepository
-	mockImages    *mocks.MockBuildImageStore
-	ctx           context.Context
+	mockKeyboards      *mocks.MockKeyboardRepository
+	mockBuilds         *mocks.MockBuildRepository
+	mockBuildImages    *mocks.MockBuildImageStore
+	mockKeyboardImages *mocks.MockKeyboardImageStore
+	ctx                context.Context
 }
 
 func TestDeleteKeyboardSuite(t *testing.T) {
@@ -29,7 +29,8 @@ func TestDeleteKeyboardSuite(t *testing.T) {
 func (s *DeleteKeyboardSuite) SetupTest() {
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
-	s.mockImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockBuildImages = mocks.NewMockBuildImageStore(s.T())
+	s.mockKeyboardImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.ctx = s.T().Context()
 }
 
@@ -38,11 +39,14 @@ func (s *DeleteKeyboardSuite) TestBlock_NoReferencingBuilds_DeletesKeyboard() {
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
+		Get(s.ctx, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1"}, nil)
+	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
 		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteBlock,
 	)
 
@@ -50,21 +54,51 @@ func (s *DeleteKeyboardSuite) TestBlock_NoReferencingBuilds_DeletesKeyboard() {
 	s.Empty(result.DeletedBuildIDs)
 }
 
-func (s *DeleteKeyboardSuite) TestBlock_KeyboardHadImages_ReturnsTheirImageKeys() {
+func (s *DeleteKeyboardSuite) TestBlock_KeyboardHadImages_DeletesEachFromS3BeforeDB() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
+		Get(s.ctx, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+			{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
+		}}, nil)
+	s.mockKeyboardImages.EXPECT().
+		DeleteKeyboardImage(s.ctx, repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")).
+		Return(nil)
+	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return([]repository.KeyboardImageKey{"keyboards/alice/kb1/images/img1"}, nil)
+		Return(nil, nil)
 
-	result, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+	_, err := cascadedelete.DeleteKeyboard(
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteBlock,
 	)
 
 	s.Require().NoError(err)
-	s.Equal([]repository.KeyboardImageKey{"keyboards/alice/kb1/images/img1"}, result.ImageKeys)
+}
+
+func (s *DeleteKeyboardSuite) TestBlock_ImageDeleteFails_ReturnsErrorWithoutDeletingKeyboard() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
+		Return(nil, nil)
+	s.mockKeyboards.EXPECT().
+		Get(s.ctx, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+			{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
+		}}, nil)
+	s.mockKeyboardImages.EXPECT().
+		DeleteKeyboardImage(s.ctx, repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")).
+		Return(errors.New("s3 unavailable"))
+
+	_, err := cascadedelete.DeleteKeyboard(
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
+		"alice", "kb1", cascadedelete.OnDeleteBlock,
+	)
+
+	s.Require().Error(err)
+	// mockKeyboards has no .EXPECT() for Delete - verifies the DB record
+	// was never touched, so a retry can safely re-attempt the S3 delete.
 }
 
 func (s *DeleteKeyboardSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_DeletesNothing() {
@@ -73,7 +107,7 @@ func (s *DeleteKeyboardSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_De
 		Return([]string{"build-1", "build-2"}, nil)
 
 	_, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteBlock,
 	)
 
@@ -84,19 +118,22 @@ func (s *DeleteKeyboardSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_De
 	s.ElementsMatch([]string{"build-1", "build-2"}, blocked.BuildIDs)
 
 	// mockKeyboards has no .EXPECT() calls set up - mockery's mock.Mock
-	// fails the test if Delete is called unexpectedly, verifying nothing
-	// was deleted.
+	// fails the test if Get/Delete is called unexpectedly, verifying
+	// nothing was deleted.
 }
 
 func (s *DeleteKeyboardSuite) TestDetach_ReferencingBuilds_DeletesKeyboardAnyway() {
 	// detach must NOT call FindBuildsReferencingKeyboard at all - it
 	// doesn't care about references.
 	s.mockKeyboards.EXPECT().
+		Get(s.ctx, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1"}, nil)
+	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
 		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteDetach,
 	)
 
@@ -109,11 +146,14 @@ func (s *DeleteKeyboardSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKeyboar
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
+		Get(s.ctx, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1"}, nil)
+	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
 		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteCascade,
 	)
 
@@ -121,28 +161,36 @@ func (s *DeleteKeyboardSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKeyboar
 	s.Empty(result.DeletedBuildIDs)
 }
 
-func (s *DeleteKeyboardSuite) TestCascade_ReferencingBuilds_DeletesEachBuildThenKeyboard() {
+func (s *DeleteKeyboardSuite) TestCascade_ReferencingBuilds_DeletesEachBuildImagesThenBuildThenKeyboard() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
 		Return([]string{"build-1", "build-2"}, nil)
 	s.mockBuilds.EXPECT().
+		Get(s.ctx, "alice", "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: "builds/alice/build-1/images/img1"},
+		}}, nil)
+	s.mockBuildImages.EXPECT().
+		DeleteBuildImage(s.ctx, repository.BuildImageKey("builds/alice/build-1/images/img1")).
+		Return(nil)
+	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return([]repository.BuildImageKey{"img-1"}, nil)
+		Return(nil, nil)
+	s.mockBuilds.EXPECT().
+		Get(s.ctx, "alice", "build-2").
+		Return(&repository.Build{ID: "build-2"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-2").
 		Return(nil, nil)
-	s.mockImages.EXPECT().
-		BestEffortDelete(s.ctx, []repository.BuildImageKey{"img-1"}).
-		Return()
-	s.mockImages.EXPECT().
-		BestEffortDelete(s.ctx, mock.MatchedBy(func(keys []repository.BuildImageKey) bool { return len(keys) == 0 })).
-		Return()
+	s.mockKeyboards.EXPECT().
+		Get(s.ctx, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
 		Return(nil, nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteCascade,
 	)
 
@@ -150,16 +198,42 @@ func (s *DeleteKeyboardSuite) TestCascade_ReferencingBuilds_DeletesEachBuildThen
 	s.ElementsMatch([]string{"build-1", "build-2"}, result.DeletedBuildIDs)
 }
 
+func (s *DeleteKeyboardSuite) TestCascade_BuildImageDeleteFails_ReturnsErrorWithoutDeletingBuildOrKeyboard() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
+		Return([]string{"build-1"}, nil)
+	s.mockBuilds.EXPECT().
+		Get(s.ctx, "alice", "build-1").
+		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: "builds/alice/build-1/images/img1"},
+		}}, nil)
+	s.mockBuildImages.EXPECT().
+		DeleteBuildImage(s.ctx, repository.BuildImageKey("builds/alice/build-1/images/img1")).
+		Return(errors.New("s3 unavailable"))
+
+	_, err := cascadedelete.DeleteKeyboard(
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
+		"alice", "kb1", cascadedelete.OnDeleteCascade,
+	)
+
+	s.Require().Error(err)
+	// mockBuilds has no .EXPECT() for Delete, mockKeyboards has none at
+	// all - verifies neither the build nor the keyboard was touched.
+}
+
 func (s *DeleteKeyboardSuite) TestCascade_BuildDeleteFails_ReturnsErrorWithoutDeletingKeyboard() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").
 		Return([]string{"build-1"}, nil)
 	s.mockBuilds.EXPECT().
+		Get(s.ctx, "alice", "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
+	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
 		Return(nil, errors.New("dynamo unavailable"))
 
 	_, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteCascade,
 	)
 
@@ -169,7 +243,7 @@ func (s *DeleteKeyboardSuite) TestCascade_BuildDeleteFails_ReturnsErrorWithoutDe
 
 func (s *DeleteKeyboardSuite) TestUnknownOnDelete_ReturnsError_CallsNothing() {
 	_, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDelete("bogus"),
 	)
 
@@ -184,7 +258,7 @@ func (s *DeleteKeyboardSuite) TestFindReferencingBuildsFails_ReturnsError() {
 		Return(nil, errors.New("query failed"))
 
 	_, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockImages,
+		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
 		"alice", "kb1", cascadedelete.OnDeleteBlock,
 	)
 

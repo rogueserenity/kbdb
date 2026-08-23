@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -257,12 +258,10 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, images repositor
 // DeleteKeyboard reads the {userId} and {keyboardId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keyboard returns 404, not 403, to avoid revealing it
-// exists. Any images the keyboard had are removed from keyboardImages
-// best-effort - a failed image delete is logged but doesn't fail the
-// response, since the keyboard itself has already been deleted by that
-// point. The on_delete query param (default "block") controls what
+// exists. The on_delete query param (default "block") controls what
 // happens if a build still references this keyboard: see
-// [cascadedelete.DeleteKeyboard].
+// [cascadedelete.DeleteKeyboard], which also handles deleting any images
+// the keyboard (and any cascaded builds) had.
 func DeleteKeyboard(
 	keyboardRepo repository.KeyboardRepository,
 	buildRepo repository.BuildRepository,
@@ -284,7 +283,7 @@ func DeleteKeyboard(
 			return
 		}
 
-		result, err := cascadedelete.DeleteKeyboard(r.Context(), keyboardRepo, buildRepo, buildImages, ownerID, id, onDelete)
+		result, err := cascadedelete.DeleteKeyboard(r.Context(), keyboardRepo, buildRepo, buildImages, keyboardImages, ownerID, id, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			problem.StillReferenced(w, "keyboard is still referenced by one or more builds", blocked.BuildIDs)
 			return
@@ -294,8 +293,6 @@ func DeleteKeyboard(
 			problem.Internal(w, "failed to delete keyboard")
 			return
 		}
-
-		keyboardImages.BestEffortDelete(r.Context(), result.ImageKeys)
 
 		if onDelete == cascadedelete.OnDeleteCascade {
 			w.Header().Set("Content-Type", "application/json")
@@ -369,7 +366,10 @@ func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images reposit
 // values and requires an authenticated caller. userId must be the
 // caller's own subject; removing an image from another user's keyboard
 // always returns 404. Idempotent: an imageId not present on the keyboard
-// is not an error.
+// is not an error. Deletes the S3 object before the DB record (not the
+// reverse) so the operation is safely retryable: a failure at either step
+// leaves nothing orphaned, since a retry either finds the same S3 object
+// (delete is idempotent) or the DB record already gone.
 func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -381,17 +381,26 @@ func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repo
 			return
 		}
 
-		removed, err := keyboardRepo.DeleteImage(r.Context(), keyboardID, imageID)
+		kb, err := keyboardRepo.Get(r.Context(), ownerID, keyboardID)
 		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
 			return
 		}
 
-		if removed != nil {
-			if err := images.DeleteKeyboardImage(r.Context(), *removed); err != nil {
-				log.FromContext(r.Context()).Error("deleting keyboard image object", log.Error, err, log.KeyboardID, keyboardID)
-				problem.Internal(w, "failed to delete keyboard image")
-				return
-			}
+		idx := slices.IndexFunc(kb.Images, func(img repository.KeyboardImage) bool { return img.ImageID == imageID })
+		if idx == -1 {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if err := images.DeleteKeyboardImage(r.Context(), kb.Images[idx].Path); err != nil {
+			log.FromContext(r.Context()).Error("deleting keyboard image object", log.Error, err, log.KeyboardID, keyboardID)
+			problem.Internal(w, "failed to delete keyboard image")
+			return
+		}
+
+		_, err = keyboardRepo.DeleteImage(r.Context(), keyboardID, imageID)
+		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
+			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
