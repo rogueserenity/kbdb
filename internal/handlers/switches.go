@@ -258,12 +258,11 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, images repository.Swit
 
 // DeleteSwitch reads the {userId} and {switchId} path values and requires an
 // authenticated caller. userId must be the caller's own subject; deleting
-// another user's switch returns 404, not 403, to avoid revealing it exists.
-// Any image the switch had is removed from switchImages best-effort - a
-// failed image delete is logged but doesn't fail the response, since the
-// switch itself has already been deleted by that point. The on_delete
-// query param (default "block") controls what happens if a build still
-// references this switch: see [cascadedelete.DeleteSwitch].
+// another user's switch returns 404, not 403, to avoid revealing it
+// exists. The on_delete query param (default "block") controls what
+// happens if a build still references this switch: see
+// [cascadedelete.DeleteSwitch], which also handles deleting any image the
+// switch (and any cascaded builds) had.
 func DeleteSwitch(
 	switchRepo repository.SwitchRepository,
 	buildRepo repository.BuildRepository,
@@ -285,7 +284,7 @@ func DeleteSwitch(
 			return
 		}
 
-		result, err := cascadedelete.DeleteSwitch(r.Context(), switchRepo, buildRepo, buildImages, ownerID, id, onDelete)
+		result, err := cascadedelete.DeleteSwitch(r.Context(), switchRepo, buildRepo, buildImages, switchImages, ownerID, id, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			problem.StillReferenced(w, "switch is still referenced by one or more builds", blocked.BuildIDs)
 			return
@@ -294,10 +293,6 @@ func DeleteSwitch(
 			log.FromContext(r.Context()).Error("deleting switch", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to delete switch")
 			return
-		}
-
-		if result.ImageKey != nil {
-			switchImages.BestEffortDelete(r.Context(), []repository.SwitchImageKey{*result.ImageKey})
 		}
 
 		if onDelete == cascadedelete.OnDeleteCascade {
@@ -371,7 +366,9 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 // requires an authenticated caller. userId must be the caller's own
 // subject; removing a switch's image on another user's switch, or one
 // that doesn't exist, both return 404, to avoid revealing it exists.
-// Idempotent: a switch with no image already set is not an error.
+// Idempotent: a switch with no image already set is not an error. Deletes
+// the S3 object before the DB record, same retry-safety reasoning as
+// [cascadedelete.DeleteSwitch].
 func DeleteSwitchImage(switchRepo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -382,17 +379,25 @@ func DeleteSwitchImage(switchRepo repository.SwitchRepository, images repository
 			return
 		}
 
-		cleared, err := switchRepo.ClearImagePath(r.Context(), id)
+		sw, err := switchRepo.Get(r.Context(), ownerID, id)
 		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
 		}
 
-		if cleared != nil {
-			if err := images.Delete(r.Context(), *cleared); err != nil {
-				log.FromContext(r.Context()).Error("deleting switch image object", log.Error, err, log.SwitchID, id)
-				problem.Internal(w, "failed to delete switch image")
-				return
-			}
+		if sw.ImagePath == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if err := images.Delete(r.Context(), *sw.ImagePath); err != nil {
+			log.FromContext(r.Context()).Error("deleting switch image object", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to delete switch image")
+			return
+		}
+
+		_, err = switchRepo.ClearImagePath(r.Context(), id)
+		if handleMutationError(w, r, err, log.SwitchID, id) {
+			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)
