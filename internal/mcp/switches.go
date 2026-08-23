@@ -184,17 +184,13 @@ func handleDeleteSwitch(
 			return nil, schema.DeleteSwitchOutput{}, err
 		}
 
-		result, err := cascadedelete.DeleteSwitch(ctx, switchRepo, buildRepo, buildImages, ownerID, in.SwitchID, onDelete)
+		result, err := cascadedelete.DeleteSwitch(ctx, switchRepo, buildRepo, buildImages, switchImages, ownerID, in.SwitchID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteSwitchOutput{}, fmt.Errorf("switch is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("deleting switch", log.SwitchID, in.SwitchID, log.Error, err)
 			return nil, schema.DeleteSwitchOutput{}, errors.New("failed to delete switch")
-		}
-
-		if result.ImageKey != nil {
-			switchImages.BestEffortDelete(ctx, []repository.SwitchImageKey{*result.ImageKey})
 		}
 
 		return nil, schema.DeleteSwitchOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
@@ -273,16 +269,28 @@ func handleDeleteSwitchImage(
 			return nil, schema.DeleteSwitchImageOutput{}, errors.New("switch_id must not be blank")
 		}
 
-		cleared, err := switchRepo.ClearImagePath(ctx, in.SwitchID)
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteSwitchImageOutput{}, err
+		}
+
+		sw, err := switchRepo.Get(ctx, ownerID, in.SwitchID)
 		if mutErr := handleMutationError(ctx, err, log.SwitchID, in.SwitchID); mutErr != nil {
 			return nil, schema.DeleteSwitchImageOutput{}, mutErr
 		}
 
-		if cleared != nil {
-			if err := images.Delete(ctx, *cleared); err != nil {
-				log.FromContext(ctx).Error("deleting switch image object", log.SwitchID, in.SwitchID, log.Error, err)
-				return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
-			}
+		if sw.ImagePath == nil {
+			return nil, schema.DeleteSwitchImageOutput{}, nil
+		}
+
+		if err := images.Delete(ctx, *sw.ImagePath); err != nil {
+			log.FromContext(ctx).Error("deleting switch image object", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
+		}
+
+		if _, err := switchRepo.ClearImagePath(ctx, in.SwitchID); err != nil {
+			log.FromContext(ctx).Error("clearing switch image path", log.SwitchID, in.SwitchID, log.Error, err)
+			return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
 		}
 
 		return nil, schema.DeleteSwitchImageOutput{}, nil

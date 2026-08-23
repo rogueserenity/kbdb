@@ -728,6 +728,9 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_DefaultOnDelete_NoReferences_
 		FindBuildsReferencingSwitch(mock.Anything, "alice", "sw1").
 		Return(nil, nil)
 	s.mockSwitches.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1"}, nil)
+	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
 		Return(nil, nil)
 
@@ -757,6 +760,9 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Block_Referenced_Returns409Wi
 
 func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
 	s.mockSwitches.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1"}, nil)
+	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
 		Return(nil, nil)
 
@@ -773,11 +779,14 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Cascade_Referenced_Returns200
 		FindBuildsReferencingSwitch(mock.Anything, "alice", "sw1").
 		Return([]string{"build-1"}, nil)
 	s.mockBuilds.EXPECT().
+		Get(mock.Anything, "alice", "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
+	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockBuildImages.EXPECT().
-		BestEffortDelete(mock.Anything, mock.Anything).
-		Return()
+	s.mockSwitches.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
 		Return(nil, nil)
@@ -824,6 +833,9 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_RepositoryError_Returns500() {
 		FindBuildsReferencingSwitch(mock.Anything, "alice", "sw1").
 		Return(nil, nil)
 	s.mockSwitches.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1"}, nil)
+	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
 		Return(nil, errors.New("delete item failed"))
 
@@ -832,6 +844,27 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_RepositoryError_Returns500() {
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteSwitchSuite) TestDeleteSwitch_ImageDeleteFails_Returns500_DoesNotDeleteSwitch() {
+	s.mockBuilds.EXPECT().
+		FindBuildsReferencingSwitch(mock.Anything, "alice", "sw1").
+		Return(nil, nil)
+	key := repository.SwitchImageKey("switches/alice/sw1/image")
+	s.mockSwitches.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", ImagePath: &key}, nil)
+	s.mockSwitchImages.EXPECT().
+		Delete(mock.Anything, key).
+		Return(errors.New("s3 unavailable"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockSwitches has no .EXPECT() for Delete - verifies the DB record
+	// was never touched, so a retry can safely re-attempt the S3 delete.
 }
 
 type SetSwitchImageSuite struct {
@@ -1020,11 +1053,14 @@ var deleteSwitchImageTestKey = repository.SwitchImageKey("switches/alice/sw1/ima
 
 func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_Succeeds() {
 	s.mockRepo.EXPECT().
-		ClearImagePath(mock.Anything, "sw1").
-		Return(&deleteSwitchImageTestKey, nil)
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", ImagePath: &deleteSwitchImageTestKey}, nil)
 	s.mockImages.EXPECT().
 		Delete(mock.Anything, deleteSwitchImageTestKey).
 		Return(nil)
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(&deleteSwitchImageTestKey, nil)
 
 	req := s.newRequest(s.ownerCtx())
 	rec := httptest.NewRecorder()
@@ -1035,8 +1071,8 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_Succeeds() {
 
 func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_AlreadyAbsent_SucceedsWithoutS3Call() {
 	s.mockRepo.EXPECT().
-		ClearImagePath(mock.Anything, "sw1").
-		Return(nil, nil)
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1"}, nil)
 
 	req := s.newRequest(s.ownerCtx())
 	rec := httptest.NewRecorder()
@@ -1067,7 +1103,7 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_Anonymous_Returns404() {
 
 func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_NotFound_Returns404() {
 	s.mockRepo.EXPECT().
-		ClearImagePath(mock.Anything, "sw1").
+		Get(mock.Anything, "alice", "sw1").
 		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx())
@@ -1079,6 +1115,12 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_NotFound_Returns404() {
 }
 
 func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_MutationConflict_Returns409() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", ImagePath: &deleteSwitchImageTestKey}, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteSwitchImageTestKey).
+		Return(nil)
 	s.mockRepo.EXPECT().
 		ClearImagePath(mock.Anything, "sw1").
 		Return(nil, repository.ErrMutationConflict)
@@ -1093,7 +1135,7 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_MutationConflict_Returns4
 
 func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_RepositoryError_Returns500() {
 	s.mockRepo.EXPECT().
-		ClearImagePath(mock.Anything, "sw1").
+		Get(mock.Anything, "alice", "sw1").
 		Return(nil, errors.New("get item failed"))
 
 	req := s.newRequest(s.ownerCtx())
@@ -1104,10 +1146,10 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_RepositoryError_Returns50
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_S3DeleteError_Returns500() {
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_S3DeleteError_Returns500_DoesNotDeleteDBRecord() {
 	s.mockRepo.EXPECT().
-		ClearImagePath(mock.Anything, "sw1").
-		Return(&deleteSwitchImageTestKey, nil)
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", ImagePath: &deleteSwitchImageTestKey}, nil)
 	s.mockImages.EXPECT().
 		Delete(mock.Anything, deleteSwitchImageTestKey).
 		Return(errors.New("s3: access denied"))
@@ -1118,4 +1160,7 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_S3DeleteError_Returns500(
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockRepo has no .EXPECT() for ClearImagePath - verifies the DB
+	// record was never touched, so a retry can safely re-attempt the S3
+	// delete.
 }

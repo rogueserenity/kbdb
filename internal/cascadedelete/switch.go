@@ -9,13 +9,13 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// SwitchResult is a DeleteSwitch call's success return value. ImageKey is
-// the image key the deleted switch had, or nil if it had none - callers
-// clean it up in a SwitchImageStore themselves. DeletedBuildIDs (via the
-// embedded Result) is empty except in cascade mode.
+// SwitchResult is a DeleteSwitch call's success return value.
+// DeletedBuildIDs (via the embedded Result) is empty except in cascade
+// mode. Image cleanup (both the switch's own and any cascaded builds')
+// happens inside DeleteSwitch itself, before the corresponding DB record
+// is deleted, so there's nothing left for the caller to clean up.
 type SwitchResult struct {
 	Result
-	ImageKey *repository.SwitchImageKey
 }
 
 // DeleteSwitch deletes the switch identified by (ownerID, switchID),
@@ -29,6 +29,13 @@ type SwitchResult struct {
 //     checking for references, leaving any referencing build's
 //     switches[].switch field dangling.
 //
+// Every delete (the switch's own, and any cascaded build's) removes the
+// item's S3 image object(s) before the DynamoDB record, not the reverse -
+// this makes the whole operation safely retryable: S3's DeleteObject is
+// idempotent, so a failure at either step (S3 or DB) can be retried to
+// completion with nothing orphaned and no failure masked by a
+// false-success retry.
+//
 // onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
 // DeleteSwitch does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
@@ -36,7 +43,8 @@ func DeleteSwitch(
 	ctx context.Context,
 	switchRepo repository.SwitchRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	switchImages repository.SwitchImageStore,
 	ownerID, switchID string,
 	onDelete OnDelete,
 ) (SwitchResult, error) {
@@ -46,12 +54,27 @@ func DeleteSwitch(
 		return SwitchResult{}, fmt.Errorf("deleting switch %q: unknown on_delete value %q", switchID, onDelete)
 	}
 
-	if onDelete == OnDeleteDetach {
-		imageKey, err := switchRepo.Delete(ctx, switchID)
-		if err != nil {
-			return SwitchResult{}, fmt.Errorf("detach-deleting switch %q: %w", switchID, err)
+	deleteSwitch := func() (SwitchResult, error) {
+		sw, err := switchRepo.Get(ctx, ownerID, switchID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return SwitchResult{}, nil
 		}
-		return SwitchResult{ImageKey: imageKey}, nil
+		if err != nil {
+			return SwitchResult{}, fmt.Errorf("getting switch %q for image cleanup: %w", switchID, err)
+		}
+		if sw.ImagePath != nil {
+			if err := switchImages.Delete(ctx, *sw.ImagePath); err != nil {
+				return SwitchResult{}, fmt.Errorf("deleting image for switch %q: %w", switchID, err)
+			}
+		}
+		if _, err := switchRepo.Delete(ctx, switchID); err != nil {
+			return SwitchResult{}, fmt.Errorf("deleting switch %q: %w", switchID, err)
+		}
+		return SwitchResult{}, nil
+	}
+
+	if onDelete == OnDeleteDetach {
+		return deleteSwitch()
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingSwitch(ctx, ownerID, switchID)
@@ -63,11 +86,7 @@ func DeleteSwitch(
 		if len(buildIDs) > 0 {
 			return SwitchResult{}, &BlockedError{BuildIDs: buildIDs}
 		}
-		imageKey, err := switchRepo.Delete(ctx, switchID)
-		if err != nil {
-			return SwitchResult{}, fmt.Errorf("deleting unreferenced switch %q: %w", switchID, err)
-		}
-		return SwitchResult{ImageKey: imageKey}, nil
+		return deleteSwitch()
 	}
 
 	errs := make([]error, len(buildIDs))
@@ -77,12 +96,21 @@ func DeleteSwitch(
 		go func(i int, buildID string) {
 			defer wg.Done()
 
-			imageKeys, err := buildRepo.Delete(ctx, buildID)
-			if err != nil {
-				errs[i] = fmt.Errorf("cascade-deleting build %q referencing switch %q: %w", buildID, switchID, err)
+			b, err := buildRepo.Get(ctx, ownerID, buildID)
+			if errors.Is(err, repository.ErrNotFound) {
 				return
 			}
-			images.BestEffortDelete(ctx, imageKeys)
+			if err != nil {
+				errs[i] = fmt.Errorf("getting build %q for image cleanup: %w", buildID, err)
+				return
+			}
+			if err := deleteBuildImages(ctx, buildImages, b); err != nil {
+				errs[i] = fmt.Errorf("deleting images for build %q referencing switch %q: %w", buildID, switchID, err)
+				return
+			}
+			if _, err := buildRepo.Delete(ctx, buildID); err != nil {
+				errs[i] = fmt.Errorf("cascade-deleting build %q referencing switch %q: %w", buildID, switchID, err)
+			}
 		}(i, buildID)
 	}
 	wg.Wait()
@@ -91,10 +119,11 @@ func DeleteSwitch(
 		return SwitchResult{}, err
 	}
 
-	imageKey, err := switchRepo.Delete(ctx, switchID)
+	result, err := deleteSwitch()
 	if err != nil {
 		return SwitchResult{}, fmt.Errorf("deleting switch %q after cascading %d build(s): %w", switchID, len(buildIDs), err)
 	}
+	result.DeletedBuildIDs = buildIDs
 
-	return SwitchResult{Result: Result{DeletedBuildIDs: buildIDs}, ImageKey: imageKey}, nil
+	return result, nil
 }
