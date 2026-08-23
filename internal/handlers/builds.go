@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -80,14 +81,29 @@ func ListBuilds(repo repository.BuildRepository, keyboardRepo repository.Keyboar
 		}
 
 		items := make([]api.BuildSummary, len(builds))
+		errs := make([]error, len(builds))
+
+		ctx := r.Context()
+		var wg sync.WaitGroup
 		for i, b := range builds {
-			summary, err := repoapi.BuildToAPISummary(r.Context(), b, keyboardRepo, images)
-			if err != nil {
-				log.FromContext(r.Context()).Error("mapping build to API summary", log.Error, err, log.BuildID, b.ID)
-				problem.Internal(w, "failed to list builds")
-				return
-			}
-			items[i] = summary
+			wg.Add(1)
+			go func(i int, b repository.Build) {
+				defer wg.Done()
+
+				summary, err := repoapi.BuildToAPISummary(ctx, b, keyboardRepo, images)
+				if err != nil {
+					errs[i] = fmt.Errorf("mapping build %q to API summary: %w", b.ID, err)
+					return
+				}
+				items[i] = summary
+			}(i, b)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(r.Context()).Error("mapping builds to API summaries", log.Error, err)
+			problem.Internal(w, "failed to list builds")
+			return
 		}
 
 		page := api.BuildListPage{Items: &items}

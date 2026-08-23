@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/google/uuid"
 
@@ -49,14 +50,29 @@ func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImag
 		}
 
 		items := make([]api.SwitchSummary, len(switches))
+		errs := make([]error, len(switches))
+
+		ctx := r.Context()
+		var wg sync.WaitGroup
 		for i, sw := range switches {
-			summary, err := repoapi.SwitchToAPISummary(r.Context(), sw, images)
-			if err != nil {
-				log.FromContext(r.Context()).Error("mapping switch to API summary", log.Error, err, log.SwitchID, sw.ID)
-				problem.Internal(w, "failed to list switches")
-				return
-			}
-			items[i] = summary
+			wg.Add(1)
+			go func(i int, sw repository.Switch) {
+				defer wg.Done()
+
+				summary, err := repoapi.SwitchToAPISummary(ctx, sw, images)
+				if err != nil {
+					errs[i] = fmt.Errorf("mapping switch %q to API summary: %w", sw.ID, err)
+					return
+				}
+				items[i] = summary
+			}(i, sw)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(r.Context()).Error("mapping switches to API summaries", log.Error, err)
+			problem.Internal(w, "failed to list switches")
+			return
 		}
 
 		page := api.SwitchListPage{Items: &items}

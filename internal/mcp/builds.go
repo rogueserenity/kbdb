@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -84,13 +85,27 @@ func handleListBuilds(
 		}
 
 		items := make([]schema.BuildSummary, len(builds))
+		errs := make([]error, len(builds))
+
+		var wg sync.WaitGroup
 		for i, b := range builds {
-			summary, err := repomcp.BuildToMCPSummary(ctx, b, keyboardRepo)
-			if err != nil {
-				log.FromContext(ctx).Error("mapping build to MCP summary", log.BuildID, b.ID, log.Error, err)
-				return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
-			}
-			items[i] = summary
+			wg.Add(1)
+			go func(i int, b repository.Build) {
+				defer wg.Done()
+
+				summary, err := repomcp.BuildToMCPSummary(ctx, b, keyboardRepo)
+				if err != nil {
+					errs[i] = fmt.Errorf("mapping build %q to MCP summary: %w", b.ID, err)
+					return
+				}
+				items[i] = summary
+			}(i, b)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(ctx).Error("mapping builds to MCP summaries", log.Error, err)
+			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
 		}
 
 		return nil, schema.ListBuildsOutput{Builds: items, NextCursor: nextCursor}, nil

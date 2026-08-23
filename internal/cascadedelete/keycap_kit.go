@@ -2,7 +2,9 @@ package cascadedelete
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -70,12 +72,25 @@ func DeleteKeycapKit(
 		return KeycapKitResult{ImageKey: cleared}, nil
 	}
 
-	for _, buildID := range buildIDs {
-		imageKeys, err := buildRepo.Delete(ctx, buildID)
-		if err != nil {
-			return KeycapKitResult{}, fmt.Errorf("cascade-deleting build %q referencing keycap kit %q/%q: %w", buildID, setID, kitID, err)
-		}
-		images.BestEffortDelete(ctx, imageKeys)
+	errs := make([]error, len(buildIDs))
+	var wg sync.WaitGroup
+	for i, buildID := range buildIDs {
+		wg.Add(1)
+		go func(i int, buildID string) {
+			defer wg.Done()
+
+			imageKeys, err := buildRepo.Delete(ctx, buildID)
+			if err != nil {
+				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keycap kit %q/%q: %w", buildID, setID, kitID, err)
+				return
+			}
+			images.BestEffortDelete(ctx, imageKeys)
+		}(i, buildID)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return KeycapKitResult{}, err
 	}
 
 	cleared, err := keycapSetRepo.DeleteKit(ctx, setID, kitID)

@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -71,9 +72,16 @@ func (s *KeyboardImageStore) DeleteKeyboardImage(ctx context.Context, key reposi
 
 // BestEffortDelete implements repository.KeyboardImageStore.
 func (s *KeyboardImageStore) BestEffortDelete(ctx context.Context, keys []repository.KeyboardImageKey) {
+	var wg sync.WaitGroup
 	for _, key := range keys {
-		if err := s.DeleteKeyboardImage(ctx, key); err != nil {
-			log.FromContext(ctx).Warn("deleting keyboard image object", log.Error, err)
-		}
+		wg.Add(1)
+		go func(key repository.KeyboardImageKey) {
+			defer wg.Done()
+
+			if err := s.DeleteKeyboardImage(ctx, key); err != nil {
+				log.FromContext(ctx).Warn("deleting keyboard image object", log.Error, err)
+			}
+		}(key)
 	}
+	wg.Wait()
 }

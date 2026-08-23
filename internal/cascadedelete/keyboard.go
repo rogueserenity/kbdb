@@ -2,7 +2,9 @@ package cascadedelete
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -69,12 +71,25 @@ func DeleteKeyboard(
 		return KeyboardResult{ImageKeys: imageKeys}, nil
 	}
 
-	for _, buildID := range buildIDs {
-		imageKeys, err := buildRepo.Delete(ctx, buildID)
-		if err != nil {
-			return KeyboardResult{}, fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
-		}
-		images.BestEffortDelete(ctx, imageKeys)
+	errs := make([]error, len(buildIDs))
+	var wg sync.WaitGroup
+	for i, buildID := range buildIDs {
+		wg.Add(1)
+		go func(i int, buildID string) {
+			defer wg.Done()
+
+			imageKeys, err := buildRepo.Delete(ctx, buildID)
+			if err != nil {
+				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
+				return
+			}
+			images.BestEffortDelete(ctx, imageKeys)
+		}(i, buildID)
+	}
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return KeyboardResult{}, err
 	}
 
 	imageKeys, err := keyboardRepo.Delete(ctx, keyboardID)
