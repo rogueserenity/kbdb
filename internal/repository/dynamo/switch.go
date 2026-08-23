@@ -279,21 +279,17 @@ func (r *SwitchRepository) mutateSwitch(
 }
 
 // SetImagePath implements repository.SwitchRepository.
-func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) (*repository.Switch, error) {
+func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("setting image path for switch %q: %w", id, repository.ErrNoUserID)
+		return fmt.Errorf("setting image path for switch %q: %w", id, repository.ErrNoUserID)
 	}
 
-	updated, err := r.mutateSwitch(ctx, ownerID, id, func(sw *repository.Switch) error {
+	_, err := r.mutateSwitch(ctx, ownerID, id, func(sw *repository.Switch) error {
 		sw.ImagePath = &key
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	return updated, nil
+	return err
 }
 
 // ClearImagePath implements repository.SwitchRepository.

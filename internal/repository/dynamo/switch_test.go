@@ -427,11 +427,9 @@ func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image")
+	err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image")
 
 	s.Require().NoError(err)
-	s.Require().NotNil(sw.ImagePath)
-	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image"), *sw.ImagePath)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
@@ -440,10 +438,9 @@ func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.SetImagePath(ctx, "sw1", "p")
+	err := s.repo.SetImagePath(ctx, "sw1", "p")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(sw)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_CASConflictExhausted_ReturnsError() {
@@ -455,18 +452,16 @@ func (s *SwitchRepositorySuite) TestSetImagePath_CASConflictExhausted_ReturnsErr
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSwitchMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.SetImagePath(ctx, "sw1", "p")
+	err := s.repo.SetImagePath(ctx, "sw1", "p")
 
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(sw)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
-	sw, err := s.repo.SetImagePath(s.T().Context(), "sw1", "p")
+	err := s.repo.SetImagePath(s.T().Context(), "sw1", "p")
 
 	s.Require().Error(err)
-	s.Nil(sw)
 }
 
 func (s *SwitchRepositorySuite) TestClearImagePath_Succeeds() {

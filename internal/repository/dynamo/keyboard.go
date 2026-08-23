@@ -30,11 +30,6 @@ var errEmptyKeyboardImageID = errors.New("image id must not be empty")
 // ambiguous duplicate.
 var errDuplicateKeyboardImageID = errors.New("image id already exists for this keyboard")
 
-// errKeyboardImageMissingAfterAdd means AddImage's just-appended image
-// isn't present by ImageID in the keyboard mutateKeyboard returned - should
-// be unreachable in practice.
-var errKeyboardImageMissingAfterAdd = errors.New("image not found in keyboard after AddImage")
-
 // errKeyboardImageAlreadyAbsent signals DeleteImage's mutateKeyboard
 // closure found no matching image - DeleteImage treats this as success,
 // not an error.
@@ -294,33 +289,24 @@ func (r *KeyboardRepository) mutateKeyboard(
 }
 
 // AddImage implements repository.KeyboardRepository.
-func (r *KeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) (*repository.KeyboardImage, error) {
+func (r *KeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) error {
 	if image.ImageID == "" {
-		return nil, fmt.Errorf("adding image to keyboard %q: %w", keyboardID, errEmptyKeyboardImageID)
+		return fmt.Errorf("adding image to keyboard %q: %w", keyboardID, errEmptyKeyboardImageID)
 	}
 
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("adding image to keyboard %q: %w", keyboardID, repository.ErrNoUserID)
+		return fmt.Errorf("adding image to keyboard %q: %w", keyboardID, repository.ErrNoUserID)
 	}
 
-	updated, err := r.mutateKeyboard(ctx, ownerID, keyboardID, func(kb *repository.Keyboard) error {
+	_, err := r.mutateKeyboard(ctx, ownerID, keyboardID, func(kb *repository.Keyboard) error {
 		if slices.ContainsFunc(kb.Images, func(existing repository.KeyboardImage) bool { return existing.ImageID == image.ImageID }) {
 			return fmt.Errorf("adding image %q to keyboard %q: %w", image.ImageID, keyboardID, errDuplicateKeyboardImageID)
 		}
 		kb.Images = append(kb.Images, image)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	idx := slices.IndexFunc(updated.Images, func(i repository.KeyboardImage) bool { return i.ImageID == image.ImageID })
-	if idx == -1 {
-		return nil, fmt.Errorf("adding image %q to keyboard %q: %w", image.ImageID, keyboardID, errKeyboardImageMissingAfterAdd)
-	}
-
-	return &updated.Images[idx], nil
+	return err
 }
 
 // DeleteImage implements repository.KeyboardRepository.

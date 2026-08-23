@@ -105,10 +105,9 @@ type KeyboardRepository interface {
 	Delete(ctx context.Context, id string) error
 
 	// AddImage appends image to the keyboard's Images (image.ImageID must
-	// already be set) and returns the stored image. Returns ErrNotFound if
-	// the keyboard doesn't exist, or ErrMutationConflict if concurrent
-	// writers exhaust the retry budget.
-	AddImage(ctx context.Context, keyboardID string, image KeyboardImage) (*KeyboardImage, error)
+	// already be set). Returns ErrNotFound if the keyboard doesn't exist, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	AddImage(ctx context.Context, keyboardID string, image KeyboardImage) error
 
 	// DeleteImage removes the image matching imageID from keyboardID's
 	// Images and returns the key that was cleared, or nil if it wasn't

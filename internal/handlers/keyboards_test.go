@@ -1032,7 +1032,7 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_Succeeds() {
 		AddImage(mock.Anything, "kb1", mock.MatchedBy(func(img repository.KeyboardImage) bool {
 			return img.ImageID != ""
 		})).
-		Return(&repository.KeyboardImage{ImageID: "img1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/presigned-put", nil)
@@ -1101,7 +1101,7 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_UnapprovedContentType_Retur
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_NotFound_Returns404() {
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
-		Return(nil, repository.ErrNotFound)
+		Return(repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1114,7 +1114,7 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_NotFound_Returns404() {
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_PresignError_Returns500() {
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
-		Return(&repository.KeyboardImage{ImageID: "img1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1130,7 +1130,7 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_PresignError_Returns500() {
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_RepositoryError_Returns500() {
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
-		Return(nil, errors.New("put item failed"))
+		Return(errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1143,7 +1143,7 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_RepositoryError_Returns500(
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_MutationConflict_Returns409() {
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()

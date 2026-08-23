@@ -344,7 +344,7 @@ func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images reposit
 			return
 		}
 
-		_, err = keyboardRepo.AddImage(r.Context(), keyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
+		err = keyboardRepo.AddImage(r.Context(), keyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
 		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
 			return
 		}

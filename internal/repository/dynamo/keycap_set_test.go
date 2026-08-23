@@ -1135,12 +1135,9 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_Succeeds() {
 		Return(&dynamodb.PutItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().NoError(err)
-	s.Require().NotNil(kit)
-	s.Require().NotNil(kit.ImagePath)
-	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), *kit.ImagePath)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_KitNotFoundInExistingSet_ReturnsErrNotFound() {
@@ -1151,10 +1148,9 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_KitNotFoundInExistingSet_
 	// closure, before any write is attempted.
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "missing-kit", "keycap-sets/alice/ks1/kits/missing-kit/image")
+	err := s.repo.SetKitImagePath(ctx, "ks1", "missing-kit", "keycap-sets/alice/ks1/kits/missing-kit/image")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(kit)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_ParentSetNotFound_ReturnsErrNotFound() {
@@ -1163,10 +1159,9 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_ParentSetNotFound_Returns
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.SetKitImagePath(ctx, "missing", "kit1", "keycap-sets/alice/missing/kits/kit1/image")
+	err := s.repo.SetKitImagePath(ctx, "missing", "kit1", "keycap-sets/alice/missing/kits/kit1/image")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(kit)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflict_RetriesThenSucceeds() {
@@ -1213,12 +1208,9 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflict_RetriesThenSu
 		Return(&dynamodb.PutItemOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().NoError(err)
-	s.Require().NotNil(kit)
-	s.Require().NotNil(kit.ImagePath)
-	s.Equal(repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image"), *kit.ImagePath)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflictExhausted_ReturnsError() {
@@ -1230,11 +1222,10 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_CASConflictExhausted_Retu
 		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSetMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(kit)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_PutItemError_Propagates() {
@@ -1246,18 +1237,16 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_PutItemError_Propagates()
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	kit, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(kit)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NoUserIDInContext_ReturnsError() {
-	kit, err := s.repo.SetKitImagePath(s.T().Context(), "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	err := s.repo.SetKitImagePath(s.T().Context(), "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().Error(err)
-	s.Nil(kit)
 }
 
 func (s *KeycapSetRepositorySuite) TestClearKitImagePath_Succeeds() {

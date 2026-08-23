@@ -344,7 +344,7 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 			return
 		}
 
-		_, err = switchRepo.SetImagePath(r.Context(), id, key)
+		err = switchRepo.SetImagePath(r.Context(), id, key)
 		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
 		}

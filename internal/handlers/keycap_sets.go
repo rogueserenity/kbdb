@@ -502,7 +502,7 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 			return
 		}
 
-		_, err = keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
+		err = keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
 		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}

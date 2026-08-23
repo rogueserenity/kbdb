@@ -29,11 +29,6 @@ var errEmptyImageID = errors.New("image id must not be empty")
 // caught here rather than silently persisting an ambiguous duplicate.
 var errDuplicateImageID = errors.New("image id already exists in this build")
 
-// errImageMissingAfterAdd means AddImage's just-appended image isn't
-// present by ImageID in the build mutateBuild returned - should be
-// unreachable in practice.
-var errImageMissingAfterAdd = errors.New("image not found in build after AddImage")
-
 // errImageAlreadyAbsent signals DeleteImage's mutateBuild closure found no
 // matching image - DeleteImage treats this as success, not an error.
 var errImageAlreadyAbsent = errors.New("image already absent from build")
@@ -379,33 +374,24 @@ func (r *BuildRepository) mutateBuild(
 }
 
 // AddImage implements repository.BuildRepository.
-func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image repository.BuildImage) (*repository.BuildImage, error) {
+func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image repository.BuildImage) error {
 	if image.ImageID == "" {
-		return nil, fmt.Errorf("adding image to build %q: %w", buildID, errEmptyImageID)
+		return fmt.Errorf("adding image to build %q: %w", buildID, errEmptyImageID)
 	}
 
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("adding image to build %q: %w", buildID, repository.ErrNoUserID)
+		return fmt.Errorf("adding image to build %q: %w", buildID, repository.ErrNoUserID)
 	}
 
-	updated, err := r.mutateBuild(ctx, ownerID, buildID, func(b *repository.Build) error {
+	_, err := r.mutateBuild(ctx, ownerID, buildID, func(b *repository.Build) error {
 		if slices.ContainsFunc(b.Images, func(existing repository.BuildImage) bool { return existing.ImageID == image.ImageID }) {
 			return fmt.Errorf("adding image %q to build %q: %w", image.ImageID, buildID, errDuplicateImageID)
 		}
 		b.Images = append(b.Images, image)
 		return nil
 	})
-	if err != nil {
-		return nil, err
-	}
-
-	idx := slices.IndexFunc(updated.Images, func(i repository.BuildImage) bool { return i.ImageID == image.ImageID })
-	if idx == -1 {
-		return nil, fmt.Errorf("adding image %q to build %q: %w", image.ImageID, buildID, errImageMissingAfterAdd)
-	}
-
-	return &updated.Images[idx], nil
+	return err
 }
 
 // DeleteImage implements repository.BuildRepository.

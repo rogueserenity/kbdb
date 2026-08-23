@@ -100,10 +100,10 @@ type SwitchRepository interface {
 	// Delete. Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// SetImagePath sets the caller's switch's ImagePath and returns the
-	// updated switch. Returns ErrNotFound if id doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	SetImagePath(ctx context.Context, id string, key SwitchImageKey) (*Switch, error)
+	// SetImagePath sets the caller's switch's ImagePath. Returns
+	// ErrNotFound if id doesn't exist, or ErrMutationConflict if
+	// concurrent writers exhaust the retry budget.
+	SetImagePath(ctx context.Context, id string, key SwitchImageKey) error
 
 	// ClearImagePath clears the caller's switch's ImagePath and returns the
 	// key that was cleared, or nil if it was already unset. Idempotent: a

@@ -39,31 +39,20 @@ func (_m *MockKeyboardRepository) EXPECT() *MockKeyboardRepository_Expecter {
 }
 
 // AddImage provides a mock function for the type MockKeyboardRepository
-func (_mock *MockKeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) (*repository.KeyboardImage, error) {
+func (_mock *MockKeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) error {
 	ret := _mock.Called(ctx, keyboardID, image)
 
 	if len(ret) == 0 {
 		panic("no return value specified for AddImage")
 	}
 
-	var r0 *repository.KeyboardImage
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardImage) (*repository.KeyboardImage, error)); ok {
-		return returnFunc(ctx, keyboardID, image)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardImage) *repository.KeyboardImage); ok {
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardImage) error); ok {
 		r0 = returnFunc(ctx, keyboardID, image)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*repository.KeyboardImage)
-		}
+		r0 = ret.Error(0)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeyboardImage) error); ok {
-		r1 = returnFunc(ctx, keyboardID, image)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
+	return r0
 }
 
 // MockKeyboardRepository_AddImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddImage'
@@ -102,12 +91,12 @@ func (_c *MockKeyboardRepository_AddImage_Call) Run(run func(ctx context.Context
 	return _c
 }
 
-func (_c *MockKeyboardRepository_AddImage_Call) Return(keyboardImage *repository.KeyboardImage, err error) *MockKeyboardRepository_AddImage_Call {
-	_c.Call.Return(keyboardImage, err)
+func (_c *MockKeyboardRepository_AddImage_Call) Return(err error) *MockKeyboardRepository_AddImage_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockKeyboardRepository_AddImage_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, image repository.KeyboardImage) (*repository.KeyboardImage, error)) *MockKeyboardRepository_AddImage_Call {
+func (_c *MockKeyboardRepository_AddImage_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, image repository.KeyboardImage) error) *MockKeyboardRepository_AddImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

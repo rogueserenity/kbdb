@@ -323,7 +323,7 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 			return
 		}
 
-		_, err = buildRepo.AddImage(r.Context(), buildID, repository.BuildImage{ImageID: imageID, Path: key})
+		err = buildRepo.AddImage(r.Context(), buildID, repository.BuildImage{ImageID: imageID, Path: key})
 		if handleMutationError(w, r, err, log.BuildID, buildID) {
 			return
 		}

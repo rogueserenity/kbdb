@@ -681,7 +681,7 @@ func (s *HandleAddBuildImageSuite) TestSucceeds() {
 		AddImage(mock.Anything, "build-1", mock.MatchedBy(func(img repository.BuildImage) bool {
 			return img.ImageID != ""
 		})).
-		Return(&repository.BuildImage{ImageID: "img-1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/upload", nil)
@@ -721,7 +721,7 @@ func (s *HandleAddBuildImageSuite) TestUnapprovedContentType_ReturnsError() {
 func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "missing", mock.Anything).
-		Return(nil, repository.ErrNotFound)
+		Return(repository.ErrNotFound)
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
@@ -735,7 +735,7 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
@@ -749,7 +749,7 @@ func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
 func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
-		Return(&repository.BuildImage{ImageID: "img-1"}, nil)
+		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -766,7 +766,7 @@ func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
-		Return(nil, errors.New("put item failed"))
+		Return(errors.New("put item failed"))
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
