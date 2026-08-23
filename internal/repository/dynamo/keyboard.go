@@ -210,39 +210,24 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 
 // Delete implements repository.KeyboardRepository. Idempotent: a
 // nonexistent id is not an error.
-func (r *KeyboardRepository) Delete(ctx context.Context, id string) ([]repository.KeyboardImageKey, error) {
+func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("deleting keyboard %q: %w", id, repository.ErrNoUserID)
+		return fmt.Errorf("deleting keyboard %q: %w", id, repository.ErrNoUserID)
 	}
 
-	out, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
 		Key: map[string]types.AttributeValue{
 			"user_id": &types.AttributeValueMemberS{Value: ownerID},
 			"id":      &types.AttributeValueMemberS{Value: id},
 		},
-		ReturnValues: types.ReturnValueAllOld,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("deleting keyboard %q for owner %q: %w", id, ownerID, err)
+		return fmt.Errorf("deleting keyboard %q for owner %q: %w", id, ownerID, err)
 	}
 
-	if len(out.Attributes) == 0 {
-		return nil, nil
-	}
-
-	var deleted repository.Keyboard
-	if err := attributevalue.UnmarshalMap(out.Attributes, &deleted); err != nil {
-		return nil, fmt.Errorf("unmarshalling deleted keyboard %q for owner %q: %w", id, ownerID, err)
-	}
-
-	imageKeys := make([]repository.KeyboardImageKey, len(deleted.Images))
-	for i, image := range deleted.Images {
-		imageKeys[i] = image.Path
-	}
-
-	return imageKeys, nil
+	return nil
 }
 
 const maxKeyboardMutationAttempts = 3

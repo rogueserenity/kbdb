@@ -97,11 +97,12 @@ type KeyboardRepository interface {
 	// ErrNotFound if no keyboard with that id exists for the caller.
 	Update(ctx context.Context, kb Keyboard) (*Keyboard, error)
 
-	// Delete removes the caller's keyboard with the given id and returns the
-	// KeyboardImageKey of every image it had, so callers can clean up the
-	// corresponding objects in a KeyboardImageStore. Idempotent: a
-	// nonexistent id is not an error.
-	Delete(ctx context.Context, id string) ([]KeyboardImageKey, error)
+	// Delete removes the caller's keyboard with the given id. Callers clean
+	// up any images it had in a KeyboardImageStore themselves, before
+	// calling Delete - see
+	// [github.com/rogueserenity/kbdb/internal/cascadedelete.DeleteKeyboard].
+	// Idempotent: a nonexistent id is not an error.
+	Delete(ctx context.Context, id string) error
 
 	// AddImage appends image to the keyboard's Images (image.ImageID must
 	// already be set) and returns the stored image. Returns ErrNotFound if
