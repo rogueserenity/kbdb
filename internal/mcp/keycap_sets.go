@@ -236,7 +236,7 @@ func handleDeleteKeycapSet(
 			return nil, schema.DeleteKeycapSetOutput{}, err
 		}
 
-		result, err := cascadedelete.DeleteKeycapSet(ctx, keycapSetRepo, buildRepo, buildImages, ownerID, in.KeycapSetID, onDelete)
+		result, err := cascadedelete.DeleteKeycapSet(ctx, keycapSetRepo, buildRepo, buildImages, images, ownerID, in.KeycapSetID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteKeycapSetOutput{}, fmt.Errorf("keycap set is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
@@ -244,8 +244,6 @@ func handleDeleteKeycapSet(
 			log.FromContext(ctx).Error("deleting keycap set", log.KeycapSetID, in.KeycapSetID, log.Error, err)
 			return nil, schema.DeleteKeycapSetOutput{}, errors.New("failed to delete keycap set")
 		}
-
-		images.BestEffortDelete(ctx, result.ImageKeys)
 
 		return nil, schema.DeleteKeycapSetOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
 	}
@@ -362,18 +360,12 @@ func handleDeleteKeycapKit(
 			return nil, schema.DeleteKeycapKitOutput{}, err
 		}
 
-		result, err := cascadedelete.DeleteKeycapKit(ctx, keycapSetRepo, buildRepo, buildImages, ownerID, in.KeycapSetID, in.KitID, onDelete)
+		result, err := cascadedelete.DeleteKeycapKit(ctx, keycapSetRepo, buildRepo, buildImages, images, ownerID, in.KeycapSetID, in.KitID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteKeycapKitOutput{}, fmt.Errorf("keycap kit is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
 		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
 			return nil, schema.DeleteKeycapKitOutput{}, mutErr
-		}
-
-		if result.ImageKey != nil {
-			if err := images.Delete(ctx, *result.ImageKey); err != nil {
-				log.FromContext(ctx).Warn("deleting keycap kit image object after kit delete", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.KeycapKitImage, *result.ImageKey, log.Error, err)
-			}
 		}
 
 		return nil, schema.DeleteKeycapKitOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
@@ -429,16 +421,33 @@ func handleDeleteKeycapKitImage(
 			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("kit_id must not be blank")
 		}
 
-		cleared, err := keycapSetRepo.ClearKitImagePath(ctx, in.KeycapSetID, in.KitID)
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteKeycapKitImageOutput{}, err
+		}
+
+		ks, err := keycapSetRepo.Get(ctx, ownerID, in.KeycapSetID)
 		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
 			return nil, schema.DeleteKeycapKitImageOutput{}, mutErr
 		}
 
-		if cleared != nil {
-			if err := images.Delete(ctx, *cleared); err != nil {
-				log.FromContext(ctx).Error("deleting keycap kit image object", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-				return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
-			}
+		idx := slices.IndexFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == in.KitID })
+		if idx == -1 {
+			return nil, schema.DeleteKeycapKitImageOutput{}, errMutationNotFound
+		}
+
+		if ks.Kits[idx].ImagePath == nil {
+			return nil, schema.DeleteKeycapKitImageOutput{}, nil
+		}
+
+		if err := images.Delete(ctx, *ks.Kits[idx].ImagePath); err != nil {
+			log.FromContext(ctx).Error("deleting keycap kit image object", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
+		}
+
+		if _, err := keycapSetRepo.ClearKitImagePath(ctx, in.KeycapSetID, in.KitID); err != nil {
+			log.FromContext(ctx).Error("clearing keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
 		}
 
 		return nil, schema.DeleteKeycapKitImageOutput{}, nil

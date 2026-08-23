@@ -580,8 +580,10 @@ func (s *HandleDeleteKeycapSetSuite) SetupTest() {
 
 func (s *HandleDeleteKeycapSetSuite) TestSucceeds() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
@@ -606,8 +608,9 @@ func (s *HandleDeleteKeycapSetSuite) TestInvalidOnDelete_ReturnsError() {
 
 func (s *HandleDeleteKeycapSetSuite) TestNotFound_StillSucceeds() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "missing").Return(nil, nil)
-	s.mockRepo.EXPECT().Delete(mock.Anything, "missing").Return(nil, repository.ErrNotFound)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "missing").
+		Return(nil, repository.ErrNotFound)
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "missing"})
@@ -615,11 +618,19 @@ func (s *HandleDeleteKeycapSetSuite) TestNotFound_StillSucceeds() {
 	s.Require().NoError(err, "delete is idempotent: a nonexistent id is not an error")
 }
 
-func (s *HandleDeleteKeycapSetSuite) TestImageKeysAreBestEffortCleanedUp() {
-	keys := []repository.KeycapKitImageKey{"keycap-sets/u/ks-1/kits/kit-1/image", "keycap-sets/u/ks-1/kits/kit-2/image"}
+func (s *HandleDeleteKeycapSetSuite) TestKitImagesAreDeletedFromS3BeforeDB() {
+	key1 := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	key2 := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-2/image")
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
-	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(keys, nil)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, keys).Return()
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key1},
+			{KitID: "kit-2", ImagePath: &key2},
+		}}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key1).Return(nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key2).Return(nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
@@ -629,12 +640,33 @@ func (s *HandleDeleteKeycapSetSuite) TestImageKeysAreBestEffortCleanedUp() {
 
 func (s *HandleDeleteKeycapSetSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, mock.Anything).Return(nil, errors.New("delete failed"))
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().ErrorContains(err, "failed to delete keycap set")
+}
+
+func (s *HandleDeleteKeycapSetSuite) TestKitImageDeleteFails_ReturnsError_DoesNotDeleteSet() {
+	key1 := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key1},
+		}}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key1).Return(errors.New("s3 unavailable"))
+
+	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1"})
+
+	s.Require().Error(err)
+	// mockRepo has no .EXPECT() for Delete - verifies the DB record was
+	// never touched.
 }
 
 func (s *HandleDeleteKeycapSetSuite) TestBlock_Referenced_ReturnsError() {
@@ -649,8 +681,10 @@ func (s *HandleDeleteKeycapSetSuite) TestBlock_Referenced_ReturnsError() {
 }
 
 func (s *HandleDeleteKeycapSetSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "detach"})
@@ -664,13 +698,15 @@ func (s *HandleDeleteKeycapSetSuite) TestCascade_Referenced_ReturnsDeletedBuildI
 		FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").
 		Return([]string{"build-1"}, nil)
 	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
+	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockBuildImg.EXPECT().
-		BestEffortDelete(mock.Anything, mock.Anything).
-		Return()
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil, nil)
-	s.mockImages.EXPECT().BestEffortDelete(mock.Anything, []repository.KeycapKitImageKey(nil)).Return()
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "cascade"})
@@ -1043,6 +1079,11 @@ func (s *HandleDeleteKeycapKitSuite) SetupTest() {
 
 func (s *HandleDeleteKeycapKitSuite) TestSucceeds() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1"},
+		}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1075,7 +1116,9 @@ func (s *HandleDeleteKeycapKitSuite) TestInvalidOnDelete_ReturnsError() {
 
 func (s *HandleDeleteKeycapKitSuite) TestKitIDNotInSet_StillSucceeds() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "missing-kit").Return(nil, nil)
-	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "missing-kit").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "missing-kit"})
@@ -1085,7 +1128,9 @@ func (s *HandleDeleteKeycapKitSuite) TestKitIDNotInSet_StillSucceeds() {
 
 func (s *HandleDeleteKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "missing", "kit-1").Return(nil, nil)
-	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "missing", "kit-1").Return(nil, repository.ErrNotFound)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "missing").
+		Return(nil, repository.ErrNotFound)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "missing", KitID: "kit-1"})
@@ -1095,6 +1140,11 @@ func (s *HandleDeleteKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
 
 func (s *HandleDeleteKeycapKitSuite) TestMutationConflict_ReturnsConflictError() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1"},
+		}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, repository.ErrMutationConflict)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1103,11 +1153,16 @@ func (s *HandleDeleteKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 	s.Require().ErrorIs(err, errMutationConflict)
 }
 
-func (s *HandleDeleteKeycapKitSuite) TestImageIsCleanedUp() {
+func (s *HandleDeleteKeycapKitSuite) TestImageIsDeletedFromS3BeforeDB() {
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
-	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key},
+		}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
@@ -1115,20 +1170,31 @@ func (s *HandleDeleteKeycapKitSuite) TestImageIsCleanedUp() {
 	s.Require().NoError(err)
 }
 
-func (s *HandleDeleteKeycapKitSuite) TestImageCleanupFailure_StillSucceeds() {
+func (s *HandleDeleteKeycapKitSuite) TestImageDeleteFails_ReturnsError_DoesNotDeleteKit() {
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
-	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key},
+		}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().NoError(err, "the kit is already deleted by this point, so a failed best-effort image cleanup must not fail the tool call")
+	s.Require().Error(err)
+	// mockRepo has no .EXPECT() for DeleteKit - verifies the DB record was
+	// never touched.
 }
 
 func (s *HandleDeleteKeycapKitSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1"},
+		}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, errors.New("delete kit failed"))
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1149,6 +1215,11 @@ func (s *HandleDeleteKeycapKitSuite) TestBlock_Referenced_ReturnsError() {
 }
 
 func (s *HandleDeleteKeycapKitSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1"},
+		}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1163,11 +1234,16 @@ func (s *HandleDeleteKeycapKitSuite) TestCascade_Referenced_ReturnsDeletedBuildI
 		FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").
 		Return([]string{"build-1"}, nil)
 	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
+	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
 		Return(nil, nil)
-	s.mockBuildImg.EXPECT().
-		BestEffortDelete(mock.Anything, mock.Anything).
-		Return()
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1"},
+		}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1312,8 +1388,13 @@ func (s *HandleDeleteKeycapKitImageSuite) SetupTest() {
 
 func (s *HandleDeleteKeycapKitImageSuite) TestSucceeds() {
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
-	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key},
+		}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
@@ -1336,7 +1417,11 @@ func (s *HandleDeleteKeycapKitImageSuite) TestBlankKitID_ReturnsError() {
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestAlreadyCleared_StillSucceeds() {
-	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1"},
+		}}, nil)
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
@@ -1344,8 +1429,21 @@ func (s *HandleDeleteKeycapKitImageSuite) TestAlreadyCleared_StillSucceeds() {
 	s.Require().NoError(err, "clearing an already-unset image is not an error")
 }
 
+func (s *HandleDeleteKeycapKitImageSuite) TestKitNotInSet_ReturnsNotFound() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "missing-kit"})
+
+	s.Require().ErrorIs(err, errMutationNotFound)
+}
+
 func (s *HandleDeleteKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
-	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "missing-kit").Return(nil, repository.ErrNotFound)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(nil, repository.ErrNotFound)
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "missing-kit"})
@@ -1354,16 +1452,25 @@ func (s *HandleDeleteKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
+	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key},
+		}}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
 	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, repository.ErrMutationConflict)
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().ErrorIs(err, errMutationConflict)
+	s.Require().ErrorContains(err, "failed to delete kit image")
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestRepositoryError_ReturnsError() {
-	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, errors.New("clear failed"))
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(nil, errors.New("get failed"))
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
@@ -1371,13 +1478,19 @@ func (s *HandleDeleteKeycapKitImageSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorIs(err, errMutationFailed)
 }
 
-func (s *HandleDeleteKeycapKitImageSuite) TestImageDeleteFailure_ReturnsError() {
+func (s *HandleDeleteKeycapKitImageSuite) TestImageDeleteFailure_ReturnsError_DoesNotClearDBRecord() {
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
-	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
+			{KitID: "kit-1", ImagePath: &key},
+		}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
 	s.Require().ErrorContains(err, "failed to delete kit image")
+	// mockRepo has no .EXPECT() for ClearKitImagePath - verifies the DB
+	// record was never touched.
 }
