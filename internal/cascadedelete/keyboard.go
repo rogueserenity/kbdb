@@ -103,7 +103,7 @@ func DeleteKeyboard(
 		if err := deleteKeyboardImages(ctx, keyboardImages, kb); err != nil {
 			return KeyboardResult{}, fmt.Errorf("deleting images for keyboard %q: %w", keyboardID, err)
 		}
-		if _, err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
+		if err := keyboardRepo.Delete(ctx, keyboardID); err != nil {
 			return KeyboardResult{}, fmt.Errorf("deleting keyboard %q: %w", keyboardID, err)
 		}
 		return KeyboardResult{}, nil

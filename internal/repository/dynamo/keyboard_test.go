@@ -392,49 +392,19 @@ func (s *KeyboardRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 func (s *KeyboardRepositorySuite) TestDelete_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{Attributes: s.getItemOutput(0).Item}, nil)
+		Return(&dynamodb.DeleteItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "kb1")
+	err := s.repo.Delete(ctx, "kb1")
 
 	s.Require().NoError(err)
-	s.Empty(imageKeys)
-}
-
-func (s *KeyboardRepositorySuite) TestDelete_ImagesPresent_ReturnsTheirImageKeys() {
-	out := s.getItemOutput(0)
-	out.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img1"},
-				"path":     &types.AttributeValueMemberS{Value: "keyboards/alice/kb1/images/img1"},
-			}},
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img2"},
-				"path":     &types.AttributeValueMemberS{Value: "keyboards/alice/kb1/images/img2"},
-			}},
-		},
-	}
-
-	s.mockClient.EXPECT().
-		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{Attributes: out.Item}, nil)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "kb1")
-
-	s.Require().NoError(err)
-	s.Require().Len(imageKeys, 2)
-	s.Equal(repository.KeyboardImageKey("keyboards/alice/kb1/images/img1"), imageKeys[0])
-	s.Equal(repository.KeyboardImageKey("keyboards/alice/kb1/images/img2"), imageKeys[1])
 }
 
 func (s *KeyboardRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on DeleteItem - see repository.ErrNoUserID.
-	imageKeys, err := s.repo.Delete(s.T().Context(), "kb1")
+	err := s.repo.Delete(s.T().Context(), "kb1")
 
 	s.Require().Error(err)
-	s.Nil(imageKeys)
 }
 
 func (s *KeyboardRepositorySuite) TestDelete_DeleteItemError_Propagates() {
@@ -443,10 +413,9 @@ func (s *KeyboardRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "kb1")
+	err := s.repo.Delete(ctx, "kb1")
 
 	s.Require().Error(err)
-	s.Nil(imageKeys)
 }
 
 func (s *KeyboardRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutput {

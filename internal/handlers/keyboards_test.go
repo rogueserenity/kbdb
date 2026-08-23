@@ -862,7 +862,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_DefaultOnDelete_NoReferen
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -894,7 +894,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Detach_Referenced_Returns
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
@@ -919,7 +919,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Cascade_Referenced_Return
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "cascade"))
@@ -967,7 +967,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_RepositoryError_Returns500() {
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb1").
-		Return(nil, errors.New("delete item failed"))
+		Return(errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))

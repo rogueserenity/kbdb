@@ -400,7 +400,7 @@ func (s *HandleDeleteKeyboardSuite) TestSucceeds() {
 		Return(&repository.Keyboard{ID: "kb-1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil, nil)
+		Return(nil)
 
 	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})
@@ -440,7 +440,7 @@ func (s *HandleDeleteKeyboardSuite) TestDetach_Referenced_Succeeds_DoesNotCheckR
 		Return(&repository.Keyboard{ID: "kb-1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil, nil)
+		Return(nil)
 
 	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "detach"})
@@ -464,7 +464,7 @@ func (s *HandleDeleteKeyboardSuite) TestCascade_Referenced_ReturnsDeletedBuildID
 		Return(&repository.Keyboard{ID: "kb-1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil, nil)
+		Return(nil)
 
 	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "cascade"})
@@ -482,7 +482,7 @@ func (s *HandleDeleteKeyboardSuite) TestRepositoryError_ReturnsError() {
 		Return(&repository.Keyboard{ID: "kb-1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(mock.Anything, "kb-1").
-		Return(nil, errors.New("delete failed"))
+		Return(errors.New("delete failed"))
 
 	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1"})

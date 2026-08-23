@@ -43,7 +43,7 @@ func (s *DeleteKeyboardSuite) TestBlock_NoReferencingBuilds_DeletesKeyboard() {
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
@@ -68,7 +68,7 @@ func (s *DeleteKeyboardSuite) TestBlock_KeyboardHadImages_DeletesEachFromS3Befor
 		Return(nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	_, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
@@ -130,7 +130,7 @@ func (s *DeleteKeyboardSuite) TestDetach_ReferencingBuilds_DeletesKeyboardAnyway
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
@@ -150,7 +150,7 @@ func (s *DeleteKeyboardSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKeyboar
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
@@ -187,7 +187,7 @@ func (s *DeleteKeyboardSuite) TestCascade_ReferencingBuilds_DeletesEachBuildImag
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockKeyboards.EXPECT().
 		Delete(s.ctx, "kb1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
