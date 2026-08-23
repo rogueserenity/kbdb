@@ -586,7 +586,7 @@ func (s *HandleDeleteBuildSuite) TestSucceeds() {
 	s.mockBuilds.EXPECT().
 		Get(mock.Anything, mock.Anything, "build-1").
 		Return(&repository.Build{ID: "build-1"}, nil)
-	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil, nil)
+	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil)
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
@@ -623,7 +623,7 @@ func (s *HandleDeleteBuildSuite) TestImagesAreDeletedFromS3BeforeDB() {
 		}}, nil)
 	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key1).Return(nil)
 	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key2).Return(nil)
-	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil, nil)
+	s.mockBuilds.EXPECT().Delete(mock.Anything, "build-1").Return(nil)
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
@@ -652,7 +652,7 @@ func (s *HandleDeleteBuildSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		Get(mock.Anything, mock.Anything, "build-1").
 		Return(&repository.Build{ID: "build-1"}, nil)
-	s.mockBuilds.EXPECT().Delete(mock.Anything, mock.Anything).Return(nil, errors.New("delete failed"))
+	s.mockBuilds.EXPECT().Delete(mock.Anything, mock.Anything).Return(errors.New("delete failed"))
 
 	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})

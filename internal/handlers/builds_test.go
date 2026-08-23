@@ -867,7 +867,7 @@ func (s *DeleteBuildSuite) TestDeleteBuild_Owner_Succeeds() {
 		Return(&repository.Build{ID: "build1"}, nil)
 	s.mockBuildRepo.EXPECT().
 		Delete(mock.Anything, "build1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -892,7 +892,7 @@ func (s *DeleteBuildSuite) TestDeleteBuild_ImagesPresent_DeletesEachFromS3Before
 		Return(nil)
 	s.mockBuildRepo.EXPECT().
 		Delete(mock.Anything, "build1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -955,7 +955,7 @@ func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryError_Returns500() {
 		Return(&repository.Build{ID: "build1"}, nil)
 	s.mockBuildRepo.EXPECT().
 		Delete(mock.Anything, "build1").
-		Return(nil, errors.New("delete item failed"))
+		Return(errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))

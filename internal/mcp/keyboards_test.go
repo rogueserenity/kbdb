@@ -458,7 +458,7 @@ func (s *HandleDeleteKeyboardSuite) TestCascade_Referenced_ReturnsDeletedBuildID
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, mock.Anything, "kb-1").
 		Return(&repository.Keyboard{ID: "kb-1"}, nil)

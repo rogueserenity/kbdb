@@ -307,7 +307,7 @@ func handleDeleteBuild(
 			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
 		}
 
-		if _, err := buildRepo.Delete(ctx, in.BuildID); err != nil && !errors.Is(err, repository.ErrNotFound) {
+		if err := buildRepo.Delete(ctx, in.BuildID); err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(ctx).Error("deleting build", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
 		}

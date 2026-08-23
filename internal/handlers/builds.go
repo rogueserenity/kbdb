@@ -433,7 +433,7 @@ func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildIm
 			return
 		}
 
-		if _, err := buildRepo.Delete(ctx, id); err != nil && !errors.Is(err, repository.ErrNotFound) {
+		if err := buildRepo.Delete(ctx, id); err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(ctx).Error("deleting build", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to delete build")
 			return

@@ -732,7 +732,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_DefaultOnDelete_NoReferences_
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -764,7 +764,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Detach_Referenced_Returns204_
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
@@ -783,13 +783,13 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Cascade_Referenced_Returns200
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockSwitches.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "cascade"))
@@ -837,7 +837,7 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_RepositoryError_Returns500() {
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(mock.Anything, "sw1").
-		Return(nil, errors.New("delete item failed"))
+		Return(errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))

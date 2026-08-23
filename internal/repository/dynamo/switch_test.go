@@ -376,37 +376,19 @@ func (s *SwitchRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 func (s *SwitchRepositorySuite) TestDelete_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{Attributes: s.getItemOutput(0).Item}, nil)
+		Return(&dynamodb.DeleteItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKey, err := s.repo.Delete(ctx, "sw1")
+	err := s.repo.Delete(ctx, "sw1")
 
 	s.Require().NoError(err)
-	s.Nil(imageKey)
-}
-
-func (s *SwitchRepositorySuite) TestDelete_ImagePresent_ReturnsImageKey() {
-	out := s.getItemOutput(0)
-	out.Item["image_path"] = &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"}
-
-	s.mockClient.EXPECT().
-		DeleteItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.DeleteItemOutput{Attributes: out.Item}, nil)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKey, err := s.repo.Delete(ctx, "sw1")
-
-	s.Require().NoError(err)
-	s.Require().NotNil(imageKey)
-	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image"), *imageKey)
 }
 
 func (s *SwitchRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on DeleteItem - see repository.ErrNoUserID.
-	imageKey, err := s.repo.Delete(s.T().Context(), "sw1")
+	err := s.repo.Delete(s.T().Context(), "sw1")
 
 	s.Require().Error(err)
-	s.Nil(imageKey)
 }
 
 func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
@@ -415,10 +397,9 @@ func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKey, err := s.repo.Delete(ctx, "sw1")
+	err := s.repo.Delete(ctx, "sw1")
 
 	s.Require().Error(err)
-	s.Nil(imageKey)
 }
 
 func (s *SwitchRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutput {

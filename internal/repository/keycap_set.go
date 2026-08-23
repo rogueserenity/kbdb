@@ -137,11 +137,10 @@ type KeycapSetRepository interface {
 	// budget.
 	Update(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
-	// Delete removes the caller's keycap set with the given id and returns
-	// the KeycapKitImageKey of every kit that had an image set, so callers
-	// can clean up the corresponding objects in a KeycapKitImageStore.
-	// Returns ErrNotFound if id doesn't exist.
-	Delete(ctx context.Context, id string) ([]KeycapKitImageKey, error)
+	// Delete removes the caller's keycap set with the given id. Callers
+	// clean up any kit images it had in a KeycapKitImageStore themselves,
+	// before calling Delete. Idempotent: a nonexistent id is not an error.
+	Delete(ctx context.Context, id string) error
 
 	// AddKit appends kit to the set's Kits (kit.KitID must already be set)
 	// and returns the stored kit, matching Create's shape for every other
@@ -159,15 +158,15 @@ type KeycapSetRepository interface {
 	// if this kit is the current primary.
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
-	// DeleteKit removes the kit matching kitID from setID's Kits and
-	// returns the image key that was on it, or nil if it had none. If kitID
-	// was the set's PrimaryKitID, that's cleared to nil too, atomically
-	// with the removal - a caller never observes a set whose PrimaryKitID
-	// names a kit that isn't there. Idempotent: a kitID not present in the
-	// set is not an error, and returns (nil, nil). Returns ErrNotFound if
-	// setID doesn't exist for the owner, or ErrMutationConflict if
-	// concurrent writers exhaust the retry budget.
-	DeleteKit(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
+	// DeleteKit removes the kit matching kitID from setID's Kits. Callers
+	// clean up any image it had in a KeycapKitImageStore themselves, before
+	// calling DeleteKit. If kitID was the set's PrimaryKitID, that's
+	// cleared to nil too, atomically with the removal - a caller never
+	// observes a set whose PrimaryKitID names a kit that isn't there.
+	// Idempotent: a kitID not present in the set is not an error. Returns
+	// ErrNotFound if setID doesn't exist for the owner, or
+	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	DeleteKit(ctx context.Context, setID, kitID string) error
 
 	// SetKitImagePath sets the kit matching kitID's ImagePath and returns
 	// the updated kit. Returns ErrNotFound if setID or the kit doesn't

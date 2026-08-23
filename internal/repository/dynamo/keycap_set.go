@@ -196,42 +196,26 @@ func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSe
 	return updated, nil
 }
 
-// Delete implements repository.KeycapSetRepository.
-func (r *KeycapSetRepository) Delete(ctx context.Context, id string) ([]repository.KeycapKitImageKey, error) {
+// Delete implements repository.KeycapSetRepository. Idempotent: a
+// nonexistent id is not an error.
+func (r *KeycapSetRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("deleting keycap set %q: %w", id, repository.ErrNoUserID)
+		return fmt.Errorf("deleting keycap set %q: %w", id, repository.ErrNoUserID)
 	}
 
-	out, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
 		Key: map[string]types.AttributeValue{
 			"user_id": &types.AttributeValueMemberS{Value: ownerID},
 			"id":      &types.AttributeValueMemberS{Value: id},
 		},
-		ReturnValues: types.ReturnValueAllOld,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("deleting keycap set %q for owner %q: %w", id, ownerID, err)
+		return fmt.Errorf("deleting keycap set %q for owner %q: %w", id, ownerID, err)
 	}
 
-	if len(out.Attributes) == 0 {
-		return nil, repository.ErrNotFound
-	}
-
-	var deleted repository.KeycapSet
-	if err := attributevalue.UnmarshalMap(out.Attributes, &deleted); err != nil {
-		return nil, fmt.Errorf("unmarshalling deleted keycap set %q for owner %q: %w", id, ownerID, err)
-	}
-
-	var imageKeys []repository.KeycapKitImageKey
-	for _, kit := range deleted.Kits {
-		if kit.ImagePath != nil {
-			imageKeys = append(imageKeys, *kit.ImagePath)
-		}
-	}
-
-	return imageKeys, nil
+	return nil
 }
 
 const maxSetMutationAttempts = 3
@@ -369,20 +353,19 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 	return &updated.Kits[idx], nil
 }
 
-// DeleteKit implements repository.KeycapSetRepository.
-func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) (*repository.KeycapKitImageKey, error) {
+// DeleteKit implements repository.KeycapSetRepository. Idempotent: a kitID
+// not present in the set is not an error.
+func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("deleting kit from keycap set %q: %w", setID, repository.ErrNoUserID)
+		return fmt.Errorf("deleting kit from keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	var cleared *repository.KeycapKitImageKey
 	_, err := r.mutateSet(ctx, ownerID, setID, func(ks *repository.KeycapSet) error {
 		idx := slices.IndexFunc(ks.Kits, func(existing repository.KeycapKit) bool { return existing.KitID == kitID })
 		if idx == -1 {
 			return errKitAlreadyAbsent
 		}
-		cleared = ks.Kits[idx].ImagePath
 		ks.Kits = slices.Delete(ks.Kits, idx, idx+1)
 		if ks.PrimaryKitID != nil && *ks.PrimaryKitID == kitID {
 			ks.PrimaryKitID = nil
@@ -390,13 +373,13 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 		return nil
 	})
 	if errors.Is(err, errKitAlreadyAbsent) {
-		return nil, nil //nolint:nilnil // no such kit already absent is a valid, expected result
+		return nil
 	}
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	return cleared, nil
+	return nil
 }
 
 // SetKitImagePath implements repository.KeycapSetRepository.

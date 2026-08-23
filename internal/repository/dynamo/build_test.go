@@ -465,10 +465,9 @@ func (s *BuildRepositorySuite) TestDelete_Succeeds() {
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
+	err := s.repo.Delete(ctx, "b1")
 
 	s.Require().NoError(err)
-	s.Empty(imageKeys)
 }
 
 func (s *BuildRepositorySuite) TestDelete_ConcurrentUpdate_RetriesThenSucceeds() {
@@ -501,10 +500,9 @@ func (s *BuildRepositorySuite) TestDelete_ConcurrentUpdate_RetriesThenSucceeds()
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
+	err := s.repo.Delete(ctx, "b1")
 
 	s.Require().NoError(err)
-	s.Empty(imageKeys)
 }
 
 func (s *BuildRepositorySuite) TestDelete_CASConflictExhausted_ReturnsError() {
@@ -518,42 +516,10 @@ func (s *BuildRepositorySuite) TestDelete_CASConflictExhausted_ReturnsError() {
 		}).Times(maxBuildMutationAttempts)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
+	err := s.repo.Delete(ctx, "b1")
 
 	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(imageKeys)
-}
-
-func (s *BuildRepositorySuite) TestDelete_ImagesPresent_ReturnsTheirImageKeys() {
-	out := s.getItemOutput(0)
-	out.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img1"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/img1"},
-			}},
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img2"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/img2"},
-			}},
-		},
-	}
-
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(out, nil)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
-
-	s.Require().NoError(err)
-	s.Require().Len(imageKeys, 2)
-	s.Equal(repository.BuildImageKey("builds/alice/b1/images/img1"), imageKeys[0])
-	s.Equal(repository.BuildImageKey("builds/alice/b1/images/img2"), imageKeys[1])
 }
 
 func (s *BuildRepositorySuite) TestDelete_NotFound_ReturnsErrNotFound() {
@@ -564,17 +530,15 @@ func (s *BuildRepositorySuite) TestDelete_NotFound_ReturnsErrNotFound() {
 	// Get before any write is attempted.
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
+	err := s.repo.Delete(ctx, "b1")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(imageKeys)
 }
 
 func (s *BuildRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
-	imageKeys, err := s.repo.Delete(s.T().Context(), "b1")
+	err := s.repo.Delete(s.T().Context(), "b1")
 
 	s.Require().Error(err)
-	s.Nil(imageKeys)
 }
 
 func (s *BuildRepositorySuite) TestDelete_GetItemError_Propagates() {
@@ -583,10 +547,9 @@ func (s *BuildRepositorySuite) TestDelete_GetItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
+	err := s.repo.Delete(ctx, "b1")
 
 	s.Require().Error(err)
-	s.Nil(imageKeys)
 }
 
 func (s *BuildRepositorySuite) TestDelete_TransactWriteItemsError_Propagates() {
@@ -598,10 +561,9 @@ func (s *BuildRepositorySuite) TestDelete_TransactWriteItemsError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	imageKeys, err := s.repo.Delete(ctx, "b1")
+	err := s.repo.Delete(ctx, "b1")
 
 	s.Require().Error(err)
-	s.Nil(imageKeys)
 }
 
 func (s *BuildRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutput {

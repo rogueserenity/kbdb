@@ -95,11 +95,10 @@ type SwitchRepository interface {
 	// if no switch with that id exists for the caller.
 	Update(ctx context.Context, sw Switch) (*Switch, error)
 
-	// Delete removes the caller's switch with the given id and returns the
-	// SwitchImageKey it had, or nil if it had none, so callers can clean up
-	// the corresponding object in a SwitchImageStore. Idempotent: a
-	// nonexistent id is not an error.
-	Delete(ctx context.Context, id string) (*SwitchImageKey, error)
+	// Delete removes the caller's switch with the given id. Callers clean
+	// up any image it had in a SwitchImageStore themselves, before calling
+	// Delete. Idempotent: a nonexistent id is not an error.
+	Delete(ctx context.Context, id string) error
 
 	// SetImagePath sets the caller's switch's ImagePath and returns the
 	// updated switch. Returns ErrNotFound if id doesn't exist, or

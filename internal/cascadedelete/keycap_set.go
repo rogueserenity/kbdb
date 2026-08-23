@@ -87,7 +87,7 @@ func DeleteKeycapSet(
 		if err := deleteKeycapSetImages(ctx, kitImages, ks); err != nil {
 			return KeycapSetResult{}, fmt.Errorf("deleting images for keycap set %q: %w", setID, err)
 		}
-		if _, err := keycapSetRepo.Delete(ctx, setID); err != nil {
+		if err := keycapSetRepo.Delete(ctx, setID); err != nil {
 			return KeycapSetResult{}, fmt.Errorf("deleting keycap set %q: %w", setID, err)
 		}
 		return KeycapSetResult{}, nil
@@ -128,7 +128,7 @@ func DeleteKeycapSet(
 				errs[i] = fmt.Errorf("deleting images for build %q referencing keycap set %q: %w", buildID, setID, err)
 				return
 			}
-			if _, err := buildRepo.Delete(ctx, buildID); err != nil {
+			if err := buildRepo.Delete(ctx, buildID); err != nil {
 				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keycap set %q: %w", buildID, setID, err)
 			}
 		}(i, buildID)

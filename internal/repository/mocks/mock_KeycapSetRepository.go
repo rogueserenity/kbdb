@@ -261,31 +261,20 @@ func (_c *MockKeycapSetRepository_Create_Call) RunAndReturn(run func(ctx context
 }
 
 // Delete provides a mock function for the type MockKeycapSetRepository
-func (_mock *MockKeycapSetRepository) Delete(ctx context.Context, id string) ([]repository.KeycapKitImageKey, error) {
+func (_mock *MockKeycapSetRepository) Delete(ctx context.Context, id string) error {
 	ret := _mock.Called(ctx, id)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Delete")
 	}
 
-	var r0 []repository.KeycapKitImageKey
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) ([]repository.KeycapKitImageKey, error)); ok {
-		return returnFunc(ctx, id)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string) []repository.KeycapKitImageKey); ok {
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) error); ok {
 		r0 = returnFunc(ctx, id)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]repository.KeycapKitImageKey)
-		}
+		r0 = ret.Error(0)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, id)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
+	return r0
 }
 
 // MockKeycapSetRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
@@ -318,42 +307,31 @@ func (_c *MockKeycapSetRepository_Delete_Call) Run(run func(ctx context.Context,
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_Delete_Call) Return(keycapKitImageKeys []repository.KeycapKitImageKey, err error) *MockKeycapSetRepository_Delete_Call {
-	_c.Call.Return(keycapKitImageKeys, err)
+func (_c *MockKeycapSetRepository_Delete_Call) Return(err error) *MockKeycapSetRepository_Delete_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, id string) ([]repository.KeycapKitImageKey, error)) *MockKeycapSetRepository_Delete_Call {
+func (_c *MockKeycapSetRepository_Delete_Call) RunAndReturn(run func(ctx context.Context, id string) error) *MockKeycapSetRepository_Delete_Call {
 	_c.Call.Return(run)
 	return _c
 }
 
 // DeleteKit provides a mock function for the type MockKeycapSetRepository
-func (_mock *MockKeycapSetRepository) DeleteKit(ctx context.Context, setID string, kitID string) (*repository.KeycapKitImageKey, error) {
+func (_mock *MockKeycapSetRepository) DeleteKit(ctx context.Context, setID string, kitID string) error {
 	ret := _mock.Called(ctx, setID, kitID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for DeleteKit")
 	}
 
-	var r0 *repository.KeycapKitImageKey
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) (*repository.KeycapKitImageKey, error)); ok {
-		return returnFunc(ctx, setID, kitID)
-	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) *repository.KeycapKitImageKey); ok {
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
 		r0 = returnFunc(ctx, setID, kitID)
 	} else {
-		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*repository.KeycapKitImageKey)
-		}
+		r0 = ret.Error(0)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string) error); ok {
-		r1 = returnFunc(ctx, setID, kitID)
-	} else {
-		r1 = ret.Error(1)
-	}
-	return r0, r1
+	return r0
 }
 
 // MockKeycapSetRepository_DeleteKit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeleteKit'
@@ -392,12 +370,12 @@ func (_c *MockKeycapSetRepository_DeleteKit_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_DeleteKit_Call) Return(keycapKitImageKey *repository.KeycapKitImageKey, err error) *MockKeycapSetRepository_DeleteKit_Call {
-	_c.Call.Return(keycapKitImageKey, err)
+func (_c *MockKeycapSetRepository_DeleteKit_Call) Return(err error) *MockKeycapSetRepository_DeleteKit_Call {
+	_c.Call.Return(err)
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_DeleteKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string) (*repository.KeycapKitImageKey, error)) *MockKeycapSetRepository_DeleteKit_Call {
+func (_c *MockKeycapSetRepository_DeleteKit_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string) error) *MockKeycapSetRepository_DeleteKit_Call {
 	_c.Call.Return(run)
 	return _c
 }

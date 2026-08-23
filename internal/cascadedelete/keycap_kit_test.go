@@ -49,7 +49,7 @@ func (s *DeleteKeycapKitSuite) TestBlock_NoReferencingBuilds_DeletesKit() {
 		Return(nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
-		Return(&imgKey, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeycapKit(
 		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,
@@ -116,7 +116,7 @@ func (s *DeleteKeycapKitSuite) TestDetach_ReferencingBuilds_DeletesKitAnyway() {
 		}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeycapKit(
 		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,
@@ -138,7 +138,7 @@ func (s *DeleteKeycapKitSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKit() 
 		}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeycapKit(
 		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,
@@ -163,13 +163,13 @@ func (s *DeleteKeycapKitSuite) TestCascade_ReferencingBuilds_DeletesEachBuildIma
 		Return(nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockBuilds.EXPECT().
 		Get(s.ctx, "alice", "build-2").
 		Return(&repository.Build{ID: "build-2"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-2").
-		Return(nil, nil)
+		Return(nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
 		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
@@ -177,7 +177,7 @@ func (s *DeleteKeycapKitSuite) TestCascade_ReferencingBuilds_DeletesEachBuildIma
 		}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteKeycapKit(
 		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,
@@ -220,7 +220,7 @@ func (s *DeleteKeycapKitSuite) TestCascade_BuildDeleteFails_ReturnsErrorWithoutD
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return(nil, errors.New("dynamo unavailable"))
+		Return(errors.New("dynamo unavailable"))
 
 	_, err := cascadedelete.DeleteKeycapKit(
 		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,
@@ -302,7 +302,7 @@ func (s *DeleteKeycapKitSuite) TestBlock_DeleteKitMutationConflict_PropagatesErr
 		}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	_, err := cascadedelete.DeleteKeycapKit(
 		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,

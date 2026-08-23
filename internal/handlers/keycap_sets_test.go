@@ -721,7 +721,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Owner_Succeeds() {
 		Return(&repository.KeycapSet{ID: "ks1"}, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -749,7 +749,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_KitsWithImages_DeletesEachFro
 		Return(nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
-		Return(nil, nil)
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -821,7 +821,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_RepositoryError_Returns500() 
 		Return(&repository.KeycapSet{ID: "ks1"}, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
-		Return(nil, errors.New("delete item failed"))
+		Return(errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), ""))
@@ -856,7 +856,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Detach_Referenced_Returns204_
 		Return(&repository.KeycapSet{ID: "ks1"}, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
-		Return(nil, nil)
+		Return(nil)
 
 	req := s.newRequest(s.ownerCtx(), "detach")
 	rec := httptest.NewRecorder()
@@ -876,13 +876,13 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Cascade_Referenced_Returns200
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{ID: "ks1"}, nil)
 	s.mockRepo.EXPECT().
 		Delete(mock.Anything, "ks1").
-		Return(nil, nil)
+		Return(nil)
 
 	req := s.newRequest(s.ownerCtx(), "cascade")
 	rec := httptest.NewRecorder()
@@ -1305,7 +1305,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Succeeds() {
 		}}, nil)
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(nil, nil)
+		Return(nil)
 
 	req := s.newRequest(s.ownerCtx(), "")
 	rec := httptest.NewRecorder()
@@ -1329,7 +1329,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_KitHadImage_DeletesFromS3Befo
 		Return(nil)
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(&key, nil)
+		Return(nil)
 
 	req := s.newRequest(s.ownerCtx(), "")
 	rec := httptest.NewRecorder()
@@ -1409,7 +1409,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_RepositoryError_Returns500() 
 		}}, nil)
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(nil, errors.New("put item failed"))
+		Return(errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), "")
 	rec := httptest.NewRecorder()
@@ -1430,7 +1430,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_MutationConflict_Returns409()
 		}}, nil)
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(nil, repository.ErrMutationConflict)
+		Return(repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), "")
 	rec := httptest.NewRecorder()
@@ -1474,7 +1474,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Detach_Referenced_Returns204_
 		}}, nil)
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(nil, nil)
+		Return(nil)
 
 	req := s.newRequest(s.ownerCtx(), "detach")
 	rec := httptest.NewRecorder()
@@ -1494,7 +1494,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Cascade_Referenced_Returns200
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
@@ -1502,7 +1502,7 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Cascade_Referenced_Returns200
 		}}, nil)
 	s.mockRepo.EXPECT().
 		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(nil, nil)
+		Return(nil)
 
 	req := s.newRequest(s.ownerCtx(), "cascade")
 	rec := httptest.NewRecorder()

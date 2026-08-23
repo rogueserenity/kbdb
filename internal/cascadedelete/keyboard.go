@@ -142,7 +142,7 @@ func DeleteKeyboard(
 				errs[i] = fmt.Errorf("deleting images for build %q referencing keyboard %q: %w", buildID, keyboardID, err)
 				return
 			}
-			if _, err := buildRepo.Delete(ctx, buildID); err != nil {
+			if err := buildRepo.Delete(ctx, buildID); err != nil {
 				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keyboard %q: %w", buildID, keyboardID, err)
 			}
 		}(i, buildID)
