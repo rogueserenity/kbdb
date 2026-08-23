@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/s3/mocks"
 )
 
@@ -101,38 +100,3 @@ func (s *BuildImageStoreSuite) TestDeleteBuildImage_SDKError_Propagates() {
 	s.Require().ErrorContains(err, "s3: access denied")
 }
 
-func (s *BuildImageStoreSuite) TestBestEffortDelete_DeletesEachKey() {
-	s.mockClient.EXPECT().
-		DeleteObject(mock.Anything, mock.MatchedBy(func(in *s3.DeleteObjectInput) bool {
-			return *in.Key == "builds/alice/b1/images/img1"
-		})).
-		Return(&s3.DeleteObjectOutput{}, nil)
-	s.mockClient.EXPECT().
-		DeleteObject(mock.Anything, mock.MatchedBy(func(in *s3.DeleteObjectInput) bool {
-			return *in.Key == "builds/alice/b1/images/img2"
-		})).
-		Return(&s3.DeleteObjectOutput{}, nil)
-
-	s.store.BestEffortDelete(s.T().Context(), []repository.BuildImageKey{
-		"builds/alice/b1/images/img1",
-		"builds/alice/b1/images/img2",
-	})
-}
-
-func (s *BuildImageStoreSuite) TestBestEffortDelete_PerKeyErrorDoesNotStopRemainingDeletes() {
-	s.mockClient.EXPECT().
-		DeleteObject(mock.Anything, mock.MatchedBy(func(in *s3.DeleteObjectInput) bool {
-			return *in.Key == "builds/alice/b1/images/img1"
-		})).
-		Return(nil, errors.New("s3: access denied"))
-	s.mockClient.EXPECT().
-		DeleteObject(mock.Anything, mock.MatchedBy(func(in *s3.DeleteObjectInput) bool {
-			return *in.Key == "builds/alice/b1/images/img2"
-		})).
-		Return(&s3.DeleteObjectOutput{}, nil)
-
-	s.store.BestEffortDelete(s.T().Context(), []repository.BuildImageKey{
-		"builds/alice/b1/images/img1",
-		"builds/alice/b1/images/img2",
-	})
-}

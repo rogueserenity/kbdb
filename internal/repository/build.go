@@ -79,10 +79,10 @@ type BuildRepository interface {
 	// retry budget.
 	Update(ctx context.Context, b Build) (*Build, error)
 
-	// Delete returns ErrNotFound if id doesn't exist, otherwise the
-	// BuildImageKey of every image the build had, so callers can clean up
-	// the corresponding objects in a BuildImageStore.
-	Delete(ctx context.Context, id string) ([]BuildImageKey, error)
+	// Delete removes the caller's build with the given id. Callers clean up
+	// any images it had in a BuildImageStore themselves, before calling
+	// Delete. Returns ErrNotFound if id doesn't exist.
+	Delete(ctx context.Context, id string) error
 
 	// AddImage returns ErrNotFound if the parent build doesn't exist, or
 	// ErrMutationConflict if concurrent writers exhaust the retry budget.
@@ -140,8 +140,4 @@ type BuildImageStore interface {
 
 	// DeleteBuildImage is idempotent, matching S3's own DeleteObject.
 	DeleteBuildImage(ctx context.Context, key BuildImageKey) error
-
-	// BestEffortDelete deletes each of keys, logging rather than returning
-	// any per-key failure.
-	BestEffortDelete(ctx context.Context, keys []BuildImageKey)
 }

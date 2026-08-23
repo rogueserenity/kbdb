@@ -197,34 +197,24 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 
 // Delete implements repository.SwitchRepository. Idempotent: a nonexistent
 // id is not an error.
-func (r *SwitchRepository) Delete(ctx context.Context, id string) (*repository.SwitchImageKey, error) {
+func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("deleting switch %q: %w", id, repository.ErrNoUserID)
+		return fmt.Errorf("deleting switch %q: %w", id, repository.ErrNoUserID)
 	}
 
-	out, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
+	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
 		Key: map[string]types.AttributeValue{
 			"user_id": &types.AttributeValueMemberS{Value: ownerID},
 			"id":      &types.AttributeValueMemberS{Value: id},
 		},
-		ReturnValues: types.ReturnValueAllOld,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("deleting switch %q for owner %q: %w", id, ownerID, err)
+		return fmt.Errorf("deleting switch %q for owner %q: %w", id, ownerID, err)
 	}
 
-	if len(out.Attributes) == 0 {
-		return nil, nil //nolint:nilnil // idempotent delete of a nonexistent switch is a valid, expected result
-	}
-
-	var deleted repository.Switch
-	if err := attributevalue.UnmarshalMap(out.Attributes, &deleted); err != nil {
-		return nil, fmt.Errorf("unmarshalling deleted switch %q for owner %q: %w", id, ownerID, err)
-	}
-
-	return deleted.ImagePath, nil
+	return nil
 }
 
 const maxSwitchMutationAttempts = 3

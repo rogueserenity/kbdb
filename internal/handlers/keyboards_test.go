@@ -913,7 +913,7 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Cascade_Referenced_Return
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(mock.Anything, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{ID: "kb1"}, nil)

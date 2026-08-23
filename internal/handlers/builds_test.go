@@ -863,11 +863,11 @@ func (s *DeleteBuildSuite) ownerCtx() context.Context {
 
 func (s *DeleteBuildSuite) TestDeleteBuild_Owner_Succeeds() {
 	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1"}, nil)
+	s.mockBuildRepo.EXPECT().
 		Delete(mock.Anything, "build1").
-		Return(nil, nil)
-	s.mockImages.EXPECT().
-		BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).
-		Return()
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -875,28 +875,55 @@ func (s *DeleteBuildSuite) TestDeleteBuild_Owner_Succeeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
-func (s *DeleteBuildSuite) TestDeleteBuild_ImagesPresent_BestEffortDeletesThem() {
-	keys := []repository.BuildImageKey{"builds/alice/build1/images/img1", "builds/alice/build1/images/img2"}
+func (s *DeleteBuildSuite) TestDeleteBuild_ImagesPresent_DeletesEachFromS3BeforeDB() {
+	key1 := repository.BuildImageKey("builds/alice/build1/images/img1")
+	key2 := repository.BuildImageKey("builds/alice/build1/images/img2")
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: key1},
+			{ImageID: "img2", Path: key2},
+		}}, nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, key1).
+		Return(nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, key2).
+		Return(nil)
 	s.mockBuildRepo.EXPECT().
 		Delete(mock.Anything, "build1").
-		Return(keys, nil)
-	s.mockImages.EXPECT().
-		BestEffortDelete(mock.Anything, keys).
-		Return()
+		Return(nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteBuildSuite) TestDeleteBuild_ImageDeleteFails_Returns500_DoesNotDeleteBuild() {
+	key1 := repository.BuildImageKey("builds/alice/build1/images/img1")
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: key1},
+		}}, nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, key1).
+		Return(errors.New("s3 unavailable"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockBuildRepo has no .EXPECT() for Delete - verifies the DB record
+	// was never touched, so a retry can safely re-attempt the S3 delete.
 }
 
 func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryNotFound_StillReturns204() {
 	s.mockBuildRepo.EXPECT().
-		Delete(mock.Anything, "build1").
+		Get(mock.Anything, "alice", "build1").
 		Return(nil, repository.ErrNotFound)
-	s.mockImages.EXPECT().
-		BestEffortDelete(mock.Anything, []repository.BuildImageKey(nil)).
-		Return()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -924,8 +951,11 @@ func (s *DeleteBuildSuite) TestDeleteBuild_Anonymous_Returns404() {
 
 func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryError_Returns500() {
 	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1"}, nil)
+	s.mockBuildRepo.EXPECT().
 		Delete(mock.Anything, "build1").
-		Return(nil, errors.New("delete item failed"))
+		Return(errors.New("delete item failed"))
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -1123,11 +1153,16 @@ var deleteBuildImageTestKey = repository.BuildImageKey("builds/alice/build1/imag
 
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Succeeds() {
 	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
-		Return(&deleteBuildImageTestKey, nil)
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: deleteBuildImageTestKey},
+		}}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
 		Return(nil)
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(&deleteBuildImageTestKey, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -1137,8 +1172,8 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Succeeds() {
 
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_AlreadyAbsent_SucceedsWithoutS3Call() {
 	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
-		Return(nil, nil)
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1"}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -1166,7 +1201,7 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Anonymous_Returns404() {
 
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotFound_Returns404() {
 	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
+		Get(mock.Anything, "alice", "build1").
 		Return(nil, repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
@@ -1177,6 +1212,14 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotFound_Returns404() {
 }
 
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_MutationConflict_Returns409() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: deleteBuildImageTestKey},
+		}}, nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
+		Return(nil)
 	s.mockBuildRepo.EXPECT().
 		DeleteImage(mock.Anything, "build1", "img1").
 		Return(nil, repository.ErrMutationConflict)
@@ -1190,7 +1233,7 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_MutationConflict_Returns409
 
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_RepositoryError_Returns500() {
 	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
+		Get(mock.Anything, "alice", "build1").
 		Return(nil, errors.New("get item failed"))
 
 	rec := httptest.NewRecorder()
@@ -1200,10 +1243,12 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_RepositoryError_Returns500(
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *DeleteBuildImageSuite) TestDeleteBuildImage_S3DeleteError_Returns500() {
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_S3DeleteError_Returns500_DoesNotDeleteDBRecord() {
 	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
-		Return(&deleteBuildImageTestKey, nil)
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+			{ImageID: "img1", Path: deleteBuildImageTestKey},
+		}}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
 		Return(errors.New("s3: access denied"))
@@ -1213,4 +1258,6 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_S3DeleteError_Returns500() 
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockBuildRepo has no .EXPECT() for DeleteImage - verifies the DB
+	// record was never touched.
 }

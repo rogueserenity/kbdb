@@ -252,23 +252,23 @@ func (r *BuildRepository) Update(ctx context.Context, b repository.Build) (*repo
 // orphaned - deleted for a reference that's no longer current, or never
 // deleted for a reference the concurrent Update just added. On a lost race,
 // retry from a fresh Get, mirroring mutateBuild's CAS loop.
-func (r *BuildRepository) Delete(ctx context.Context, id string) ([]repository.BuildImageKey, error) {
+func (r *BuildRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return nil, fmt.Errorf("deleting build %q: %w", id, repository.ErrNoUserID)
+		return fmt.Errorf("deleting build %q: %w", id, repository.ErrNoUserID)
 	}
 
 	for range maxBuildMutationAttempts {
 		existing, err := r.Get(ctx, ownerID, id)
 		if err != nil {
-			return nil, err
+			return err
 		}
 
 		expr, err := expression.NewBuilder().
 			WithCondition(expression.Name("version").Equal(expression.Value(existing.Version))).
 			Build()
 		if err != nil {
-			return nil, fmt.Errorf("building build delete condition for build %q: %w", id, err)
+			return fmt.Errorf("building build delete condition for build %q: %w", id, err)
 		}
 
 		transactItems := []types.TransactWriteItem{
@@ -291,22 +291,18 @@ func (r *BuildRepository) Delete(ctx context.Context, id string) ([]repository.B
 
 		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
 		if err == nil {
-			imageKeys := make([]repository.BuildImageKey, len(existing.Images))
-			for i, image := range existing.Images {
-				imageKeys[i] = image.Path
-			}
-			return imageKeys, nil
+			return nil
 		}
 
 		if !isConditionalCheckFailed(err) {
-			return nil, fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
+			return fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
 		}
 		// Lost the CAS race - another writer updated Version first. Loop
 		// and retry from a fresh Get.
 		log.FromContext(ctx).Warn("build delete CAS retry", log.BuildID, id, "attempted_version", existing.Version)
 	}
 
-	return nil, fmt.Errorf("deleting build %q owner %q: %w", id, ownerID, repository.ErrMutationConflict)
+	return fmt.Errorf("deleting build %q owner %q: %w", id, ownerID, repository.ErrMutationConflict)
 }
 
 const maxBuildMutationAttempts = 3

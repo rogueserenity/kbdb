@@ -43,7 +43,7 @@ func (s *DeleteSwitchSuite) TestBlock_NoReferencingBuilds_DeletesSwitch() {
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,
@@ -67,7 +67,7 @@ func (s *DeleteSwitchSuite) TestBlock_SwitchHadImage_DeletesFromS3BeforeDB() {
 		Return(nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	_, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,
@@ -128,7 +128,7 @@ func (s *DeleteSwitchSuite) TestDetach_ReferencingBuilds_DeletesSwitchAnyway() {
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,
@@ -148,7 +148,7 @@ func (s *DeleteSwitchSuite) TestCascade_NoReferencingBuilds_DeletesOnlySwitch() 
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,
@@ -173,19 +173,19 @@ func (s *DeleteSwitchSuite) TestCascade_ReferencingBuilds_DeletesEachBuildImages
 		Return(nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockBuilds.EXPECT().
 		Get(s.ctx, "alice", "build-2").
 		Return(&repository.Build{ID: "build-2"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-2").
-		Return(nil, nil)
+		Return(nil)
 	s.mockSwitches.EXPECT().
 		Get(s.ctx, "alice", "sw1").
 		Return(&repository.Switch{ID: "sw1"}, nil)
 	s.mockSwitches.EXPECT().
 		Delete(s.ctx, "sw1").
-		Return(nil, nil)
+		Return(nil)
 
 	result, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,
@@ -228,7 +228,7 @@ func (s *DeleteSwitchSuite) TestCascade_BuildDeleteFails_ReturnsErrorWithoutDele
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return(nil, errors.New("dynamo unavailable"))
+		Return(errors.New("dynamo unavailable"))
 
 	_, err := cascadedelete.DeleteSwitch(
 		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,

@@ -175,13 +175,13 @@ func (s *DeleteKeyboardSuite) TestCascade_ReferencingBuilds_DeletesEachBuildImag
 		Return(nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return(nil, nil)
+		Return(nil)
 	s.mockBuilds.EXPECT().
 		Get(s.ctx, "alice", "build-2").
 		Return(&repository.Build{ID: "build-2"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-2").
-		Return(nil, nil)
+		Return(nil)
 	s.mockKeyboards.EXPECT().
 		Get(s.ctx, "alice", "kb1").
 		Return(&repository.Keyboard{ID: "kb1"}, nil)
@@ -230,7 +230,7 @@ func (s *DeleteKeyboardSuite) TestCascade_BuildDeleteFails_ReturnsErrorWithoutDe
 		Return(&repository.Build{ID: "build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Delete(s.ctx, "build-1").
-		Return(nil, errors.New("dynamo unavailable"))
+		Return(errors.New("dynamo unavailable"))
 
 	_, err := cascadedelete.DeleteKeyboard(
 		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,

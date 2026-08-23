@@ -67,7 +67,7 @@ func DeleteSwitch(
 				return SwitchResult{}, fmt.Errorf("deleting image for switch %q: %w", switchID, err)
 			}
 		}
-		if _, err := switchRepo.Delete(ctx, switchID); err != nil {
+		if err := switchRepo.Delete(ctx, switchID); err != nil {
 			return SwitchResult{}, fmt.Errorf("deleting switch %q: %w", switchID, err)
 		}
 		return SwitchResult{}, nil
@@ -108,7 +108,7 @@ func DeleteSwitch(
 				errs[i] = fmt.Errorf("deleting images for build %q referencing switch %q: %w", buildID, switchID, err)
 				return
 			}
-			if _, err := buildRepo.Delete(ctx, buildID); err != nil {
+			if err := buildRepo.Delete(ctx, buildID); err != nil {
 				errs[i] = fmt.Errorf("cascade-deleting build %q referencing switch %q: %w", buildID, switchID, err)
 			}
 		}(i, buildID)

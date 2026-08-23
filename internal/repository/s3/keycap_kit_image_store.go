@@ -3,13 +3,11 @@ package s3
 import (
 	"context"
 	"fmt"
-	"sync"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 
-	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -78,20 +76,4 @@ func (s *KeycapKitImageStore) Delete(ctx context.Context, key repository.KeycapK
 	}
 
 	return nil
-}
-
-// BestEffortDelete implements repository.KeycapKitImageStore.
-func (s *KeycapKitImageStore) BestEffortDelete(ctx context.Context, keys []repository.KeycapKitImageKey) {
-	var wg sync.WaitGroup
-	for _, key := range keys {
-		wg.Add(1)
-		go func(key repository.KeycapKitImageKey) {
-			defer wg.Done()
-
-			if err := s.Delete(ctx, key); err != nil {
-				log.FromContext(ctx).Warn("deleting keycap kit image object", log.Error, err)
-			}
-		}(key)
-	}
-	wg.Wait()
 }
