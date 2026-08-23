@@ -366,10 +366,8 @@ func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images reposit
 // values and requires an authenticated caller. userId must be the
 // caller's own subject; removing an image from another user's keyboard
 // always returns 404. Idempotent: an imageId not present on the keyboard
-// is not an error. Deletes the S3 object before the DB record (not the
-// reverse) so the operation is safely retryable: a failure at either step
-// leaves nothing orphaned, since a retry either finds the same S3 object
-// (delete is idempotent) or the DB record already gone.
+// is not an error. Deletes the S3 object before the DB record, same
+// retry-safety reasoning as [cascadedelete.DeleteKeyboard].
 func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
