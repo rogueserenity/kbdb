@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -266,11 +267,10 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 // authenticated caller. userId must be the caller's own subject; deleting
 // another user's keycap set returns 404, not 403, to avoid revealing it
 // exists. Idempotent: deleting a set that doesn't exist still returns 204.
-// Any kit images the set had are removed from images best-effort - a
-// failed image delete is logged but doesn't fail the response, since the
-// keycap set itself has already been deleted by that point. The on_delete
-// query param (default "block") controls what happens if a build still
-// references any kit in this set: see [cascadedelete.DeleteKeycapSet].
+// The on_delete query param (default "block") controls what happens if a
+// build still references any kit in this set: see
+// [cascadedelete.DeleteKeycapSet], which also handles deleting any kit
+// images the set (and any cascaded builds) had.
 func DeleteKeycapSet(
 	keycapSetRepo repository.KeycapSetRepository,
 	buildRepo repository.BuildRepository,
@@ -292,7 +292,7 @@ func DeleteKeycapSet(
 			return
 		}
 
-		result, err := cascadedelete.DeleteKeycapSet(r.Context(), keycapSetRepo, buildRepo, buildImages, ownerID, id, onDelete)
+		result, err := cascadedelete.DeleteKeycapSet(r.Context(), keycapSetRepo, buildRepo, buildImages, images, ownerID, id, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			problem.StillReferenced(w, "keycap set is still referenced by one or more builds", blocked.BuildIDs)
 			return
@@ -302,8 +302,6 @@ func DeleteKeycapSet(
 			problem.Internal(w, "failed to delete keycap set")
 			return
 		}
-
-		images.BestEffortDelete(r.Context(), result.ImageKeys)
 
 		if onDelete == cascadedelete.OnDeleteCascade {
 			w.Header().Set("Content-Type", "application/json")
@@ -418,11 +416,10 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 // values and requires an authenticated caller. userId must be the caller's
 // own subject; deleting a kit from another user's set, or a set that
 // doesn't exist, both return 404. Idempotent: a kitId not present in the
-// set is not an error. If the kit had an image, it's removed from images
-// best-effort - a failed image delete is logged but doesn't fail the
-// response, since the kit itself has already been deleted by that point.
-// The on_delete query param (default "block") controls what happens if a
-// build still references this kit: see [cascadedelete.DeleteKeycapKit].
+// set is not an error. The on_delete query param (default "block")
+// controls what happens if a build still references this kit: see
+// [cascadedelete.DeleteKeycapKit], which also handles deleting any image
+// the kit (and any cascaded builds) had.
 func DeleteKeycapKit(
 	keycapSetRepo repository.KeycapSetRepository,
 	buildRepo repository.BuildRepository,
@@ -445,19 +442,13 @@ func DeleteKeycapKit(
 			return
 		}
 
-		result, err := cascadedelete.DeleteKeycapKit(r.Context(), keycapSetRepo, buildRepo, buildImages, ownerID, setID, kitID, onDelete)
+		result, err := cascadedelete.DeleteKeycapKit(r.Context(), keycapSetRepo, buildRepo, buildImages, images, ownerID, setID, kitID, onDelete)
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			problem.StillReferenced(w, "keycap kit is still referenced by one or more builds", blocked.BuildIDs)
 			return
 		}
 		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
-		}
-
-		if result.ImageKey != nil {
-			if err := images.Delete(r.Context(), *result.ImageKey); err != nil {
-				log.FromContext(r.Context()).Warn("deleting keycap kit image object after kit delete", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID, log.KeycapKitImage, *result.ImageKey)
-			}
 		}
 
 		if onDelete == cascadedelete.OnDeleteCascade {
@@ -534,7 +525,8 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 // the caller's own subject; removing a kit's image on another user's set,
 // a set that doesn't exist, or a kitId that doesn't exist within it, all
 // return 404, to avoid revealing it exists. Idempotent: a kit with no
-// image already set is not an error.
+// image already set is not an error. Deletes the S3 object before the DB
+// record, same retry-safety reasoning as [cascadedelete.DeleteKeycapSet].
 func DeleteKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -546,17 +538,31 @@ func DeleteKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images r
 			return
 		}
 
-		cleared, err := keycapSetRepo.ClearKitImagePath(r.Context(), setID, kitID)
+		ks, err := keycapSetRepo.Get(r.Context(), ownerID, setID)
 		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 
-		if cleared != nil {
-			if err := images.Delete(r.Context(), *cleared); err != nil {
-				log.FromContext(r.Context()).Error("deleting keycap kit image object", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
-				problem.Internal(w, "failed to delete kit image")
-				return
-			}
+		idx := slices.IndexFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == kitID })
+		if idx == -1 {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		if ks.Kits[idx].ImagePath == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if err := images.Delete(r.Context(), *ks.Kits[idx].ImagePath); err != nil {
+			log.FromContext(r.Context()).Error("deleting keycap kit image object", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			problem.Internal(w, "failed to delete kit image")
+			return
+		}
+
+		_, err = keycapSetRepo.ClearKitImagePath(r.Context(), setID, kitID)
+		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
+			return
 		}
 
 		w.WriteHeader(http.StatusNoContent)

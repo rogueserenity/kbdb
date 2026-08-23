@@ -10,13 +10,33 @@ import (
 )
 
 // KeycapSetResult is a DeleteKeycapSet call's success return value.
-// ImageKeys are the image keys the deleted set's kits had, or nil if none
-// did - callers clean them up in a KeycapKitImageStore themselves, same as
-// before this package existed. DeletedBuildIDs (via the embedded Result) is
-// empty except in cascade mode.
+// DeletedBuildIDs (via the embedded Result) is empty except in cascade
+// mode. Image cleanup (both the set's own kits' and any cascaded builds')
+// happens inside DeleteKeycapSet itself, before the corresponding DB
+// record is deleted, so there's nothing left for the caller to clean up.
 type KeycapSetResult struct {
 	Result
-	ImageKeys []repository.KeycapKitImageKey
+}
+
+// deleteKeycapSetImages - see [DeleteKeycapSet]'s doc comment for why this
+// gates the set's own DB delete.
+func deleteKeycapSetImages(ctx context.Context, images repository.KeycapKitImageStore, ks *repository.KeycapSet) error {
+	errs := make([]error, len(ks.Kits))
+	var wg sync.WaitGroup
+	for i, kit := range ks.Kits {
+		if kit.ImagePath == nil {
+			continue
+		}
+		wg.Add(1)
+		go func(i int, key repository.KeycapKitImageKey) {
+			defer wg.Done()
+			if err := images.Delete(ctx, key); err != nil {
+				errs[i] = err
+			}
+		}(i, *kit.ImagePath)
+	}
+	wg.Wait()
+	return errors.Join(errs...)
 }
 
 // DeleteKeycapSet deletes the keycap set identified by (ownerID, setID),
@@ -31,6 +51,13 @@ type KeycapSetResult struct {
 //     checking for references, leaving any referencing build's
 //     keycap_kits[] entry dangling.
 //
+// Every delete (the set's own kits', and any cascaded build's) removes
+// the item's S3 image object(s) before the DynamoDB record, not the
+// reverse - this makes the whole operation safely retryable: S3's
+// DeleteObject is idempotent, so a failure at either step (S3 or DB) can
+// be retried to completion with nothing orphaned and no failure masked by
+// a false-success retry.
+//
 // onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
 // DeleteKeycapSet does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
@@ -38,7 +65,8 @@ func DeleteKeycapSet(
 	ctx context.Context,
 	keycapSetRepo repository.KeycapSetRepository,
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
+	buildImages repository.BuildImageStore,
+	kitImages repository.KeycapKitImageStore,
 	ownerID, setID string,
 	onDelete OnDelete,
 ) (KeycapSetResult, error) {
@@ -48,12 +76,25 @@ func DeleteKeycapSet(
 		return KeycapSetResult{}, fmt.Errorf("deleting keycap set %q: unknown on_delete value %q", setID, onDelete)
 	}
 
-	if onDelete == OnDeleteDetach {
-		imageKeys, err := keycapSetRepo.Delete(ctx, setID)
-		if err != nil {
-			return KeycapSetResult{}, fmt.Errorf("detach-deleting keycap set %q: %w", setID, err)
+	deleteSet := func() (KeycapSetResult, error) {
+		ks, err := keycapSetRepo.Get(ctx, ownerID, setID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return KeycapSetResult{}, nil
 		}
-		return KeycapSetResult{ImageKeys: imageKeys}, nil
+		if err != nil {
+			return KeycapSetResult{}, fmt.Errorf("getting keycap set %q for image cleanup: %w", setID, err)
+		}
+		if err := deleteKeycapSetImages(ctx, kitImages, ks); err != nil {
+			return KeycapSetResult{}, fmt.Errorf("deleting images for keycap set %q: %w", setID, err)
+		}
+		if _, err := keycapSetRepo.Delete(ctx, setID); err != nil {
+			return KeycapSetResult{}, fmt.Errorf("deleting keycap set %q: %w", setID, err)
+		}
+		return KeycapSetResult{}, nil
+	}
+
+	if onDelete == OnDeleteDetach {
+		return deleteSet()
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingKeycapSet(ctx, ownerID, setID)
@@ -65,11 +106,7 @@ func DeleteKeycapSet(
 		if len(buildIDs) > 0 {
 			return KeycapSetResult{}, &BlockedError{BuildIDs: buildIDs}
 		}
-		imageKeys, err := keycapSetRepo.Delete(ctx, setID)
-		if err != nil {
-			return KeycapSetResult{}, fmt.Errorf("deleting unreferenced keycap set %q: %w", setID, err)
-		}
-		return KeycapSetResult{ImageKeys: imageKeys}, nil
+		return deleteSet()
 	}
 
 	errs := make([]error, len(buildIDs))
@@ -79,12 +116,21 @@ func DeleteKeycapSet(
 		go func(i int, buildID string) {
 			defer wg.Done()
 
-			imageKeys, err := buildRepo.Delete(ctx, buildID)
-			if err != nil {
-				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keycap set %q: %w", buildID, setID, err)
+			b, err := buildRepo.Get(ctx, ownerID, buildID)
+			if errors.Is(err, repository.ErrNotFound) {
 				return
 			}
-			images.BestEffortDelete(ctx, imageKeys)
+			if err != nil {
+				errs[i] = fmt.Errorf("getting build %q for image cleanup: %w", buildID, err)
+				return
+			}
+			if err := deleteBuildImages(ctx, buildImages, b); err != nil {
+				errs[i] = fmt.Errorf("deleting images for build %q referencing keycap set %q: %w", buildID, setID, err)
+				return
+			}
+			if _, err := buildRepo.Delete(ctx, buildID); err != nil {
+				errs[i] = fmt.Errorf("cascade-deleting build %q referencing keycap set %q: %w", buildID, setID, err)
+			}
 		}(i, buildID)
 	}
 	wg.Wait()
@@ -93,10 +139,11 @@ func DeleteKeycapSet(
 		return KeycapSetResult{}, err
 	}
 
-	imageKeys, err := keycapSetRepo.Delete(ctx, setID)
+	result, err := deleteSet()
 	if err != nil {
 		return KeycapSetResult{}, fmt.Errorf("deleting keycap set %q after cascading %d build(s): %w", setID, len(buildIDs), err)
 	}
+	result.DeletedBuildIDs = buildIDs
 
-	return KeycapSetResult{Result: Result{DeletedBuildIDs: buildIDs}, ImageKeys: imageKeys}, nil
+	return result, nil
 }
