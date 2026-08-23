@@ -26,8 +26,6 @@ var errKeyboardAlreadyExists = errors.New("keyboard already exists")
 
 var errKeyboardImageNotFound = errors.New("keyboard image not found")
 
-var errKeyboardMutationConflict = errors.New("the keyboard is being modified concurrently, please retry")
-
 var listKeyboardsTool = &mcp.Tool{
 	Name:        "list_keyboards",
 	Description: "Lists keyboards in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_keyboard for a single keyboard's full details. Omit user_id to list your own keyboards.",
@@ -154,12 +152,8 @@ func handleUpdateKeyboard(
 		kb.ID = in.KeyboardID
 
 		updated, err := keyboardRepo.Update(ctx, kb)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.UpdateKeyboardOutput{}, errKeyboardNotFound
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("updating keyboard", log.KeyboardID, kb.ID, log.Error, err)
-			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to update keyboard")
+		if mutErr := handleMutationError(ctx, err, log.KeyboardID, kb.ID); mutErr != nil {
+			return nil, schema.UpdateKeyboardOutput{}, mutErr
 		}
 
 		// isOwner: true - update always targets the caller's own collection.
@@ -258,16 +252,8 @@ func handleAddKeyboardImage(
 		}
 
 		_, err = keyboardRepo.AddImage(ctx, in.KeyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.AddKeyboardImageOutput{}, errKeyboardNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keyboard mutation conflict", log.KeyboardID, in.KeyboardID)
-			return nil, schema.AddKeyboardImageOutput{}, errKeyboardMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("adding keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
+		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
+			return nil, schema.AddKeyboardImageOutput{}, mutErr
 		}
 
 		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
@@ -293,16 +279,8 @@ func handleDeleteKeyboardImage(
 		}
 
 		removed, err := keyboardRepo.DeleteImage(ctx, in.KeyboardID, in.ImageID)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.DeleteKeyboardImageOutput{}, errKeyboardNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keyboard mutation conflict", log.KeyboardID, in.KeyboardID)
-			return nil, schema.DeleteKeyboardImageOutput{}, errKeyboardMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("deleting keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("failed to delete keyboard image")
+		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
+			return nil, schema.DeleteKeyboardImageOutput{}, mutErr
 		}
 
 		if removed != nil {

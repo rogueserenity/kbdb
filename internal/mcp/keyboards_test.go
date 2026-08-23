@@ -368,7 +368,7 @@ func (s *HandleUpdateKeyboardSuite) TestNotFound_ReturnsNotFound() {
 		KeyboardInput: validKeyboardInput(),
 	})
 
-	s.Require().ErrorIs(err, errKeyboardNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 type HandleDeleteKeyboardSuite struct {
@@ -707,7 +707,7 @@ func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errKeyboardNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
@@ -721,7 +721,7 @@ func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errKeyboardMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 type HandleDeleteKeyboardImageSuite struct {
@@ -773,7 +773,7 @@ func (s *HandleDeleteKeyboardImageSuite) TestNotFound_ReturnsError() {
 	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
 
-	s.Require().ErrorIs(err, errKeyboardNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleDeleteKeyboardImageSuite) TestMutationConflict_ReturnsError() {
@@ -784,7 +784,7 @@ func (s *HandleDeleteKeyboardImageSuite) TestMutationConflict_ReturnsError() {
 	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
 
-	s.Require().ErrorIs(err, errKeyboardMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteKeyboardImageSuite) TestAlreadyAbsent_SucceedsWithoutS3Call() {

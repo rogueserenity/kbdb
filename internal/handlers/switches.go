@@ -334,18 +334,7 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 		}
 
 		_, err = switchRepo.SetImagePath(r.Context(), id, key)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("switch mutation conflict", log.SwitchID, id)
-			problem.Conflict(w, "the switch is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("setting switch image path", log.Error, err, log.SwitchID, id)
-			problem.Internal(w, "failed to set switch image")
+		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
 		}
 
@@ -378,18 +367,7 @@ func DeleteSwitchImage(switchRepo repository.SwitchRepository, images repository
 		}
 
 		cleared, err := switchRepo.ClearImagePath(r.Context(), id)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("switch mutation conflict", log.SwitchID, id)
-			problem.Conflict(w, "the switch is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("clearing switch image path", log.Error, err, log.SwitchID, id)
-			problem.Internal(w, "failed to delete switch image")
+		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
 		}
 

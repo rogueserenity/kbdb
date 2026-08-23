@@ -449,7 +449,7 @@ func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {
 		SwitchInput: validInput(),
 	})
 
-	s.Require().ErrorIs(err, errSwitchNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 type HandleDeleteSwitchSuite struct {
@@ -700,7 +700,7 @@ func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errSwitchNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
@@ -714,7 +714,7 @@ func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errSwitchMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 type HandleDeleteSwitchImageSuite struct {
@@ -766,7 +766,7 @@ func (s *HandleDeleteSwitchImageSuite) TestNotFound_ReturnsNotFound() {
 	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
 
-	s.Require().ErrorIs(err, errSwitchNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleDeleteSwitchImageSuite) TestMutationConflict_ReturnsConflictError() {
@@ -775,7 +775,7 @@ func (s *HandleDeleteSwitchImageSuite) TestMutationConflict_ReturnsConflictError
 	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
 
-	s.Require().ErrorIs(err, errSwitchMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteSwitchImageSuite) TestRepositoryError_ReturnsError() {
@@ -784,7 +784,7 @@ func (s *HandleDeleteSwitchImageSuite) TestRepositoryError_ReturnsError() {
 	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
 
-	s.Require().ErrorContains(err, "failed to delete switch image")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 func (s *HandleDeleteSwitchImageSuite) TestS3DeleteError_ReturnsError() {

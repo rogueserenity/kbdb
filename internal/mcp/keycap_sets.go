@@ -27,8 +27,6 @@ var errKeycapKitNotFound = errors.New("keycap kit not found")
 
 var errKeycapKitHasNoImage = errors.New("keycap kit has no image")
 
-var errKeycapSetMutationConflict = errors.New("the keycap set is being modified concurrently, please retry")
-
 var listKeycapSetsTool = &mcp.Tool{
 	Name:        "list_keycap_sets",
 	Description: "Lists keycap sets in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_keycap_set for a single set's full details, including its kits. Omit user_id to list your own keycap sets.",
@@ -208,18 +206,8 @@ func handleUpdateKeycapSet(
 		ks.ID = in.KeycapSetID
 
 		updated, err := keycapSetRepo.Update(ctx, ks)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.UpdateKeycapSetOutput{}, errKeycapSetNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			// Warn, not Error: expected contention under retry, not a bug -
-			// still worth a trace if one set sees this repeatedly.
-			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, ks.ID)
-			return nil, schema.UpdateKeycapSetOutput{}, errKeycapSetMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("updating keycap set", log.KeycapSetID, ks.ID, log.Error, err)
-			return nil, schema.UpdateKeycapSetOutput{}, errors.New("failed to update keycap set")
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, ks.ID); mutErr != nil {
+			return nil, schema.UpdateKeycapSetOutput{}, mutErr
 		}
 
 		// isOwner: true - update always targets the caller's own collection.
@@ -313,16 +301,8 @@ func handleCreateKeycapKit(
 		kit.KitID = uuid.NewString()
 
 		created, err := keycapSetRepo.AddKit(ctx, in.KeycapSetID, kit, in.Primary)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.CreateKeycapKitOutput{}, errKeycapSetNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID)
-			return nil, schema.CreateKeycapKitOutput{}, errKeycapSetMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("adding keycap kit", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID, log.Error, err)
-			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to add kit")
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID); mutErr != nil {
+			return nil, schema.CreateKeycapKitOutput{}, mutErr
 		}
 
 		// isOwner: true - a kit is always added to the caller's own set.
@@ -349,16 +329,8 @@ func handleUpdateKeycapKit(
 		kit.KitID = in.KitID
 
 		updated, err := keycapSetRepo.UpdateKit(ctx, in.KeycapSetID, kit, in.Primary)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.UpdateKeycapKitOutput{}, errKeycapKitNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
-			return nil, schema.UpdateKeycapKitOutput{}, errKeycapSetMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("updating keycap kit", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to update kit")
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
+			return nil, schema.UpdateKeycapKitOutput{}, mutErr
 		}
 
 		// isOwner: true - a kit is always updated on the caller's own set.
@@ -394,16 +366,8 @@ func handleDeleteKeycapKit(
 		if blocked, ok := errors.AsType[*cascadedelete.BlockedError](err); ok {
 			return nil, schema.DeleteKeycapKitOutput{}, fmt.Errorf("keycap kit is still referenced by builds: %s", strings.Join(blocked.BuildIDs, ", "))
 		}
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.DeleteKeycapKitOutput{}, errKeycapSetNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
-			return nil, schema.DeleteKeycapKitOutput{}, errKeycapSetMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("deleting keycap kit", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.DeleteKeycapKitOutput{}, errors.New("failed to delete kit")
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
+			return nil, schema.DeleteKeycapKitOutput{}, mutErr
 		}
 
 		if result.ImageKey != nil {
@@ -439,16 +403,8 @@ func handleSetKeycapKitImage(
 		}
 
 		_, err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.SetKeycapKitImageOutput{}, errKeycapKitNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
-			return nil, schema.SetKeycapKitImageOutput{}, errKeycapSetMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("setting keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
+			return nil, schema.SetKeycapKitImageOutput{}, mutErr
 		}
 
 		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
@@ -474,16 +430,8 @@ func handleDeleteKeycapKitImage(
 		}
 
 		cleared, err := keycapSetRepo.ClearKitImagePath(ctx, in.KeycapSetID, in.KitID)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.DeleteKeycapKitImageOutput{}, errKeycapKitNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("keycap set mutation conflict", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID)
-			return nil, schema.DeleteKeycapKitImageOutput{}, errKeycapSetMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("clearing keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
+			return nil, schema.DeleteKeycapKitImageOutput{}, mutErr
 		}
 
 		if cleared != nil {

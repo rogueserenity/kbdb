@@ -346,7 +346,7 @@ func (s *HandleUpdateBuildSuite) TestNotFound_ReturnsNotFound() {
 		BuildInput: validBuildInput(),
 	})
 
-	s.Require().ErrorIs(err, errBuildNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleUpdateBuildSuite) TestMutationConflict_ReturnsConflictError() {
@@ -361,7 +361,7 @@ func (s *HandleUpdateBuildSuite) TestMutationConflict_ReturnsConflictError() {
 		BuildInput: validBuildInput(),
 	})
 
-	s.Require().ErrorIs(err, errBuildMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleUpdateBuildSuite) TestRepositoryError_ReturnsError() {
@@ -376,7 +376,7 @@ func (s *HandleUpdateBuildSuite) TestRepositoryError_ReturnsError() {
 		BuildInput: validBuildInput(),
 	})
 
-	s.Require().ErrorContains(err, "failed to update build")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 func strPtrMCP(s string) *string { return &s }
@@ -698,7 +698,7 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errBuildNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
@@ -712,7 +712,7 @@ func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorIs(err, errBuildMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
@@ -743,7 +743,7 @@ func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
 		ContentType: "image/png",
 	})
 
-	s.Require().ErrorContains(err, "failed to add build image")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 type HandleDeleteBuildImageSuite struct {
@@ -802,7 +802,7 @@ func (s *HandleDeleteBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "missing", ImageID: "img-1"})
 
-	s.Require().ErrorIs(err, errBuildNotFound)
+	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
 func (s *HandleDeleteBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
@@ -811,7 +811,7 @@ func (s *HandleDeleteBuildImageSuite) TestMutationConflict_ReturnsConflictError(
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
 
-	s.Require().ErrorIs(err, errBuildMutationConflict)
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteBuildImageSuite) TestRepositoryError_ReturnsError() {
@@ -820,7 +820,7 @@ func (s *HandleDeleteBuildImageSuite) TestRepositoryError_ReturnsError() {
 	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
 
-	s.Require().ErrorContains(err, "failed to delete build image")
+	s.Require().ErrorIs(err, errMutationFailed)
 }
 
 func (s *HandleDeleteBuildImageSuite) TestImageDeleteFailure_ReturnsError() {

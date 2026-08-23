@@ -24,8 +24,6 @@ var errSwitchAlreadyExists = errors.New("switch already exists")
 
 var errSwitchHasNoImage = errors.New("switch has no image")
 
-var errSwitchMutationConflict = errors.New("the switch is being modified concurrently, please retry")
-
 var listSwitchesTool = &mcp.Tool{
 	Name:        "list_switches",
 	Description: "Lists switches in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_switch for a single switch's full details. Omit user_id to list your own switches.",
@@ -156,12 +154,8 @@ func handleUpdateSwitch(
 		sw.ID = in.SwitchID
 
 		updated, err := switchRepo.Update(ctx, sw)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.UpdateSwitchOutput{}, errSwitchNotFound
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("updating switch", log.SwitchID, sw.ID, log.Error, err)
-			return nil, schema.UpdateSwitchOutput{}, errors.New("failed to update switch")
+		if mutErr := handleMutationError(ctx, err, log.SwitchID, sw.ID); mutErr != nil {
+			return nil, schema.UpdateSwitchOutput{}, mutErr
 		}
 
 		// isOwner: true - update always targets the caller's own collection.
@@ -256,16 +250,8 @@ func handleSetSwitchImage(
 		}
 
 		_, err = switchRepo.SetImagePath(ctx, in.SwitchID, key)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.SetSwitchImageOutput{}, errSwitchNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("switch mutation conflict", log.SwitchID, in.SwitchID)
-			return nil, schema.SetSwitchImageOutput{}, errSwitchMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("setting switch image path", log.SwitchID, in.SwitchID, log.Error, err)
-			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
+		if mutErr := handleMutationError(ctx, err, log.SwitchID, in.SwitchID); mutErr != nil {
+			return nil, schema.SetSwitchImageOutput{}, mutErr
 		}
 
 		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
@@ -288,16 +274,8 @@ func handleDeleteSwitchImage(
 		}
 
 		cleared, err := switchRepo.ClearImagePath(ctx, in.SwitchID)
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, schema.DeleteSwitchImageOutput{}, errSwitchNotFound
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(ctx).Warn("switch mutation conflict", log.SwitchID, in.SwitchID)
-			return nil, schema.DeleteSwitchImageOutput{}, errSwitchMutationConflict
-		}
-		if err != nil {
-			log.FromContext(ctx).Error("clearing switch image path", log.SwitchID, in.SwitchID, log.Error, err)
-			return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
+		if mutErr := handleMutationError(ctx, err, log.SwitchID, in.SwitchID); mutErr != nil {
+			return nil, schema.DeleteSwitchImageOutput{}, mutErr
 		}
 
 		if cleared != nil {

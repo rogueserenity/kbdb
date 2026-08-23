@@ -244,20 +244,7 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 		ks.ID = id
 
 		updated, err := keycapSetRepo.Update(r.Context(), ks)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			// Warn, not Error: expected contention under retry, not a bug -
-			// still worth a trace if one set sees this repeatedly.
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, id)
-			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("updating keycap set", log.Error, err, log.KeycapSetID, id)
-			problem.Internal(w, "failed to update keycap set")
+		if handleMutationError(w, r, err, log.KeycapSetID, id) {
 			return
 		}
 
@@ -359,20 +346,7 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 		kit.KitID = uuid.NewString()
 
 		created, err := keycapSetRepo.AddKit(r.Context(), setID, kit, in.Primary)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			// Warn, not Error: expected contention under retry, not a bug -
-			// still worth a trace if one set sees this repeatedly.
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kit.KitID)
-			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("adding keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kit.KitID)
-			problem.Internal(w, "failed to add kit")
+		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kit.KitID) {
 			return
 		}
 
@@ -422,18 +396,7 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, images reposi
 		kit.KitID = kitID
 
 		updated, err := keycapSetRepo.UpdateKit(r.Context(), setID, kit, in.Primary)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("updating keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Internal(w, "failed to update kit")
+		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 
@@ -487,18 +450,7 @@ func DeleteKeycapKit(
 			problem.StillReferenced(w, "keycap kit is still referenced by one or more builds", blocked.BuildIDs)
 			return
 		}
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("deleting keycap kit", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Internal(w, "failed to delete kit")
+		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 
@@ -560,18 +512,7 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 		}
 
 		_, err = keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("setting keycap kit image path", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Internal(w, "failed to set kit image")
+		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 
@@ -606,18 +547,7 @@ func DeleteKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images r
 		}
 
 		cleared, err := keycapSetRepo.ClearKitImagePath(r.Context(), setID, kitID)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if errors.Is(err, repository.ErrMutationConflict) {
-			log.FromContext(r.Context()).Warn("keycap set mutation conflict", log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Conflict(w, "the keycap set is being modified concurrently, please retry")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("clearing keycap kit image path", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
-			problem.Internal(w, "failed to delete kit image")
+		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 
