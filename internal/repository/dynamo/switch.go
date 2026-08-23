@@ -247,8 +247,17 @@ func (r *SwitchRepository) mutateSwitch(
 			return nil, fmt.Errorf("marshalling switch %q for owner %q: %w", switchID, ownerID, err)
 		}
 
+		// expectedVersion is 0 both for a real version:0 item and for a
+		// pre-Version item with no version attribute at all (Get/UnmarshalMap
+		// defaults a missing attribute to the zero value) - attribute_not_exists
+		// covers the latter, since DynamoDB never matches an equality condition
+		// against an absent attribute.
+		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
+		if expectedVersion == 0 {
+			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
+		}
 		expr, err := expression.NewBuilder().
-			WithCondition(expression.Name("version").Equal(expression.Value(expectedVersion))).
+			WithCondition(versionCondition).
 			Build()
 		if err != nil {
 			return nil, fmt.Errorf("building switch mutation condition for switch %q: %w", switchID, err)
