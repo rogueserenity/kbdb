@@ -99,8 +99,9 @@ type KeyboardRepository interface {
 
 	// Delete removes the caller's keyboard with the given id. Callers clean
 	// up any images it had in a KeyboardImageStore themselves, before
-	// calling Delete - see cascadedelete.DeleteKeyboard. Idempotent: a
-	// nonexistent id is not an error.
+	// calling Delete - see
+	// [github.com/rogueserenity/kbdb/internal/cascadedelete.DeleteKeyboard].
+	// Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
 	// AddImage appends image to the keyboard's Images (image.ImageID must
