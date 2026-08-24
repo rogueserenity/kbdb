@@ -25,13 +25,15 @@ func intPtr(i int) *int           { return &i }
 type CreateBuildSuite struct {
 	suite.Suite
 
-	mockBuildRepo     *mocks.MockBuildRepository
-	mockImages        *mocks.MockBuildImageStore
-	mockKitImages     *mocks.MockKeycapKitImageStore
-	mockKeyboardRepo  *mocks.MockKeyboardRepository
-	mockSwitchRepo    *mocks.MockSwitchRepository
-	mockKeycapSetRepo *mocks.MockKeycapSetRepository
-	handler           http.HandlerFunc
+	mockBuildRepo      *mocks.MockBuildRepository
+	mockImages         *mocks.MockBuildImageStore
+	mockKitImages      *mocks.MockKeycapKitImageStore
+	mockKeyboardImages *mocks.MockKeyboardImageStore
+	mockSwitchImages   *mocks.MockSwitchImageStore
+	mockKeyboardRepo   *mocks.MockKeyboardRepository
+	mockSwitchRepo     *mocks.MockSwitchRepository
+	mockKeycapSetRepo  *mocks.MockKeycapSetRepository
+	handler            http.HandlerFunc
 }
 
 func TestCreateBuildSuite(t *testing.T) {
@@ -42,10 +44,12 @@ func (s *CreateBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.mockKeyboardImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.mockSwitchImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing
@@ -344,13 +348,15 @@ func (s *CreateBuildSuite) TestCreateBuild_ReferenceCheckRepositoryError_Returns
 type UpdateBuildSuite struct {
 	suite.Suite
 
-	mockBuildRepo     *mocks.MockBuildRepository
-	mockImages        *mocks.MockBuildImageStore
-	mockKitImages     *mocks.MockKeycapKitImageStore
-	mockKeyboardRepo  *mocks.MockKeyboardRepository
-	mockSwitchRepo    *mocks.MockSwitchRepository
-	mockKeycapSetRepo *mocks.MockKeycapSetRepository
-	handler           http.HandlerFunc
+	mockBuildRepo      *mocks.MockBuildRepository
+	mockImages         *mocks.MockBuildImageStore
+	mockKitImages      *mocks.MockKeycapKitImageStore
+	mockKeyboardImages *mocks.MockKeyboardImageStore
+	mockSwitchImages   *mocks.MockSwitchImageStore
+	mockKeyboardRepo   *mocks.MockKeyboardRepository
+	mockSwitchRepo     *mocks.MockSwitchRepository
+	mockKeycapSetRepo  *mocks.MockKeycapSetRepository
+	handler            http.HandlerFunc
 }
 
 func TestUpdateBuildSuite(t *testing.T) {
@@ -361,10 +367,12 @@ func (s *UpdateBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.mockKeyboardImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.mockSwitchImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = UpdateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	s.handler = UpdateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 func (s *UpdateBuildSuite) stubOwnedKeyboard() {
@@ -798,13 +806,15 @@ func (s *ListBuildsSuite) TestListBuilds_RepositoryError_Returns500() {
 type GetBuildSuite struct {
 	suite.Suite
 
-	mockBuildRepo     *mocks.MockBuildRepository
-	mockImages        *mocks.MockBuildImageStore
-	mockKitImages     *mocks.MockKeycapKitImageStore
-	mockKeyboardRepo  *mocks.MockKeyboardRepository
-	mockSwitchRepo    *mocks.MockSwitchRepository
-	mockKeycapSetRepo *mocks.MockKeycapSetRepository
-	handler           http.HandlerFunc
+	mockBuildRepo      *mocks.MockBuildRepository
+	mockImages         *mocks.MockBuildImageStore
+	mockKitImages      *mocks.MockKeycapKitImageStore
+	mockKeyboardImages *mocks.MockKeyboardImageStore
+	mockSwitchImages   *mocks.MockSwitchImageStore
+	mockKeyboardRepo   *mocks.MockKeyboardRepository
+	mockSwitchRepo     *mocks.MockSwitchRepository
+	mockKeycapSetRepo  *mocks.MockKeycapSetRepository
+	handler            http.HandlerFunc
 }
 
 func TestGetBuildSuite(t *testing.T) {
@@ -815,10 +825,12 @@ func (s *GetBuildSuite) SetupTest() {
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
+	s.mockKeyboardImages = mocks.NewMockKeyboardImageStore(s.T())
+	s.mockSwitchImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = GetBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	s.handler = GetBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing -

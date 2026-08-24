@@ -494,6 +494,93 @@ var _ = Describe("Getting a build", func() {
 		})
 	})
 
+	Context("given a build referencing a keyboard that has an image", func() {
+		var (
+			buildID   string
+			imageKbID string
+			imageID   string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			imageKbID = "build-fixture-keyboard-with-image-" + uuid.NewString()
+			imageID = "img-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedKeyboardWithImage(ctx, ownerID, imageKbID, imageID, "private")).To(Succeed())
+			Expect(db.SeedBuild(ctx, ownerID, buildID, imageKbID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, imageKbID)).To(Succeed())
+			Expect(db.DeleteKeyboard(ctx, ownerID, imageKbID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("includes a presigned image_url for the keyboard's first image", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Keyboard *struct {
+						ImageURL *string `json:"image_url"`
+					} `json:"keyboard"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Keyboard).NotTo(BeNil())
+				Expect(got.Keyboard.ImageURL).NotTo(BeNil())
+				Expect(*got.Keyboard.ImageURL).NotTo(BeEmpty())
+			})
+		})
+	})
+
+	Context("given a build referencing a switch that has an image", func() {
+		var (
+			buildID       string
+			imageSwitchID string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			imageSwitchID = "build-fixture-switch-with-image-" + uuid.NewString()
+			buildID = "private-build-" + uuid.NewString()
+			Expect(db.SeedSwitchWithImage(ctx, ownerID, imageSwitchID, "private")).To(Succeed())
+			Expect(db.SeedBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, imageSwitchID, "private")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, imageSwitchID)).To(Succeed())
+			Expect(db.DeleteSwitch(ctx, ownerID, imageSwitchID)).To(Succeed())
+		})
+
+		When("getting the build", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("includes a presigned image_url for the switch", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got struct {
+					Switches []struct {
+						Switch *struct {
+							ImageURL *string `json:"image_url"`
+						} `json:"switch"`
+					} `json:"switches"`
+				}
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Switches).To(HaveLen(1))
+				Expect(got.Switches[0].Switch).NotTo(BeNil())
+				Expect(got.Switches[0].Switch.ImageURL).NotTo(BeNil())
+				Expect(*got.Switches[0].Switch.ImageURL).NotTo(BeEmpty())
+			})
+		})
+	})
+
 	Context("given a build referencing two switches, one deleted and one still existing", func() {
 		var (
 			buildID          string

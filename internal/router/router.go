@@ -120,11 +120,11 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/builds",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, buildImageStore, imageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore, imageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, buildImageStore, imageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds/{buildId}/images",

@@ -131,6 +131,8 @@ func GetBuild(
 	repo repository.BuildRepository,
 	images repository.BuildImageStore,
 	kitImages repository.KeycapKitImageStore,
+	keyboardImages repository.KeyboardImageStore,
+	switchImages repository.SwitchImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -156,7 +158,7 @@ func GetBuild(
 			return
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *b, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo, authz.IsOwner(r.Context(), ownerID))
+		out, err := repoapi.BuildToAPI(r.Context(), *b, images, kitImages, keyboardImages, switchImages, keyboardRepo, switchRepo, keycapSetRepo, authz.IsOwner(r.Context(), ownerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to get build")
@@ -175,6 +177,8 @@ func CreateBuild(
 	buildRepo repository.BuildRepository,
 	images repository.BuildImageStore,
 	kitImages repository.KeycapKitImageStore,
+	keyboardImages repository.KeyboardImageStore,
+	switchImages repository.SwitchImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -220,7 +224,7 @@ func CreateBuild(
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.BuildToAPI(r.Context(), *created, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo, true)
+		out, err := repoapi.BuildToAPI(r.Context(), *created, images, kitImages, keyboardImages, switchImages, keyboardRepo, switchRepo, keycapSetRepo, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, created.ID)
 			problem.Internal(w, "failed to create build")
@@ -241,6 +245,8 @@ func UpdateBuild(
 	buildRepo repository.BuildRepository,
 	images repository.BuildImageStore,
 	kitImages repository.KeycapKitImageStore,
+	keyboardImages repository.KeyboardImageStore,
+	switchImages repository.SwitchImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -278,7 +284,7 @@ func UpdateBuild(
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.BuildToAPI(r.Context(), *updated, images, kitImages, keyboardRepo, switchRepo, keycapSetRepo, true)
+		out, err := repoapi.BuildToAPI(r.Context(), *updated, images, kitImages, keyboardImages, switchImages, keyboardRepo, switchRepo, keycapSetRepo, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, updated.ID)
 			problem.Internal(w, "failed to update build")
