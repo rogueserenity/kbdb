@@ -152,6 +152,7 @@ func metadataHandler(issuerURL string) http.Handler {
 		metadata := oauthex.ProtectedResourceMetadata{
 			Resource:             resourceURL,
 			AuthorizationServers: []string{issuerURL},
+			ScopesSupported:      []string{"openid", "email", "profile", "offline_access"},
 		}
 
 		w.Header().Set("Content-Type", "application/json")
