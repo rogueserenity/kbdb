@@ -152,6 +152,12 @@ func metadataHandler(issuerURL string) http.Handler {
 		metadata := oauthex.ProtectedResourceMetadata{
 			Resource:             resourceURL,
 			AuthorizationServers: []string{issuerURL},
+			// ScopesSupported must list offline_access for MCP clients like
+			// Claude Code to discover and request it, since without a scope
+			// catalog anywhere they send no scope parameter at all - meaning
+			// no refresh_token gets issued and every access token expiry
+			// forces a full reauth instead of a silent refresh.
+			ScopesSupported: []string{"openid", "email", "profile", "offline_access"},
 		}
 
 		w.Header().Set("Content-Type", "application/json")
