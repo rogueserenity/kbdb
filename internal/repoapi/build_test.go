@@ -52,11 +52,13 @@ func TestBuildToAPISuite(t *testing.T) {
 // buildToAPIDeps bundles the mocks BuildToAPI needs; the returned
 // EXPECT()s must be set up by the caller before invoking BuildToAPI.
 type buildToAPIDeps struct {
-	images        *mocks.MockBuildImageStore
-	kitImages     *mocks.MockKeycapKitImageStore
-	keyboardRepo  *mocks.MockKeyboardRepository
-	switchRepo    *mocks.MockSwitchRepository
-	keycapSetRepo *mocks.MockKeycapSetRepository
+	images         *mocks.MockBuildImageStore
+	kitImages      *mocks.MockKeycapKitImageStore
+	keyboardImages *mocks.MockKeyboardImageStore
+	switchImages   *mocks.MockSwitchImageStore
+	keyboardRepo   *mocks.MockKeyboardRepository
+	switchRepo     *mocks.MockSwitchRepository
+	keycapSetRepo  *mocks.MockKeycapSetRepository
 }
 
 func newBuildToAPIDeps(t interface {
@@ -64,16 +66,18 @@ func newBuildToAPIDeps(t interface {
 	Cleanup(func())
 }) buildToAPIDeps {
 	return buildToAPIDeps{
-		images:        mocks.NewMockBuildImageStore(t),
-		kitImages:     mocks.NewMockKeycapKitImageStore(t),
-		keyboardRepo:  mocks.NewMockKeyboardRepository(t),
-		switchRepo:    mocks.NewMockSwitchRepository(t),
-		keycapSetRepo: mocks.NewMockKeycapSetRepository(t),
+		images:         mocks.NewMockBuildImageStore(t),
+		kitImages:      mocks.NewMockKeycapKitImageStore(t),
+		keyboardImages: mocks.NewMockKeyboardImageStore(t),
+		switchImages:   mocks.NewMockSwitchImageStore(t),
+		keyboardRepo:   mocks.NewMockKeyboardRepository(t),
+		switchRepo:     mocks.NewMockSwitchRepository(t),
+		keycapSetRepo:  mocks.NewMockKeycapSetRepository(t),
 	}
 }
 
 func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build, error) {
-	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
+	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
 }
 
 func (d buildToAPIDeps) callSummary(ctx context.Context, b repository.Build, isOwner bool) (api.BuildSummary, error) {
@@ -393,6 +397,115 @@ func (s *BuildToAPISuite) TestKitImagePresignFails_ReturnsError() {
 	s.Require().Error(err)
 }
 
+func (s *BuildToAPISuite) TestKeyboardWithImage_MintsFreshPresignedURLForFirstImage() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	imgPath := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Images: []repository.KeyboardImage{
+				{ImageID: "img1", Path: imgPath},
+				{ImageID: "img2", Path: repository.KeyboardImageKey("keyboards/alice/kb1/images/img2")},
+			},
+		}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("https://example.com/kb1-img1.png", nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Keyboard)
+	s.Require().NotNil(out.Keyboard.ImageUrl)
+	s.Equal("https://example.com/kb1-img1.png", *out.Keyboard.ImageUrl)
+}
+
+func (s *BuildToAPISuite) TestKeyboardWithoutImages_OmitsImageUrl() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.expectFullyResolvable()
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Keyboard)
+	s.Nil(out.Keyboard.ImageUrl)
+}
+
+func (s *BuildToAPISuite) TestKeyboardImagePresignFails_ReturnsError() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	imgPath := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Images: []repository.KeyboardImage{{ImageID: "img1", Path: imgPath}},
+		}, nil)
+	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+
+	_, err := d.call(context.Background(), b)
+	s.Require().Error(err)
+}
+
+func (s *BuildToAPISuite) TestSwitchWithImage_MintsFreshPresignedURL() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	imgPath := repository.SwitchImageKey("switches/alice/sw1/image")
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear", ImagePath: &imgPath}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/sw1.png", nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Switches)
+	s.Require().Len(*out.Switches, 1)
+	s.Require().NotNil((*out.Switches)[0].Switch)
+	s.Require().NotNil((*out.Switches)[0].Switch.ImageUrl)
+	s.Equal("https://example.com/sw1.png", *(*out.Switches)[0].Switch.ImageUrl)
+}
+
+func (s *BuildToAPISuite) TestSwitchWithoutImage_OmitsImageUrl() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.expectFullyResolvable()
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Switches)
+	s.Require().Len(*out.Switches, 1)
+	s.Require().NotNil((*out.Switches)[0].Switch)
+	s.Nil((*out.Switches)[0].Switch.ImageUrl)
+}
+
+func (s *BuildToAPISuite) TestSwitchImagePresignFails_ReturnsError() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	imgPath := repository.SwitchImageKey("switches/alice/sw1/image")
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear", ImagePath: &imgPath}, nil)
+	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+
+	_, err := d.call(context.Background(), b)
+	s.Require().Error(err)
+}
+
 func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
 	b := fullRepoBuild()
 
@@ -517,7 +630,7 @@ func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
 			}},
 		}, nil)
 
-	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, false)
+	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, false)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Stabs)
@@ -550,7 +663,7 @@ func (s *BuildToAPISuite) TestIsOwnerTrue_IncludesStabsPriceAndTotalCost() {
 			}},
 		}, nil)
 
-	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
+	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Stabs)

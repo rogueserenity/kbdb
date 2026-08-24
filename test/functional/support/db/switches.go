@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
@@ -27,6 +28,27 @@ func SeedSwitch(ctx context.Context, ownerID, id, visibility string) error {
 			"vendor": "NovelKeys",
 			"price":  0.35,
 		},
+	})
+}
+
+// SeedSwitchWithImage is [SeedSwitch] plus an ImagePath, whose path doesn't
+// need a real S3 object behind it - presigning a GET URL doesn't check the
+// object exists, only specs that fetch the URL's content would need that.
+func SeedSwitchWithImage(ctx context.Context, ownerID, id, visibility string) error {
+	table := NewDynamoTable(ctx, support.SwitchTableName())
+	return table.PutItem(ctx, map[string]any{
+		"user_id":    ownerID,
+		"id":         id,
+		"brand":      "Gateron",
+		"name":       "Yellow",
+		"type":       "Linear",
+		"visibility": visibility,
+		"version":    0,
+		"purchase": map[string]any{
+			"vendor": "NovelKeys",
+			"price":  0.35,
+		},
+		"image_path": fmt.Sprintf("switches/%s/%s/image", ownerID, id),
 	})
 }
 

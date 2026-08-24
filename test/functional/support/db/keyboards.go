@@ -2,6 +2,7 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
@@ -38,6 +39,36 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 			"vendor":       "Amazon",
 			"price":        329.99,
 			"order_status": "Delivered",
+		},
+	})
+}
+
+// SeedKeyboardWithImage is [SeedKeyboard] plus a single Images entry, whose
+// path doesn't need a real S3 object behind it - presigning a GET URL
+// doesn't check the object exists, only specs that fetch the URL's content
+// would need that.
+func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility string) error {
+	table := NewDynamoTable(ctx, support.KeyboardTableName())
+	return table.PutItem(ctx, map[string]any{
+		"user_id":    ownerID,
+		"id":         id,
+		"brand":      "Keychron",
+		"name":       "Q1",
+		"size":       "60%",
+		"visibility": visibility,
+		"version":    0,
+		"design": map[string]any{
+			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
+			"plates":   []string{"Brass"},
+		},
+		"pcb": map[string]any{"firmware": "QMK/VIA"},
+		"purchase": map[string]any{
+			"vendor":       "Amazon",
+			"price":        329.99,
+			"order_status": "Delivered",
+		},
+		"images": []map[string]any{
+			{"image_id": imageID, "path": fmt.Sprintf("keyboards/%s/%s/images/%s", ownerID, id, imageID)},
 		},
 	})
 }

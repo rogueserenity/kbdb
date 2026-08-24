@@ -27,6 +27,8 @@ func BuildToAPI(
 	ctx context.Context, b repository.Build,
 	images repository.BuildImageStore,
 	kitImages repository.KeycapKitImageStore,
+	keyboardImages repository.KeyboardImageStore,
+	switchImages repository.SwitchImageStore,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -42,12 +44,12 @@ func BuildToAPI(
 		return api.Build{}, err
 	}
 
-	keyboardRef, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo)
+	keyboardRef, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo, keyboardImages, true)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	switches, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo)
+	switches, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo, switchImages, true)
 	if err != nil {
 		return api.Build{}, err
 	}
@@ -163,7 +165,7 @@ func BuildToAPISummary(
 		Image:     image,
 	}
 
-	kb, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo)
+	kb, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo, nil, false)
 	if err != nil {
 		return api.BuildSummary{}, err
 	}
@@ -172,7 +174,7 @@ func BuildToAPISummary(
 	}
 
 	if isOwner {
-		_, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo)
+		_, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo, nil, false)
 		if err != nil {
 			return api.BuildSummary{}, err
 		}
@@ -293,7 +295,16 @@ func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repositor
 // buildKeyboardRefToAPI resolves keyboardID into a denormalized reference
 // plus its purchase price. Returns (nil, nil, nil) if the keyboard no
 // longer exists.
-func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyboardRepo repository.KeyboardRepository) (*api.BuildKeyboardRef, *float64, error) {
+//
+// resolveImages false skips presigning ImageUrl; keyboardImages may be nil
+// in that case. When true, the ref surfaces only the keyboard's first
+// image (kb.Images[0]), mirroring how [BuildToAPISummary] picks a build's
+// own Images[0] for its summary thumbnail.
+func buildKeyboardRefToAPI(
+	ctx context.Context, ownerID, keyboardID string,
+	keyboardRepo repository.KeyboardRepository, keyboardImages repository.KeyboardImageStore,
+	resolveImages bool,
+) (*api.BuildKeyboardRef, *float64, error) {
 	kb, err := keyboardRepo.Get(ctx, ownerID, keyboardID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
@@ -302,13 +313,23 @@ func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyb
 		return nil, nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
 	}
 
-	return &api.BuildKeyboardRef{
+	ref := &api.BuildKeyboardRef{
 		Id:     kb.ID,
 		Brand:  kb.Brand,
 		Name:   kb.Name,
 		Size:   kb.Size,
 		Layout: kb.Layout,
-	}, kb.Purchase.Price, nil
+	}
+
+	if resolveImages && len(kb.Images) > 0 {
+		url, err := keyboardImages.PresignGetKeyboardImage(ctx, kb.Images[0].Path)
+		if err != nil {
+			return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
+		}
+		ref.ImageUrl = &url
+	}
+
+	return ref, kb.Purchase.Price, nil
 }
 
 // buildSwitchEntriesResolvedToAPI resolves each entry's Switch id into a
@@ -322,7 +343,14 @@ func buildKeyboardRefToAPI(ctx context.Context, ownerID, keyboardID string, keyb
 // a per-unit price - see SwitchPurchase's doc), so an entry contributes
 // (Price/Quantity)*Count only when Quantity is set and non-zero; otherwise
 // its cost is unknown and excluded rather than guessed at.
-func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry, switchRepo repository.SwitchRepository) (*[]api.BuildSwitchEntryResolved, *float64, error) {
+//
+// resolveImages false skips presigning ImageUrl; switchImages may be nil in
+// that case.
+func buildSwitchEntriesResolvedToAPI(
+	ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry,
+	switchRepo repository.SwitchRepository, switchImages repository.SwitchImageStore,
+	resolveImages bool,
+) (*[]api.BuildSwitchEntryResolved, *float64, error) {
 	if entries == nil {
 		return nil, nil, nil //nolint:nilnil // no switches is a valid, expected result
 	}
@@ -356,6 +384,15 @@ func buildSwitchEntriesResolvedToAPI(ctx context.Context, ownerID string, entrie
 					Name:         sw.Name,
 					Type:         sw.Type,
 				},
+			}
+
+			if resolveImages && sw.ImagePath != nil {
+				url, err := switchImages.PresignGet(ctx, *sw.ImagePath)
+				if err != nil {
+					errs[i] = fmt.Errorf("presigning switch image for switch %q: %w", e.Switch, err)
+					return
+				}
+				out[i].Switch.ImageUrl = &url
 			}
 
 			if sw.Purchase.Price != nil && sw.Purchase.Quantity != nil && *sw.Purchase.Quantity != 0 {
