@@ -123,19 +123,6 @@ func decodeUploadURL(result *sdkmcp.CallToolResult) string {
 	return out.UploadURL
 }
 
-func decodeImageURL(result *sdkmcp.CallToolResult) string {
-	GinkgoHelper()
-
-	var out struct {
-		URL string `json:"url"`
-	}
-	raw, err := json.Marshal(result.StructuredContent)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(json.Unmarshal(raw, &out)).To(Succeed())
-
-	return out.URL
-}
-
 func idsOf(out listOutput) []string {
 	ids := make([]string, 0, len(out.KeycapSets))
 	for _, ks := range out.KeycapSets {

@@ -21,7 +21,7 @@ type KeyboardSummary struct {
 	Size        *string `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
 	Layout      *string `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
 	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, for a keyboard not yet delivered"`
-	HasImages   bool    `json:"has_images" jsonschema:"whether this keyboard has any images on file"`
+	HasImages   bool    `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
 }
 
 // GetKeyboardInput is the get_keyboard tool input.
@@ -88,13 +88,11 @@ type KeyboardInput struct {
 	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
 }
 
-// Keyboard reports HasImages rather than presigned URLs, unlike REST's
-// inline Images array, to avoid handing back a URL that may have expired
-// by the time an agent acts on a held result - call
-// get_keyboard_image_url to fetch one on demand. Optional fields are
-// pointers so a recorded zero stays distinguishable from an unset field,
-// which is omitted entirely - matching what REST returns for the same
-// stored keyboard.
+// Keyboard reports HasImages rather than the image list itself - call
+// list_keyboard_images for the id of each image on file. Optional fields
+// are pointers so a recorded zero stays distinguishable from an unset
+// field, which is omitted entirely - matching what REST returns for the
+// same stored keyboard.
 type Keyboard struct {
 	ID         string            `json:"id" jsonschema:"the keyboard's unique id"`
 	Brand      string            `json:"brand" jsonschema:"the keyboard's brand"`
@@ -106,7 +104,7 @@ type Keyboard struct {
 	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
-	HasImages  bool              `json:"has_images" jsonschema:"whether this keyboard has any images on file"`
+	HasImages  bool              `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
 }
 
 // KeyboardDesign is a keyboard's case and plate makeup.
@@ -142,16 +140,22 @@ type KeyboardPurchase struct {
 	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
 }
 
-// GetKeyboardImageURLInput is the get_keyboard_image_url tool's input.
-type GetKeyboardImageURLInput struct {
-	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the image belongs to"`
-	ImageID    string `json:"image_id" jsonschema:"the id of the image to fetch, as returned by add_keyboard_image"`
+// ListKeyboardImagesInput is the list_keyboard_images tool's input.
+type ListKeyboardImagesInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to list images for"`
 	UserID     string `json:"user_id,omitempty" jsonschema:"whose collection to read from; omit for your own"`
 }
 
-// GetKeyboardImageURLOutput is the get_keyboard_image_url tool's output.
-type GetKeyboardImageURLOutput struct {
-	URL string `json:"url" jsonschema:"a freshly-minted, short-lived presigned URL to fetch the image bytes from; do not cache or persist it, it expires within minutes"`
+// ListKeyboardImagesOutput is the list_keyboard_images tool's output.
+type ListKeyboardImagesOutput struct {
+	Images []KeyboardImage `json:"images" jsonschema:"the keyboard's images"`
+}
+
+// KeyboardImage is one image on file for a keyboard. There's no URL - call
+// add_keyboard_image/delete_keyboard_image to manage images by id; images
+// are served to end users through REST, not this MCP surface.
+type KeyboardImage struct {
+	ImageID string `json:"image_id" jsonschema:"the image's id"`
 }
 
 // AddKeyboardImageInput is the add_keyboard_image tool's input. It doesn't

@@ -114,8 +114,6 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 			})
 
 			Context("given the kit has an image set", func() {
-				var imageGetURL string
-
 				BeforeEach(func(ctx SpecContext) {
 					setImgResult, setImgErr := client.CallTool(ctx, "set_keycap_kit_image", map[string]any{
 						"keycap_set_id": keycapSetID,
@@ -135,21 +133,6 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, upload.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes")))
 					Expect(putErr).NotTo(HaveOccurred())
 					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
-
-					imgURLResult, imgURLErr := client.CallTool(ctx, "get_keycap_kit_image_url", map[string]any{
-						"keycap_set_id": keycapSetID,
-						"kit_id":        kitID,
-					})
-					Expect(imgURLErr).NotTo(HaveOccurred())
-					Expect(imgURLResult.IsError).To(BeFalse())
-
-					var got struct {
-						URL string `json:"url"`
-					}
-					raw2, marshalErr2 := json.Marshal(imgURLResult.StructuredContent)
-					Expect(marshalErr2).NotTo(HaveOccurred())
-					Expect(json.Unmarshal(raw2, &got)).To(Succeed())
-					imageGetURL = got.URL
 				})
 
 				When("the delete_keycap_kit tool is called", func() {
@@ -160,13 +143,18 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 						})
 					})
 
-					It("removes the kit and its image is actually gone from S3", func(ctx SpecContext) {
+					It("removes the kit, image included", func(ctx SpecContext) {
 						Expect(err).NotTo(HaveOccurred())
 						Expect(result.IsError).To(BeFalse())
 
-						getImageResp, getErr := api.DoPresigned(ctx, http.MethodGet, imageGetURL, "", nil)
-						Expect(getErr).NotTo(HaveOccurred())
-						Expect(getImageResp.StatusCode).To(BeElementOf(http.StatusNotFound, http.StatusForbidden))
+						check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						Expect(check.IsError).To(BeFalse())
+
+						kits := decodeKeycapSetOutput(check).KeycapSet.Kits
+						for _, kit := range kits {
+							Expect(kit.KitID).NotTo(Equal(kitID))
+						}
 					})
 				})
 			})

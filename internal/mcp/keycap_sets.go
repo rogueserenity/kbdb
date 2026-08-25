@@ -23,10 +23,6 @@ var errKeycapSetNotFound = errors.New("keycap set not found")
 
 var errKeycapSetAlreadyExists = errors.New("keycap set already exists")
 
-var errKeycapKitNotFound = errors.New("keycap kit not found")
-
-var errKeycapKitHasNoImage = errors.New("keycap kit has no image")
-
 var listKeycapSetsTool = &mcp.Tool{
 	Name:        "list_keycap_sets",
 	Description: "Lists keycap sets in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_keycap_set for a single set's full details, including its kits. Omit user_id to list your own keycap sets.",
@@ -34,12 +30,7 @@ var listKeycapSetsTool = &mcp.Tool{
 
 var getKeycapSetTool = &mcp.Tool{
 	Name:        "get_keycap_set",
-	Description: "Returns the full details of one keycap set, including its kits. Each kit reports has_image rather than a URL - call get_keycap_kit_image_url to fetch one. Omit user_id to read from your own collection.",
-}
-
-var getKeycapKitImageURLTool = &mcp.Tool{
-	Name:        "get_keycap_kit_image_url",
-	Description: "Mints a short-lived URL to fetch a kit's image. Call this only when you need the image itself; get_keycap_set already reports whether one exists via has_image.",
+	Description: "Returns the full details of one keycap set, including its kits. Each kit reports has_image rather than the image itself. Omit user_id to read from your own collection.",
 }
 
 var createKeycapSetTool = &mcp.Tool{
@@ -124,44 +115,6 @@ func handleGetKeycapSet(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[
 		}
 
 		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*ks, authz.IsOwner(ctx, ownerID))}, nil
-	}
-}
-
-func handleGetKeycapKitImageURL(
-	repo repository.KeycapSetRepository,
-	images repository.KeycapKitImageStore,
-) mcp.ToolHandlerFor[schema.GetKeycapKitImageURLInput, schema.GetKeycapKitImageURLOutput] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetKeycapKitImageURLInput) (*mcp.CallToolResult, schema.GetKeycapKitImageURLOutput, error) {
-		if strings.TrimSpace(in.KeycapSetID) == "" {
-			return nil, schema.GetKeycapKitImageURLOutput{}, errors.New("keycap_set_id must not be blank")
-		}
-		if strings.TrimSpace(in.KitID) == "" {
-			return nil, schema.GetKeycapKitImageURLOutput{}, errors.New("kit_id must not be blank")
-		}
-
-		ks, err := ownedReadable(ctx, repo.Get, func(ks repository.KeycapSet) repository.Visibility { return ks.Visibility },
-			"keycap set", errKeycapSetNotFound, log.KeycapSetID, in.UserID, in.KeycapSetID)
-		if err != nil {
-			return nil, schema.GetKeycapKitImageURLOutput{}, err
-		}
-
-		idx := slices.IndexFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == in.KitID })
-		if idx == -1 {
-			return nil, schema.GetKeycapKitImageURLOutput{}, errKeycapKitNotFound
-		}
-
-		kit := ks.Kits[idx]
-		if kit.ImagePath == nil {
-			return nil, schema.GetKeycapKitImageURLOutput{}, errKeycapKitHasNoImage
-		}
-
-		url, err := images.PresignGet(ctx, *kit.ImagePath)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning keycap kit image", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.GetKeycapKitImageURLOutput{}, errors.New("failed to presign keycap kit image")
-		}
-
-		return nil, schema.GetKeycapKitImageURLOutput{URL: url}, nil
 	}
 }
 

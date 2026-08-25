@@ -67,6 +67,11 @@ var deleteBuildImageTool = &mcp.Tool{
 	Description: "Removes one image from one of your own builds, along with the underlying image object. Idempotent: deleting an image that isn't there succeeds.",
 }
 
+var listBuildImagesTool = &mcp.Tool{
+	Name:        "list_build_images",
+	Description: "Lists the ids of a build's images. get_build/list_builds only report whether any exist via has_images/has_image - call this to get their ids, e.g. before deleting one.",
+}
+
 func handleListBuilds(
 	buildRepo repository.BuildRepository,
 	keyboardRepo repository.KeyboardRepository,
@@ -349,6 +354,29 @@ func handleAddBuildImage(
 		}
 
 		return nil, schema.AddBuildImageOutput{ImageID: imageID, UploadURL: uploadURL}, nil
+	}
+}
+
+func handleListBuildImages(
+	repo repository.BuildRepository,
+) mcp.ToolHandlerFor[schema.ListBuildImagesInput, schema.ListBuildImagesOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListBuildImagesInput) (*mcp.CallToolResult, schema.ListBuildImagesOutput, error) {
+		if strings.TrimSpace(in.BuildID) == "" {
+			return nil, schema.ListBuildImagesOutput{}, errors.New("build_id must not be blank")
+		}
+
+		b, err := ownedReadable(ctx, repo.Get, func(b repository.Build) repository.Visibility { return b.Visibility },
+			"build", errBuildNotFound, log.BuildID, in.UserID, in.BuildID)
+		if err != nil {
+			return nil, schema.ListBuildImagesOutput{}, err
+		}
+
+		images := make([]schema.BuildImage, len(b.Images))
+		for i, img := range b.Images {
+			images[i] = schema.BuildImage{ImageID: img.ImageID}
+		}
+
+		return nil, schema.ListBuildImagesOutput{Images: images}, nil
 	}
 }
 

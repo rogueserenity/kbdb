@@ -22,8 +22,6 @@ var errSwitchNotFound = errors.New("switch not found")
 
 var errSwitchAlreadyExists = errors.New("switch already exists")
 
-var errSwitchHasNoImage = errors.New("switch has no image")
-
 var listSwitchesTool = &mcp.Tool{
 	Name:        "list_switches",
 	Description: "Lists switches in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_switch for a single switch's full details. Omit user_id to list your own switches.",
@@ -47,11 +45,6 @@ var updateSwitchTool = &mcp.Tool{
 var deleteSwitchTool = &mcp.Tool{
 	Name:        "delete_switch",
 	Description: "Removes a switch from your own collection. Idempotent: deleting a switch that isn't there succeeds. on_delete controls what happens if a build still references this switch: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the switch and every referencing build; \"detach\" deletes the switch regardless, leaving referencing builds with a dangling switches[].switch id.",
-}
-
-var getSwitchImageURLTool = &mcp.Tool{
-	Name:        "get_switch_image_url",
-	Description: "Mints a short-lived URL to fetch a switch's image. Call this only when you need the image itself; get_switch/list_switches already report whether one exists via has_image.",
 }
 
 var setSwitchImageTool = &mcp.Tool{
@@ -194,35 +187,6 @@ func handleDeleteSwitch(
 		}
 
 		return nil, schema.DeleteSwitchOutput{DeletedBuildIDs: result.DeletedBuildIDs}, nil
-	}
-}
-
-func handleGetSwitchImageURL(
-	repo repository.SwitchRepository,
-	images repository.SwitchImageStore,
-) mcp.ToolHandlerFor[schema.GetSwitchImageURLInput, schema.GetSwitchImageURLOutput] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetSwitchImageURLInput) (*mcp.CallToolResult, schema.GetSwitchImageURLOutput, error) {
-		if strings.TrimSpace(in.SwitchID) == "" {
-			return nil, schema.GetSwitchImageURLOutput{}, errors.New("switch_id must not be blank")
-		}
-
-		sw, err := ownedReadable(ctx, repo.Get, func(sw repository.Switch) repository.Visibility { return sw.Visibility },
-			"switch", errSwitchNotFound, log.SwitchID, in.UserID, in.SwitchID)
-		if err != nil {
-			return nil, schema.GetSwitchImageURLOutput{}, err
-		}
-
-		if sw.ImagePath == nil {
-			return nil, schema.GetSwitchImageURLOutput{}, errSwitchHasNoImage
-		}
-
-		url, err := images.PresignGet(ctx, *sw.ImagePath)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning switch image", log.SwitchID, in.SwitchID, log.Error, err)
-			return nil, schema.GetSwitchImageURLOutput{}, errors.New("failed to presign switch image")
-		}
-
-		return nil, schema.GetSwitchImageURLOutput{URL: url}, nil
 	}
 }
 

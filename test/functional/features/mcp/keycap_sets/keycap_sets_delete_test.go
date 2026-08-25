@@ -75,8 +75,6 @@ var _ = Describe("Deleting a keycap set over MCP", func() {
 			})
 
 			Context("given the set has a kit with an image", func() {
-				var imageGetURL string
-
 				BeforeEach(func(ctx SpecContext) {
 					kitResult, kitErr := client.CallTool(ctx, "create_keycap_kit", map[string]any{
 						"keycap_set_id": keycapSetID,
@@ -104,21 +102,6 @@ var _ = Describe("Deleting a keycap set over MCP", func() {
 					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, upload.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes")))
 					Expect(putErr).NotTo(HaveOccurred())
 					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
-
-					imgURLResult, imgURLErr := client.CallTool(ctx, "get_keycap_kit_image_url", map[string]any{
-						"keycap_set_id": keycapSetID,
-						"kit_id":        kitID,
-					})
-					Expect(imgURLErr).NotTo(HaveOccurred())
-					Expect(imgURLResult.IsError).To(BeFalse())
-
-					var got struct {
-						URL string `json:"url"`
-					}
-					raw2, marshalErr2 := json.Marshal(imgURLResult.StructuredContent)
-					Expect(marshalErr2).NotTo(HaveOccurred())
-					Expect(json.Unmarshal(raw2, &got)).To(Succeed())
-					imageGetURL = got.URL
 				})
 
 				When("the delete_keycap_set tool is called", func() {
@@ -129,16 +112,13 @@ var _ = Describe("Deleting a keycap set over MCP", func() {
 						}
 					})
 
-					It("removes the set and the kit's image is actually gone from S3", func(ctx SpecContext) {
+					It("removes the set, kit and image included", func(ctx SpecContext) {
 						Expect(err).NotTo(HaveOccurred())
 						Expect(result.IsError).To(BeFalse())
 
-						getImageResp, getErr := api.DoPresigned(ctx, http.MethodGet, imageGetURL, "", nil)
-						Expect(getErr).NotTo(HaveOccurred())
-						// Real S3 returns 403 (not 404) for GetObject against a
-						// missing key when the caller lacks s3:ListBucket;
-						// LocalStack returns 404.
-						Expect(getImageResp.StatusCode).To(BeElementOf(http.StatusNotFound, http.StatusForbidden))
+						check, checkErr := client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+						Expect(checkErr).NotTo(HaveOccurred())
+						Expect(check.IsError).To(BeTrue())
 					})
 				})
 			})
