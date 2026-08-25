@@ -2,7 +2,6 @@ package keyboards_test
 
 import (
 	"bytes"
-	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -80,39 +79,29 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 						Expect(check.IsError).To(BeFalse())
 						Expect(decodeGetOutput(check).Keyboard.HasImages).To(BeTrue())
 
-						By("get_keyboard_image_url minting a presigned GET URL that returns the exact bytes uploaded")
-						urlResult, urlErr := client.CallTool(ctx, "get_keyboard_image_url", map[string]any{
+						By("list_keyboard_images reporting the new image_id")
+						listResult, listErr := client.CallTool(ctx, "list_keyboard_images", map[string]any{
 							"keyboard_id": keyboardID,
-							"image_id":    out.ImageID,
 						})
-						Expect(urlErr).NotTo(HaveOccurred())
-						Expect(urlResult.IsError).To(BeFalse())
-						imageURL := decodeImageURL(urlResult)
-						Expect(imageURL).NotTo(BeEmpty())
-
-						getImageResp, getErr := api.DoPresigned(ctx, http.MethodGet, imageURL, "", nil)
-						Expect(getErr).NotTo(HaveOccurred())
-						Expect(getImageResp.StatusCode).To(Equal(http.StatusOK))
-
-						gotBytes, readErr := io.ReadAll(getImageResp.Body)
-						Expect(readErr).NotTo(HaveOccurred())
-						Expect(gotBytes).To(Equal(imageBytes))
+						Expect(listErr).NotTo(HaveOccurred())
+						Expect(listResult.IsError).To(BeFalse())
+						Expect(imageIDsOf(decodeListImagesOutput(listResult))).To(ConsistOf(out.ImageID))
 					})
 				})
 			})
 
 			Context("given the keyboard has no image set", func() {
-				When("the get_keyboard_image_url tool is called", func() {
+				When("the list_keyboard_images tool is called", func() {
 					BeforeEach(func(ctx SpecContext) {
-						result, err = client.CallTool(ctx, "get_keyboard_image_url", map[string]any{
+						result, err = client.CallTool(ctx, "list_keyboard_images", map[string]any{
 							"keyboard_id": keyboardID,
-							"image_id":    "no-such-image-" + uuid.NewString(),
 						})
 					})
 
-					It("returns an MCP tool error result", func() {
+					It("succeeds with an empty images list", func() {
 						Expect(err).NotTo(HaveOccurred())
-						Expect(result.IsError).To(BeTrue())
+						Expect(result.IsError).To(BeFalse())
+						Expect(decodeListImagesOutput(result).Images).To(BeEmpty())
 					})
 				})
 			})

@@ -569,98 +569,55 @@ func (s *HandleUpdateKeyboardSuite) TestMalformedOrderDate_ReturnsError() {
 	s.Require().ErrorContains(err, "purchase.order_date")
 }
 
-type HandleGetKeyboardImageURLSuite struct {
+type HandleListKeyboardImagesSuite struct {
 	suite.Suite
 
-	mockRepo   *mocks.MockKeyboardRepository
-	mockImages *mocks.MockKeyboardImageStore
+	mockRepo *mocks.MockKeyboardRepository
 }
 
-func TestHandleGetKeyboardImageURLSuite(t *testing.T) {
-	suite.Run(t, new(HandleGetKeyboardImageURLSuite))
+func TestHandleListKeyboardImagesSuite(t *testing.T) {
+	suite.Run(t, new(HandleListKeyboardImagesSuite))
 }
 
-func (s *HandleGetKeyboardImageURLSuite) SetupTest() {
+func (s *HandleListKeyboardImagesSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
-	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 }
 
-func (s *HandleGetKeyboardImageURLSuite) TestSucceeds() {
-	imagePath := repository.KeyboardImageKey("keyboards/caller-0001/kb-1/images/img-1")
+func (s *HandleListKeyboardImagesSuite) TestSucceeds() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, callerID, "kb-1").
 		Return(&repository.Keyboard{
 			ID:         "kb-1",
 			Visibility: repository.VisibilityPrivate,
-			Images:     []repository.KeyboardImage{{ImageID: "img-1", Path: imagePath}},
+			Images: []repository.KeyboardImage{
+				{ImageID: "img-1", Path: "keyboards/caller-0001/kb-1/images/img-1"},
+				{ImageID: "img-2", Path: "keyboards/caller-0001/kb-1/images/img-2"},
+			},
 		}, nil)
-	s.mockImages.EXPECT().
-		PresignGetKeyboardImage(mock.Anything, imagePath).
-		Return("https://example.com/presigned", nil)
 
-	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
-	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{
-		KeyboardID: "kb-1",
-		ImageID:    "img-1",
-	})
+	handler := handleListKeyboardImages(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardImagesInput{KeyboardID: "kb-1"})
 
 	s.Require().NoError(err)
-	s.Equal("https://example.com/presigned", out.URL)
+	s.Equal([]schema.KeyboardImage{{ImageID: "img-1"}, {ImageID: "img-2"}}, out.Images)
 }
 
-func (s *HandleGetKeyboardImageURLSuite) TestBlankKeyboardID_ReturnsError() {
-	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: " ", ImageID: "img-1"})
+func (s *HandleListKeyboardImagesSuite) TestBlankKeyboardID_ReturnsError() {
+	handler := handleListKeyboardImages(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardImagesInput{KeyboardID: " "})
 
 	s.Require().ErrorContains(err, "keyboard_id must not be blank")
 }
 
-func (s *HandleGetKeyboardImageURLSuite) TestBlankImageID_ReturnsError() {
-	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: " "})
-
-	s.Require().ErrorContains(err, "image_id must not be blank")
-}
-
-func (s *HandleGetKeyboardImageURLSuite) TestKeyboardNotFound_ReturnsError() {
+func (s *HandleListKeyboardImagesSuite) TestKeyboardNotFound_ReturnsError() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, callerID, "kb-1").
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: "img-1"})
+	handler := handleListKeyboardImages(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardImagesInput{KeyboardID: "kb-1"})
 
 	s.Require().ErrorIs(err, errKeyboardNotFound)
-}
-
-func (s *HandleGetKeyboardImageURLSuite) TestImageNotFound_ReturnsError() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, nil)
-
-	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: "missing"})
-
-	s.Require().ErrorIs(err, errKeyboardImageNotFound)
-}
-
-func (s *HandleGetKeyboardImageURLSuite) TestPresignError_ReturnsError() {
-	imagePath := repository.KeyboardImageKey("keyboards/caller-0001/kb-1/images/img-1")
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, callerID, "kb-1").
-		Return(&repository.Keyboard{
-			ID:         "kb-1",
-			Visibility: repository.VisibilityPrivate,
-			Images:     []repository.KeyboardImage{{ImageID: "img-1", Path: imagePath}},
-		}, nil)
-	s.mockImages.EXPECT().
-		PresignGetKeyboardImage(mock.Anything, imagePath).
-		Return("", errors.New("s3: access denied"))
-
-	handler := handleGetKeyboardImageURL(s.mockRepo, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardImageURLInput{KeyboardID: "kb-1", ImageID: "img-1"})
-
-	s.Require().ErrorContains(err, "failed to presign keyboard image")
 }
 
 type HandleAddKeyboardImageSuite struct {

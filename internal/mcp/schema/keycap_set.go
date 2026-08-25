@@ -14,15 +14,13 @@ type ListKeycapSetsOutput struct {
 }
 
 // KeycapSetSummary is the reduced keycap set shape list_keycap_sets returns.
-// PrimaryKitHasImage mirrors KeycapKit.HasImage's no-URL-in-a-list-result
-// rule - call get_keycap_kit_image_url with PrimaryKitID to fetch it.
 type KeycapSetSummary struct {
 	ID                 string  `json:"id" jsonschema:"the keycap set's unique id"`
 	Brand              string  `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
 	Name               string  `json:"name" jsonschema:"the keycap set's name"`
 	Profile            *string `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
 	PrimaryKitID       *string `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit whose image represents this set, if one is designated and it still exists"`
-	PrimaryKitHasImage bool    `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file; call get_keycap_kit_image_url to fetch it"`
+	PrimaryKitHasImage bool    `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file"`
 	OrderStatus        *string `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
 }
 
@@ -54,15 +52,12 @@ type KeycapSet struct {
 }
 
 // KeycapKit is one purchase within a keycap set. HasImage reports whether an
-// image is on file, without minting a URL every set/kit read would then have
-// to carry - call get_keycap_kit_image_url on demand instead. This is a
-// deliberate divergence from REST's KeycapKitImage.Url: a presigned URL
-// handed back inline would be short-lived and an agent may hold this result
-// across turns, long after the URL has expired.
+// image is on file - images are served to end users through REST, not this
+// MCP surface; manage a kit's image with set_keycap_kit_image/delete_keycap_kit_image.
 type KeycapKit struct {
-	KitID    string            `json:"kit_id" jsonschema:"the kit's unique id, scoped to its parent keycap set"`
-	Name     string            `json:"name" jsonschema:"the kit's name, e.g. Base or Novelties"`
-	HasImage bool              `json:"has_image" jsonschema:"whether an image is on file for this kit; call get_keycap_kit_image_url to fetch it"`
+	KitID    string             `json:"kit_id" jsonschema:"the kit's unique id, scoped to its parent keycap set"`
+	Name     string             `json:"name" jsonschema:"the kit's name, e.g. Base or Novelties"`
+	HasImage bool               `json:"has_image" jsonschema:"whether an image is on file for this kit"`
 	Purchase *KeycapKitPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 }
 
@@ -76,18 +71,6 @@ type KeycapKitPurchase struct {
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
 	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
 	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
-}
-
-// GetKeycapKitImageURLInput is the get_keycap_kit_image_url tool input.
-type GetKeycapKitImageURLInput struct {
-	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
-	KitID       string `json:"kit_id" jsonschema:"the id of the kit to fetch the image for"`
-	UserID      string `json:"user_id,omitempty" jsonschema:"whose collection to read from; omit for your own"`
-}
-
-// GetKeycapKitImageURLOutput is the get_keycap_kit_image_url tool output.
-type GetKeycapKitImageURLOutput struct {
-	URL string `json:"url" jsonschema:"a freshly-minted, short-lived presigned URL to fetch the image; do not cache or persist it, it expires within minutes"`
 }
 
 // KeycapSetInput is the writable half of a keycap set, shared by
@@ -209,8 +192,7 @@ type SetKeycapKitImageInput struct {
 // SetKeycapKitImageOutput is the set_keycap_kit_image tool output.
 // UploadURL is a presigned S3 PUT URL - the caller uploads the image bytes
 // directly to it, matching REST's SetKeycapKitImage; the tool call itself
-// never carries image bytes (see the design note on get_keycap_kit_image_url
-// for why images stay presigned end to end).
+// never carries image bytes.
 type SetKeycapKitImageOutput struct {
 	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
 }

@@ -24,8 +24,6 @@ var errKeyboardNotFound = errors.New("keyboard not found")
 
 var errKeyboardAlreadyExists = errors.New("keyboard already exists")
 
-var errKeyboardImageNotFound = errors.New("keyboard image not found")
-
 var listKeyboardsTool = &mcp.Tool{
 	Name:        "list_keyboards",
 	Description: "Lists keyboards in a user's collection, most useful for browsing. Returns an abbreviated shape; call get_keyboard for a single keyboard's full details. Omit user_id to list your own keyboards.",
@@ -51,9 +49,9 @@ var deleteKeyboardTool = &mcp.Tool{
 	Description: "Removes a keyboard from your own collection. Idempotent: deleting a keyboard that isn't there succeeds. on_delete controls what happens if a build still references this keyboard: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the keyboard and every referencing build; \"detach\" deletes the keyboard regardless, leaving referencing builds with a dangling keyboard_id.",
 }
 
-var getKeyboardImageURLTool = &mcp.Tool{
-	Name:        "get_keyboard_image_url",
-	Description: "Mints a short-lived URL to fetch one of a keyboard's images. Call this only when you need the image itself; get_keyboard/list_keyboards already report whether any exist via has_images.",
+var listKeyboardImagesTool = &mcp.Tool{
+	Name:        "list_keyboard_images",
+	Description: "Lists the ids of a keyboard's images. get_keyboard/list_keyboards only report whether any exist via has_images - call this to get their ids, e.g. before deleting one.",
 }
 
 var addKeyboardImageTool = &mcp.Tool{
@@ -195,36 +193,26 @@ func handleDeleteKeyboard(
 	}
 }
 
-func handleGetKeyboardImageURL(
+func handleListKeyboardImages(
 	repo repository.KeyboardRepository,
-	images repository.KeyboardImageStore,
-) mcp.ToolHandlerFor[schema.GetKeyboardImageURLInput, schema.GetKeyboardImageURLOutput] {
-	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetKeyboardImageURLInput) (*mcp.CallToolResult, schema.GetKeyboardImageURLOutput, error) {
+) mcp.ToolHandlerFor[schema.ListKeyboardImagesInput, schema.ListKeyboardImagesOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeyboardImagesInput) (*mcp.CallToolResult, schema.ListKeyboardImagesOutput, error) {
 		if strings.TrimSpace(in.KeyboardID) == "" {
-			return nil, schema.GetKeyboardImageURLOutput{}, errors.New("keyboard_id must not be blank")
-		}
-		if strings.TrimSpace(in.ImageID) == "" {
-			return nil, schema.GetKeyboardImageURLOutput{}, errors.New("image_id must not be blank")
+			return nil, schema.ListKeyboardImagesOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
 		kb, err := ownedReadable(ctx, repo.Get, func(k repository.Keyboard) repository.Visibility { return k.Visibility },
 			"keyboard", errKeyboardNotFound, log.KeyboardID, in.UserID, in.KeyboardID)
 		if err != nil {
-			return nil, schema.GetKeyboardImageURLOutput{}, err
+			return nil, schema.ListKeyboardImagesOutput{}, err
 		}
 
-		idx := slices.IndexFunc(kb.Images, func(i repository.KeyboardImage) bool { return i.ImageID == in.ImageID })
-		if idx == -1 {
-			return nil, schema.GetKeyboardImageURLOutput{}, errKeyboardImageNotFound
+		images := make([]schema.KeyboardImage, len(kb.Images))
+		for i, img := range kb.Images {
+			images[i] = schema.KeyboardImage{ImageID: img.ImageID}
 		}
 
-		url, err := images.PresignGetKeyboardImage(ctx, kb.Images[idx].Path)
-		if err != nil {
-			log.FromContext(ctx).Error("presigning keyboard image", log.KeyboardID, in.KeyboardID, log.Error, err)
-			return nil, schema.GetKeyboardImageURLOutput{}, errors.New("failed to presign keyboard image")
-		}
-
-		return nil, schema.GetKeyboardImageURLOutput{URL: url}, nil
+		return nil, schema.ListKeyboardImagesOutput{Images: images}, nil
 	}
 }
 

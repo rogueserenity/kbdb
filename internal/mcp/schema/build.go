@@ -40,10 +40,8 @@ type BuildInput struct {
 	Visibility    string                `json:"visibility" jsonschema:"who can read this build; one of \"public\", \"authenticated\", \"private\""`
 }
 
-// Build reports HasImages rather than a presigned URL, unlike REST's
-// inline Images array, to avoid handing back a URL that may have expired
-// by the time an agent acts on a held result; a future
-// get_build_image_url tool fetches one on demand.
+// Build reports HasImages rather than the image list itself - call
+// list_build_images for the id of each image on file.
 type Build struct {
 	ID            string                `json:"id" jsonschema:"the build's unique id"`
 	Keyboard      string                `json:"keyboard" jsonschema:"the id of the Keyboard resource this build is based on"`
@@ -152,3 +150,21 @@ type DeleteBuildImageInput struct {
 // DeleteBuildImageOutput is the delete_build_image tool's output. Deleting
 // is idempotent, so there is no payload.
 type DeleteBuildImageOutput struct{}
+
+// ListBuildImagesInput is the list_build_images tool's input.
+type ListBuildImagesInput struct {
+	BuildID string `json:"build_id" jsonschema:"the id of the build to list images for"`
+	UserID  string `json:"user_id,omitempty" jsonschema:"whose collection to read from; omit for your own"`
+}
+
+// ListBuildImagesOutput is the list_build_images tool's output.
+type ListBuildImagesOutput struct {
+	Images []BuildImage `json:"images" jsonschema:"the build's images"`
+}
+
+// BuildImage is one image on file for a build. There's no URL - call
+// add_build_image/delete_build_image to manage images by id; images are
+// served to end users through REST, not this MCP surface.
+type BuildImage struct {
+	ImageID string `json:"image_id" jsonschema:"the image's id"`
+}

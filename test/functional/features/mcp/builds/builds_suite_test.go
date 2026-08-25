@@ -107,3 +107,30 @@ func buildIDsOf(out listBuildsOutput) []string {
 
 	return ids
 }
+
+type listImagesOutput struct {
+	Images []struct {
+		ImageID string `json:"image_id"`
+	} `json:"images"`
+}
+
+func decodeListImagesOutput(result *sdkmcp.CallToolResult) listImagesOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out listImagesOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}
+
+func imageIDsOf(out listImagesOutput) []string {
+	ids := make([]string, 0, len(out.Images))
+	for _, img := range out.Images {
+		ids = append(ids, img.ImageID)
+	}
+
+	return ids
+}

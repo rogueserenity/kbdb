@@ -67,16 +67,3 @@ func decodeSetImageOutput(result *sdkmcp.CallToolResult) setImageOutput {
 
 	return out
 }
-
-func decodeImageURL(result *sdkmcp.CallToolResult) string {
-	GinkgoHelper()
-
-	var out struct {
-		URL string `json:"url"`
-	}
-	raw, err := json.Marshal(result.StructuredContent)
-	Expect(err).NotTo(HaveOccurred())
-	Expect(json.Unmarshal(raw, &out)).To(Succeed())
-
-	return out.URL
-}

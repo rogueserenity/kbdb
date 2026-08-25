@@ -2,7 +2,6 @@ package switches_test
 
 import (
 	"bytes"
-	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -78,23 +77,6 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 						Expect(checkErr).NotTo(HaveOccurred())
 						Expect(check.IsError).To(BeFalse())
 						Expect(decodeGetOutput(check).Switch.HasImage).To(BeTrue())
-
-						By("get_switch_image_url minting a presigned GET URL that returns the exact bytes uploaded")
-						urlResult, urlErr := client.CallTool(ctx, "get_switch_image_url", map[string]any{
-							"switch_id": switchID,
-						})
-						Expect(urlErr).NotTo(HaveOccurred())
-						Expect(urlResult.IsError).To(BeFalse())
-						imageURL := decodeImageURL(urlResult)
-						Expect(imageURL).NotTo(BeEmpty())
-
-						getImageResp, getErr := api.DoPresigned(ctx, http.MethodGet, imageURL, "", nil)
-						Expect(getErr).NotTo(HaveOccurred())
-						Expect(getImageResp.StatusCode).To(Equal(http.StatusOK))
-
-						gotBytes, readErr := io.ReadAll(getImageResp.Body)
-						Expect(readErr).NotTo(HaveOccurred())
-						Expect(gotBytes).To(Equal(imageBytes))
 					})
 				})
 			})
@@ -115,20 +97,6 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 				})
 			})
 
-			Context("given the switch has no image set", func() {
-				When("the get_switch_image_url tool is called", func() {
-					BeforeEach(func(ctx SpecContext) {
-						result, err = client.CallTool(ctx, "get_switch_image_url", map[string]any{
-							"switch_id": switchID,
-						})
-					})
-
-					It("returns an MCP tool error result", func() {
-						Expect(err).NotTo(HaveOccurred())
-						Expect(result.IsError).To(BeTrue())
-					})
-				})
-			})
 		})
 
 		Context("given another user owns the switch", func() {
