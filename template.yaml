@@ -47,6 +47,15 @@ Parameters:
       This deployment's Stytch public token, rendered into the GET
       /authorize consent page (see internal/consent). Safe to embed
       client-side by design.
+  LogoutReturnOrigins:
+    Type: String
+    Description: >-
+      Comma-separated browser origins (each scheme + host + port, e.g.
+      http://localhost:5173,https://jay.mykeebs.dev) GET /logout is allowed
+      to redirect back to via its return_to param - see internal/consent.
+      Typically mykeebs-web's dev server and/or its deployed counterpart.
+      Kept as a plain string (not CommaDelimitedList) since it's only ever
+      passed straight through to LOGOUT_RETURN_ORIGINS below.
   CustomDomainName:
     Type: String
     Default: ''
@@ -256,6 +265,7 @@ Resources:
           OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
           OIDC_AUDIENCE: !Ref OidcAudience
           STYTCH_PUBLIC_TOKEN: !Ref StytchPublicToken
+          LOGOUT_RETURN_ORIGINS: !Ref LogoutReturnOrigins
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
@@ -633,6 +643,16 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Path: /authorize
+            Method: any
+            Auth:
+              Authorizer: NONE
+        # No auth: same rationale as McpMetadataEvent. Method: any so a
+        # non-GET request reaches the handler's own 405 instead of a 404.
+        LogoutEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /logout
             Method: any
             Auth:
               Authorizer: NONE

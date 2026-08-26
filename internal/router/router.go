@@ -29,8 +29,9 @@ import (
 // Metadata (the OIDC issuer MCP clients should authenticate against); the
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see [github.com/rogueserenity/kbdb/internal/mcp.Handlers]
-// for why. stytchPublicToken configures the GET /authorize consent page
-// (see internal/consent). version is advertised to MCP clients in the
+// for why. stytchPublicToken configures the GET /authorize consent page and
+// GET /logout (see internal/consent); logoutReturnOrigins restricts
+// /logout's return_to param. version is advertised to MCP clients in the
 // server's initialize handshake.
 func New(
 	verifier *auth.Verifier,
@@ -43,6 +44,7 @@ func New(
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
 	issuerURL, stytchPublicToken, version string,
+	logoutReturnOrigins []string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
 
@@ -51,6 +53,7 @@ func New(
 	// Not part of api/openapi.yaml, so not wrapped in validate - see
 	// internal/consent.
 	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken, issuerURL))
+	mux.Handle("GET /logout", consent.LogoutHandler(stytchPublicToken, issuerURL, logoutReturnOrigins))
 
 	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:
 	// lookup categories are static, deploy-time data (internal/lookup),

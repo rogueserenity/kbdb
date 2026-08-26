@@ -4,8 +4,16 @@
 <meta charset="utf-8" />
 <title>kbdb — Sign in</title>
 <style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap');
   stytch-login, stytch-identity-provider { display: block; min-height: 400px; min-width: 300px; }
-  body { font-family: system-ui, sans-serif; max-width: 480px; margin: 4rem auto; padding: 0 1rem; }
+  body {
+    font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+    max-width: 480px;
+    margin: 4rem auto;
+    padding: 0 1rem;
+    background: #141316;
+    color: #ede7dd;
+  }
 </style>
 </head>
 <body>
@@ -14,12 +22,10 @@
   <stytch-identity-provider id="idp-el"></stytch-identity-provider>
 
   <script type="module">
-    import { StytchClient, StytchIdentityProvider, StytchUI, Products } from 'https://esm.sh/@stytch/vanilla-js@6.2.0';
+    import { StytchClient, StytchIdentityProvider, StytchUI, Products, OAuthProviders } from 'https://esm.sh/@stytch/vanilla-js@6.2.0';
 
     const PUBLIC_TOKEN = {{.StytchPublicToken}};
-    // customBaseUrl: Stytch stamps "iss" based on the domain a request hit,
-    // not a fixed per-project setting - without this the RFC 9207 "iss" it
-    // returns won't match the custom domain named in discovery.
+    // customBaseUrl keeps the OIDC "iss" matching the discovery domain.
     const stytch = new StytchClient(PUBLIC_TOKEN, {
       customBaseUrl: {{.OIDCIssuerBaseURL}},
     });
@@ -27,50 +33,104 @@
     customElements.define('stytch-login', StytchUI);
     customElements.define('stytch-identity-provider', StytchIdentityProvider);
 
+    // Matches mykeebs-web's own theme tokens (src/routes/layout.css).
+    const presentation = {
+      theme: {
+        'font-family': "'Inter', ui-sans-serif, system-ui, sans-serif",
+        'font-family-mono': "'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace",
+        'rounded-base': '6px',
+        'color-scheme': 'dark',
+        background: '#141316',
+        foreground: '#ede7dd',
+        primary: '#e8a33d',
+        'primary-foreground': '#2a1c04',
+        secondary: '#1f1c21',
+        'secondary-foreground': '#ede7dd',
+        muted: '#1c1a1e',
+        'muted-foreground': '#9c9499',
+        accent: '#e8a33d',
+        'accent-foreground': '#2a1c04',
+        border: '#332f36',
+        input: '#332f36',
+        ring: '#e8a33d',
+        destructive: '#c1554a',
+        'destructive-foreground': '#fff',
+        warning: '#d6a94a',
+        success: '#7c9473',
+      },
+      options: {},
+    };
+
+    function showSignedIn() {
+      document.getElementById('status').textContent = 'Signed in';
+      document.getElementById('login-el').style.display = 'none';
+      const idp = document.getElementById('idp-el');
+      idp.style.display = 'block';
+      idp.render({ client: stytch, presentation });
+    }
+
     async function render() {
       try {
-        // The magic-link redirect replaces our OAuth query params with
-        // Stytch's own - restore them from localStorage (not sessionStorage:
-        // a magic link opened in a new tab can't see the original tab's).
-        const params = new URLSearchParams(window.location.search);
-        const magicToken = params.get('token');
-        const savedQs = localStorage.getItem('kbdb_oauth_qs');
+        // Discord's redirect back overwrites our OAuth query params with
+        // Stytch's own (?token=...) - save/restore via localStorage.
+        let params = new URLSearchParams(window.location.search);
 
-        if (magicToken && !params.has('client_id')) {
-          await stytch.magicLinks.authenticate(magicToken, { session_duration_minutes: 60 });
+        if (params.has('client_id')) {
+          localStorage.setItem('kbdb_oauth_qs', window.location.search);
+        } else if (params.has('token')) {
+          await stytch.authenticateByUrl({ session_duration_minutes: 60 });
+          const savedQs = localStorage.getItem('kbdb_oauth_qs');
           if (savedQs) {
             window.history.replaceState({}, '', window.location.pathname + savedQs);
+            params = new URLSearchParams(savedQs);
           }
         }
 
-        const loggedIn = stytch.session.getSync() != null;
+        // getSync() is a local cache read - re-verify against the server so
+        // a session revoked from mykeebs-web's origin is actually caught.
+        let loggedIn = false;
+        if (stytch.session.getSync() != null) {
+          try {
+            await stytch.session.authenticate({ session_duration_minutes: 60 });
+            loggedIn = true;
+          } catch {
+            loggedIn = false;
+          }
+        }
 
         if (loggedIn) {
-          document.getElementById('status').textContent = 'Signed in';
-          document.getElementById('login-el').style.display = 'none';
-          const idp = document.getElementById('idp-el');
-          idp.style.display = 'block';
-          idp.render({ client: stytch });
+          showSignedIn();
         } else {
           document.getElementById('status').textContent = 'Sign in to continue';
           document.getElementById('idp-el').style.display = 'none';
           const login = document.getElementById('login-el');
           login.style.display = 'block';
-          localStorage.setItem('kbdb_oauth_qs', window.location.search);
           const bareRedirectUrl = window.location.origin + window.location.pathname;
           login.render({
             client: stytch,
             config: {
-              products: [Products.emailMagicLinks],
-              emailMagicLinksOptions: {
+              products: [Products.oauth, Products.otp],
+              oauthOptions: {
+                providers: [{ type: OAuthProviders.Discord }],
                 loginRedirectURL: bareRedirectUrl,
-                loginExpirationMinutes: 60,
                 signupRedirectURL: bareRedirectUrl,
-                signupExpirationMinutes: 60,
+              },
+              otpOptions: {
+                methods: ['email'],
               },
             },
+            presentation,
             styles: {
               container: { width: '100%' },
+            },
+            // OTP authenticates in-page, not via redirect - without this,
+            // nothing advances past the widget's own "Success!" screen.
+            callbacks: {
+              onEvent: ({ type }) => {
+                if (type === 'AUTHENTICATE_FLOW_COMPLETE') {
+                  showSignedIn();
+                }
+              },
             },
           });
         }

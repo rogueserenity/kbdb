@@ -73,7 +73,8 @@ sam deploy \
     SkipApiRepository=true \
     "OidcIssuerBaseUrl=$ISSUER_URL" \
     "OidcAudience=client_local_kbdb" \
-    "StytchPublicToken=public-token-test-local-kbdb"
+    "StytchPublicToken=public-token-test-local-kbdb" \
+    "LogoutReturnOrigins=http://localhost:5173"
 
 out() {
   aws cloudformation describe-stacks --stack-name "$STACK" \
