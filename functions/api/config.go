@@ -8,7 +8,10 @@ type Config struct {
 	OIDCIssuerURL string `env:"OIDC_ISSUER_URL" required:""`
 	OIDCAudience  string `env:"OIDC_AUDIENCE" required:""`
 	// Rendered into the GET /authorize consent page - see internal/consent.
-	StytchPublicToken  string `env:"STYTCH_PUBLIC_TOKEN" required:""`
+	StytchPublicToken string `env:"STYTCH_PUBLIC_TOKEN" required:""`
+	// Comma-separated origins GET /logout may redirect back to - see
+	// internal/consent.
+	LogoutReturnOrigins string `env:"LOGOUT_RETURN_ORIGINS" required:""`
 	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
 	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
 	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`

@@ -23,6 +23,7 @@ OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL
 OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
 STYTCH_PUBLIC_TOKEN="${KBDB_STYTCH_PUBLIC_TOKEN:?set KBDB_STYTCH_PUBLIC_TOKEN - see CONTRIBUTING.md}"
 CORS_ALLOW_ORIGINS="${KBDB_CORS_ALLOW_ORIGINS:?set KBDB_CORS_ALLOW_ORIGINS - see CONTRIBUTING.md}"
+LOGOUT_RETURN_ORIGINS="${KBDB_LOGOUT_RETURN_ORIGINS:?set KBDB_LOGOUT_RETURN_ORIGINS - see CONTRIBUTING.md}"
 
 # Optional - see CONTRIBUTING.md's "Custom domain" section. Unset by
 # default, so a normal dev-deploy run doesn't touch template.yaml's
@@ -46,6 +47,7 @@ sam deploy --stack-name "$STACK_NAME" \
     "OidcAudience=${OIDC_AUDIENCE}" \
     "StytchPublicToken=${STYTCH_PUBLIC_TOKEN}" \
     "CorsAllowOrigins=${CORS_ALLOW_ORIGINS}" \
+    "LogoutReturnOrigins=${LOGOUT_RETURN_ORIGINS}" \
     "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \
   --no-fail-on-empty-changeset \
