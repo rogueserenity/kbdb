@@ -130,6 +130,7 @@ jobs:
               "OidcAudience=client_local_kbdb" \
               "StytchPublicToken=public-token-test-local-kbdb" \
               "CorsAllowOrigins=http://localhost:5173" \
+              "LogoutReturnOrigins=http://localhost:5173" \
             --tags "kbdb:pr=pr-${{ github.event.pull_request.number }}" \
             --no-confirm-changeset \
             --no-fail-on-empty-changeset
