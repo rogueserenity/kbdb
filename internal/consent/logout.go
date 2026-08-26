@@ -4,10 +4,10 @@ import (
 	"bytes"
 	_ "embed"
 	"fmt"
+	"html/template"
 	"log"
 	"net/http"
 	"net/url"
-	"text/template"
 
 	"github.com/rogueserenity/kbdb/internal/problem"
 )
@@ -17,6 +17,11 @@ var logoutHTML string
 
 var logoutTemplate = template.Must(template.New("logout.html").Parse(logoutHTML))
 
+// logoutTemplateData fields are rendered by html/template into a <script>
+// block - its context-aware escaping renders them as safe JS string
+// literals (including escaping a </script> breakout attempt from ReturnTo,
+// which is user-controlled via the return_to query param), so fields are
+// passed raw, not pre-quoted.
 type logoutTemplateData struct {
 	StytchPublicToken string
 	OIDCIssuerBaseURL string
@@ -43,9 +48,9 @@ func LogoutHandler(stytchPublicToken, oidcIssuerBaseURL string, allowedReturnOri
 		}
 
 		data := logoutTemplateData{
-			StytchPublicToken: fmt.Sprintf("%q", stytchPublicToken),
-			OIDCIssuerBaseURL: fmt.Sprintf("%q", oidcIssuerBaseURL),
-			ReturnTo:          fmt.Sprintf("%q", returnTo),
+			StytchPublicToken: stytchPublicToken,
+			OIDCIssuerBaseURL: oidcIssuerBaseURL,
+			ReturnTo:          returnTo,
 		}
 
 		var buf bytes.Buffer

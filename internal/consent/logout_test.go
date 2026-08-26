@@ -45,6 +45,24 @@ func (s *LogoutHandlerSuite) TestGet_EscapesReturnTo() {
 	s.Contains(rec.Body.String(), `"http://localhost:5173/\"; alert(1); //"`)
 }
 
+func (s *LogoutHandlerSuite) TestGet_ReturnToScriptBreakout_DoesNotBreakOutOfScriptTag() {
+	// A return_to containing a literal </script> must not close the
+	// surrounding <script> block early - %q-style JS-string escaping alone
+	// wouldn't stop this, since the HTML tokenizer scans for </script>
+	// before any JS parsing happens. html/template's context-aware escaping
+	// must rewrite it (e.g. to "<\/script>") to prevent breakout.
+	returnTo := `http://localhost:5173/</script><script>alert(document.cookie)</script>`
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet,
+		"/logout?return_to="+url.QueryEscape(returnTo), nil)
+	rec := httptest.NewRecorder()
+
+	LogoutHandler("public-token-test-abc123", "https://auth.example.com",
+		[]string{"http://localhost:5173"}).ServeHTTP(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+	s.NotContains(rec.Body.String(), "</script><script>alert(document.cookie)</script>")
+}
+
 func (s *LogoutHandlerSuite) TestGet_MissingReturnTo_BadRequest() {
 	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/logout", nil)
 	rec := httptest.NewRecorder()

@@ -6,10 +6,9 @@ package consent
 import (
 	"bytes"
 	_ "embed"
-	"fmt"
+	"html/template"
 	"log"
 	"net/http"
-	"text/template"
 )
 
 //go:embed authorize.html
@@ -17,9 +16,10 @@ var authorizeHTML string
 
 var authorizeTemplate = template.Must(template.New("authorize.html").Parse(authorizeHTML))
 
-// templateData fields are pre-quoted via %q so they render as valid JS
-// string literals - text/template has no JS-context awareness to do this
-// itself.
+// templateData fields are rendered by html/template into a <script> block -
+// its context-aware escaping renders them as safe JS string literals
+// (including escaping a </script> breakout attempt), so fields are passed
+// raw, not pre-quoted.
 type templateData struct {
 	StytchPublicToken string
 	OIDCIssuerBaseURL string
@@ -29,8 +29,8 @@ type templateData struct {
 func Handler(stytchPublicToken, oidcIssuerBaseURL string) http.Handler {
 	var buf bytes.Buffer
 	data := templateData{
-		StytchPublicToken: fmt.Sprintf("%q", stytchPublicToken),
-		OIDCIssuerBaseURL: fmt.Sprintf("%q", oidcIssuerBaseURL),
+		StytchPublicToken: stytchPublicToken,
+		OIDCIssuerBaseURL: oidcIssuerBaseURL,
 	}
 	if err := authorizeTemplate.Execute(&buf, data); err != nil {
 		log.Fatalf("consent: rendering authorize.html: %v", err)
