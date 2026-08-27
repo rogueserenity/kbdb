@@ -239,3 +239,71 @@ func (_c *MockProfileRepository_ResolveUsername_Call) RunAndReturn(run func(ctx 
 	_c.Call.Return(run)
 	return _c
 }
+
+// Update provides a mock function for the type MockProfileRepository
+func (_mock *MockProfileRepository) Update(ctx context.Context, p repository.Profile) (*repository.Profile, error) {
+	ret := _mock.Called(ctx, p)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Update")
+	}
+
+	var r0 *repository.Profile
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.Profile) (*repository.Profile, error)); ok {
+		return returnFunc(ctx, p)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.Profile) *repository.Profile); ok {
+		r0 = returnFunc(ctx, p)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.Profile)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.Profile) error); ok {
+		r1 = returnFunc(ctx, p)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProfileRepository_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
+type MockProfileRepository_Update_Call struct {
+	*mock.Call
+}
+
+// Update is a helper method to define mock.On call
+//   - ctx context.Context
+//   - p repository.Profile
+func (_e *MockProfileRepository_Expecter) Update(ctx any, p any) *MockProfileRepository_Update_Call {
+	return &MockProfileRepository_Update_Call{Call: _e.mock.On("Update", ctx, p)}
+}
+
+func (_c *MockProfileRepository_Update_Call) Run(run func(ctx context.Context, p repository.Profile)) *MockProfileRepository_Update_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.Profile
+		if args[1] != nil {
+			arg1 = args[1].(repository.Profile)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProfileRepository_Update_Call) Return(profile *repository.Profile, err error) *MockProfileRepository_Update_Call {
+	_c.Call.Return(profile, err)
+	return _c
+}
+
+func (_c *MockProfileRepository_Update_Call) RunAndReturn(run func(ctx context.Context, p repository.Profile) (*repository.Profile, error)) *MockProfileRepository_Update_Call {
+	_c.Call.Return(run)
+	return _c
+}

@@ -28,3 +28,9 @@ func (c *ProfilesClient) Get(ctx context.Context, identifier, token string) (*ht
 func (c *ProfilesClient) Create(ctx context.Context, userID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPost, "/v1/profile/"+userID, token, bytes.NewBufferString(body))
 }
+
+// Update calls PUT /v1/profile/{userId} with the given bearer token and raw
+// JSON body. The caller owns closing resp.Body.
+func (c *ProfilesClient) Update(ctx context.Context, userID, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPut, "/v1/profile/"+userID, token, bytes.NewBufferString(body))
+}

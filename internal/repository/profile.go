@@ -95,6 +95,17 @@ type ProfileRepository interface {
 	// directory-GSI discriminators are derived from p and set here, not by
 	// the caller.
 	Create(ctx context.Context, p Profile) (*Profile, error)
+
+	// Update replaces the caller's profile with the body-settable fields of
+	// p (username, discoverable, discord_username, bio, links), leaving
+	// AvatarPath and Version carried forward from the stored item - the
+	// avatar is managed only via the image endpoints, and Version is the
+	// CAS guard. This is a full replace: an omitted body field is cleared.
+	// The caller is read from ctx, not p.StytchUserID. Returns ErrNotFound
+	// if the caller has no profile, or ErrUsernameTaken if a changed
+	// username is already claimed by a different user. The sparse
+	// directory-GSI discriminators are recomputed on every update.
+	Update(ctx context.Context, p Profile) (*Profile, error)
 }
 
 // ProfileImageKey is the object key a profile's avatar is stored under in a

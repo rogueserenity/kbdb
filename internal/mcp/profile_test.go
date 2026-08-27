@@ -186,3 +186,69 @@ func (s *HandleCreateProfileSuite) TestRepoError_GenericError() {
 	s.Require().Error(err)
 	s.NotErrorIs(err, errProfileAlreadyExists)
 }
+
+type HandleUpdateProfileSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockProfileRepository
+}
+
+func TestHandleUpdateProfileSuite(t *testing.T) {
+	suite.Run(t, new(HandleUpdateProfileSuite))
+}
+
+func (s *HandleUpdateProfileSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+}
+
+func (s *HandleUpdateProfileSuite) call(in schema.UpdateProfileInput) (schema.UpdateProfileOutput, error) {
+	_, out, err := handleUpdateProfile(s.mockRepo)(callerContext(s.T()), nil, in)
+	return out, err
+}
+
+func (s *HandleUpdateProfileSuite) TestValid_Updated() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
+		return p.Username == "alice"
+	})).Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+
+	out, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().NoError(err)
+	s.Equal("alice", out.Profile.Username)
+}
+
+func (s *HandleUpdateProfileSuite) TestInvalidUsername_ErrorNoRepoCall() {
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "AB"}})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "username")
+}
+
+func (s *HandleUpdateProfileSuite) TestNoProfile_NotFoundError() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().ErrorIs(err, errProfileNotFound)
+}
+
+func (s *HandleUpdateProfileSuite) TestUsernameTaken_Error() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrUsernameTaken)
+
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "taken"}})
+
+	s.Require().Error(err)
+	s.Equal(`username "taken" is already taken`, err.Error())
+}
+
+func (s *HandleUpdateProfileSuite) TestRepoError_GenericError() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamo down"))
+
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().Error(err)
+	s.NotErrorIs(err, errProfileNotFound)
+}

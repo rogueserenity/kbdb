@@ -30,6 +30,11 @@ var createProfileTool = &mcp.Tool{
 	Description: "Creates your own public profile. You may have only one profile - creating a second fails. username must be 3-20 chars of lowercase letters, digits, hyphen, or underscore, must not start with \"user-\", and must be unique across all users. Omitting an optional field (discord_username, bio, links) leaves it unset.",
 }
 
+var updateProfileTool = &mcp.Tool{
+	Name:        "update_profile",
+	Description: "Replaces your own public profile. This is a full replace: every field is overwritten, so omitting bio or links clears them - send the complete profile, not just the fields you want to change. The avatar is not part of this call and is left untouched. Fails if you have no profile yet, or if the requested username is already taken by another user.",
+}
+
 func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.GetProfileInput, schema.GetProfileOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetProfileInput) (*mcp.CallToolResult, schema.GetProfileOutput, error) {
 		if strings.TrimSpace(in.Identifier) == "" {
@@ -68,6 +73,28 @@ func handleCreateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 		}
 
 		return nil, schema.CreateProfileOutput{Profile: repomcp.ProfileToMCP(*created)}, nil
+	}
+}
+
+func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.UpdateProfileInput, schema.UpdateProfileOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateProfileInput) (*mcp.CallToolResult, schema.UpdateProfileOutput, error) {
+		p, err := validatedProfile(in.ProfileInput)
+		if err != nil {
+			return nil, schema.UpdateProfileOutput{}, err
+		}
+
+		updated, err := repo.Update(ctx, p)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			return nil, schema.UpdateProfileOutput{}, errProfileNotFound
+		case errors.Is(err, repository.ErrUsernameTaken):
+			return nil, schema.UpdateProfileOutput{}, fmt.Errorf("username %q is already taken", p.Username)
+		case err != nil:
+			log.FromContext(ctx).Error("updating profile", log.Error, err)
+			return nil, schema.UpdateProfileOutput{}, errors.New("failed to update profile")
+		}
+
+		return nil, schema.UpdateProfileOutput{Profile: repomcp.ProfileToMCP(*updated)}, nil
 	}
 }
 

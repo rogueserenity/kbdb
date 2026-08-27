@@ -283,3 +283,122 @@ func (s *CreateProfileSuite) TestRepoError_500() {
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 }
+
+type UpdateProfileSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+	handler    http.HandlerFunc
+}
+
+func TestUpdateProfileSuite(t *testing.T) {
+	suite.Run(t, new(UpdateProfileSuite))
+}
+
+func (s *UpdateProfileSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+	s.handler = UpdateProfile(s.mockRepo, s.mockImages)
+}
+
+// put builds a PUT /v1/profile/{identifier} request with body as JSON and
+// the caller identity on ctx set to caller (empty for anonymous).
+func (s *UpdateProfileSuite) put(caller string, body any) *httptest.ResponseRecorder {
+	s.T().Helper()
+
+	var raw []byte
+	switch b := body.(type) {
+	case string:
+		raw = []byte(b)
+	default:
+		var err error
+		raw, err = json.Marshal(b)
+		s.Require().NoError(err)
+	}
+
+	ctx := s.T().Context()
+	if caller != "" {
+		ctx = kbdbctx.WithUserID(ctx, caller)
+	}
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/v1/profile/"+profileUserID, strings.NewReader(string(raw)))
+	req.SetPathValue("identifier", profileUserID)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+	return rec
+}
+
+func (s *UpdateProfileSuite) TestValidInput_200() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
+		return p.Username == "alice"
+	})).Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+
+	s.Equal(http.StatusOK, rec.Code)
+	var body api.Profile
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
+	s.Equal("alice", body.Username)
+	s.NotContains(rec.Body.String(), "user-alice") // IdP subject never leaked
+}
+
+func (s *UpdateProfileSuite) TestNotOwner_404_NoRepoCall() {
+	rec := s.put("user-bob", api.ProfileInput{Username: "alice"})
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *UpdateProfileSuite) TestAnonymous_404() {
+	rec := s.put("", api.ProfileInput{Username: "alice"})
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *UpdateProfileSuite) TestMalformedBody_400() {
+	rec := s.put("user-alice", "{not json")
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+}
+
+func (s *UpdateProfileSuite) TestInvalidUsername_400() {
+	rec := s.put("user-alice", api.ProfileInput{Username: "AB"})
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+}
+
+func (s *UpdateProfileSuite) TestNoProfile_404() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrNotFound)
+
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *UpdateProfileSuite) TestUsernameTaken_409_UsernameUnavailableType() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrUsernameTaken)
+
+	rec := s.put("user-alice", api.ProfileInput{Username: "taken"})
+
+	s.Equal(http.StatusConflict, rec.Code)
+	var body struct {
+		Type   string `json:"type"`
+		Detail string `json:"detail"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
+	s.Equal("https://mykeebs.info/errors/username-unavailable", body.Type)
+	s.Equal(`the username "taken" is already taken`, body.Detail)
+}
+
+func (s *UpdateProfileSuite) TestRepoError_500() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamo down"))
+
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}

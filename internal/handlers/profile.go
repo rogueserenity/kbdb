@@ -122,3 +122,59 @@ func CreateProfile(repo repository.ProfileRepository, images repository.ProfileI
 		_ = json.NewEncoder(w).Encode(out)
 	}
 }
+
+// UpdateProfile reads the {identifier} path value (which for PUT must be the
+// caller's own IdP subject) and requires an authenticated caller. A
+// username, or another user's subject, returns 404, not 403, matching the
+// don't-leak posture of the other write routes; so does a caller who has no
+// profile yet. This is a full replace: an omitted body-settable field is
+// cleared, while the avatar is left untouched (managed only via the image
+// endpoints). A username now claimed by a different user is 409 with the
+// distinct .../errors/username-unavailable type.
+func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.PathValue("identifier")
+
+		if !authz.IsOwner(r.Context(), userID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.ProfileInput
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		p := repoapi.ProfileToRepo(in)
+
+		if !validateProfileInput(w, p) {
+			return
+		}
+
+		updated, err := repo.Update(r.Context(), p)
+		switch {
+		case errors.Is(err, repository.ErrNotFound):
+			problem.NotFound(w, "resource not found")
+			return
+		case errors.Is(err, repository.ErrUsernameTaken):
+			problem.UsernameUnavailable(w, fmt.Sprintf("the username %q is already taken", p.Username))
+			return
+		case err != nil:
+			log.FromContext(r.Context()).Error("updating profile", log.Error, err)
+			problem.Internal(w, "failed to update profile")
+			return
+		}
+
+		out, err := repoapi.ProfileToAPI(r.Context(), *updated, images)
+		if err != nil {
+			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err)
+			problem.Internal(w, "failed to update profile")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(out)
+	}
+}

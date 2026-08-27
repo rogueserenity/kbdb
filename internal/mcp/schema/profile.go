@@ -33,6 +33,19 @@ type CreateProfileOutput struct {
 	Profile Profile `json:"profile" jsonschema:"the created profile"`
 }
 
+// UpdateProfileInput is the update_profile tool arguments. Every field is
+// replaced, so omitting an optional field clears it - matching the REST PUT
+// this mirrors. There is no user_id: the update always targets the caller's
+// own profile.
+type UpdateProfileInput struct {
+	ProfileInput
+}
+
+// UpdateProfileOutput is the update_profile tool result.
+type UpdateProfileOutput struct {
+	Profile Profile `json:"profile" jsonschema:"the updated profile"`
+}
+
 // GetProfileOutput is the get_profile tool result.
 type GetProfileOutput struct {
 	Profile Profile `json:"profile" jsonschema:"the requested profile"`
