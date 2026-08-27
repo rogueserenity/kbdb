@@ -158,6 +158,9 @@ func New(
 	// references a Profile), idempotent: no profile is still 204.
 	mux.Handle("DELETE /v1/profile/{identifier}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteProfile(profileRepo, profileImageStore))))
+	// The public directory: anonymous OK, only discoverable profiles returned.
+	mux.Handle("GET /v1/profiles",
+		middleware.OptionalAuth(verifier)(validate(handlers.ListProfiles(profileRepo, profileImageStore))))
 
 	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
 	// API Gateway's native authorizer - see that middleware's doc comment

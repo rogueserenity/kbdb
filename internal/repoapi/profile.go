@@ -31,6 +31,26 @@ func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.P
 	return out, nil
 }
 
+// ProfileToAPISummary maps a repository.Profile to a directory row -
+// no bio or links, avatar presigned if set.
+func ProfileToAPISummary(ctx context.Context, p repository.Profile, images repository.ProfileImageStore) (api.ProfileSummary, error) {
+	summary := api.ProfileSummary{
+		Username:        &p.Username,
+		UserId:          &p.StytchUserID,
+		DiscordUsername: p.DiscordUsername,
+	}
+
+	if p.AvatarPath != nil {
+		url, err := images.PresignGet(ctx, *p.AvatarPath)
+		if err != nil {
+			return api.ProfileSummary{}, fmt.Errorf("presigning profile avatar: %w", err)
+		}
+		summary.Avatar = &api.ProfileImage{Url: url}
+	}
+
+	return summary, nil
+}
+
 // ProfileToRepo maps a ProfileInput to a repository.Profile. StytchUserID,
 // AvatarPath, and the GSI discriminators are set downstream, not here.
 func ProfileToRepo(in api.ProfileInput) repository.Profile {

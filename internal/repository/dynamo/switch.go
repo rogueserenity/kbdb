@@ -350,10 +350,10 @@ func decodeCursor(cursor string) (map[string]types.AttributeValue, error) {
 	return out, nil
 }
 
-// encodeCursor is decodeCursor's inverse. DynamoDB's LastEvaluatedKey for
-// this table is always string-valued (user_id, id), so a plain
-// map[string]string round-trips it without needing attributevalue's fuller
-// (and cursor-unfriendly) type-tagged encoding.
+// encodeCursor is decodeCursor's inverse. Every LastEvaluatedKey paginated
+// here is string-valued (base-table user_id/id and the directory GSI
+// keys), so a plain map[string]string round-trips it without
+// attributevalue's cursor-unfriendly type-tagged encoding.
 func encodeCursor(key map[string]types.AttributeValue) (string, error) {
 	if len(key) == 0 {
 		return "", nil

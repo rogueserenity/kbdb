@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -61,6 +62,70 @@ func GetProfile(repo repository.ProfileRepository, images repository.ProfileImag
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
+// ListProfiles returns a page of discoverable profiles. username /
+// discord_username are mutually-exclusive begins-with filters (both is a
+// 400); a next_cursor can't be reused across filters (also a 400).
+// Anonymous callers are allowed.
+func ListProfiles(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		limit := parseListLimit(r)
+		cursor := r.URL.Query().Get("cursor")
+		usernamePrefix := r.URL.Query().Get("username")
+		discordPrefix := r.URL.Query().Get("discord_username")
+
+		if usernamePrefix != "" && discordPrefix != "" {
+			problem.BadRequest(w, "username and discord_username are mutually exclusive")
+			return
+		}
+
+		profiles, nextCursor, err := repo.ListPublic(r.Context(), usernamePrefix, discordPrefix, limit, cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			problem.BadRequest(w, "invalid pagination cursor; restart from the first page")
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("listing profiles", log.Error, err)
+			problem.Internal(w, "failed to list profiles")
+			return
+		}
+
+		items := make([]api.ProfileSummary, len(profiles))
+		errs := make([]error, len(profiles))
+
+		ctx := r.Context()
+		var wg sync.WaitGroup
+		for i, p := range profiles {
+			wg.Add(1)
+			go func(i int, p repository.Profile) {
+				defer wg.Done()
+
+				summary, err := repoapi.ProfileToAPISummary(ctx, p, images)
+				if err != nil {
+					errs[i] = fmt.Errorf("mapping profile %q to API summary: %w", p.Username, err)
+					return
+				}
+				items[i] = summary
+			}(i, p)
+		}
+		wg.Wait()
+
+		if err := errors.Join(errs...); err != nil {
+			log.FromContext(r.Context()).Error("mapping profiles to API summaries", log.Error, err)
+			problem.Internal(w, "failed to list profiles")
+			return
+		}
+
+		page := api.ProfileListPage{Items: &items}
+		if nextCursor != "" {
+			page.NextCursor = &nextCursor
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(page)
 	}
 }
 

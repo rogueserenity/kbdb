@@ -18,6 +18,17 @@ func ProfileToMCP(p repository.Profile) schema.Profile {
 	}
 }
 
+// ProfileToMCPSummary maps a repository.Profile to a list_profiles row -
+// no bio or links, avatar as a bool.
+func ProfileToMCPSummary(p repository.Profile) schema.ProfileSummary {
+	return schema.ProfileSummary{
+		Username:        p.Username,
+		UserID:          p.StytchUserID,
+		DiscordUsername: p.DiscordUsername,
+		HasAvatar:       p.AvatarPath != nil,
+	}
+}
+
 // ProfileFromMCP maps a create_profile / update_profile tool input to a
 // repository.Profile. StytchUserID, AvatarPath, and the GSI discriminators
 // are set downstream, not here.

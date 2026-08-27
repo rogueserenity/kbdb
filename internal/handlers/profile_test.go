@@ -537,3 +537,143 @@ func (s *DeleteProfileSuite) TestMutationConflict_409() {
 
 	s.Equal(http.StatusConflict, rec.Code)
 }
+
+type ListProfilesSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+	handler    http.HandlerFunc
+}
+
+func TestListProfilesSuite(t *testing.T) {
+	suite.Run(t, new(ListProfilesSuite))
+}
+
+func (s *ListProfilesSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+	s.handler = ListProfiles(s.mockRepo, s.mockImages)
+}
+
+func (s *ListProfilesSuite) request(query string) *http.Request {
+	return httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/profiles?"+query, nil)
+}
+
+func (s *ListProfilesSuite) TestNoFilters_PassesEmptyPrefixes() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 20, "").
+		Return([]repository.Profile{
+			{StytchUserID: "user-alice", Username: "alice", Discoverable: true},
+		}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20"))
+
+	s.Equal(http.StatusOK, rec.Code)
+	var got api.ProfileListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	row := (*got.Items)[0]
+	s.Require().NotNil(row.Username)
+	s.Equal("alice", *row.Username)
+	s.Require().NotNil(row.UserId)
+	s.Equal("user-alice", *row.UserId)
+}
+
+func (s *ListProfilesSuite) TestUsernameFilter_Forwarded() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "al", "", 20, "").
+		Return([]repository.Profile{}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20&username=al"))
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *ListProfilesSuite) TestDiscordFilter_Forwarded() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "cool", 20, "").
+		Return([]repository.Profile{}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20&discord_username=cool"))
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *ListProfilesSuite) TestBothFilters_400() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("username=al&discord_username=cool"))
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+}
+
+func (s *ListProfilesSuite) TestPassesLimitAndCursor() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 5, "abc").
+		Return([]repository.Profile{}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=5&cursor=abc"))
+
+	s.Equal(http.StatusOK, rec.Code)
+}
+
+func (s *ListProfilesSuite) TestReturnsNextCursor_WhenPresent() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 20, "").
+		Return([]repository.Profile{}, "next-page", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20"))
+
+	var got api.ProfileListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.NextCursor)
+	s.Equal("next-page", *got.NextCursor)
+}
+
+func (s *ListProfilesSuite) TestAvatarPresigned_WhenSet() {
+	key := repository.ProfileImageKey("profiles/user-alice/avatar")
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 20, "").
+		Return([]repository.Profile{
+			{StytchUserID: "user-alice", Username: "alice", Discoverable: true, AvatarPath: &key},
+		}, "", nil)
+	s.mockImages.EXPECT().PresignGet(mock.Anything, key).Return("https://signed/avatar", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20"))
+
+	var got api.ProfileListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	row := (*got.Items)[0]
+	s.Require().NotNil(row.Avatar)
+	s.Equal("https://signed/avatar", row.Avatar.Url)
+}
+
+func (s *ListProfilesSuite) TestRepositoryError_500() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 20, "").
+		Return(nil, "", errors.New("query failed"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20"))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+func (s *ListProfilesSuite) TestInvalidCursor_400() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 20, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.request("limit=20&cursor=stale"))
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}

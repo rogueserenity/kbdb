@@ -660,3 +660,175 @@ func (s *ProfileRepositorySuite) TestResolveUsername_ClaimMissingUserID_IsError(
 	s.Require().Error(err)
 	s.NotErrorIs(err, repository.ErrNotFound)
 }
+
+func discoverableRow(userID, username string) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"user_id":         &types.AttributeValueMemberS{Value: userID},
+		"username":        &types.AttributeValueMemberS{Value: username},
+		"discoverable":    &types.AttributeValueMemberBOOL{Value: true},
+		"discoverable_pk": &types.AttributeValueMemberS{Value: "1"},
+	}
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_QueriesUsernameIndex_NoPrefix() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return *in.TableName == "profile-table" &&
+				in.IndexName != nil && *in.IndexName == "DiscoverableUsernameIndex" &&
+				*in.Limit == 20 && len(in.ExclusiveStartKey) == 0 &&
+				!containsAttrName(in.ExpressionAttributeNames, "username")
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{
+				discoverableRow("user-alice", "alice"),
+				discoverableRow("user-bob", "bob"),
+			},
+		}, nil)
+
+	profiles, next, err := s.repo.ListPublic(s.T().Context(), "", "", 20, "")
+
+	s.Require().NoError(err)
+	s.Empty(next)
+	s.Require().Len(profiles, 2)
+	s.Equal("alice", profiles[0].Username)
+	s.Equal("user-alice", profiles[0].StytchUserID)
+	s.True(profiles[0].Discoverable)
+}
+
+func containsAttrName(names map[string]string, attr string) bool {
+	for _, v := range names {
+		if v == attr {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_UsernamePrefix_AddsBeginsWith() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return *in.IndexName == "DiscoverableUsernameIndex" &&
+				containsAttrName(in.ExpressionAttributeNames, "username") &&
+				exprValuesContainS(in.ExpressionAttributeValues, "al")
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{discoverableRow("user-alice", "alice")},
+		}, nil)
+
+	profiles, _, err := s.repo.ListPublic(s.T().Context(), "al", "", 20, "")
+
+	s.Require().NoError(err)
+	s.Require().Len(profiles, 1)
+	s.Equal("alice", profiles[0].Username)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_DiscordPrefix_UsesDiscordIndex_Lowercased() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return *in.IndexName == "DiscoverableDiscordIndex" &&
+				containsAttrName(in.ExpressionAttributeNames, "discord_pk") &&
+				containsAttrName(in.ExpressionAttributeNames, "discord_username_lc") &&
+				exprValuesContainS(in.ExpressionAttributeValues, "cool") // lowercased
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{discoverableRow("user-alice", "alice")},
+		}, nil)
+
+	_, _, err := s.repo.ListPublic(s.T().Context(), "", "CooL", 20, "")
+
+	s.Require().NoError(err)
+}
+
+func exprValuesContainS(values map[string]types.AttributeValue, want string) bool {
+	for _, v := range values {
+		if sv, ok := v.(*types.AttributeValueMemberS); ok && sv.Value == want {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_EmptyResult_ReturnsEmptySliceNotNil() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
+
+	profiles, _, err := s.repo.ListPublic(s.T().Context(), "", "", 20, "")
+
+	s.Require().NoError(err)
+	s.NotNil(profiles)
+	s.Empty(profiles)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_Cursor_RoundTripsThreeKeyGSIKey() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return len(in.ExclusiveStartKey) == 0
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id":         &types.AttributeValueMemberS{Value: "user-bob"},
+				"discoverable_pk": &types.AttributeValueMemberS{Value: "1"},
+				"username":        &types.AttributeValueMemberS{Value: "bob"},
+			},
+		}, nil).Once()
+
+	_, cursor, err := s.repo.ListPublic(s.T().Context(), "", "", 20, "")
+	s.Require().NoError(err)
+	s.Require().NotEmpty(cursor)
+
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			k := in.ExclusiveStartKey
+			uid, ok1 := k["user_id"].(*types.AttributeValueMemberS)
+			pk, ok2 := k["discoverable_pk"].(*types.AttributeValueMemberS)
+			un, ok3 := k["username"].(*types.AttributeValueMemberS)
+			return len(k) == 3 && ok1 && ok2 && ok3 &&
+				uid.Value == "user-bob" && pk.Value == "1" && un.Value == "bob"
+		})).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
+
+	_, _, err = s.repo.ListPublic(s.T().Context(), "", "", 20, cursor)
+	s.Require().NoError(err)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_InvalidCursor_ReturnsErrInvalidCursor() {
+	profiles, next, err := s.repo.ListPublic(s.T().Context(), "", "", 20, "not-valid-base64!!")
+
+	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
+	s.Nil(profiles)
+	s.Empty(next)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_CursorFromOtherFilter_ReturnsErrInvalidCursor() {
+	// Page 1: no filter -> a username-index cursor.
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id":         &types.AttributeValueMemberS{Value: "user-bob"},
+				"discoverable_pk": &types.AttributeValueMemberS{Value: "1"},
+				"username":        &types.AttributeValueMemberS{Value: "bob"},
+			},
+		}, nil).Once()
+
+	_, cursor, err := s.repo.ListPublic(s.T().Context(), "", "", 20, "")
+	s.Require().NoError(err)
+
+	// Reusing it with a discord_username filter must be rejected, not passed
+	// to Query as a mismatched ExclusiveStartKey.
+	_, _, err = s.repo.ListPublic(s.T().Context(), "", "cool", 20, cursor)
+	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_QueryError_Propagates() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	_, _, err := s.repo.ListPublic(s.T().Context(), "", "", 20, "")
+
+	s.Require().Error(err)
+}

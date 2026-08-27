@@ -583,6 +583,53 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
+  /v1/profiles:
+    get:
+      tags: [profiles]
+      summary: List discoverable profiles
+      operationId: listProfiles
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        The public directory. Returns only profiles with discoverable set to
+        true; a row carries user_id so a client can chain to
+        GET /v1/profile/{user_id}, but never bio or links. Anonymous callers
+        are allowed. Rows are ordered by username, except that a
+        discord_username filter orders by the lowercased Discord handle.
+        username and discord_username are optional begins-with prefix
+        filters and are mutually exclusive — supplying both returns 400. A
+        next_cursor is bound to the filter it was returned under; reusing
+        it with a different filter returns 400.
+      parameters:
+        - $ref: "#/components/parameters/Limit"
+        - $ref: "#/components/parameters/Cursor"
+        - name: username
+          in: query
+          schema:
+            type: string
+          description: >
+            Case-sensitive begins-with filter on username. Mutually
+            exclusive with discord_username.
+        - name: discord_username
+          in: query
+          schema:
+            type: string
+          description: >
+            Case-insensitive begins-with filter on discord_username.
+            Mutually exclusive with username.
+      responses:
+        "200":
+          description: A page of discoverable profiles.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileListPage"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
   /v1/users/{userId}/keycap-sets:
     parameters:
       - $ref: "#/components/parameters/UserId"
