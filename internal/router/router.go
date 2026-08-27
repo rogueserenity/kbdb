@@ -142,6 +142,12 @@ func New(
 	// discoverable-or-owner rule itself (see internal/profileread).
 	mux.Handle("GET /v1/profile/{identifier}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetProfile(profileRepo, profileImageStore))))
+	// Same path as the GET, POST only. Default OidcAuthorizer at the gateway
+	// (security: [CognitoAuth] in api/openapi.yaml, no anonymous override);
+	// the handler requires {identifier} to be the caller's own subject via
+	// authz.IsOwner (a username there, or anyone else's subject, is 404).
+	mux.Handle("POST /v1/profile/{identifier}",
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateProfile(profileRepo, profileImageStore))))
 
 	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
 	// API Gateway's native authorizer - see that middleware's doc comment

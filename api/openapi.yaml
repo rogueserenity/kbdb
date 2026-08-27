@@ -442,6 +442,48 @@ paths:
   /v1/profile/{identifier}:
     parameters:
       - $ref: "#/components/parameters/ProfileIdentifier"
+    post:
+      tags: [profiles]
+      summary: Create a profile
+      operationId: createProfile
+      description: >
+        Creates the caller's profile. For this operation identifier must be
+        the caller's own IdP subject (not a username) — creating a profile
+        for anyone else always returns 404. A user has exactly one profile:
+        a second create returns 409 (type .../errors/conflict). If the
+        requested username is already claimed by a different user, the
+        response is 409 with type .../errors/username-unavailable so the
+        frontend can surface it against the username field.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "201":
+          description: The created profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: >
+            Either the caller already has a profile (type
+            https://mykeebs.info/errors/conflict) or the requested username
+            is taken by another user (type
+            https://mykeebs.info/errors/username-unavailable). The two are
+            distinguished by the Problem `type`, not the schema.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
     get:
       tags: [profiles]
       summary: Get a profile
@@ -1560,11 +1602,10 @@ components:
           description: Display label for the link, e.g. "Twitch" or "My Discord".
         url:
           type: string
-          format: uri
-          pattern: "^https://"
           description: >
             An https URL. http, scheme-relative, and non-http(s) schemes
-            are rejected.
+            are rejected. Enforced by the handler (not a schema pattern) so
+            the rejection names the exact links[i].url that failed.
 
     ProfileImage:
       type: object

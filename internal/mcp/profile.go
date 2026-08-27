@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -10,15 +11,23 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/profileread"
+	"github.com/rogueserenity/kbdb/internal/profilevalidate"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 var errProfileNotFound = errors.New("profile not found")
 
+var errProfileAlreadyExists = errors.New("you already have a profile")
+
 var getProfileTool = &mcp.Tool{
 	Name:        "get_profile",
 	Description: "Returns one user's public profile. identifier is either the user's id or their username. A profile that isn't discoverable is only visible to its owner; pass your own user id to read your own non-discoverable profile.",
+}
+
+var createProfileTool = &mcp.Tool{
+	Name:        "create_profile",
+	Description: "Creates your own public profile. You may have only one profile - creating a second fails. username must be 3-20 chars of lowercase letters, digits, hyphen, or underscore, must not start with \"user-\", and must be unique across all users. Omitting an optional field (discord_username, bio, links) leaves it unset.",
 }
 
 func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.GetProfileInput, schema.GetProfileOutput] {
@@ -38,4 +47,46 @@ func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[sche
 
 		return nil, schema.GetProfileOutput{Profile: repomcp.ProfileToMCP(*p)}, nil
 	}
+}
+
+func handleCreateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.CreateProfileInput, schema.CreateProfileOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateProfileInput) (*mcp.CallToolResult, schema.CreateProfileOutput, error) {
+		p, err := validatedProfile(in.ProfileInput)
+		if err != nil {
+			return nil, schema.CreateProfileOutput{}, err
+		}
+
+		created, err := repo.Create(ctx, p)
+		switch {
+		case errors.Is(err, repository.ErrAlreadyExists):
+			return nil, schema.CreateProfileOutput{}, errProfileAlreadyExists
+		case errors.Is(err, repository.ErrUsernameTaken):
+			return nil, schema.CreateProfileOutput{}, fmt.Errorf("username %q is already taken", p.Username)
+		case err != nil:
+			log.FromContext(ctx).Error("creating profile", log.Error, err)
+			return nil, schema.CreateProfileOutput{}, errors.New("failed to create profile")
+		}
+
+		return nil, schema.CreateProfileOutput{Profile: repomcp.ProfileToMCP(*created)}, nil
+	}
+}
+
+// validatedProfile applies the full field-level rule set (the SDK infers a
+// tool's schema from Go types only, so nothing is enforced for free) and
+// maps the input to a repository.Profile. Errors join every violation into
+// one message, mirroring validatedSwitch.
+func validatedProfile(in schema.ProfileInput) (repository.Profile, error) {
+	p := repomcp.ProfileFromMCP(in)
+
+	fieldErrs := profilevalidate.Validate(p)
+	if len(fieldErrs) > 0 {
+		reasons := make([]string, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			reasons[i] = fe.Name + ": " + fe.Reason
+		}
+
+		return repository.Profile{}, errors.New(strings.Join(reasons, "; "))
+	}
+
+	return p, nil
 }

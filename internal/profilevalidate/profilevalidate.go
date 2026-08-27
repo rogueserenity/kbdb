@@ -1,0 +1,131 @@
+// Package profilevalidate holds the field-level rules for a profile's
+// writable body, shared by the REST create/update handlers and the MCP
+// create_profile / update_profile tools. The OpenAPI request validator
+// enforces the same rules for REST, but the MCP SDK infers a tool's schema
+// from Go types alone, so nothing is checked there for free - both surfaces
+// call Validate so the rules can't drift apart.
+package profilevalidate
+
+import (
+	"net/url"
+	"regexp"
+	"strconv"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/rogueserenity/kbdb/internal/repository"
+)
+
+// FieldError reports that Name (a JSON pointer-ish field path, e.g.
+// "username" or "links[0].url") failed validation for the stated Reason.
+type FieldError struct {
+	Name   string
+	Reason string
+}
+
+const (
+	maxLinks           = 5
+	maxLinkName        = 32
+	maxDiscordUsername = 32
+	maxBio             = 500
+)
+
+// usernamePattern mirrors ProfileInput.username's pattern in
+// api/openapi.yaml: lowercase letters, digits, hyphen, underscore, 3-20
+// chars. The "user-" prefix ban is a separate check (a pattern can't
+// express "not starting with").
+var usernamePattern = regexp.MustCompile(`^[a-z0-9_-]{3,20}$`)
+
+// Validate returns every field-level violation in p's writable body, or nil
+// if it's valid. Unset optional fields (nil pointers, empty links) are not
+// violations. StytchUserID, AvatarPath, Version and the GSI discriminators
+// are server-owned and not checked here.
+func Validate(p repository.Profile) []FieldError {
+	var errs []FieldError
+
+	if !usernamePattern.MatchString(p.Username) {
+		errs = append(errs, FieldError{
+			Name:   "username",
+			Reason: "must be 3-20 characters of lowercase letters, digits, hyphen, or underscore",
+		})
+	} else if strings.HasPrefix(p.Username, "user-") {
+		errs = append(errs, FieldError{
+			Name:   "username",
+			Reason: `must not start with "user-"`,
+		})
+	}
+
+	if p.DiscordUsername != nil && utf8.RuneCountInString(*p.DiscordUsername) > maxDiscordUsername {
+		errs = append(errs, FieldError{
+			Name:   "discord_username",
+			Reason: "must be at most 32 characters",
+		})
+	}
+
+	if p.Bio != nil && utf8.RuneCountInString(*p.Bio) > maxBio {
+		errs = append(errs, FieldError{
+			Name:   "bio",
+			Reason: "must be at most 500 characters",
+		})
+	}
+
+	if len(p.Links) > maxLinks {
+		errs = append(errs, FieldError{
+			Name:   "links",
+			Reason: "must have at most 5 entries",
+		})
+	}
+	errs = append(errs, validateLinks(p.Links)...)
+
+	return errs
+}
+
+func validateLinks(links []repository.ProfileLink) []FieldError {
+	var errs []FieldError
+
+	for i, l := range links {
+		if strings.TrimSpace(l.Name) == "" {
+			errs = append(errs, FieldError{
+				Name:   linkField(i, "name"),
+				Reason: "must not be blank",
+			})
+		} else if utf8.RuneCountInString(l.Name) > maxLinkName {
+			errs = append(errs, FieldError{
+				Name:   linkField(i, "name"),
+				Reason: "must be at most 32 characters",
+			})
+		}
+
+		if reason := badLinkURL(l.URL); reason != "" {
+			errs = append(errs, FieldError{Name: linkField(i, "url"), Reason: reason})
+		}
+	}
+
+	return errs
+}
+
+// badLinkURL returns why u is not an acceptable link URL, or "" if it's
+// fine: it must parse, use scheme exactly "https", and have a non-empty
+// host.
+func badLinkURL(u string) string {
+	if strings.TrimSpace(u) == "" {
+		return "must not be blank"
+	}
+
+	parsed, err := url.Parse(u)
+	if err != nil {
+		return "must be a valid URL"
+	}
+	if parsed.Scheme != "https" {
+		return "must use the https scheme"
+	}
+	if parsed.Host == "" {
+		return "must have a host"
+	}
+
+	return ""
+}
+
+func linkField(i int, sub string) string {
+	return "links[" + strconv.Itoa(i) + "]." + sub
+}

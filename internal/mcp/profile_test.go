@@ -104,3 +104,85 @@ func (s *HandleGetProfileSuite) TestStoreError_GenericError() {
 }
 
 func sp(v string) *string { return &v }
+
+type HandleCreateProfileSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockProfileRepository
+}
+
+func TestHandleCreateProfileSuite(t *testing.T) {
+	suite.Run(t, new(HandleCreateProfileSuite))
+}
+
+func (s *HandleCreateProfileSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+}
+
+func (s *HandleCreateProfileSuite) call(in schema.CreateProfileInput) (schema.CreateProfileOutput, error) {
+	_, out, err := handleCreateProfile(s.mockRepo)(callerContext(s.T()), nil, in)
+	return out, err
+}
+
+func (s *HandleCreateProfileSuite) TestValid_Created() {
+	s.mockRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
+		return p.Username == "alice"
+	})).Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+
+	out, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().NoError(err)
+	s.Equal("alice", out.Profile.Username)
+}
+
+func (s *HandleCreateProfileSuite) TestInvalidUsername_ErrorNoRepoCall() {
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "AB"}})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "username")
+}
+
+func (s *HandleCreateProfileSuite) TestUserPrefixUsername_Error() {
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "user-alice"}})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleCreateProfileSuite) TestLinkHTTPURL_Error() {
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{
+		Username: "alice",
+		Links:    []schema.ProfileLink{{Name: "site", URL: "http://x.example"}},
+	}})
+
+	s.Require().Error(err)
+	s.Contains(err.Error(), "links[0].url")
+}
+
+func (s *HandleCreateProfileSuite) TestAlreadyExists_Error() {
+	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrAlreadyExists)
+
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().ErrorIs(err, errProfileAlreadyExists)
+}
+
+func (s *HandleCreateProfileSuite) TestUsernameTaken_Error() {
+	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrUsernameTaken)
+
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().Error(err)
+	s.Equal(`username "alice" is already taken`, err.Error())
+}
+
+func (s *HandleCreateProfileSuite) TestRepoError_GenericError() {
+	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamo down"))
+
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().Error(err)
+	s.NotErrorIs(err, errProfileAlreadyExists)
+}
