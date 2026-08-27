@@ -5,9 +5,8 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// ProfileToMCP maps a repository.Profile to its MCP tool shape. The avatar
-// is reported as a bool (has_avatar) - MCP never serves image URLs, matching
-// SwitchToMCP's HasImage. The owner's IdP subject is never included.
+// ProfileToMCP maps a repository.Profile to its MCP tool shape: avatar as a
+// bool, no IdP subject.
 func ProfileToMCP(p repository.Profile) schema.Profile {
 	return schema.Profile{
 		Username:        p.Username,
@@ -20,9 +19,8 @@ func ProfileToMCP(p repository.Profile) schema.Profile {
 }
 
 // ProfileFromMCP maps a create_profile / update_profile tool input to a
-// repository.Profile. It does not set StytchUserID (the caller, from ctx),
-// AvatarPath (managed only via the image tools), or the GSI discriminators
-// (the repository derives those).
+// repository.Profile. StytchUserID, AvatarPath, and the GSI discriminators
+// are set downstream, not here.
 func ProfileFromMCP(in schema.ProfileInput) repository.Profile {
 	return repository.Profile{
 		Username:        in.Username,

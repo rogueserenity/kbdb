@@ -8,9 +8,9 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// ProfileToAPI maps a repository.Profile to its wire representation. It
-// presigns the avatar if one is set, and never emits the owner's IdP
-// subject. Returns an error only if presigning fails.
+// ProfileToAPI maps a repository.Profile to its wire shape, presigning the
+// avatar if set and never emitting the IdP subject. Errors only if
+// presigning fails.
 func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.ProfileImageStore) (api.Profile, error) {
 	out := api.Profile{
 		Username:        p.Username,
@@ -31,12 +31,8 @@ func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.P
 	return out, nil
 }
 
-// ProfileToRepo maps a generated ProfileInput (already schema-validated by
-// the OpenAPI request validator) to a repository.Profile. It does not set
-// StytchUserID (comes from the caller, not the body), AvatarPath (managed
-// only via the image endpoints - the update path carries it forward from
-// the stored item), or the derived GSI attributes (the repository sets
-// those).
+// ProfileToRepo maps a ProfileInput to a repository.Profile. StytchUserID,
+// AvatarPath, and the GSI discriminators are set downstream, not here.
 func ProfileToRepo(in api.ProfileInput) repository.Profile {
 	p := repository.Profile{
 		Username:        in.Username,

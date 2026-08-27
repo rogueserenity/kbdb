@@ -9,8 +9,7 @@ import (
 )
 
 // SeedProfileOptions is the fixture shape for SeedProfile. Only Username is
-// required; everything else is optional. When Discoverable is true, the
-// sparse-GSI discriminators are set the way the app would set them.
+// required.
 type SeedProfileOptions struct {
 	Username        string
 	Discoverable    bool
@@ -20,12 +19,10 @@ type SeedProfileOptions struct {
 	AvatarPath      string
 }
 
-// SeedProfile PutItems a profile directly into DynamoDB and writes the
-// matching { username -> user_id } claim item, bypassing the API - for
-// specs that need a profile in place before exercising the read routes,
-// which is every profile spec until the create route exists.
-//
-// version is set to 0, matching what Create will set it to.
+// SeedProfile writes a profile item and its { username -> user_id } claim
+// directly into DynamoDB, bypassing the API. Discoverable also sets the
+// sparse-GSI discriminators the way the app would; version is 0, as Create
+// sets it.
 func SeedProfile(ctx context.Context, ownerID string, opts SeedProfileOptions) error {
 	profileTable := NewDynamoTable(ctx, support.ProfileTableName())
 

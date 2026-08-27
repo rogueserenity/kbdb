@@ -55,8 +55,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 }
 
 func (s *ProfileMapperSuite) TestProfileToAPI_NeverLeaksSubject() {
-	// api.Profile has no field carrying the IdP subject; this test documents
-	// that ProfileToAPI's output type can't express it.
+	// api.Profile has no field for the IdP subject; this pins that.
 	out, err := ProfileToAPI(s.T().Context(), repository.Profile{
 		StytchUserID: "user-secret",
 		Username:     "alice",

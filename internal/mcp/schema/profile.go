@@ -12,9 +12,8 @@ type GetProfileInput struct {
 }
 
 // ProfileInput is the writable half of a profile, shared by create_profile
-// (and later update_profile). Every field is replaced on write, so omitting
-// an optional field clears it. There is no user_id: a profile write always
-// targets the caller's own profile.
+// and update_profile. A write is a full replace, so an omitted optional
+// field clears it. No user_id: a write always targets the caller's profile.
 type ProfileInput struct {
 	Username        string        `json:"username" jsonschema:"3-20 chars of lowercase letters, digits, hyphen, or underscore; must not start with \"user-\"; unique across all profiles"`
 	Discoverable    bool          `json:"discoverable" jsonschema:"whether the profile is listed in the public directory and readable by anyone; when false only you can read it"`
@@ -33,14 +32,23 @@ type CreateProfileOutput struct {
 	Profile Profile `json:"profile" jsonschema:"the created profile"`
 }
 
+// UpdateProfileInput is the update_profile tool arguments.
+type UpdateProfileInput struct {
+	ProfileInput
+}
+
+// UpdateProfileOutput is the update_profile tool result.
+type UpdateProfileOutput struct {
+	Profile Profile `json:"profile" jsonschema:"the updated profile"`
+}
+
 // GetProfileOutput is the get_profile tool result.
 type GetProfileOutput struct {
 	Profile Profile `json:"profile" jsonschema:"the requested profile"`
 }
 
 // Profile is a user's public identity. HasAvatar reports whether an avatar
-// is on file rather than the image itself - images are served to end users
-// through REST, not this MCP surface.
+// is on file; MCP never serves the image itself.
 type Profile struct {
 	Username        string       `json:"username" jsonschema:"the profile's unique username"`
 	Discoverable    bool         `json:"discoverable" jsonschema:"whether the profile is listed in the public directory"`

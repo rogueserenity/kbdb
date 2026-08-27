@@ -8,19 +8,21 @@ import (
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
+	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
+	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
+const maxProfileMutationAttempts = 3
+
 // ProfileRepository is the DynamoDB-backed repository.ProfileRepository.
-// It uses two tables: profileTableName holds the profile items (partitioned
-// by user_id, no sort key - one profile per user), and usernameTableName
-// holds { username -> user_id } claim items that enforce username
-// uniqueness (a GSI can't). Later issues add the write methods that keep
-// the two in sync via TransactWriteItems.
+// profileTableName holds the profile items; usernameTableName holds
+// { username -> user_id } claim items that enforce username uniqueness (a
+// GSI can't). Writes keep the two in sync via TransactWriteItems.
 type ProfileRepository struct {
 	client            dynamoAPI
 	profileTableName  string
@@ -62,13 +64,10 @@ func (r *ProfileRepository) Get(ctx context.Context, stytchUserID string) (*repo
 	return &p, nil
 }
 
-// Create implements repository.ProfileRepository. It writes the profile
-// item (conditional on the user not already having one) and the
-// { username -> user_id } claim item (conditional on the username being
-// unclaimed) in a single TransactWriteItems, so a username is never
-// half-claimed. The two conditional failures are told apart by which
-// cancellation reason fired: index 0 is the profile Put (ErrAlreadyExists),
-// index 1 is the claim Put (ErrUsernameTaken).
+// Create implements repository.ProfileRepository. The profile item and the
+// { username -> user_id } claim are written in one TransactWriteItems so a
+// username is never half-claimed; conflicts are classified by
+// mapProfileCreateConflict.
 func (r *ProfileRepository) Create(ctx context.Context, p repository.Profile) (*repository.Profile, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -116,8 +115,8 @@ func (r *ProfileRepository) Create(ctx context.Context, p repository.Profile) (*
 }
 
 // setProfileDirectoryKeys derives the sparse-GSI discriminators from p's
-// Discoverable / DiscordUsername fields. Left nil (and so omitted from the
-// item) whenever the profile shouldn't be in that index.
+// Discoverable / DiscordUsername fields, leaving each nil when the profile
+// shouldn't be in that index.
 func setProfileDirectoryKeys(p *repository.Profile) {
 	p.DiscoverablePK = nil
 	p.DiscordPK = nil
@@ -136,10 +135,11 @@ func setProfileDirectoryKeys(p *repository.Profile) {
 	}
 }
 
-// mapProfileCreateConflict maps a TransactWriteItems ConditionExpression
-// failure to the right sentinel: reason 0 (the profile Put) -> the user
-// already has a profile; reason 1 (the claim Put) -> the username is taken.
-// Returns nil if err isn't a conditional-check cancellation.
+// mapProfileCreateConflict maps a Create TransactWriteItems cancellation to
+// a sentinel. Items are [profilePut, claimPut]; ErrAlreadyExists takes
+// priority over ErrUsernameTaken when both conditions fail (you can't
+// create at all, so the username is moot). Returns nil if err isn't a
+// conditional-check cancellation.
 func mapProfileCreateConflict(err error) error {
 	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
 	if !ok {
@@ -162,9 +162,167 @@ func mapProfileCreateConflict(err error) error {
 	}
 }
 
-// ResolveUsername implements repository.ProfileRepository. It reads the
-// { username -> user_id } claim item from usernameTableName; ErrNotFound
-// means no profile has claimed that username.
+// Update implements repository.ProfileRepository. It goes through
+// mutateProfile so AvatarPath and Version carry forward from the stored
+// item; only the body-settable fields come from p.
+func (r *ProfileRepository) Update(ctx context.Context, p repository.Profile) (*repository.Profile, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("updating profile: %w", repository.ErrNoUserID)
+	}
+
+	updated, err := r.mutateProfile(ctx, ownerID, func(existing *repository.Profile) error {
+		existing.Username = p.Username
+		existing.Discoverable = p.Discoverable
+		existing.DiscordUsername = p.DiscordUsername
+		existing.Bio = p.Bio
+		existing.Links = p.Links
+		return nil
+	})
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, repository.ErrNotFound
+	}
+	if errors.Is(err, repository.ErrUsernameTaken) {
+		return nil, repository.ErrUsernameTaken
+	}
+	if err != nil {
+		return nil, fmt.Errorf("updating profile for user %q: %w", ownerID, err)
+	}
+
+	return updated, nil
+}
+
+// mutateProfile is a Version-based CAS retry loop like
+// [(*SwitchRepository).mutateSwitch], except the rewrite is a
+// TransactWriteItems: when mutate changes Username, the { username ->
+// user_id } claim must move atomically with the profile item (delete old,
+// put new under attribute_not_exists). A same-username mutation writes no
+// claim items. Fields mutate doesn't touch (AvatarPath, ...) carry forward
+// from the stored item; the directory-GSI keys are recomputed each attempt.
+func (r *ProfileRepository) mutateProfile(
+	ctx context.Context,
+	ownerID string,
+	mutate func(p *repository.Profile) error,
+) (*repository.Profile, error) {
+	for range maxProfileMutationAttempts {
+		p, err := r.Get(ctx, ownerID)
+		if err != nil {
+			return nil, err
+		}
+
+		oldUsername := p.Username
+
+		if err := mutate(p); err != nil {
+			return nil, err
+		}
+
+		expectedVersion := p.Version
+		p.Version++
+		p.StytchUserID = ownerID
+		setProfileDirectoryKeys(p)
+
+		profileItem, err := attributevalue.MarshalMap(*p)
+		if err != nil {
+			return nil, fmt.Errorf("marshalling profile for user %q: %w", ownerID, err)
+		}
+
+		// expectedVersion 0 also matches a pre-Version item with no version
+		// attribute, hence the attribute_not_exists branch.
+		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
+		if expectedVersion == 0 {
+			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
+		}
+		expr, err := expression.NewBuilder().WithCondition(versionCondition).Build()
+		if err != nil {
+			return nil, fmt.Errorf("building profile mutation condition for user %q: %w", ownerID, err)
+		}
+
+		items := []types.TransactWriteItem{
+			{Put: &types.Put{
+				TableName:                 &r.profileTableName,
+				Item:                      profileItem,
+				ConditionExpression:       expr.Condition(),
+				ExpressionAttributeNames:  expr.Names(),
+				ExpressionAttributeValues: expr.Values(),
+			}},
+		}
+		if p.Username != oldUsername {
+			claimItem, err := attributevalue.MarshalMap(struct {
+				Username string `dynamodbav:"username"`
+				UserID   string `dynamodbav:"user_id"`
+			}{Username: p.Username, UserID: ownerID})
+			if err != nil {
+				return nil, fmt.Errorf("marshalling username claim for user %q: %w", ownerID, err)
+			}
+			items = append(items,
+				types.TransactWriteItem{Delete: &types.Delete{
+					TableName: &r.usernameTableName,
+					Key: map[string]types.AttributeValue{
+						"username": &types.AttributeValueMemberS{Value: oldUsername},
+					},
+				}},
+				types.TransactWriteItem{Put: &types.Put{
+					TableName:           &r.usernameTableName,
+					Item:                claimItem,
+					ConditionExpression: aws.String("attribute_not_exists(username)"),
+				}},
+			)
+		}
+
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: items})
+		if err == nil {
+			return p, nil
+		}
+
+		if mapped := mapProfileUpdateConflict(err, p.Username != oldUsername); mapped != nil {
+			if errors.Is(mapped, errProfileVersionConflict) {
+				log.FromContext(ctx).Warn("profile CAS retry",
+					log.ProfileID, ownerID, "attempted_version", expectedVersion)
+				continue
+			}
+			return nil, mapped
+		}
+		return nil, fmt.Errorf("mutating profile for user %q: %w", ownerID, err)
+	}
+
+	return nil, fmt.Errorf("mutating profile for user %q: %w", ownerID, repository.ErrMutationConflict)
+}
+
+// errProfileVersionConflict signals mutateProfile to retry; never returned
+// to a caller.
+var errProfileVersionConflict = errors.New("profile version CAS conflict")
+
+// mapProfileUpdateConflict classifies a mutateProfile TransactWriteItems
+// cancellation. With a username change the items are [profilePut,
+// claimDelete, claimPut], so reason 2 is the new username being taken by a
+// different user (a version retry wouldn't free it, so it wins over the
+// version CAS at reason 0). Otherwise the only item is the profile Put and
+// any failure is the version CAS. Returns nil if err isn't a
+// conditional-check cancellation.
+func mapProfileUpdateConflict(err error, usernameChanged bool) error {
+	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
+	if !ok {
+		return nil
+	}
+
+	failed := func(i int) bool {
+		return i < len(txErr.CancellationReasons) &&
+			txErr.CancellationReasons[i].Code != nil &&
+			*txErr.CancellationReasons[i].Code == "ConditionalCheckFailed"
+	}
+
+	if usernameChanged && failed(2) {
+		return repository.ErrUsernameTaken
+	}
+	if failed(0) {
+		return errProfileVersionConflict
+	}
+	return nil
+}
+
+// ResolveUsername implements repository.ProfileRepository, reading the
+// { username -> user_id } claim item. ErrNotFound means the username is
+// unclaimed.
 func (r *ProfileRepository) ResolveUsername(ctx context.Context, username string) (string, error) {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &r.usernameTableName,

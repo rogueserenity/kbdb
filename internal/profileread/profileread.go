@@ -1,8 +1,6 @@
-// Package profileread resolves a GET /v1/profile/{identifier} / get_profile
-// identifier (an IdP subject or a username) to a profile and applies the
-// discoverable-or-owner visibility rule. It's a separate package so both
-// internal/handlers and internal/mcp can share the exact same logic without
-// one importing the other.
+// Package profileread resolves a profile identifier (an IdP subject or a
+// username) to a profile and applies the discoverable-or-owner visibility
+// rule, shared by internal/handlers and internal/mcp.
 package profileread
 
 import (
@@ -14,21 +12,11 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// Resolve looks up the profile named by identifier and returns it only if
-// it may be shown to the caller.
-//
-// Resolution is id-first, username-fallback: identifier is tried as an IdP
-// subject (repo.Get); on ErrNotFound it's tried as a username
-// (repo.ResolveUsername, then repo.Get). The username charset is disjoint
-// from IdP subject values, so the id-first probe never matches a profile
-// that was meant to be found by username.
-//
-// Visibility: the profile is returned only if it's discoverable, or if the
-// caller (from ctx) is its owner. Otherwise - and when nothing matches
-// identifier at all - Resolve returns (nil, false, nil): "not found", with
-// no error, so callers respond 404 without leaking whether a
-// non-discoverable profile exists. A non-nil error means an actual failure
-// (a store error), not "not found".
+// Resolve looks up the profile named by identifier (subject first, username
+// fallback) and returns it only if discoverable or owned by the caller
+// (from ctx). "Not found or not visible" is (nil, false, nil) so callers
+// 404 without leaking whether a non-discoverable profile exists; a non-nil
+// error is a real store failure.
 func Resolve(ctx context.Context, repo repository.ProfileRepository, identifier string) (*repository.Profile, bool, error) {
 	p, found, err := resolveProfile(ctx, repo, identifier)
 	if err != nil || !found {
@@ -46,10 +34,8 @@ func Resolve(ctx context.Context, repo repository.ProfileRepository, identifier 
 }
 
 // resolveProfile fetches the profile named by identifier (subject first,
-// then username), with no visibility check. found is false - err nil - when
-// nothing matches, or when a username claim points at a subject with no
-// profile (a stale claim must not 500). A non-nil err is a real store
-// failure.
+// then username), with no visibility check. A stale username claim pointing
+// at a subject with no profile is (nil, false, nil), not a 500.
 func resolveProfile(ctx context.Context, repo repository.ProfileRepository, identifier string) (*repository.Profile, bool, error) {
 	p, err := repo.Get(ctx, identifier)
 	if err == nil {

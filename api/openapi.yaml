@@ -509,6 +509,47 @@ paths:
           $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
+    put:
+      tags: [profiles]
+      summary: Update a profile
+      operationId: updateProfile
+      description: >
+        Replaces the caller's profile. identifier must be the caller's own
+        IdP subject (not a username) — updating a profile for anyone else
+        always returns 404, as does updating when the caller has no profile.
+        This is a full replace: a body-settable field that is omitted is
+        cleared (e.g. omitting bio or links empties them). The avatar is not
+        a body-settable field and is left untouched — manage it via
+        POST/DELETE .../profile/{userId}/image. If the requested username is
+        already claimed by a different user, the response is 409 with type
+        .../errors/username-unavailable.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ProfileInput"
+      responses:
+        "200":
+          description: The updated profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: >
+            The requested username is already claimed by a different user
+            (type https://mykeebs.info/errors/username-unavailable).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
 
   /v1/users/{userId}/keycap-sets:
     parameters:
