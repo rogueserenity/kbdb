@@ -2,15 +2,21 @@ services:
   workos-emulate:
     image: ghcr.io/workos/emulate:0.10.0@sha256:e87075cc32610c6a91cd1e12f33e3f46cd70be53f714366ea2964ff266cc774f
     environment:
-      # @workos/emulate has no discovery endpoint, so scripts/func-setup.sh
-      # publishes a static .well-known/openid-configuration to floci's S3
-      # whose issuer matches this and whose jwks_uri points back at this
-      # container's own live /oauth2/jwks - no pinned signing key needed,
-      # the emulator generates its own at startup and this is the only
-      # value that has to be known in advance. localhost.floci.io resolves
-      # to floci's container IP for siblings and to 127.0.0.1 for the host
-      # (see FLOCI_HOSTNAME below), so both the Lambda container and the
-      # host-side test runner reach the same issuer.
+      # This is the *base* issuer. From v0.10.0 the emulator mints AuthKit
+      # access tokens with iss "<base>/user_management/<client_id>" (matching
+      # production WorkOS) and appends that suffix itself - so this value
+      # stays bare. The emulator's own per-client discovery doc points
+      # jwks_uri at localhost:4100, which the deployed Lambda can't reach, so
+      # scripts/func-setup.sh still publishes a static
+      # .well-known/openid-configuration to floci's S3 (under the
+      # /user_management/<client_id> suffix) whose issuer matches the minted
+      # iss and whose jwks_uri points back at this container's own live
+      # /oauth2/jwks - no pinned signing key needed, the emulator generates
+      # its own at startup and this base is the only value that has to be
+      # known in advance. localhost.floci.io resolves to floci's container IP
+      # for siblings and to 127.0.0.1 for the host (see FLOCI_HOSTNAME below),
+      # so both the Lambda container and the host-side test runner reach the
+      # same issuer.
       - WORKOS_EMULATE_ISSUER=http://localhost.floci.io:4566/kbdb-floci-oidc
     ports:
       - "4100:4100"
