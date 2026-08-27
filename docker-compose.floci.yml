@@ -1,6 +1,6 @@
 services:
   workos-emulate:
-    image: ghcr.io/workos/emulate:latest
+    image: ghcr.io/workos/emulate:0.9.0@sha256:292cf6d8c84743ebf218dc12c316f51d93d839c9e62fb2b46d16bdae7b093237
     environment:
       # @workos/emulate has no discovery endpoint, so scripts/func-setup.sh
       # publishes a static .well-known/openid-configuration to floci's S3

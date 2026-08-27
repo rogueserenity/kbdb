@@ -1,7 +1,10 @@
 package dynamo
 
 import (
+	"context"
 	"errors"
+	"maps"
+	"strconv"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -237,6 +240,229 @@ func (s *ProfileRepositorySuite) TestCreate_TransactWriteItemsError_Propagates()
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrAlreadyExists)
 	s.Require().NotErrorIs(err, repository.ErrUsernameTaken)
+}
+
+// storedProfileItem is a GetItemOutput for a profile at the given version,
+// with the fields mutateProfile carries forward populated so a test can
+// assert they survive the rewrite.
+func storedProfileItem(version int, extra map[string]types.AttributeValue) *dynamodb.GetItemOutput {
+	item := map[string]types.AttributeValue{
+		"user_id":      &types.AttributeValueMemberS{Value: "user-alice"},
+		"username":     &types.AttributeValueMemberS{Value: "alice"},
+		"discoverable": &types.AttributeValueMemberBOOL{Value: true},
+		"version":      &types.AttributeValueMemberN{Value: strconv.Itoa(version)},
+	}
+	maps.Copy(item, extra)
+	return &dynamodb.GetItemOutput{Item: item}
+}
+
+func (s *ProfileRepositorySuite) updateCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "user-alice")
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_NoUserID_ReturnsErrNoUserID() {
+	_, err := s.repo.Update(s.T().Context(), repository.Profile{Username: "alice"})
+
+	s.Require().ErrorIs(err, repository.ErrNoUserID)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_SameUsername_WritesOnlyProfileItem_NoClaimWrites() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	newBio := "updated"
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{
+		Username: "alice", Discoverable: true, Bio: &newBio,
+	})
+
+	s.Require().NoError(err)
+	s.Len(captured.TransactItems, 1)
+	s.NotNil(captured.TransactItems[0].Put)
+	s.Equal("profile-table", *captured.TransactItems[0].Put.TableName)
+	s.Equal(1, got.Version)
+	s.Require().NotNil(got.Bio)
+	s.Equal("updated", *got.Bio)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_OmittingBioAndLinks_ClearsThem() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, map[string]types.AttributeValue{
+			"bio":   &types.AttributeValueMemberS{Value: "old bio"},
+			"links": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+		}), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
+	s.Require().NoError(err)
+
+	item := captured.TransactItems[0].Put.Item
+	s.NotContains(item, "bio")
+	s.NotContains(item, "links")
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_BodyDoesNotMentionAvatar_CarriesAvatarPathForward() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, map[string]types.AttributeValue{
+			"avatar_path": &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar"},
+		}), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
+	s.Require().NoError(err)
+
+	item := captured.TransactItems[0].Put.Item
+	s.Equal("profiles/user-alice/avatar",
+		item["avatar_path"].(*types.AttributeValueMemberS).Value)
+	s.Require().NotNil(got.AvatarPath)
+	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar"), *got.AvatarPath)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIKeys() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, map[string]types.AttributeValue{
+			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
+			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
+			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
+			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
+		}), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	discord := "Alice_KB"
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{
+		Username: "alice", Discoverable: false, DiscordUsername: &discord,
+	})
+	s.Require().NoError(err)
+
+	item := captured.TransactItems[0].Put.Item
+	s.NotContains(item, "discoverable_pk")
+	s.NotContains(item, "discord_pk")
+	s.NotContains(item, "discord_username_lc")
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_ChangedUsername_MovesClaimAtomically() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
+	s.Require().NoError(err)
+
+	s.Require().Len(captured.TransactItems, 3)
+	s.NotNil(captured.TransactItems[0].Put)
+	s.Require().NotNil(captured.TransactItems[1].Delete)
+	s.Equal("profile-username-table", *captured.TransactItems[1].Delete.TableName)
+	s.Equal("alice",
+		captured.TransactItems[1].Delete.Key["username"].(*types.AttributeValueMemberS).Value)
+	s.Require().NotNil(captured.TransactItems[2].Put)
+	s.Equal("profile-username-table", *captured.TransactItems[2].Put.TableName)
+	s.Equal("attribute_not_exists(username)", *captured.TransactItems[2].Put.ConditionExpression)
+	s.Equal("alice2",
+		captured.TransactItems[2].Put.Item["username"].(*types.AttributeValueMemberS).Value)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_NoProfile_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice"})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameClaimFails_ReturnsErrUsernameTaken() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("None")},
+				{Code: aws.String("None")},
+				{Code: aws.String("ConditionalCheckFailed")},
+			},
+		})
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "taken", Discoverable: true})
+
+	s.Require().ErrorIs(err, repository.ErrUsernameTaken)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflict_RetriesThenSucceeds() {
+	gomock := s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything)
+	gomock.Return(storedProfileItem(0, nil), nil).Once()
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(1, nil), nil).Once()
+
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("ConditionalCheckFailed")},
+			},
+		}).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	newBio := "second try wins"
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{
+		Username: "alice", Discoverable: true, Bio: &newBio,
+	})
+
+	s.Require().NoError(err)
+	s.Equal(2, got.Version)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflictExhaustsRetries_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("ConditionalCheckFailed")},
+			},
+		})
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
+
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 }
 
 func (s *ProfileRepositorySuite) TestResolveUsername_Succeeds() {

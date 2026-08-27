@@ -148,6 +148,11 @@ func New(
 	// authz.IsOwner (a username there, or anyone else's subject, is 404).
 	mux.Handle("POST /v1/profile/{identifier}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateProfile(profileRepo, profileImageStore))))
+	// Same path/auth as the POST - PUT only. {identifier} must be the
+	// caller's own subject (authz.IsOwner); a full replace of the
+	// body-settable fields, avatar untouched.
+	mux.Handle("PUT /v1/profile/{identifier}",
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateProfile(profileRepo, profileImageStore))))
 
 	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
 	// API Gateway's native authorizer - see that middleware's doc comment

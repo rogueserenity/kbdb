@@ -468,6 +468,15 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/profile/{identifier}
             Method: post
+        # Same path/auth as CreateProfileEvent, PUT only - a full replace of
+        # the caller's own profile; {identifier} must be their own subject
+        # (authz.IsOwner at the app layer).
+        UpdateProfileEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profile/{identifier}
+            Method: put
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and

@@ -1,9 +1,6 @@
 // Package profilevalidate holds the field-level rules for a profile's
-// writable body, shared by the REST create/update handlers and the MCP
-// create_profile / update_profile tools. The OpenAPI request validator
-// enforces the same rules for REST, but the MCP SDK infers a tool's schema
-// from Go types alone, so nothing is checked there for free - both surfaces
-// call Validate so the rules can't drift apart.
+// writable body, shared by the REST handlers and the MCP tools so the rules
+// can't drift.
 package profilevalidate
 
 import (
@@ -30,16 +27,12 @@ const (
 	maxBio             = 500
 )
 
-// usernamePattern mirrors ProfileInput.username's pattern in
-// api/openapi.yaml: lowercase letters, digits, hyphen, underscore, 3-20
-// chars. The "user-" prefix ban is a separate check (a pattern can't
-// express "not starting with").
+// usernamePattern mirrors ProfileInput.username in api/openapi.yaml; the
+// "user-" prefix ban is a separate check.
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_-]{3,20}$`)
 
 // Validate returns every field-level violation in p's writable body, or nil
-// if it's valid. Unset optional fields (nil pointers, empty links) are not
-// violations. StytchUserID, AvatarPath, Version and the GSI discriminators
-// are server-owned and not checked here.
+// if valid. Unset optional fields are not violations.
 func Validate(p repository.Profile) []FieldError {
 	var errs []FieldError
 
@@ -104,9 +97,8 @@ func validateLinks(links []repository.ProfileLink) []FieldError {
 	return errs
 }
 
-// badLinkURL returns why u is not an acceptable link URL, or "" if it's
-// fine: it must parse, use scheme exactly "https", and have a non-empty
-// host.
+// badLinkURL returns why u is not an acceptable link URL (must parse, be
+// https, have a host), or "" if it's fine.
 func badLinkURL(u string) string {
 	if strings.TrimSpace(u) == "" {
 		return "must not be blank"
