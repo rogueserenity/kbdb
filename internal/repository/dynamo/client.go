@@ -3,9 +3,25 @@ package dynamo
 import (
 	"context"
 	"errors"
+	"math"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 )
+
+// queryLimit clamps a caller-supplied page size to [1, math.MaxInt32] and
+// returns it as the *int32 a QueryInput.Limit wants. The two returns above
+// the final conversion keep limit provably in range at the int32() cast -
+// both for correctness and so static analysis can see the bound.
+func queryLimit(limit int) *int32 {
+	if limit < 1 {
+		return aws.Int32(1)
+	}
+	if limit > math.MaxInt32 {
+		return aws.Int32(math.MaxInt32)
+	}
+	return aws.Int32(int32(limit))
+}
 
 // errKitMissingAfterAdd means AddKit's just-appended kit isn't present by
 // KitID in the set mutateSet returned - should be unreachable in practice.

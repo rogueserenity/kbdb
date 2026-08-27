@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"strings"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -443,12 +442,6 @@ func (r *ProfileRepository) ListPublic(
 		return nil, "", fmt.Errorf("%w: %w", repository.ErrInvalidCursor, err)
 	}
 
-	if limit < 1 {
-		limit = 1
-	} else if limit > math.MaxInt32 {
-		limit = math.MaxInt32
-	}
-
 	indexName := discoverableUsernameIndex
 	keyCond := expression.Key("discoverable_pk").Equal(expression.Value(directoryPKValue))
 	if usernamePrefix != "" {
@@ -476,7 +469,7 @@ func (r *ProfileRepository) ListPublic(
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		ExclusiveStartKey:         startKey,
-		Limit:                     aws.Int32(int32(limit)),
+		Limit:                     queryLimit(limit),
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("querying discoverable profiles: %w", err)

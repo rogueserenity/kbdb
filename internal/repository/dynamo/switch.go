@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -57,15 +56,6 @@ func (r *SwitchRepository) List(
 		return nil, "", fmt.Errorf("decoding cursor: %w", err)
 	}
 
-	// limit is validated by the handler against api/openapi.yaml's Limit
-	// parameter (1-100) before reaching here; List's exported signature
-	// accepts any int, so clamp defensively rather than trust that.
-	if limit < 1 {
-		limit = 1
-	} else if limit > math.MaxInt32 {
-		limit = math.MaxInt32
-	}
-
 	visValues := make([]expression.OperandBuilder, len(visibilities))
 	for i, v := range visibilities {
 		visValues[i] = expression.Value(v)
@@ -87,7 +77,7 @@ func (r *SwitchRepository) List(
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
 		ExclusiveStartKey:         startKey,
-		Limit:                     aws.Int32(int32(limit)),
+		Limit:                     queryLimit(limit),
 	})
 	if err != nil {
 		return nil, "", fmt.Errorf("querying switches for owner %q: %w", ownerID, err)
