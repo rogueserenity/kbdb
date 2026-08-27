@@ -14,6 +14,13 @@ var ErrNotFound = errors.New("not found")
 // errors.Is to return 409 instead of a generic 500.
 var ErrAlreadyExists = errors.New("already exists")
 
+// ErrUsernameTaken is returned by ProfileRepository create/update when the
+// requested username is claimed by a *different* user - distinct from
+// ErrAlreadyExists ("this user already has a profile"). Handlers map it to
+// a 409 with the username-unavailable problem type so the frontend can
+// surface it against the username field.
+var ErrUsernameTaken = errors.New("username taken")
+
 // ErrMutationConflict is returned when a repository method that
 // read-modify-writes an item (e.g. KeycapSetRepository's kit/set mutations)
 // loses a bounded number of optimistic-concurrency retries in a row -

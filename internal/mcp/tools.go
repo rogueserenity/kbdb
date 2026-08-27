@@ -18,9 +18,11 @@ func registerTools(
 	imageStore repository.KeycapKitImageStore,
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
+	profileRepo repository.ProfileRepository,
 ) {
 	sdkmcp.AddTool(s, listLookupsTool, handleListLookups())
 	sdkmcp.AddTool(s, getLookupTool, handleGetLookup())
+	sdkmcp.AddTool(s, getProfileTool, handleGetProfile(profileRepo))
 	sdkmcp.AddTool(s, listSwitchesTool, handleListSwitches(switchRepo))
 	sdkmcp.AddTool(s, getSwitchTool, handleGetSwitch(switchRepo))
 	sdkmcp.AddTool(s, createSwitchTool, handleCreateSwitch(switchRepo))

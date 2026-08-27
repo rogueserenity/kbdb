@@ -12,11 +12,13 @@ type Config struct {
 	// Comma-separated origins GET /logout may redirect back to - see
 	// internal/consent.
 	LogoutReturnOrigins string `env:"LOGOUT_RETURN_ORIGINS" required:""`
-	ImagesBucketName   string `env:"IMAGES_BUCKET_NAME" required:""`
-	SwitchTableName    string `env:"SWITCH_TABLE_NAME" required:""`
-	KeyboardTableName  string `env:"KEYBOARD_TABLE_NAME" required:""`
-	KeycapSetTableName string `env:"KEYCAP_SET_TABLE_NAME" required:""`
-	BuildTableName     string `env:"BUILD_TABLE_NAME" required:""`
+	ImagesBucketName         string `env:"IMAGES_BUCKET_NAME" required:""`
+	SwitchTableName          string `env:"SWITCH_TABLE_NAME" required:""`
+	KeyboardTableName        string `env:"KEYBOARD_TABLE_NAME" required:""`
+	KeycapSetTableName       string `env:"KEYCAP_SET_TABLE_NAME" required:""`
+	BuildTableName           string `env:"BUILD_TABLE_NAME" required:""`
+	ProfileTableName         string `env:"PROFILE_TABLE_NAME" required:""`
+	ProfileUsernameTableName string `env:"PROFILE_USERNAME_TABLE_NAME" required:""`
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`

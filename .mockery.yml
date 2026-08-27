@@ -38,6 +38,12 @@ packages:
       SwitchImageStore:
         config:
           structname: 'MockSwitchImageStore'
+      ProfileRepository:
+        config:
+          structname: 'MockProfileRepository'
+      ProfileImageStore:
+        config:
+          structname: 'MockProfileImageStore'
   github.com/rogueserenity/kbdb/internal/repository/dynamo:
     config:
       dir: '{{.InterfaceDir}}/mocks'

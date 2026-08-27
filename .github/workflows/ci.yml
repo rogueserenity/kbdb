@@ -158,12 +158,22 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --query "Stacks[0].Outputs[?OutputKey=='BuildTableName'].OutputValue" \
             --output text)
+          PROFILE_TABLE_NAME=$(aws cloudformation describe-stacks \
+            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ProfileTableName'].OutputValue" \
+            --output text)
+          PROFILE_USERNAME_TABLE_NAME=$(aws cloudformation describe-stacks \
+            --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
+            --query "Stacks[0].Outputs[?OutputKey=='ProfileUsernameTableName'].OutputValue" \
+            --output text)
           {
             echo "api-url=$API_URL"
             echo "switch-table-name=$SWITCH_TABLE_NAME"
             echo "keyboard-table-name=$KEYBOARD_TABLE_NAME"
             echo "keycap-set-table-name=$KEYCAP_SET_TABLE_NAME"
             echo "build-table-name=$BUILD_TABLE_NAME"
+            echo "profile-table-name=$PROFILE_TABLE_NAME"
+            echo "profile-username-table-name=$PROFILE_USERNAME_TABLE_NAME"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create test users and mint emulator tokens
@@ -203,6 +213,8 @@ jobs:
           KBDB_KEYBOARD_TABLE_NAME: ${{ steps.stack-outputs.outputs.keyboard-table-name }}
           KBDB_KEYCAP_SET_TABLE_NAME: ${{ steps.stack-outputs.outputs.keycap-set-table-name }}
           KBDB_BUILD_TABLE_NAME: ${{ steps.stack-outputs.outputs.build-table-name }}
+          KBDB_PROFILE_TABLE_NAME: ${{ steps.stack-outputs.outputs.profile-table-name }}
+          KBDB_PROFILE_USERNAME_TABLE_NAME: ${{ steps.stack-outputs.outputs.profile-username-table-name }}
           # Explicitly empty (not omitted) - func-test.sh only falls back to
           # its LocalStack default for a genuinely unset variable.
           KBDB_DYNAMODB_ENDPOINT_URL: ""

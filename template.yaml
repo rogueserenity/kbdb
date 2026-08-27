@@ -241,6 +241,81 @@ Resources:
             NonKeyAttributes:
               - build_id
 
+  # User-owned profiles. Unlike every other entity table this has NO sort
+  # key: a user has exactly one profile, so user_id (the IdP subject) alone
+  # is the primary key. (The lookup table is likewise not user_id/id-keyed,
+  # but this is the first *entity* table that isn't.)
+  #
+  # Two GlobalSecondaryIndexes back the /v1/profiles directory. Both are
+  # SPARSE and both partition on a constant value ("1"):
+  #   - DiscoverableUsernameIndex: discoverable_pk -> username. Answers
+  #     "list all discoverable profiles" (Query with no sort-key condition)
+  #     and "search by username prefix" (begins_with).
+  #   - DiscoverableDiscordIndex: discord_pk -> discord_username_lc. Answers
+  #     "search by Discord handle prefix".
+  # The discoverable_pk / discord_pk attributes are written by the app ONLY
+  # when discoverable is true (discord_pk additionally requires a
+  # discord_username), so non-discoverable profiles are simply absent from
+  # the indexes - no filter expression needed - and each index stays small.
+  #
+  # A constant partition key means each index is a single hot partition.
+  # Ceilings: ~1,000 discoverable-profile writes/sec (one-partition WCU) and
+  # ~10 GB (~20M profiles). Reads are bounded Query + pagination and stay
+  # fine well past that; this is a personal-collection directory, nowhere
+  # near those limits. Escape hatch if it ever matters: shard the constant
+  # PK into "1".."N" (hash of user_id) and scatter-gather in ListPublic.
+  ProfileTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: user_id
+          AttributeType: S
+        - AttributeName: discoverable_pk
+          AttributeType: S
+        - AttributeName: username
+          AttributeType: S
+        - AttributeName: discord_pk
+          AttributeType: S
+        - AttributeName: discord_username_lc
+          AttributeType: S
+      KeySchema:
+        - AttributeName: user_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: DiscoverableUsernameIndex
+          KeySchema:
+            - AttributeName: discoverable_pk
+              KeyType: HASH
+            - AttributeName: username
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: DiscoverableDiscordIndex
+          KeySchema:
+            - AttributeName: discord_pk
+              KeyType: HASH
+            - AttributeName: discord_username_lc
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+
+  # Enforces Profile.username uniqueness - a GSI can't. Holds one
+  # { username -> user_id } claim item per profile, written in the same
+  # TransactWriteItems as the ProfileTable item (conditional on
+  # attribute_not_exists). Deliberate cost: a second table and 2x write cost
+  # on profile create/rename.
+  ProfileUsernameTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: username
+          AttributeType: S
+      KeySchema:
+        - AttributeName: username
+          KeyType: HASH
+
   # Matches ApiFunction's explicit FunctionName below so Lambda writes here
   # instead of auto-creating an unmanaged, never-expiring log group.
   ApiFunctionLogGroup:
@@ -271,6 +346,8 @@ Resources:
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
           KEYCAP_SET_TABLE_NAME: !Ref KeycapSetTable
           BUILD_TABLE_NAME: !Ref BuildTable
+          PROFILE_TABLE_NAME: !Ref ProfileTable
+          PROFILE_USERNAME_TABLE_NAME: !Ref ProfileUsernameTable
           # Empty in real deployments; sam local's --env-vars override
           # (env.local.json) can only override a var declared here.
           DYNAMODB_ENDPOINT_URL: ""
@@ -325,6 +402,29 @@ Resources:
               Action:
                 - dynamodb:Query
               Resource: !Sub "${BuildTable.Arn}/index/BuildRefIndex"
+            # Profile writes (later PRs) touch both tables in one
+            # TransactWriteItems, so both get the full CRUD set now.
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:TransactWriteItems
+              Resource: !GetAtt ProfileTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:DeleteItem
+                - dynamodb:TransactWriteItems
+              Resource: !GetAtt ProfileUsernameTable.Arn
+            - Effect: Allow
+              Action:
+                - dynamodb:Query
+              Resource:
+                - !Sub "${ProfileTable.Arn}/index/DiscoverableUsernameIndex"
+                - !Sub "${ProfileTable.Arn}/index/DiscoverableDiscordIndex"
       Events:
         # No auth: security: [] in api/openapi.yaml. Lookup categories are
         # static, deploy-time data (internal/lookup) - GET only, no write
@@ -343,6 +443,18 @@ Resources:
           Properties:
             ApiId: !Ref HttpApi
             Path: /v1/lookups/{category}
+            Method: get
+            Auth:
+              Authorizer: NONE
+        # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
+        # api/openapi.yaml - anonymous callers may read discoverable
+        # profiles); the app applies the discoverable-or-owner rule itself
+        # via middleware.OptionalAuth and internal/profileread.
+        GetProfileEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profile/{identifier}
             Method: get
             Auth:
               Authorizer: NONE
@@ -769,3 +881,9 @@ Outputs:
   BuildTableName:
     Description: DynamoDB table backing GET /users/{userId}/builds
     Value: !Ref BuildTable
+  ProfileTableName:
+    Description: DynamoDB table backing GET /v1/profile/{identifier} and /v1/profiles
+    Value: !Ref ProfileTable
+  ProfileUsernameTableName:
+    Description: DynamoDB table enforcing Profile.username uniqueness
+    Value: !Ref ProfileUsernameTable
