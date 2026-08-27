@@ -16,9 +16,16 @@ export AWS_ENDPOINT_URL="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
 STACK="${KBDB_FLOCI_STACK:-kbdb-floci}"
 ENDPOINT="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
 OIDC_BUCKET="kbdb-floci-oidc"
-# Must match docker-compose.floci.yml's WORKOS_EMULATE_ISSUER exactly - it's
-# both the discovery doc's own "issuer" field and the fetch URL go-oidc uses.
-ISSUER_URL="$ENDPOINT/$OIDC_BUCKET"
+CLIENT_ID="client_local_kbdb"
+# The base must match docker-compose.floci.yml's WORKOS_EMULATE_ISSUER
+# exactly. From emulator v0.10.0 the minted AuthKit access token's iss is
+# "<base>/user_management/<client_id>" (as in production WorkOS), and go-oidc
+# does an exact-string iss match against the discovery doc's "issuer" - so
+# the discovery doc's "issuer", the URL go-oidc fetches, and OidcIssuerBaseUrl
+# all carry the /user_management/<client_id> suffix, while WORKOS_EMULATE_ISSUER
+# stays bare (the emulator appends the suffix itself).
+ISSUER_BASE_URL="$ENDPOINT/$OIDC_BUCKET"
+ISSUER_URL="$ISSUER_BASE_URL/user_management/$CLIENT_ID"
 
 docker compose -f docker-compose.floci.yml up -d floci workos-emulate
 
@@ -43,16 +50,20 @@ aws ecr create-repository --repository-name "$ECR_REPO" >/dev/null 2>&1 || true
 REPO_URI=$(aws ecr describe-repositories \
   --repository-names "$ECR_REPO" --query 'repositories[0].repositoryUri' --output text)
 
-# @workos/emulate has no discovery endpoint, so host a static one here whose
-# jwks_uri points at the emulator's real, live JWKS endpoint - the doc is
-# just a pointer, never a JWKS snapshot, so it can't go stale and there's no
-# signing key to generate or pin (the emulator mints its own at startup).
+# The emulator does serve its own per-client discovery doc from v0.10.0, but
+# its jwks_uri points at localhost:4100, which the deployed Lambda can't
+# reach - so host a static doc here instead whose jwks_uri points at the
+# emulator's real, live, sibling-reachable JWKS endpoint. The doc is just a
+# pointer, never a JWKS snapshot, so it can't go stale and there's no signing
+# key to generate or pin (the emulator mints its own at startup). It's served
+# under the /user_management/<client_id> suffix so go-oidc finds it at
+# "$ISSUER_URL/.well-known/openid-configuration".
 aws s3api create-bucket --bucket "$OIDC_BUCKET" \
   --region "$AWS_DEFAULT_REGION" \
   --create-bucket-configuration LocationConstraint="$AWS_DEFAULT_REGION" \
   >/dev/null 2>&1 || true
 
-cat <<EOF | aws s3 cp - "s3://$OIDC_BUCKET/.well-known/openid-configuration" \
+cat <<EOF | aws s3 cp - "s3://$OIDC_BUCKET/user_management/$CLIENT_ID/.well-known/openid-configuration" \
   --content-type application/json >/dev/null
 {
   "issuer": "$ISSUER_URL",

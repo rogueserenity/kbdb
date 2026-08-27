@@ -99,10 +99,16 @@ jobs:
         run: |
           JWKS_PREFIX="jwks/kbdb-pr-${{ github.event.pull_request.number }}"
           ISSUER_BASE_URL="https://${{ vars.JWKS_BUCKET_NAME }}.s3.us-east-2.amazonaws.com/${JWKS_PREFIX}"
+          # From emulator v0.10.0 the minted AuthKit token's iss is
+          # "<base>/user_management/<client_id>". ISSUER_URL (suffixed) is what
+          # go-oidc exact-matches and what OidcIssuerBaseUrl must be;
+          # ISSUER_BASE_URL (bare) is what WORKOS_EMULATE_ISSUER stays, since
+          # the emulator appends the suffix itself.
           read -r ISSUER_URL KEY_PATH KID < <(scripts/ci-publish-emulator-jwks.sh \
-            "${{ vars.JWKS_BUCKET_NAME }}" "$JWKS_PREFIX" us-east-2 "$ISSUER_BASE_URL")
+            "${{ vars.JWKS_BUCKET_NAME }}" "$JWKS_PREFIX" us-east-2 "$ISSUER_BASE_URL" client_local_kbdb)
           {
             echo "issuer-url=$ISSUER_URL"
+            echo "issuer-base-url=$ISSUER_BASE_URL"
             echo "key-path=$KEY_PATH"
             echo "kid=$KID"
           } >> "$GITHUB_OUTPUT"
@@ -110,10 +116,10 @@ jobs:
       - name: Start WorkOS emulator
         run: |
           docker run --rm -d -p 4100:4100 --name workos-emulate \
-            -e WORKOS_EMULATE_ISSUER="${{ steps.emulator-jwks.outputs.issuer-url }}" \
+            -e WORKOS_EMULATE_ISSUER="${{ steps.emulator-jwks.outputs.issuer-base-url }}" \
             -e WORKOS_EMULATE_KID="${{ steps.emulator-jwks.outputs.kid }}" \
             -v "${{ steps.emulator-jwks.outputs.key-path }}:/keys/signing-key.pem:ro" \
-            ghcr.io/workos/emulate:0.9.0@sha256:292cf6d8c84743ebf218dc12c316f51d93d839c9e62fb2b46d16bdae7b093237 --host 0.0.0.0 --signing-key /keys/signing-key.pem
+            ghcr.io/workos/emulate:0.10.0@sha256:e87075cc32610c6a91cd1e12f33e3f46cd70be53f714366ea2964ff266cc774f --host 0.0.0.0 --signing-key /keys/signing-key.pem
           for _ in $(seq 1 20); do
             curl -sf http://localhost:4100/health && break
             sleep 0.5
