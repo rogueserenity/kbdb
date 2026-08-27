@@ -477,6 +477,15 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/profile/{identifier}
             Method: put
+        # Same path/auth as CreateProfileEvent, DELETE only - a leaf delete
+        # of the caller's own profile; {identifier} must be their own
+        # subject (authz.IsOwner at the app layer). Idempotent.
+        DeleteProfileEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profile/{identifier}
+            Method: delete
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and

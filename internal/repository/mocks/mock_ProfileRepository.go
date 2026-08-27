@@ -106,6 +106,57 @@ func (_c *MockProfileRepository_Create_Call) RunAndReturn(run func(ctx context.C
 	return _c
 }
 
+// Delete provides a mock function for the type MockProfileRepository
+func (_mock *MockProfileRepository) Delete(ctx context.Context) error {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Delete")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProfileRepository_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
+type MockProfileRepository_Delete_Call struct {
+	*mock.Call
+}
+
+// Delete is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockProfileRepository_Expecter) Delete(ctx any) *MockProfileRepository_Delete_Call {
+	return &MockProfileRepository_Delete_Call{Call: _e.mock.On("Delete", ctx)}
+}
+
+func (_c *MockProfileRepository_Delete_Call) Run(run func(ctx context.Context)) *MockProfileRepository_Delete_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProfileRepository_Delete_Call) Return(err error) *MockProfileRepository_Delete_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProfileRepository_Delete_Call) RunAndReturn(run func(ctx context.Context) error) *MockProfileRepository_Delete_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Get provides a mock function for the type MockProfileRepository
 func (_mock *MockProfileRepository) Get(ctx context.Context, stytchUserID string) (*repository.Profile, error) {
 	ret := _mock.Called(ctx, stytchUserID)

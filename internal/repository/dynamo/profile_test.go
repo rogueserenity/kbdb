@@ -465,6 +465,158 @@ func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflictExhaustsRetries_Re
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 }
 
+func (s *ProfileRepositorySuite) TestDelete_NoUserID_ReturnsErrNoUserID() {
+	err := s.repo.Delete(s.T().Context())
+
+	s.Require().ErrorIs(err, repository.ErrNoUserID)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_RemovesProfileAndClaimAtomically_BothConditioned() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().NoError(err)
+	s.Require().Len(captured.TransactItems, 2)
+
+	profileDel := captured.TransactItems[0].Delete
+	s.Require().NotNil(profileDel)
+	s.Equal("profile-table", *profileDel.TableName)
+	s.Equal("user-alice", profileDel.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	// Guards against deleting nothing when the profile was removed under us.
+	s.Require().NotNil(profileDel.ConditionExpression)
+	s.Contains(*profileDel.ConditionExpression, "attribute_exists")
+
+	claimDel := captured.TransactItems[1].Delete
+	s.Require().NotNil(claimDel)
+	s.Equal("profile-username-table", *claimDel.TableName)
+	s.Equal("alice", claimDel.Key["username"].(*types.AttributeValueMemberS).Value)
+	// Guards against deleting a claim that has since been reissued to
+	// someone else (a rename or delete+recreate race).
+	s.Require().NotNil(claimDel.ConditionExpression)
+	ownerVal := ""
+	for _, v := range claimDel.ExpressionAttributeValues {
+		if sv, ok := v.(*types.AttributeValueMemberS); ok {
+			ownerVal = sv.Value
+		}
+	}
+	s.Equal("user-alice", ownerVal)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_ConcurrentRename_RetriesWithFreshUsername() {
+	// Attempt 1: profile still reads as "alice"; the claim-delete condition
+	// fails because a rename already moved the "alice" claim.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("None")},
+				{Code: aws.String("ConditionalCheckFailed")},
+			},
+		}).Once()
+
+	// Attempt 2: fresh Get returns the renamed profile; delete targets the
+	// new claim and succeeds.
+	renamed := storedProfileItem(1, map[string]types.AttributeValue{
+		"username": &types.AttributeValueMemberS{Value: "bob"},
+	})
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).Return(renamed, nil).Once()
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().NoError(err)
+	s.Equal("bob", captured.TransactItems[1].Delete.Key["username"].(*types.AttributeValueMemberS).Value)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_TransactionConflict_Retries() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("TransactionConflict")},
+				{Code: aws.String("None")},
+			},
+		}).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().NoError(err)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_ConflictExhaustsRetries_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("ConditionalCheckFailed")},
+				{Code: aws.String("None")},
+			},
+		})
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_NoProfile_IsNoOpSuccess() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().NoError(err)
+	s.mockClient.AssertNotCalled(s.T(), "TransactWriteItems", mock.Anything, mock.Anything)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_GetError_Propagates() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().Error(err)
+	s.mockClient.AssertNotCalled(s.T(), "TransactWriteItems", mock.Anything, mock.Anything)
+}
+
+func (s *ProfileRepositorySuite) TestDelete_NonRetryableError_PropagatesWithoutRetry() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled")).Once()
+
+	err := s.repo.Delete(s.updateCtx())
+
+	s.Require().Error(err)
+	s.NotErrorIs(err, repository.ErrMutationConflict)
+}
+
 func (s *ProfileRepositorySuite) TestResolveUsername_Succeeds() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {

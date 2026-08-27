@@ -1,0 +1,112 @@
+package profiles_test
+
+import (
+	"github.com/google/uuid"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	. "github.com/onsi/ginkgo/v2"
+	. "github.com/onsi/gomega"
+
+	"github.com/rogueserenity/kbdb/test/functional/support"
+	"github.com/rogueserenity/kbdb/test/functional/support/api"
+	"github.com/rogueserenity/kbdb/test/functional/support/db"
+)
+
+var _ = Describe("Deleting a profile over MCP", func() {
+	var (
+		client   *api.MCPClient
+		result   *sdkmcp.CallToolResult
+		err      error
+		ownerID  string
+		username string
+	)
+
+	BeforeEach(func(ctx SpecContext) {
+		result = nil
+		err = nil
+		username = "u" + uuid.NewString()[:8]
+
+		token, tokenErr := api.AuthToken(ctx)
+		Expect(tokenErr).NotTo(HaveOccurred())
+		ownerID, err = api.TokenSubject(token)
+		Expect(err).NotTo(HaveOccurred())
+
+		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+	})
+
+	Context("given the caller has a profile", func() {
+		BeforeEach(func(ctx SpecContext) {
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username:     username,
+				Discoverable: true,
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			_ = db.DeleteProfile(ctx, ownerID, username)
+		})
+
+		When("delete_profile is called", func() {
+			BeforeEach(func(ctx SpecContext) {
+				result, err = client.CallTool(ctx, "delete_profile", map[string]any{})
+			})
+
+			It("succeeds, the profile is gone, and the username is free again", func(ctx SpecContext) {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.IsError).To(BeFalse())
+
+				By("no longer resolving the profile")
+				got, getErr := client.CallTool(ctx, "get_profile", map[string]any{"identifier": ownerID})
+				Expect(getErr).NotTo(HaveOccurred())
+				Expect(got.IsError).To(BeTrue())
+
+				By("letting another user claim the freed username")
+				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
+				Expect(tokenErr).NotTo(HaveOccurred())
+				otherID, subErr := api.TokenSubject(otherToken)
+				Expect(subErr).NotTo(HaveOccurred())
+				otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
+
+				created, createErr := otherClient.CallTool(ctx, "create_profile", map[string]any{
+					"username": username, "discoverable": true,
+				})
+				Expect(createErr).NotTo(HaveOccurred())
+				Expect(created.IsError).To(BeFalse())
+
+				DeferCleanup(func(ctx SpecContext) {
+					Expect(db.DeleteProfile(ctx, otherID, username)).To(Succeed())
+				})
+			})
+		})
+	})
+
+	Context("given the caller has no profile", func() {
+		When("delete_profile is called", func() {
+			BeforeEach(func(ctx SpecContext) {
+				result, err = client.CallTool(ctx, "delete_profile", map[string]any{})
+			})
+
+			It("succeeds idempotently", func() {
+				Expect(err).NotTo(HaveOccurred())
+				Expect(result.IsError).To(BeFalse())
+			})
+		})
+	})
+
+	Context("given no bearer token", func() {
+		BeforeEach(func() {
+			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
+		})
+
+		When("delete_profile is called", func() {
+			BeforeEach(func(ctx SpecContext) {
+				result, err = client.CallTool(ctx, "delete_profile", map[string]any{})
+			})
+
+			It("rejects the call with a real HTTP 401", func() {
+				Expect(result).To(BeNil())
+				Expect(err).To(HaveOccurred())
+			})
+		})
+	})
+})

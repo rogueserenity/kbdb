@@ -320,6 +320,100 @@ func mapProfileUpdateConflict(err error, usernameChanged bool) error {
 	return nil
 }
 
+// Delete implements repository.ProfileRepository. A two-item
+// TransactWriteItems removes the profile item and its { username ->
+// user_id } claim together. A missing profile is a no-op success
+// (idempotent).
+//
+// Delete can't address the claim without first reading the profile for its
+// username, so a concurrent rename (or a full delete + recreate) between
+// that read and the transaction could point the claim delete at a
+// username that has since moved to - or been reclaimed by - a different
+// item. Both deletes are therefore conditioned:
+//   - profile item: attribute_exists(user_id), so a profile deleted out
+//     from under us fails the transaction rather than the delete silently
+//     "succeeding" against nothing;
+//   - claim item: user_id = caller, so a claim that has since been moved
+//     or reissued to someone else is left alone.
+//
+// A conditioned failure (ConditionalCheckFailed) or a TransactionConflict
+// both re-read and retry: the fresh Get either returns ErrNotFound (the
+// profile is genuinely gone now - idempotent success) or the current
+// username to try again against.
+func (r *ProfileRepository) Delete(ctx context.Context) error {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("deleting profile: %w", repository.ErrNoUserID)
+	}
+
+	for range maxProfileMutationAttempts {
+		p, err := r.Get(ctx, ownerID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+
+		claimExpr, err := expression.NewBuilder().
+			WithCondition(expression.Name("user_id").Equal(expression.Value(ownerID))).
+			Build()
+		if err != nil {
+			return fmt.Errorf("building profile claim delete condition for user %q: %w", ownerID, err)
+		}
+
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
+			TransactItems: []types.TransactWriteItem{
+				{Delete: &types.Delete{
+					TableName:           &r.profileTableName,
+					Key:                 map[string]types.AttributeValue{"user_id": &types.AttributeValueMemberS{Value: ownerID}},
+					ConditionExpression: aws.String("attribute_exists(user_id)"),
+				}},
+				{Delete: &types.Delete{
+					TableName:                 &r.usernameTableName,
+					Key:                       map[string]types.AttributeValue{"username": &types.AttributeValueMemberS{Value: p.Username}},
+					ConditionExpression:       claimExpr.Condition(),
+					ExpressionAttributeNames:  claimExpr.Names(),
+					ExpressionAttributeValues: claimExpr.Values(),
+				}},
+			},
+		})
+		if err == nil {
+			return nil
+		}
+
+		if profileDeleteShouldRetry(err) {
+			log.FromContext(ctx).Warn("profile delete CAS retry", log.ProfileID, ownerID)
+			continue
+		}
+		return fmt.Errorf("deleting profile for user %q: %w", ownerID, err)
+	}
+
+	return fmt.Errorf("deleting profile for user %q: %w", ownerID, repository.ErrMutationConflict)
+}
+
+// profileDeleteShouldRetry reports whether a failed Delete transaction is a
+// transient conflict worth another attempt from a fresh read: one of the
+// conditioned deletes failed (a concurrent rename / delete / recreate
+// landed), or DynamoDB canceled with TransactionConflict. Any other
+// cancellation reason (throttling, validation, ...) is not retried.
+func profileDeleteShouldRetry(err error) bool {
+	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
+	if !ok {
+		return false
+	}
+
+	for _, reason := range txErr.CancellationReasons {
+		if reason.Code == nil {
+			continue
+		}
+		if *reason.Code == "ConditionalCheckFailed" || *reason.Code == "TransactionConflict" {
+			return true
+		}
+	}
+	return false
+}
+
 // ResolveUsername implements repository.ProfileRepository, reading the
 // { username -> user_id } claim item. ErrNotFound means the username is
 // unclaimed.
