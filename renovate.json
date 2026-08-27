@@ -25,8 +25,9 @@
   ],
   "packageRules": [
     {
-      "description": "A workos/emulate bump can be a breaking iss-claim change (see issue #295) - must be reviewed, never automerged",
+      "description": "A workos/emulate bump can be a breaking iss-claim change (see issue #295) - must be reviewed, never automerged. groupName forces the ci.yml (customManagers) and docker-compose.floci.yml (built-in docker-compose manager) updates onto one branch/PR so the pins can't drift apart.",
       "matchDepNames": ["ghcr.io/workos/emulate"],
+      "groupName": "workos-emulate",
       "automerge": false
     }
   ]
