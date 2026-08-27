@@ -29,6 +29,8 @@ tags:
     description: Builds combining a keyboard, switches, and keycap kits, in a user's collection or shared with the caller.
   - name: lookups
     description: Approved value lists for enum-like fields (vendors, materials, profiles, etc.) — non-sensitive global reference data, not owned by any user. Reads require no authentication at all; there are no write routes.
+  - name: profiles
+    description: A user's public identity — username, avatar, bio, Discord handle, links — and the discoverable directory of other users' profiles.
 
 paths:
   /v1/users/{userId}/keyboards:
@@ -434,6 +436,35 @@ paths:
           $ref: "#/components/responses/NotFoundResponse"
         "409":
           $ref: "#/components/responses/ConflictResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /v1/profile/{identifier}:
+    parameters:
+      - $ref: "#/components/parameters/ProfileIdentifier"
+    get:
+      tags: [profiles]
+      summary: Get a profile
+      operationId: getProfile
+      security:
+        - {}
+        - CognitoAuth: []
+      description: >
+        Returns the profile identified by identifier, which may be either
+        the owner's IdP subject or their username. A non-discoverable
+        profile is returned only to its owner (authenticated caller whose
+        subject matches); to anyone else — and for an identifier that
+        matches no profile at all — the response is 404, not 403, so a
+        non-discoverable profile's existence isn't revealed.
+      responses:
+        "200":
+          description: The requested profile.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Profile"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -1057,6 +1088,16 @@ components:
       schema:
         type: string
       description: Server-generated identifier for the build.
+    ProfileIdentifier:
+      name: identifier
+      in: path
+      required: true
+      schema:
+        type: string
+      description: >
+        Either a profile owner's IdP subject or their username. The username
+        charset (^[a-z0-9_-]{3,20}$, and never starting with "user-") is
+        disjoint from IdP subject values, so the two never collide.
     Limit:
       name: limit
       in: query
@@ -1504,6 +1545,128 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/SwitchSummary"
+        next_cursor:
+          type: [string, "null"]
+
+    ProfileLink:
+      type: object
+      required: [name, url]
+      properties:
+        name:
+          type: string
+          minLength: 1
+          pattern: "\\S"
+          maxLength: 32
+          description: Display label for the link, e.g. "Twitch" or "My Discord".
+        url:
+          type: string
+          format: uri
+          pattern: "^https://"
+          description: >
+            An https URL. http, scheme-relative, and non-http(s) schemes
+            are rejected.
+
+    ProfileImage:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          format: uri
+          description: >
+            A freshly-minted, short-lived presigned S3 GET URL for the
+            profile's avatar. Generated new on every fetch — do not cache
+            or persist it. Managed via POST/DELETE
+            .../profile/{userId}/image, not via a body PUT.
+
+    ProfileImageUpload:
+      type: object
+      required: [upload_url]
+      properties:
+        upload_url:
+          type: string
+          format: uri
+          description: >
+            Presigned S3 PUT URL for the avatar. Short-lived — upload
+            promptly.
+
+    ProfileInput:
+      type: object
+      required: [username]
+      properties:
+        username:
+          type: string
+          pattern: "^[a-z0-9_-]{3,20}$"
+          description: >
+            Lowercase letters, digits, hyphen, underscore; 3–20 characters;
+            never starting with "user-". Unique across all profiles,
+            case-sensitively (the charset has no uppercase). Used as
+            /u/{username} in the frontend and as an identifier on
+            GET /v1/profile/{identifier}.
+        discoverable:
+          type: boolean
+          default: false
+          description: >
+            Whether this profile appears in GET /v1/profiles and is
+            resolvable by anyone at GET /v1/profile/{identifier}. When
+            false, only the owner can read it. Omitted on a PUT means
+            false (full-replace semantics).
+        discord_username:
+          type: string
+          maxLength: 32
+          description: >
+            Free text, not verified against Discord. Discord's current
+            username limit is 32 characters.
+        bio:
+          type: string
+          maxLength: 500
+        links:
+          type: array
+          maxItems: 5
+          items:
+            $ref: "#/components/schemas/ProfileLink"
+
+    Profile:
+      allOf:
+        - $ref: "#/components/schemas/ProfileInput"
+        - type: object
+          properties:
+            avatar:
+              oneOf:
+                - $ref: "#/components/schemas/ProfileImage"
+                - type: "null"
+              description: >
+                Managed via the dedicated image endpoints, not via a body
+                PUT — see POST/DELETE .../profile/{userId}/image.
+
+    ProfileSummary:
+      type: object
+      description: >
+        A directory-listing row. Deliberately omits bio and links — those
+        are only on the full GET /v1/profile/{identifier} response.
+      properties:
+        username:
+          type: string
+        user_id:
+          type: string
+          description: >
+            The profile owner's IdP subject. Present so a client can then
+            call GET /v1/profile/{user_id}. Only ever returned here (for
+            discoverable profiles), never on the single-profile response.
+        discord_username:
+          type: [string, "null"]
+        avatar:
+          oneOf:
+            - $ref: "#/components/schemas/ProfileImage"
+            - type: "null"
+
+    ProfileListPage:
+      type: object
+      properties:
+        items:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfileSummary"
         next_cursor:
           type: [string, "null"]
 

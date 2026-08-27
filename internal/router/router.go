@@ -43,6 +43,8 @@ func New(
 	imageStore repository.KeycapKitImageStore,
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
+	profileRepo repository.ProfileRepository,
+	profileImageStore repository.ProfileImageStore,
 	issuerURL, stytchPublicToken, version string,
 	logoutReturnOrigins []string,
 ) http.Handler {
@@ -135,6 +137,12 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}/images/{imageId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuildImage(buildRepo, buildImageStore))))
 
+	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers may
+	// read discoverable profiles; the handler applies the
+	// discoverable-or-owner rule itself (see internal/profileread).
+	mux.Handle("GET /v1/profile/{identifier}",
+		middleware.OptionalAuth(verifier)(validate(handlers.GetProfile(profileRepo, profileImageStore))))
+
 	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
 	// API Gateway's native authorizer - see that middleware's doc comment
 	// for why (a spec-compliant 401 needs a WWW-Authenticate header naming
@@ -142,7 +150,7 @@ func New(
 	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
 	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
 	// the REST surface.
-	mcpHandlers := mcp.New(switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, verifier, issuerURL, version)
+	mcpHandlers := mcp.New(switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, profileRepo, verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

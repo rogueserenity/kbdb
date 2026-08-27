@@ -60,6 +60,7 @@ func main() {
 	keyboardRepo := dynamo.NewKeyboardRepository(dynamoClient, cfg.KeyboardTableName)
 	keycapSetRepo := dynamo.NewKeycapSetRepository(dynamoClient, cfg.KeycapSetTableName)
 	buildRepo := dynamo.NewBuildRepository(dynamoClient, cfg.BuildTableName)
+	profileRepo := dynamo.NewProfileRepository(dynamoClient, cfg.ProfileTableName, cfg.ProfileUsernameTableName)
 
 	s3Client := s3.NewFromConfig(awsCfg, func(o *s3.Options) {
 		if cfg.S3EndpointURL != "" {
@@ -76,8 +77,9 @@ func main() {
 	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 	keyboardImageStore := imagestore.NewKeyboardImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 	switchImageStore := imagestore.NewSwitchImageStore(s3Client, presignClient, cfg.ImagesBucketName)
+	profileImageStore := imagestore.NewProfileImageStore(s3Client, presignClient, cfg.ImagesBucketName)
 
-	handler := router.New(verifier, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, cfg.OIDCIssuerURL, cfg.StytchPublicToken, Version, strings.Split(cfg.LogoutReturnOrigins, ","))
+	handler := router.New(verifier, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, profileRepo, profileImageStore, cfg.OIDCIssuerURL, cfg.StytchPublicToken, Version, strings.Split(cfg.LogoutReturnOrigins, ","))
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

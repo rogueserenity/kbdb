@@ -56,6 +56,19 @@ func BuildTableName() string {
 	return os.Getenv("KBDB_BUILD_TABLE_NAME")
 }
 
+// ProfileTableName returns the DynamoDB table name backing
+// GET /v1/profile/{identifier}, so specs can seed fixture rows directly.
+func ProfileTableName() string {
+	return os.Getenv("KBDB_PROFILE_TABLE_NAME")
+}
+
+// ProfileUsernameTableName returns the DynamoDB table name holding
+// { username -> user_id } claim items, so specs can seed the claim needed
+// to resolve a profile by username.
+func ProfileUsernameTableName() string {
+	return os.Getenv("KBDB_PROFILE_USERNAME_TABLE_NAME")
+}
+
 // DynamoDBEndpointURL returns the DynamoDB endpoint specs should talk to.
 // Empty uses default AWS endpoint resolution.
 func DynamoDBEndpointURL() string {

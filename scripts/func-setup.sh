@@ -107,6 +107,8 @@ export KBDB_SWITCH_TABLE_NAME=$(out SwitchTableName)
 export KBDB_KEYBOARD_TABLE_NAME=$(out KeyboardTableName)
 export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
 export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
+export KBDB_PROFILE_TABLE_NAME=$(out ProfileTableName)
+export KBDB_PROFILE_USERNAME_TABLE_NAME=$(out ProfileUsernameTableName)
 export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
 export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
 ENVEOF
