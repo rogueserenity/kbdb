@@ -84,14 +84,11 @@ func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 		}
 
 		updated, err := repo.Update(ctx, p)
-		switch {
-		case errors.Is(err, repository.ErrNotFound):
-			return nil, schema.UpdateProfileOutput{}, errProfileNotFound
-		case errors.Is(err, repository.ErrUsernameTaken):
+		if errors.Is(err, repository.ErrUsernameTaken) {
 			return nil, schema.UpdateProfileOutput{}, fmt.Errorf("username %q is already taken", p.Username)
-		case err != nil:
-			log.FromContext(ctx).Error("updating profile", log.Error, err)
-			return nil, schema.UpdateProfileOutput{}, errors.New("failed to update profile")
+		}
+		if mutErr := handleMutationError(ctx, err); mutErr != nil {
+			return nil, schema.UpdateProfileOutput{}, mutErr
 		}
 
 		return nil, schema.UpdateProfileOutput{Profile: repomcp.ProfileToMCP(*updated)}, nil
