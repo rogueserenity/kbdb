@@ -458,6 +458,16 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # Same path as GetProfileEvent, POST only. Default OidcAuthorizer
+        # applies (security: [CognitoAuth] in api/openapi.yaml, no anonymous
+        # override, unlike the GET) - {identifier} must be the caller's own
+        # subject, checked at the app layer by authz.IsOwner.
+        CreateProfileEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profile/{identifier}
+            Method: post
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and

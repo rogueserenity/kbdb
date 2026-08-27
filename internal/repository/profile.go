@@ -85,6 +85,16 @@ type ProfileRepository interface {
 	// Used by GET /v1/profile/{identifier} and get_profile when the
 	// identifier is a username rather than a subject.
 	ResolveUsername(ctx context.Context, username string) (stytchUserID string, err error)
+
+	// Create writes p as the caller's profile. The caller is read from ctx
+	// (internal/ctx.UserID), not p.StytchUserID - a user can only ever
+	// create their own profile. The profile item and the { username ->
+	// user_id } claim item are written atomically; on conflict Create
+	// returns ErrAlreadyExists (this user already has a profile) or
+	// ErrUsernameTaken (the username belongs to someone else). The sparse
+	// directory-GSI discriminators are derived from p and set here, not by
+	// the caller.
+	Create(ctx context.Context, p Profile) (*Profile, error)
 }
 
 // ProfileImageKey is the object key a profile's avatar is stored under in a

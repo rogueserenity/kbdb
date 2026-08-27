@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 )
@@ -20,4 +21,10 @@ func NewProfilesClient() *ProfilesClient {
 // caller owns closing resp.Body.
 func (c *ProfilesClient) Get(ctx context.Context, identifier, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodGet, "/v1/profile/"+identifier, token, nil)
+}
+
+// Create calls POST /v1/profile/{userId} with the given bearer token and
+// raw JSON body. The caller owns closing resp.Body.
+func (c *ProfilesClient) Create(ctx context.Context, userID, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/profile/"+userID, token, bytes.NewBufferString(body))
 }

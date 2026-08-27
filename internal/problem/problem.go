@@ -76,6 +76,17 @@ func Conflict(w http.ResponseWriter, detail string) {
 	Write(w, http.StatusConflict, "https://mykeebs.info/errors/conflict", "Conflict", detail)
 }
 
+// UsernameUnavailable writes a 409 Problem response for a create/update
+// whose requested username is already taken by another user. Unlike every
+// other 409 in this package it uses a distinct type URI, not
+// .../errors/conflict, so the frontend can branch on it to render the error
+// under the username field.
+func UsernameUnavailable(w http.ResponseWriter, detail string) {
+	Write(w, http.StatusConflict,
+		"https://mykeebs.info/errors/username-unavailable",
+		"Username Unavailable", detail)
+}
+
 // StillReferenced writes a 409 Problem response listing the ids of every
 // build blocking a delete in blocking_build_ids, per RFC 9457 §3.2's
 // pattern of extending Problem with an extension member (mirrors

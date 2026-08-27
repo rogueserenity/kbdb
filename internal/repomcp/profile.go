@@ -19,6 +19,33 @@ func ProfileToMCP(p repository.Profile) schema.Profile {
 	}
 }
 
+// ProfileFromMCP maps a create_profile / update_profile tool input to a
+// repository.Profile. It does not set StytchUserID (the caller, from ctx),
+// AvatarPath (managed only via the image tools), or the GSI discriminators
+// (the repository derives those).
+func ProfileFromMCP(in schema.ProfileInput) repository.Profile {
+	return repository.Profile{
+		Username:        in.Username,
+		Discoverable:    in.Discoverable,
+		DiscordUsername: in.DiscordUsername,
+		Bio:             in.Bio,
+		Links:           profileLinksFromMCP(in.Links),
+	}
+}
+
+func profileLinksFromMCP(links []schema.ProfileLink) []repository.ProfileLink {
+	if len(links) == 0 {
+		return nil
+	}
+
+	out := make([]repository.ProfileLink, len(links))
+	for i, l := range links {
+		out[i] = repository.ProfileLink{Name: l.Name, URL: l.URL}
+	}
+
+	return out
+}
+
 func profileLinksToMCP(links []repository.ProfileLink) []schema.ProfileLink {
 	if len(links) == 0 {
 		return nil
