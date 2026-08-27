@@ -30,35 +30,50 @@ import (
 // non-discoverable profile exists. A non-nil error means an actual failure
 // (a store error), not "not found".
 func Resolve(ctx context.Context, repo repository.ProfileRepository, identifier string) (*repository.Profile, bool, error) {
-	p, err := repo.Get(ctx, identifier)
-	if errors.Is(err, repository.ErrNotFound) {
-		subject, resolveErr := repo.ResolveUsername(ctx, strings.ToLower(identifier))
-		if errors.Is(resolveErr, repository.ErrNotFound) {
-			return nil, false, nil
-		}
-		if resolveErr != nil {
-			return nil, false, resolveErr
-		}
-
-		p, err = repo.Get(ctx, subject)
-		if errors.Is(err, repository.ErrNotFound) {
-			// The claim item points at a subject with no profile - treat as
-			// not found rather than an error; a later issue's delete path
-			// keeps the two in sync, but a stale claim must not 500.
-			return nil, false, nil
-		}
-	}
-	if err != nil {
+	p, found, err := resolveProfile(ctx, repo, identifier)
+	if err != nil || !found {
 		return nil, false, err
 	}
 
 	if p.Discoverable {
 		return p, true, nil
 	}
-
 	if caller, ok := kbdbctx.UserID(ctx); ok && caller == p.StytchUserID {
 		return p, true, nil
 	}
 
 	return nil, false, nil
+}
+
+// resolveProfile fetches the profile named by identifier (subject first,
+// then username), with no visibility check. found is false - err nil - when
+// nothing matches, or when a username claim points at a subject with no
+// profile (a stale claim must not 500). A non-nil err is a real store
+// failure.
+func resolveProfile(ctx context.Context, repo repository.ProfileRepository, identifier string) (*repository.Profile, bool, error) {
+	p, err := repo.Get(ctx, identifier)
+	if err == nil {
+		return p, true, nil
+	}
+	if !errors.Is(err, repository.ErrNotFound) {
+		return nil, false, err
+	}
+
+	subject, err := repo.ResolveUsername(ctx, strings.ToLower(identifier))
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	p, err = repo.Get(ctx, subject)
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, err
+	}
+
+	return p, true, nil
 }
