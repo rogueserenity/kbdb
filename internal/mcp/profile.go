@@ -98,10 +98,9 @@ func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 	}
 }
 
-// validatedProfile applies the full field-level rule set (the SDK infers a
-// tool's schema from Go types only, so nothing is enforced for free) and
-// maps the input to a repository.Profile. Errors join every violation into
-// one message, mirroring validatedSwitch.
+// validatedProfile runs the full field rule set (the SDK enforces none of
+// it) and maps the input to a repository.Profile, joining every violation
+// into one error like validatedSwitch.
 func validatedProfile(in schema.ProfileInput) (repository.Profile, error) {
 	p := repomcp.ProfileFromMCP(in)
 

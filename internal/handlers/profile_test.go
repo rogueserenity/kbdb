@@ -141,13 +141,12 @@ func (s *CreateProfileSuite) SetupTest() {
 	s.handler = CreateProfile(s.mockRepo, s.mockImages)
 }
 
-// profileUserID is the {userId} path value every CreateProfile test posts
-// to; the owner/not-owner distinction is made by the caller identity on
-// ctx, not by varying this.
+// profileUserID is the {userId} path value every test posts to; owner vs.
+// not-owner is varied via the ctx caller identity, not this.
 const profileUserID = "user-alice"
 
-// post builds a POST /v1/profile/{userId} request with body as JSON and the
-// caller identity on ctx set to caller (empty for anonymous).
+// post builds a POST request with body as JSON and ctx caller set to caller
+// (empty for anonymous).
 func (s *CreateProfileSuite) post(caller string, body any) *httptest.ResponseRecorder {
 	s.T().Helper()
 
@@ -302,8 +301,8 @@ func (s *UpdateProfileSuite) SetupTest() {
 	s.handler = UpdateProfile(s.mockRepo, s.mockImages)
 }
 
-// put builds a PUT /v1/profile/{identifier} request with body as JSON and
-// the caller identity on ctx set to caller (empty for anonymous).
+// put builds a PUT request with body as JSON and ctx caller set to caller
+// (empty for anonymous).
 func (s *UpdateProfileSuite) put(caller string, body any) *httptest.ResponseRecorder {
 	s.T().Helper()
 
