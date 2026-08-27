@@ -144,15 +144,10 @@ func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileI
 
 		updated, err := repo.Update(r.Context(), p)
 		switch {
-		case errors.Is(err, repository.ErrNotFound):
-			problem.NotFound(w, "resource not found")
-			return
 		case errors.Is(err, repository.ErrUsernameTaken):
 			problem.UsernameUnavailable(w, fmt.Sprintf("the username %q is already taken", p.Username))
 			return
-		case err != nil:
-			log.FromContext(r.Context()).Error("updating profile", log.Error, err)
-			problem.Internal(w, "failed to update profile")
+		case handleMutationError(w, r, err, log.ProfileID, userID):
 			return
 		}
 
@@ -166,5 +161,48 @@ func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileI
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(out)
+	}
+}
+
+// DeleteProfile removes the caller's profile. {identifier} must be the
+// caller's own subject (anything else is 404, not 403). A leaf delete -
+// nothing references a Profile - so no cascade; it only makes the user
+// undiscoverable. If an avatar is on file, its object is removed first
+// (DB-then-S3 ordering, matching the single-image delete policy in
+// internal/repository); a failed object delete aborts before the DB
+// delete. Idempotent: no profile is still 204.
+func DeleteProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.PathValue("identifier")
+
+		if !authz.IsOwner(r.Context(), userID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		p, err := repo.Get(r.Context(), userID)
+		if errors.Is(err, repository.ErrNotFound) {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting profile", log.Error, err, log.ProfileID, userID)
+			problem.Internal(w, "failed to delete profile")
+			return
+		}
+
+		if p.AvatarPath != nil {
+			if err := images.Delete(r.Context(), *p.AvatarPath); err != nil {
+				log.FromContext(r.Context()).Error("deleting profile avatar object", log.Error, err, log.ProfileID, userID)
+				problem.Internal(w, "failed to delete profile")
+				return
+			}
+		}
+
+		if handleMutationError(w, r, repo.Delete(r.Context()), log.ProfileID, userID) {
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
 	}
 }

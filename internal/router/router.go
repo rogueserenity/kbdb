@@ -153,6 +153,11 @@ func New(
 	// body-settable fields, avatar untouched.
 	mux.Handle("PUT /v1/profile/{identifier}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateProfile(profileRepo, profileImageStore))))
+	// Same path/auth as the POST/PUT - DELETE only. {identifier} must be the
+	// caller's own subject (authz.IsOwner). A leaf delete (nothing
+	// references a Profile), idempotent: no profile is still 204.
+	mux.Handle("DELETE /v1/profile/{identifier}",
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteProfile(profileRepo, profileImageStore))))
 
 	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
 	// API Gateway's native authorizer - see that middleware's doc comment
@@ -161,7 +166,7 @@ func New(
 	// response can't carry). template.yaml's McpEvent is Authorizer: NONE
 	// accordingly. Not wrapped in validate: api/openapi.yaml only covers
 	// the REST surface.
-	mcpHandlers := mcp.New(switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, profileRepo, verifier, issuerURL, version)
+	mcpHandlers := mcp.New(switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, profileRepo, profileImageStore, verifier, issuerURL, version)
 	mux.Handle("/mcp", mcpHandlers.Streamable)
 	mux.Handle(mcpHandlers.MetadataPath, mcpHandlers.Metadata)
 	mux.Handle(mcpHandlers.RootMetadataPath, mcpHandlers.Metadata)

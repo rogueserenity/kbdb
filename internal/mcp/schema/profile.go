@@ -47,6 +47,13 @@ type GetProfileOutput struct {
 	Profile Profile `json:"profile" jsonschema:"the requested profile"`
 }
 
+// DeleteProfileInput is the delete_profile tool arguments. It takes none: a
+// delete always targets the caller's own profile.
+type DeleteProfileInput struct{}
+
+// DeleteProfileOutput is the delete_profile tool result.
+type DeleteProfileOutput struct{}
+
 // Profile is a user's public identity. HasAvatar reports whether an avatar
 // is on file; MCP never serves the image itself.
 type Profile struct {

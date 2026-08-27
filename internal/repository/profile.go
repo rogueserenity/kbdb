@@ -76,6 +76,12 @@ type ProfileRepository interface {
 	// cleared. Returns ErrNotFound if the caller has no profile, or
 	// ErrUsernameTaken if a changed username is claimed by a different user.
 	Update(ctx context.Context, p Profile) (*Profile, error)
+
+	// Delete removes the caller's profile and its { username -> user_id }
+	// claim, atomically. A missing profile is a no-op success (idempotent).
+	// This is a leaf delete: nothing references a Profile, so there is no
+	// cascade.
+	Delete(ctx context.Context) error
 }
 
 // ProfileImageKey is the object key a profile's avatar is stored under.

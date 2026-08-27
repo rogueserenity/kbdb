@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -259,4 +260,81 @@ func (s *HandleUpdateProfileSuite) TestRepoError_GenericError() {
 	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
 
 	s.Require().ErrorIs(err, errMutationFailed)
+}
+
+type HandleDeleteProfileSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+}
+
+func TestHandleDeleteProfileSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteProfileSuite))
+}
+
+func (s *HandleDeleteProfileSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+}
+
+func (s *HandleDeleteProfileSuite) call() error {
+	_, _, err := handleDeleteProfile(s.mockRepo, s.mockImages)(callerContext(s.T()), nil, schema.DeleteProfileInput{})
+	return err
+}
+
+func (s *HandleDeleteProfileSuite) TestDeletesProfile_NoError() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).Return(nil)
+
+	s.Require().NoError(s.call())
+}
+
+func (s *HandleDeleteProfileSuite) TestNoProfile_IdempotentNoError() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).Return(nil, repository.ErrNotFound)
+
+	s.Require().NoError(s.call())
+	s.mockRepo.AssertNotCalled(s.T(), "Delete", mock.Anything)
+}
+
+func (s *HandleDeleteProfileSuite) TestAvatarDeletedBeforeDBDelete() {
+	key := repository.ProfileImageKey("profiles/" + callerID + "/avatar")
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+
+	var order []string
+	s.mockImages.EXPECT().Delete(mock.Anything, key).
+		Run(func(context.Context, repository.ProfileImageKey) { order = append(order, "s3") }).
+		Return(nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).
+		Run(func(context.Context) { order = append(order, "db") }).
+		Return(nil)
+
+	s.Require().NoError(s.call())
+	s.Equal([]string{"s3", "db"}, order)
+}
+
+func (s *HandleDeleteProfileSuite) TestAvatarDeleteFails_ErrorNoDBDelete() {
+	key := repository.ProfileImageKey("profiles/" + callerID + "/avatar")
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 down"))
+
+	s.Require().Error(s.call())
+	s.mockRepo.AssertNotCalled(s.T(), "Delete", mock.Anything)
+}
+
+func (s *HandleDeleteProfileSuite) TestGetError_GenericError() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).Return(nil, errors.New("dynamo down"))
+
+	s.Require().Error(s.call())
+}
+
+func (s *HandleDeleteProfileSuite) TestDeleteError_GenericError() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).Return(errors.New("dynamo down"))
+
+	s.Require().Error(s.call())
 }

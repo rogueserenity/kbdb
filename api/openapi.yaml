@@ -542,8 +542,40 @@ paths:
           $ref: "#/components/responses/NotFoundResponse"
         "409":
           description: >
-            The requested username is already claimed by a different user
-            (type https://mykeebs.info/errors/username-unavailable).
+            Either the requested username is already claimed by a different
+            user (type https://mykeebs.info/errors/username-unavailable) or
+            the profile was being modified concurrently and the write could
+            not be applied (type https://mykeebs.info/errors/conflict) —
+            retry. The two are distinguished by the Problem `type`.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [profiles]
+      summary: Delete a profile
+      operationId: deleteProfile
+      description: >
+        Deletes the caller's profile. identifier must be the caller's own
+        IdP subject (not a username) — deleting a profile for anyone else
+        always returns 404. This is a leaf delete: nothing references a
+        profile, so there is no cascade — the user's builds, keyboards, and
+        other items keep their own visibility and are untouched; only the
+        directory listing loses the user. The username is freed for reuse
+        and the avatar object, if any, is removed. Idempotent: deleting
+        when the caller has no profile still returns 204.
+      responses:
+        "204":
+          description: The profile was deleted, or the caller had none.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: >
+            The profile was being modified concurrently and the delete
+            could not be applied (type https://mykeebs.info/errors/conflict).
+            Retry.
           content:
             application/problem+json:
               schema:

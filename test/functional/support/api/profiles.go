@@ -31,3 +31,9 @@ func (c *ProfilesClient) Create(ctx context.Context, userID, token, body string)
 func (c *ProfilesClient) Update(ctx context.Context, userID, token, body string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodPut, "/v1/profile/"+userID, token, bytes.NewBufferString(body))
 }
+
+// Delete calls DELETE /v1/profile/{userId}. The caller owns closing
+// resp.Body.
+func (c *ProfilesClient) Delete(ctx context.Context, userID, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/profile/"+userID, token, nil)
+}

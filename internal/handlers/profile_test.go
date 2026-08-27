@@ -401,3 +401,139 @@ func (s *UpdateProfileSuite) TestRepoError_500() {
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 }
+
+func (s *UpdateProfileSuite) TestMutationConflict_409() {
+	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+
+	s.Equal(http.StatusConflict, rec.Code)
+}
+
+type DeleteProfileSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+	handler    http.HandlerFunc
+}
+
+func TestDeleteProfileSuite(t *testing.T) {
+	suite.Run(t, new(DeleteProfileSuite))
+}
+
+func (s *DeleteProfileSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+	s.handler = DeleteProfile(s.mockRepo, s.mockImages)
+}
+
+// del builds a DELETE request with ctx caller set to caller (empty for
+// anonymous).
+func (s *DeleteProfileSuite) del(caller string) *httptest.ResponseRecorder {
+	s.T().Helper()
+
+	ctx := s.T().Context()
+	if caller != "" {
+		ctx = kbdbctx.WithUserID(ctx, caller)
+	}
+
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/v1/profile/"+profileUserID, nil)
+	req.SetPathValue("identifier", profileUserID)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+	return rec
+}
+
+func (s *DeleteProfileSuite) TestDeletesProfile_204() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).Return(nil)
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteProfileSuite) TestNotOwner_404_NoRepoCall() {
+	rec := s.del("user-bob")
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *DeleteProfileSuite) TestAnonymous_404() {
+	rec := s.del("")
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *DeleteProfileSuite) TestNoProfile_204_Idempotent() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(nil, repository.ErrNotFound)
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteProfileSuite) TestAvatarDeletedBeforeDBDelete() {
+	key := repository.ProfileImageKey("profiles/user-alice/avatar")
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &key}, nil)
+
+	var order []string
+	s.mockImages.EXPECT().Delete(mock.Anything, key).
+		Run(func(context.Context, repository.ProfileImageKey) { order = append(order, "s3") }).
+		Return(nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).
+		Run(func(context.Context) { order = append(order, "db") }).
+		Return(nil)
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusNoContent, rec.Code)
+	s.Equal([]string{"s3", "db"}, order)
+}
+
+func (s *DeleteProfileSuite) TestAvatarDeleteFails_500_NoDBDelete() {
+	key := repository.ProfileImageKey("profiles/user-alice/avatar")
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &key}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 down"))
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.mockRepo.AssertNotCalled(s.T(), "Delete", mock.Anything)
+}
+
+func (s *DeleteProfileSuite) TestGetError_500() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(nil, errors.New("dynamo down"))
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+func (s *DeleteProfileSuite) TestDeleteError_500() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).Return(errors.New("dynamo down"))
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+func (s *DeleteProfileSuite) TestMutationConflict_409() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+	s.mockRepo.EXPECT().Delete(mock.Anything).Return(repository.ErrMutationConflict)
+
+	rec := s.del("user-alice")
+
+	s.Equal(http.StatusConflict, rec.Code)
+}

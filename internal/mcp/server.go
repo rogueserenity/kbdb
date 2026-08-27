@@ -71,13 +71,14 @@ func New(
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
 	profileRepo repository.ProfileRepository,
+	profileImageStore repository.ProfileImageStore,
 	verifier *auth.Verifier,
 	issuerURL, version string,
 ) Handlers {
 	mcpServer := sdkmcp.NewServer(&sdkmcp.Implementation{Name: "kbdb", Version: version}, nil)
 	mcpServer.AddReceivingMiddleware(identityMiddleware())
 
-	registerTools(mcpServer, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, profileRepo)
+	registerTools(mcpServer, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, imageStore, buildRepo, buildImageStore, profileRepo, profileImageStore)
 
 	streamable := sdkmcp.NewStreamableHTTPHandler(
 		func(*http.Request) *sdkmcp.Server { return mcpServer },

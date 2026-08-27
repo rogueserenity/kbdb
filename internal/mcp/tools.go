@@ -19,12 +19,14 @@ func registerTools(
 	buildRepo repository.BuildRepository,
 	buildImageStore repository.BuildImageStore,
 	profileRepo repository.ProfileRepository,
+	profileImageStore repository.ProfileImageStore,
 ) {
 	sdkmcp.AddTool(s, listLookupsTool, handleListLookups())
 	sdkmcp.AddTool(s, getLookupTool, handleGetLookup())
 	sdkmcp.AddTool(s, getProfileTool, handleGetProfile(profileRepo))
 	sdkmcp.AddTool(s, createProfileTool, handleCreateProfile(profileRepo))
 	sdkmcp.AddTool(s, updateProfileTool, handleUpdateProfile(profileRepo))
+	sdkmcp.AddTool(s, deleteProfileTool, handleDeleteProfile(profileRepo, profileImageStore))
 	sdkmcp.AddTool(s, listSwitchesTool, handleListSwitches(switchRepo))
 	sdkmcp.AddTool(s, getSwitchTool, handleGetSwitch(switchRepo))
 	sdkmcp.AddTool(s, createSwitchTool, handleCreateSwitch(switchRepo))

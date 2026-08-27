@@ -35,6 +35,11 @@ var updateProfileTool = &mcp.Tool{
 	Description: "Replaces your own public profile. This is a full replace: every field is overwritten, so omitting bio or links clears them - send the complete profile, not just the fields you want to change. The avatar is not part of this call and is left untouched. Fails if you have no profile yet, or if the requested username is already taken by another user.",
 }
 
+var deleteProfileTool = &mcp.Tool{
+	Name:        "delete_profile",
+	Description: "Deletes your own public profile, freeing its username for reuse and removing your avatar if one is set. This only makes you undiscoverable - your builds, keyboards, and other items keep their own visibility and are untouched. Idempotent: deleting when you have no profile succeeds.",
+}
+
 func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.GetProfileInput, schema.GetProfileOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetProfileInput) (*mcp.CallToolResult, schema.GetProfileOutput, error) {
 		if strings.TrimSpace(in.Identifier) == "" {
@@ -92,6 +97,39 @@ func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 		}
 
 		return nil, schema.UpdateProfileOutput{Profile: repomcp.ProfileToMCP(*updated)}, nil
+	}
+}
+
+func handleDeleteProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) mcp.ToolHandlerFor[schema.DeleteProfileInput, schema.DeleteProfileOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, _ schema.DeleteProfileInput) (*mcp.CallToolResult, schema.DeleteProfileOutput, error) {
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteProfileOutput{}, err
+		}
+
+		p, err := repo.Get(ctx, ownerID)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, schema.DeleteProfileOutput{}, nil
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("getting profile", log.Error, err, log.ProfileID, ownerID)
+			return nil, schema.DeleteProfileOutput{}, errors.New("failed to delete profile")
+		}
+
+		// DB-then-S3 ordering: drop the avatar object first, hard-fail on
+		// error, matching internal/repository's single-image delete policy.
+		if p.AvatarPath != nil {
+			if err := images.Delete(ctx, *p.AvatarPath); err != nil {
+				log.FromContext(ctx).Error("deleting profile avatar object", log.Error, err, log.ProfileID, ownerID)
+				return nil, schema.DeleteProfileOutput{}, errors.New("failed to delete profile")
+			}
+		}
+
+		if mutErr := handleMutationError(ctx, repo.Delete(ctx), log.ProfileID, ownerID); mutErr != nil {
+			return nil, schema.DeleteProfileOutput{}, mutErr
+		}
+
+		return nil, schema.DeleteProfileOutput{}, nil
 	}
 }
 
