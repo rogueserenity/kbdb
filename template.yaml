@@ -382,6 +382,7 @@ Resources:
                 - dynamodb:Query
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:UpdateItem
                 - dynamodb:DeleteItem
               Resource: !GetAtt SwitchTable.Arn
             - Effect: Allow
