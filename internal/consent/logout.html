@@ -1,4 +1,8 @@
 <!DOCTYPE html>
+<!--
+  IdP-specific, like authorize.html: embeds the deployment's IdP browser SDK
+  (currently Stytch's @stytch/vanilla-js) to revoke the session on this origin.
+-->
 <html>
 <head>
 <meta charset="utf-8" />
@@ -21,14 +25,14 @@
   <script type="module">
     import { StytchClient } from 'https://esm.sh/@stytch/vanilla-js@6.2.0';
 
-    const PUBLIC_TOKEN = {{.StytchPublicToken}};
+    const PUBLIC_TOKEN = {{.IDPConsentPublicToken}};
     const RETURN_TO = {{.ReturnTo}};
 
-    const stytch = new StytchClient(PUBLIC_TOKEN, {
+    const idpClient = new StytchClient(PUBLIC_TOKEN, {
       customBaseUrl: {{.OIDCIssuerBaseURL}},
     });
 
-    stytch.session.revoke().catch(() => {}).finally(() => {
+    idpClient.session.revoke().catch(() => {}).finally(() => {
       window.location.assign(RETURN_TO);
     });
   </script>

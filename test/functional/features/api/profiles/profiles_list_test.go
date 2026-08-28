@@ -13,8 +13,8 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
-// listRow is one /v1/profiles item. StytchUser catches a leak (specs
-// assert it empty); UserID is expected (the list -> detail chain).
+// listRow is one /v1/profiles item. UserID is expected (the list -> detail
+// chain, and to address the {userId} collection routes).
 type listRow struct {
 	Username        string  `json:"username"`
 	UserID          string  `json:"user_id"`
@@ -23,9 +23,8 @@ type listRow struct {
 		URL string `json:"url"`
 	} `json:"avatar"`
 	// not in the summary shape - specs assert absent
-	Bio        *string `json:"bio"`
-	Links      *[]any  `json:"links"`
-	StytchUser string  `json:"stytch_user_id"`
+	Bio   *string `json:"bio"`
+	Links *[]any  `json:"links"`
 }
 
 type listPage struct {
@@ -118,8 +117,6 @@ var _ = Describe("Listing profiles", func() {
 					row := page.Items[0]
 					By("carrying the owner's user id for the list -> detail chain")
 					Expect(row.UserID).To(Equal(ownerID))
-					By("never exposing any other stytch_user_id field")
-					Expect(row.StytchUser).To(BeEmpty())
 					By("omitting bio and links from the summary shape")
 					Expect(row.Bio).To(BeNil())
 					Expect(row.Links).To(BeNil())

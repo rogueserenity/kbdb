@@ -12,7 +12,7 @@ import (
 
 // Not part of api/openapi.yaml, so tested here directly rather than via a
 // generated entity client - see internal/consent.
-var _ = Describe("Fetching the Stytch consent page", func() {
+var _ = Describe("Fetching the IdP consent page", func() {
 	var (
 		client *api.Client
 		resp   *http.Response
@@ -37,10 +37,10 @@ var _ = Describe("Fetching the Stytch consent page", func() {
 				Expect(resp.Header.Get("Content-Type")).To(Equal("text/html; charset=utf-8"))
 			})
 
-			It("renders this stack's Stytch public token into the page", func() {
+			It("renders this stack's IdP consent public token into the page", func() {
 				body, readErr := io.ReadAll(resp.Body)
 				Expect(readErr).NotTo(HaveOccurred())
-				// Matches scripts/func-setup.sh's StytchPublicToken deploy
+				// Matches scripts/func-setup.sh's IdpConsentPublicToken deploy
 				// parameter for this stack.
 				Expect(string(body)).To(ContainSubstring(`"public-token-test-local-kbdb"`))
 			})

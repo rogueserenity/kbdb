@@ -25,8 +25,8 @@ var _ = Describe("Listing keyboards", func() {
 		client = api.NewKeyboardsClient()
 
 		// Derived from a freshly minted token, not a fixed fixture subject:
-		// in CI, AuthToken mints a real Cognito-generated subject rather
-		// than mockoidc's fixed fixture subject string, so the owner used
+		// in CI, AuthToken mints a real subject from the WorkOS emulator
+		// rather than a fixed fixture subject string, so the owner used
 		// to seed fixture data below must match whatever subject this
 		// environment's token actually carries.
 		var err error
@@ -55,7 +55,7 @@ var _ = Describe("Listing keyboards", func() {
 
 		BeforeEach(func(ctx SpecContext) {
 			// Fresh IDs per spec run, not fixed literals: AuthToken is a
-			// shared, real Cognito identity in CI (provisioning one per
+			// shared, real emulator identity in CI (provisioning one per
 			// spec isn't practical there), so specs sharing an identity
 			// must namespace their own data to stay collision-proof under
 			// concurrent/out-of-order runs.

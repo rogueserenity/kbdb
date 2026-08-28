@@ -48,12 +48,12 @@ type Verifier struct {
 }
 
 // NewVerifier constructs a Verifier for issuerURL via OIDC discovery.
-// audience is the expected token audience (the Stytch project ID in
-// production - see checkAudience).
+// audience is the expected token audience (typically the IdP project ID -
+// see checkAudience).
 //
 // The audience check itself is done by VerifyToken, not go-oidc's own
 // Verify: go-oidc's built-in check (oidc.Config.ClientID) expects aud to
-// match a single value exactly, but Stytch's tokens carry aud as a
+// match a single value exactly, but the IdP's tokens can carry aud as a
 // multi-value array (e.g. [project_id, ...]) that must merely contain the
 // expected value - see checkAudience's slices.Contains. SkipClientIDCheck
 // is set here so go-oidc's own (incompatible) check is bypassed in favor
@@ -98,7 +98,7 @@ func (v *Verifier) VerifyToken(ctx context.Context, rawToken string) (*Claims, e
 
 // checkAudience rejects token unless its aud claim contains v.audience.
 // aud is checked as a multi-value array rather than requiring an exact
-// match, since Stytch's tokens carry other values alongside the expected
+// match, since some IdPs' tokens carry other values alongside the expected
 // one (e.g. aud: [project_id, ...]) - see NewVerifier.
 func (v *Verifier) checkAudience(token verifiedToken) error {
 	aud := token.audience()

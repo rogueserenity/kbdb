@@ -220,8 +220,8 @@ func (_c *MockProfileRepository_Delete_Call) RunAndReturn(run func(ctx context.C
 }
 
 // Get provides a mock function for the type MockProfileRepository
-func (_mock *MockProfileRepository) Get(ctx context.Context, stytchUserID string) (*repository.Profile, error) {
-	ret := _mock.Called(ctx, stytchUserID)
+func (_mock *MockProfileRepository) Get(ctx context.Context, ownerID string) (*repository.Profile, error) {
+	ret := _mock.Called(ctx, ownerID)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Get")
@@ -230,17 +230,17 @@ func (_mock *MockProfileRepository) Get(ctx context.Context, stytchUserID string
 	var r0 *repository.Profile
 	var r1 error
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (*repository.Profile, error)); ok {
-		return returnFunc(ctx, stytchUserID)
+		return returnFunc(ctx, ownerID)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, string) *repository.Profile); ok {
-		r0 = returnFunc(ctx, stytchUserID)
+		r0 = returnFunc(ctx, ownerID)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*repository.Profile)
 		}
 	}
 	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
-		r1 = returnFunc(ctx, stytchUserID)
+		r1 = returnFunc(ctx, ownerID)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -254,12 +254,12 @@ type MockProfileRepository_Get_Call struct {
 
 // Get is a helper method to define mock.On call
 //   - ctx context.Context
-//   - stytchUserID string
-func (_e *MockProfileRepository_Expecter) Get(ctx any, stytchUserID any) *MockProfileRepository_Get_Call {
-	return &MockProfileRepository_Get_Call{Call: _e.mock.On("Get", ctx, stytchUserID)}
+//   - ownerID string
+func (_e *MockProfileRepository_Expecter) Get(ctx any, ownerID any) *MockProfileRepository_Get_Call {
+	return &MockProfileRepository_Get_Call{Call: _e.mock.On("Get", ctx, ownerID)}
 }
 
-func (_c *MockProfileRepository_Get_Call) Run(run func(ctx context.Context, stytchUserID string)) *MockProfileRepository_Get_Call {
+func (_c *MockProfileRepository_Get_Call) Run(run func(ctx context.Context, ownerID string)) *MockProfileRepository_Get_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -282,7 +282,7 @@ func (_c *MockProfileRepository_Get_Call) Return(profile *repository.Profile, er
 	return _c
 }
 
-func (_c *MockProfileRepository_Get_Call) RunAndReturn(run func(ctx context.Context, stytchUserID string) (*repository.Profile, error)) *MockProfileRepository_Get_Call {
+func (_c *MockProfileRepository_Get_Call) RunAndReturn(run func(ctx context.Context, ownerID string) (*repository.Profile, error)) *MockProfileRepository_Get_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -435,8 +435,8 @@ func (_c *MockProfileRepository_ResolveUsername_Call) Run(run func(ctx context.C
 	return _c
 }
 
-func (_c *MockProfileRepository_ResolveUsername_Call) Return(stytchUserID string, err error) *MockProfileRepository_ResolveUsername_Call {
-	_c.Call.Return(stytchUserID, err)
+func (_c *MockProfileRepository_ResolveUsername_Call) Return(ownerID string, err error) *MockProfileRepository_ResolveUsername_Call {
+	_c.Call.Return(ownerID, err)
 	return _c
 }
 

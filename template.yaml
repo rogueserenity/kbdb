@@ -26,25 +26,24 @@ Parameters:
   OidcIssuerBaseUrl:
     Type: String
     Description: >-
-      This deployment's OIDC issuer base URL, scheme included - e.g.
-      https://test.stytch.com/v1/public/{project_id} for a real Stytch Test
-      deployment, or a floci-local http://... URL for local dev (see
-      scripts/func-setup.sh). Not a bare domain: a real IdP is always
-      https, but floci's local S3 emulation only serves plain http, so
-      the scheme must be supplied by the caller rather than hardcoded
-      here.
+      This deployment's OIDC issuer base URL, scheme included - e.g. the
+      issuer base URL of your hosted IdP project, or a floci-local
+      http://... URL for local dev (see scripts/func-setup.sh). Not a bare
+      domain: a real IdP is always https, but floci's local S3 emulation
+      only serves plain http, so the scheme must be supplied by the caller
+      rather than hardcoded here.
   OidcAudience:
     Type: String
     Description: >-
       The expected aud claim on every access token for this environment
       (REST and MCP alike) - used as the native JWT authorizer's audience.
-      This is the Stytch project ID: Stytch always includes it in aud for
-      every token regardless of client type (confirmed empirically against
-      a live Stytch test project), so one value covers both flows.
-  StytchPublicToken:
+      Typically the IdP project ID: many IdPs (Stytch among them) put it in
+      aud for every token regardless of client type, so one value covers
+      both the REST and MCP flows.
+  IdpConsentPublicToken:
     Type: String
     Description: >-
-      This deployment's Stytch public token, rendered into the GET
+      This deployment's IdP browser-SDK public token, rendered into the GET
       /authorize consent page (see internal/consent). Safe to embed
       client-side by design.
   LogoutReturnOrigins:
@@ -339,7 +338,7 @@ Resources:
         Variables:
           OIDC_ISSUER_URL: !Ref OidcIssuerBaseUrl
           OIDC_AUDIENCE: !Ref OidcAudience
-          STYTCH_PUBLIC_TOKEN: !Ref StytchPublicToken
+          IDP_CONSENT_PUBLIC_TOKEN: !Ref IdpConsentPublicToken
           LOGOUT_RETURN_ORIGINS: !Ref LogoutReturnOrigins
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
           SWITCH_TABLE_NAME: !Ref SwitchTable
@@ -446,7 +445,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
+        # Auth: NONE at the gateway (security: [{}, BearerAuth] in
         # api/openapi.yaml - anonymous callers may read discoverable
         # profiles); the app applies the discoverable-or-owner rule itself
         # via middleware.OptionalAuth and internal/profileread.
@@ -459,7 +458,7 @@ Resources:
             Auth:
               Authorizer: NONE
         # Same path as GetProfileEvent, POST only. Default OidcAuthorizer
-        # applies (security: [CognitoAuth] in api/openapi.yaml, no anonymous
+        # applies (security: [BearerAuth] in api/openapi.yaml, no anonymous
         # override, unlike the GET) - {identifier} must be the caller's own
         # subject, checked at the app layer by authz.IsOwner.
         CreateProfileEvent:
@@ -487,7 +486,7 @@ Resources:
             Path: /v1/profile/{identifier}
             Method: delete
         # The public directory. Auth: NONE at the gateway (security: [{},
-        # CognitoAuth] in api/openapi.yaml - anonymous callers allowed); the
+        # BearerAuth] in api/openapi.yaml - anonymous callers allowed); the
         # app returns only discoverable profiles, so there is no per-caller
         # visibility rule. Backed by the ProfileTable directory GSIs.
         ListProfilesEvent:
@@ -514,7 +513,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/profile/{identifier}/image
             Method: delete
-        # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
+        # Auth: NONE at the gateway (security: [{}, BearerAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and
         # internal/authz.ReadableVisibilities.
@@ -535,7 +534,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default OidcAuthorizer applies (security: [CognitoAuth] in
+        # Default OidcAuthorizer applies (security: [BearerAuth] in
         # api/openapi.yaml, no anonymous override, unlike the GET routes) -
         # ownership is checked at the app layer by authz.IsOwner.
         CreateSwitchEvent:
@@ -576,7 +575,7 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/switches/{switchId}/image
             Method: delete
-        # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
+        # Auth: NONE at the gateway (security: [{}, BearerAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and
         # internal/authz.ReadableVisibilities.
@@ -597,7 +596,7 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
-        # Default OidcAuthorizer applies (security: [CognitoAuth] in
+        # Default OidcAuthorizer applies (security: [BearerAuth] in
         # api/openapi.yaml, no anonymous override, unlike the GET routes) -
         # ownership is checked at the app layer by authz.IsOwner.
         CreateKeyboardEvent:

@@ -18,6 +18,7 @@ func TestProfiles(t *testing.T) {
 type getProfileOutput struct {
 	Profile struct {
 		Username        string  `json:"username"`
+		UserID          string  `json:"user_id"`
 		Discoverable    bool    `json:"discoverable"`
 		DiscordUsername *string `json:"discord_username"`
 		Bio             *string `json:"bio"`

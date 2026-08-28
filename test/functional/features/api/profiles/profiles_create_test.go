@@ -92,9 +92,8 @@ var _ = Describe("Creating a profile", func() {
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.Username).To(Equal(username))
 
-					By("never leaking the IdP subject")
-					Expect(got.UserID).To(BeEmpty())
-					Expect(got.StytchUser).To(BeEmpty())
+					By("returning the IdP subject as user_id")
+					Expect(got.UserID).To(Equal(ownerID))
 				})
 
 				It("is then resolvable by id and by username", func(ctx SpecContext) {

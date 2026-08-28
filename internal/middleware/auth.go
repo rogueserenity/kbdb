@@ -20,11 +20,10 @@ import (
 // Required-auth routes no longer have an equivalent in-process middleware:
 // they rely solely on API Gateway's native JWT authorizer (see
 // template.yaml's HttpApi.Auth.DefaultAuthorizer), which verifies the
-// identical token before the request ever reaches this process. That
-// in-process re-verification was deliberate defense-in-depth under
-// Cognito; re-examined for the WorkOS migration and dropped as
-// redundant — the native authorizer is the same class of AWS-verified
-// mechanism Cognito's JWT authorizer already was.
+// identical token before the request ever reaches this process. An earlier
+// version re-verified in-process too, as deliberate defense-in-depth; that
+// was re-examined and dropped as redundant — the native authorizer is an
+// AWS-verified check of the same token, on the same class of mechanism.
 func OptionalAuth(verifier *auth.Verifier) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

@@ -41,15 +41,15 @@ func NewProfileRepository(client *dynamodb.Client, profileTableName, usernameTab
 }
 
 // Get implements repository.ProfileRepository.
-func (r *ProfileRepository) Get(ctx context.Context, stytchUserID string) (*repository.Profile, error) {
+func (r *ProfileRepository) Get(ctx context.Context, ownerID string) (*repository.Profile, error) {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName: &r.profileTableName,
 		Key: map[string]types.AttributeValue{
-			"user_id": &types.AttributeValueMemberS{Value: stytchUserID},
+			"user_id": &types.AttributeValueMemberS{Value: ownerID},
 		},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("getting profile for user %q: %w", stytchUserID, err)
+		return nil, fmt.Errorf("getting profile for user %q: %w", ownerID, err)
 	}
 
 	if len(out.Item) == 0 {
@@ -58,7 +58,7 @@ func (r *ProfileRepository) Get(ctx context.Context, stytchUserID string) (*repo
 
 	var p repository.Profile
 	if err := attributevalue.UnmarshalMap(out.Item, &p); err != nil {
-		return nil, fmt.Errorf("unmarshalling profile for user %q: %w", stytchUserID, err)
+		return nil, fmt.Errorf("unmarshalling profile for user %q: %w", ownerID, err)
 	}
 
 	return &p, nil
@@ -73,7 +73,7 @@ func (r *ProfileRepository) Create(ctx context.Context, p repository.Profile) (*
 	if !ok {
 		return nil, fmt.Errorf("creating profile: %w", repository.ErrNoUserID)
 	}
-	p.StytchUserID = ownerID
+	p.OwnerID = ownerID
 	p.Version = 0
 	setProfileDirectoryKeys(&p)
 
@@ -273,7 +273,7 @@ func (r *ProfileRepository) mutateProfile(
 
 		expectedVersion := p.Version
 		p.Version++
-		p.StytchUserID = ownerID
+		p.OwnerID = ownerID
 		setProfileDirectoryKeys(p)
 
 		profileItem, err := attributevalue.MarshalMap(*p)

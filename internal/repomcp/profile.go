@@ -6,10 +6,11 @@ import (
 )
 
 // ProfileToMCP maps a repository.Profile to its MCP tool shape: avatar as a
-// bool, no IdP subject.
+// bool.
 func ProfileToMCP(p repository.Profile) schema.Profile {
 	return schema.Profile{
 		Username:        p.Username,
+		UserID:          p.OwnerID,
 		Discoverable:    p.Discoverable,
 		DiscordUsername: p.DiscordUsername,
 		Bio:             p.Bio,
@@ -23,14 +24,14 @@ func ProfileToMCP(p repository.Profile) schema.Profile {
 func ProfileToMCPSummary(p repository.Profile) schema.ProfileSummary {
 	return schema.ProfileSummary{
 		Username:        p.Username,
-		UserID:          p.StytchUserID,
+		UserID:          p.OwnerID,
 		DiscordUsername: p.DiscordUsername,
 		HasAvatar:       p.AvatarPath != nil,
 	}
 }
 
 // ProfileFromMCP maps a create_profile / update_profile tool input to a
-// repository.Profile. StytchUserID, AvatarPath, and the GSI discriminators
+// repository.Profile. OwnerID, AvatarPath, and the GSI discriminators
 // are set downstream, not here.
 func ProfileFromMCP(in schema.ProfileInput) repository.Profile {
 	return repository.Profile{

@@ -24,10 +24,9 @@ type profileBody struct {
 	Avatar *struct {
 		URL string `json:"url"`
 	} `json:"avatar"`
-	// Present only if the server wrongly leaked it - specs assert it stays
-	// zero.
-	UserID      string `json:"user_id"`
-	StytchUser  string `json:"stytch_user_id"`
+	// The IdP subject, returned so a caller can address the {userId}-keyed
+	// collection routes.
+	UserID string `json:"user_id"`
 }
 
 var _ = Describe("Getting a profile", func() {
@@ -76,7 +75,7 @@ var _ = Describe("Getting a profile", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the full profile without the IdP subject", func() {
+				It("returns the full profile including the IdP subject as user_id", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got profileBody
@@ -87,9 +86,8 @@ var _ = Describe("Getting a profile", func() {
 					Expect(got.Links).NotTo(BeNil())
 					Expect(*got.Links).To(HaveLen(1))
 
-					By("never leaking the IdP subject on the single-profile response")
-					Expect(got.UserID).To(BeEmpty())
-					Expect(got.StytchUser).To(BeEmpty())
+					By("returning the IdP subject as user_id so the caller can address the collection routes")
+					Expect(got.UserID).To(Equal(ownerID))
 				})
 			})
 		})
