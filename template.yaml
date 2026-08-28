@@ -143,6 +143,15 @@ Resources:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
               SSEAlgorithm: AES256
+      # Lets browsers preflight the presigned-URL PUT upload. Authz is the
+      # presigned URL itself, not CORS.
+      CorsConfiguration:
+        CorsRules:
+          - AllowedOrigins: ["*"]
+            AllowedMethods: [PUT]
+            AllowedHeaders: ["*"]
+            ExposedHeaders: [ETag]
+            MaxAge: 3000
 
   # User-owned switches. user_id (the owner's IdP subject claim) is the
   # partition key, id the sort key - every real access pattern is scoped to
