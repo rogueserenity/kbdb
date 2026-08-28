@@ -251,13 +251,17 @@ func (r *KeyboardRepository) mutateKeyboard(
 		// pre-Version item with no version attribute at all (Get/UnmarshalMap
 		// defaults a missing attribute to the zero value) - attribute_not_exists
 		// covers the latter, since DynamoDB never matches an equality condition
-		// against an absent attribute.
+		// against an absent attribute. attribute_exists(id) is AND-ed in so
+		// this Put can update or migrate a legacy item but never create one:
+		// without it a mutation racing a Delete of a version:0 item would
+		// resurrect it via the attribute_not_exists(version) branch.
 		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
 		if expectedVersion == 0 {
 			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
 		}
+		mutationCondition := expression.AttributeExists(expression.Name("id")).And(versionCondition)
 		expr, err := expression.NewBuilder().
-			WithCondition(versionCondition).
+			WithCondition(mutationCondition).
 			Build()
 		if err != nil {
 			return nil, fmt.Errorf("building keyboard mutation condition for keyboard %q: %w", keyboardID, err)

@@ -389,6 +389,19 @@ func (s *ProfileRepositorySuite) TestUpdate_ChangedUsername_MovesClaimAtomically
 	s.Equal("profile-username-table", *captured.TransactItems[1].Delete.TableName)
 	s.Equal("alice",
 		captured.TransactItems[1].Delete.Key["username"].(*types.AttributeValueMemberS).Value)
+	// The old-claim delete is conditioned on user_id = caller so a
+	// concurrent rename / delete+recreate that moved the claim can't be
+	// clobbered (mirrors Delete()).
+	claimDel := captured.TransactItems[1].Delete
+	s.Require().NotNil(claimDel.ConditionExpression)
+	s.Require().Len(claimDel.ExpressionAttributeNames, 1)
+	s.Require().Len(claimDel.ExpressionAttributeValues, 1)
+	for _, name := range claimDel.ExpressionAttributeNames {
+		s.Equal("user_id", name)
+	}
+	for _, val := range claimDel.ExpressionAttributeValues {
+		s.Equal("user-alice", val.(*types.AttributeValueMemberS).Value)
+	}
 	s.Require().NotNil(captured.TransactItems[2].Put)
 	s.Equal("profile-username-table", *captured.TransactItems[2].Put.TableName)
 	s.Equal("attribute_not_exists(username)", *captured.TransactItems[2].Put.ConditionExpression)
@@ -421,6 +434,34 @@ func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameClaimFails_ReturnsErr
 	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "taken", Discoverable: true})
 
 	s.Require().ErrorIs(err, repository.ErrUsernameTaken)
+}
+
+// A ConditionalCheckFailed on the old-claim delete (reason 1) means the
+// "alice" claim moved to another user between the Get and the transaction:
+// re-read and retry, don't surface it as an error.
+func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameOldClaimMoved_RetriesThenSucceeds() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil).Once()
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(1, nil), nil).Once()
+
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("None")},
+				{Code: aws.String("ConditionalCheckFailed")},
+				{Code: aws.String("None")},
+			},
+		}).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
+
+	s.Require().NoError(err)
+	s.Equal(2, got.Version)
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflict_RetriesThenSucceeds() {

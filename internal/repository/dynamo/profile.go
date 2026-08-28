@@ -283,11 +283,16 @@ func (r *ProfileRepository) mutateProfile(
 
 		// expectedVersion 0 also matches a pre-Version item with no version
 		// attribute, hence the attribute_not_exists branch.
+		// attribute_exists(user_id) is AND-ed in so this Put can update or
+		// migrate a legacy item but never create one: without it a mutation
+		// racing a Delete of a version:0 profile would resurrect it via the
+		// attribute_not_exists(version) branch.
 		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
 		if expectedVersion == 0 {
 			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
 		}
-		expr, err := expression.NewBuilder().WithCondition(versionCondition).Build()
+		profileCondition := expression.AttributeExists(expression.Name("user_id")).And(versionCondition)
+		expr, err := expression.NewBuilder().WithCondition(profileCondition).Build()
 		if err != nil {
 			return nil, fmt.Errorf("building profile mutation condition for user %q: %w", ownerID, err)
 		}
@@ -309,12 +314,28 @@ func (r *ProfileRepository) mutateProfile(
 			if err != nil {
 				return nil, fmt.Errorf("marshalling username claim for user %q: %w", ownerID, err)
 			}
+
+			// Condition the old-claim delete on user_id = ownerID, mirroring
+			// Delete(): between the Get above and this transaction firing a
+			// concurrent rename or delete+recreate can move the oldUsername
+			// claim to a different user, and an unconditioned delete would
+			// wipe it. A ConditionalCheckFailed here re-reads and retries.
+			claimDeleteExpr, err := expression.NewBuilder().
+				WithCondition(expression.Name("user_id").Equal(expression.Value(ownerID))).
+				Build()
+			if err != nil {
+				return nil, fmt.Errorf("building profile claim delete condition for user %q: %w", ownerID, err)
+			}
+
 			items = append(items,
 				types.TransactWriteItem{Delete: &types.Delete{
 					TableName: &r.usernameTableName,
 					Key: map[string]types.AttributeValue{
 						"username": &types.AttributeValueMemberS{Value: oldUsername},
 					},
+					ConditionExpression:       claimDeleteExpr.Condition(),
+					ExpressionAttributeNames:  claimDeleteExpr.Names(),
+					ExpressionAttributeValues: claimDeleteExpr.Values(),
 				}},
 				types.TransactWriteItem{Put: &types.Put{
 					TableName:           &r.usernameTableName,
@@ -349,10 +370,18 @@ var errProfileVersionConflict = errors.New("profile version CAS conflict")
 
 // mapProfileUpdateConflict classifies a mutateProfile TransactWriteItems
 // cancellation. With a username change the items are [profilePut,
-// claimDelete, claimPut], so reason 2 is the new username being taken by a
-// different user (a version retry wouldn't free it, so it wins over the
-// version CAS at reason 0). Otherwise the only item is the profile Put and
-// any failure is the version CAS. Returns nil if err isn't a
+// claimDelete, claimPut]:
+//   - reason 2 (claimPut) is the new username being taken by a different
+//     user; a version retry wouldn't free it, so it wins over the version
+//     CAS at reason 0.
+//   - reason 1 (claimDelete, conditioned on user_id = caller) failing means
+//     the old claim moved to someone else between the Get and the
+//     transaction - re-read and retry (errProfileVersionConflict).
+//
+// Otherwise the only item is the profile Put and any failure - a lost
+// version CAS, or the profile deleted out from under us failing
+// attribute_exists(user_id) - is treated as a retry; the fresh Get then
+// either succeeds or returns ErrNotFound. Returns nil if err isn't a
 // conditional-check cancellation.
 func mapProfileUpdateConflict(err error, usernameChanged bool) error {
 	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
@@ -369,7 +398,7 @@ func mapProfileUpdateConflict(err error, usernameChanged bool) error {
 	if usernameChanged && failed(2) {
 		return repository.ErrUsernameTaken
 	}
-	if failed(0) {
+	if failed(0) || (usernameChanged && failed(1)) {
 		return errProfileVersionConflict
 	}
 	return nil

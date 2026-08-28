@@ -265,12 +265,14 @@ func (s *BuildRepositorySuite) TestUpdate_Succeeds() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
 		Return(s.getItemOutput(0), nil)
+	var captured *dynamodb.TransactWriteItemsInput
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
 			var b repository.Build
 			if err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b); err != nil {
 				return false
 			}
+			captured = in
 			return b.Keyboard == "kb2" && b.Version == 1
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
@@ -280,6 +282,13 @@ func (s *BuildRepositorySuite) TestUpdate_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("kb2", b.Keyboard)
+
+	// The mutation Put is conditioned on attribute_exists(id) so a mutation
+	// racing a Delete of a version:0 item can't recreate it.
+	put := captured.TransactItems[0].Put
+	s.Require().NotNil(put.ConditionExpression)
+	s.Contains(*put.ConditionExpression, "attribute_exists")
+	s.Equal("id", put.ExpressionAttributeNames["#0"])
 }
 
 func (s *BuildRepositorySuite) TestUpdate_ReferenceChange_DiffsMarkers() {

@@ -246,12 +246,14 @@ func (s *KeyboardRepositorySuite) TestUpdate_Succeeds() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
 		Return(s.getItemOutput(0), nil)
+	var captured *dynamodb.PutItemInput
 	s.mockClient.EXPECT().
 		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
 			var kb repository.Keyboard
 			if err := attributevalue.UnmarshalMap(in.Item, &kb); err != nil {
 				return false
 			}
+			captured = in
 			return kb.Brand == "Keychron" && kb.Version == 1
 		})).
 		Return(&dynamodb.PutItemOutput{}, nil)
@@ -261,6 +263,12 @@ func (s *KeyboardRepositorySuite) TestUpdate_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("Keychron", kb.Brand)
+
+	// The mutation Put is conditioned on attribute_exists(id) so a mutation
+	// racing a Delete of a version:0 item can't recreate it.
+	s.Require().NotNil(captured.ConditionExpression)
+	s.Contains(*captured.ConditionExpression, "attribute_exists")
+	s.Equal("id", captured.ExpressionAttributeNames["#0"])
 }
 
 func (s *KeyboardRepositorySuite) TestUpdate_PreservesExistingImagesAndVersion() {
