@@ -33,3 +33,7 @@ var ErrMutationConflict = errors.New("mutation conflict: too many concurrent wri
 // internal/ctx.UserID ok - an empty-string partition key or object-store key
 // would otherwise write against user_id="" instead of erroring.
 var ErrNoUserID = errors.New("no user id in context")
+
+// ErrInvalidCursor is returned when a pagination cursor is malformed or was
+// minted for a different query shape. Handlers map it to a 400.
+var ErrInvalidCursor = errors.New("invalid pagination cursor")

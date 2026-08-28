@@ -486,6 +486,18 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/profile/{identifier}
             Method: delete
+        # The public directory. Auth: NONE at the gateway (security: [{},
+        # CognitoAuth] in api/openapi.yaml - anonymous callers allowed); the
+        # app returns only discoverable profiles, so there is no per-caller
+        # visibility rule. Backed by the ProfileTable directory GSIs.
+        ListProfilesEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profiles
+            Method: get
+            Auth:
+              Authorizer: NONE
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and

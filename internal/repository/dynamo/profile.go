@@ -414,6 +414,99 @@ func profileDeleteShouldRetry(err error) bool {
 	return false
 }
 
+const (
+	discoverableUsernameIndex = "DiscoverableUsernameIndex"
+	discoverableDiscordIndex  = "DiscoverableDiscordIndex"
+	directoryPKValue          = "1"
+)
+
+// directoryIndexKeys is each GSI's LastEvaluatedKey attribute set, used to
+// reject a cursor minted for the other filter.
+var directoryIndexKeys = map[string]map[string]struct{}{
+	discoverableUsernameIndex: {"discoverable_pk": {}, "username": {}, "user_id": {}},
+	discoverableDiscordIndex:  {"discord_pk": {}, "discord_username_lc": {}, "user_id": {}},
+}
+
+// ListPublic implements repository.ProfileRepository. discordPrefix routes
+// to the discord index (begins_with, lowercased), else the username index;
+// the handler guarantees at most one prefix. A bad/mismatched cursor is
+// repository.ErrInvalidCursor.
+func (r *ProfileRepository) ListPublic(
+	ctx context.Context,
+	usernamePrefix, discordPrefix string,
+	limit int,
+	cursor string,
+) ([]repository.Profile, string, error) {
+	startKey, err := decodeCursor(cursor)
+	if err != nil {
+		return nil, "", fmt.Errorf("%w: %w", repository.ErrInvalidCursor, err)
+	}
+
+	indexName := discoverableUsernameIndex
+	keyCond := expression.Key("discoverable_pk").Equal(expression.Value(directoryPKValue))
+	if usernamePrefix != "" {
+		keyCond = keyCond.And(expression.KeyBeginsWith(expression.Key("username"), usernamePrefix))
+	}
+	if discordPrefix != "" {
+		indexName = discoverableDiscordIndex
+		keyCond = expression.Key("discord_pk").Equal(expression.Value(directoryPKValue)).
+			And(expression.KeyBeginsWith(expression.Key("discord_username_lc"), strings.ToLower(discordPrefix)))
+	}
+
+	if !cursorMatchesIndex(startKey, indexName) {
+		return nil, "", fmt.Errorf("%w: minted for a different filter", repository.ErrInvalidCursor)
+	}
+
+	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
+	if err != nil {
+		return nil, "", fmt.Errorf("building profile directory expression: %w", err)
+	}
+
+	out, err := r.client.Query(ctx, &dynamodb.QueryInput{
+		TableName:                 &r.profileTableName,
+		IndexName:                 &indexName,
+		KeyConditionExpression:    expr.KeyCondition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ExclusiveStartKey:         startKey,
+		Limit:                     queryLimit(limit),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("querying discoverable profiles: %w", err)
+	}
+
+	profiles := []repository.Profile{}
+	if err := attributevalue.UnmarshalListOfMaps(out.Items, &profiles); err != nil {
+		return nil, "", fmt.Errorf("unmarshalling discoverable profiles: %w", err)
+	}
+
+	nextCursor, err := encodeCursor(out.LastEvaluatedKey)
+	if err != nil {
+		return nil, "", fmt.Errorf("encoding next cursor: %w", err)
+	}
+
+	return profiles, nextCursor, nil
+}
+
+// cursorMatchesIndex reports whether startKey's attributes are exactly
+// directoryIndexKeys[indexName]. An empty key always matches.
+func cursorMatchesIndex(startKey map[string]types.AttributeValue, indexName string) bool {
+	if len(startKey) == 0 {
+		return true
+	}
+
+	want := directoryIndexKeys[indexName]
+	if len(startKey) != len(want) {
+		return false
+	}
+	for k := range startKey {
+		if _, ok := want[k]; !ok {
+			return false
+		}
+	}
+	return true
+}
+
 // ResolveUsername implements repository.ProfileRepository, reading the
 // { username -> user_id } claim item. ErrNotFound means the username is
 // unclaimed.

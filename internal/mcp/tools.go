@@ -27,6 +27,7 @@ func registerTools(
 	sdkmcp.AddTool(s, createProfileTool, handleCreateProfile(profileRepo))
 	sdkmcp.AddTool(s, updateProfileTool, handleUpdateProfile(profileRepo))
 	sdkmcp.AddTool(s, deleteProfileTool, handleDeleteProfile(profileRepo, profileImageStore))
+	sdkmcp.AddTool(s, listProfilesTool, handleListProfiles(profileRepo))
 	sdkmcp.AddTool(s, listSwitchesTool, handleListSwitches(switchRepo))
 	sdkmcp.AddTool(s, getSwitchTool, handleGetSwitch(switchRepo))
 	sdkmcp.AddTool(s, createSwitchTool, handleCreateSwitch(switchRepo))

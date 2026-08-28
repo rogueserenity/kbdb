@@ -40,3 +40,36 @@ func decodeGetProfileOutput(result *sdkmcp.CallToolResult) getProfileOutput {
 
 	return out
 }
+
+type listProfilesOutput struct {
+	Profiles []struct {
+		Username        string  `json:"username"`
+		UserID          string  `json:"user_id"`
+		DiscordUsername *string `json:"discord_username"`
+		HasAvatar       bool    `json:"has_avatar"`
+		// Deliberately not in the summary shape - specs assert absent.
+		Bio   *string `json:"bio"`
+		Links []any   `json:"links"`
+	} `json:"profiles"`
+	NextCursor string `json:"next_cursor"`
+}
+
+func decodeListProfilesOutput(result *sdkmcp.CallToolResult) listProfilesOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out listProfilesOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}
+
+func listProfileUsernames(out listProfilesOutput) []string {
+	names := make([]string, len(out.Profiles))
+	for i, p := range out.Profiles {
+		names[i] = p.Username
+	}
+	return names
+}

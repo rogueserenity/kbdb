@@ -338,3 +338,96 @@ func (s *HandleDeleteProfileSuite) TestDeleteError_GenericError() {
 
 	s.Require().Error(s.call())
 }
+
+type HandleListProfilesSuite struct {
+	suite.Suite
+
+	mockRepo *mocks.MockProfileRepository
+}
+
+func TestHandleListProfilesSuite(t *testing.T) {
+	suite.Run(t, new(HandleListProfilesSuite))
+}
+
+func (s *HandleListProfilesSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+}
+
+func (s *HandleListProfilesSuite) call(in schema.ListProfilesInput) (schema.ListProfilesOutput, error) {
+	handler := handleListProfiles(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, in)
+	return out, err
+}
+
+func (s *HandleListProfilesSuite) TestNoFilters_ReturnsSummaries() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", defaultListLimit, "").
+		Return([]repository.Profile{
+			{StytchUserID: "user-alice", Username: "alice", Discoverable: true},
+		}, "next", nil)
+
+	out, err := s.call(schema.ListProfilesInput{})
+
+	s.Require().NoError(err)
+	s.Equal("next", out.NextCursor)
+	s.Require().Len(out.Profiles, 1)
+	s.Equal("alice", out.Profiles[0].Username)
+	s.Equal("user-alice", out.Profiles[0].UserID)
+	s.False(out.Profiles[0].HasAvatar)
+}
+
+func (s *HandleListProfilesSuite) TestUsernameFilter_Forwarded() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "al", "", defaultListLimit, "").
+		Return([]repository.Profile{}, "", nil)
+
+	_, err := s.call(schema.ListProfilesInput{Username: "al"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleListProfilesSuite) TestDiscordFilter_Forwarded() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "cool", defaultListLimit, "").
+		Return([]repository.Profile{}, "", nil)
+
+	_, err := s.call(schema.ListProfilesInput{DiscordUsername: "cool"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleListProfilesSuite) TestBothFilters_ErrorNoRepoCall() {
+	_, err := s.call(schema.ListProfilesInput{Username: "al", DiscordUsername: "cool"})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleListProfilesSuite) TestClampsLimitAndPassesCursor() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", maxListLimit, "page-2").
+		Return([]repository.Profile{}, "", nil)
+
+	_, err := s.call(schema.ListProfilesInput{Limit: 5000, Cursor: "page-2"})
+
+	s.Require().NoError(err)
+}
+
+func (s *HandleListProfilesSuite) TestRepoError_GenericError() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", defaultListLimit, "").
+		Return(nil, "", errors.New("dynamo down"))
+
+	_, err := s.call(schema.ListProfilesInput{})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleListProfilesSuite) TestInvalidCursor_Error() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", defaultListLimit, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	_, err := s.call(schema.ListProfilesInput{Cursor: "stale"})
+
+	s.Require().Error(err)
+}

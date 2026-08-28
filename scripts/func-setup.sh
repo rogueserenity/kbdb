@@ -92,11 +92,35 @@ out() {
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
 
-# scripts/workos-emulate-seed.yaml pre-seeds these two users plus the
-# client_local_kbdb application - no need to create them per run like
-# ci.yml does for its throwaway per-PR users.
+# emulator v0.10.0 refuses password auth until email_verified, which the
+# seed file can't set. Create the user verified, or PUT the flag onto the
+# seed-created record.
+ensure_verified() {
+  local email="$1" password="$2" status
+
+  status=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4100/user_management/users \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer sk_test_default" \
+    -d "{\"email\":\"$email\",\"password\":\"$password\",\"email_verified\":true}")
+  case "$status" in
+    201) return ;;
+    409|422) ;;
+    *) echo "creating emulator user $email failed (HTTP $status)" >&2; exit 1 ;;
+  esac
+
+  local user_id
+  user_id=$(curl -sf "http://localhost:4100/user_management/users?email=$email" \
+    -H "Authorization: Bearer sk_test_default" \
+    | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; print(d[0]['id']) if d else exit('emulator user $email not found')")
+  curl -sf -X PUT "http://localhost:4100/user_management/users/$user_id" \
+    -H "Content-Type: application/json" \
+    -H "Authorization: Bearer sk_test_default" \
+    -d '{"email_verified":true}' >/dev/null
+}
+
 create_and_mint() {
   local email="$1" password="$2"
+  ensure_verified "$email" "$password"
   curl -sf -X POST http://localhost:4100/user_management/authenticate \
     -H "Content-Type: application/json" \
     -d "{\"client_id\":\"client_local_kbdb\",\"client_secret\":\"sk_test_default\",\"grant_type\":\"password\",\"email\":\"$email\",\"password\":\"$password\"}" \

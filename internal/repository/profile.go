@@ -82,6 +82,11 @@ type ProfileRepository interface {
 	// This is a leaf delete: nothing references a Profile, so there is no
 	// cascade.
 	Delete(ctx context.Context) error
+
+	// ListPublic returns a cursor-paginated page of discoverable profiles.
+	// At most one of usernamePrefix / discordPrefix may be set (the caller
+	// enforces this), each a begins_with filter on its directory index.
+	ListPublic(ctx context.Context, usernamePrefix, discordPrefix string, limit int, cursor string) ([]Profile, string, error)
 }
 
 // ProfileImageKey is the object key a profile's avatar is stored under.

@@ -54,6 +54,30 @@ type DeleteProfileInput struct{}
 // DeleteProfileOutput is the delete_profile tool result.
 type DeleteProfileOutput struct{}
 
+// ListProfilesInput is the list_profiles tool arguments. Username and
+// DiscordUsername are mutually-exclusive begins-with filters.
+type ListProfilesInput struct {
+	Limit           int    `json:"limit,omitempty" jsonschema:"maximum number of profiles to return (1-100, default 20)"`
+	Cursor          string `json:"cursor,omitempty" jsonschema:"resume from a previous call's next_cursor"`
+	Username        string `json:"username,omitempty" jsonschema:"case-sensitive begins-with filter on username; mutually exclusive with discord_username"`
+	DiscordUsername string `json:"discord_username,omitempty" jsonschema:"case-insensitive begins-with filter on discord_username; mutually exclusive with username"`
+}
+
+// ListProfilesOutput is the list_profiles tool result.
+type ListProfilesOutput struct {
+	Profiles   []ProfileSummary `json:"profiles" jsonschema:"the discoverable profiles in this page"`
+	NextCursor string           `json:"next_cursor,omitempty" jsonschema:"pass as cursor to fetch the next page; empty when there are no more"`
+}
+
+// ProfileSummary is a list_profiles row - no bio or links; use UserID to
+// chain to get_profile.
+type ProfileSummary struct {
+	Username        string  `json:"username" jsonschema:"the profile's unique username"`
+	UserID          string  `json:"user_id" jsonschema:"the profile owner's user id; pass to get_profile"`
+	DiscordUsername *string `json:"discord_username,omitempty" jsonschema:"the owner's Discord username, if given"`
+	HasAvatar       bool    `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
+}
+
 // Profile is a user's public identity. HasAvatar reports whether an avatar
 // is on file; MCP never serves the image itself.
 type Profile struct {

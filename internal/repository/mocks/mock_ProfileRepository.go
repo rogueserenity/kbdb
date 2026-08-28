@@ -225,6 +225,98 @@ func (_c *MockProfileRepository_Get_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// ListPublic provides a mock function for the type MockProfileRepository
+func (_mock *MockProfileRepository) ListPublic(ctx context.Context, usernamePrefix string, discordPrefix string, limit int, cursor string) ([]repository.Profile, string, error) {
+	ret := _mock.Called(ctx, usernamePrefix, discordPrefix, limit, cursor)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ListPublic")
+	}
+
+	var r0 []repository.Profile
+	var r1 string
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int, string) ([]repository.Profile, string, error)); ok {
+		return returnFunc(ctx, usernamePrefix, discordPrefix, limit, cursor)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, int, string) []repository.Profile); ok {
+		r0 = returnFunc(ctx, usernamePrefix, discordPrefix, limit, cursor)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).([]repository.Profile)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, int, string) string); ok {
+		r1 = returnFunc(ctx, usernamePrefix, discordPrefix, limit, cursor)
+	} else {
+		r1 = ret.Get(1).(string)
+	}
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, string, int, string) error); ok {
+		r2 = returnFunc(ctx, usernamePrefix, discordPrefix, limit, cursor)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
+}
+
+// MockProfileRepository_ListPublic_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListPublic'
+type MockProfileRepository_ListPublic_Call struct {
+	*mock.Call
+}
+
+// ListPublic is a helper method to define mock.On call
+//   - ctx context.Context
+//   - usernamePrefix string
+//   - discordPrefix string
+//   - limit int
+//   - cursor string
+func (_e *MockProfileRepository_Expecter) ListPublic(ctx any, usernamePrefix any, discordPrefix any, limit any, cursor any) *MockProfileRepository_ListPublic_Call {
+	return &MockProfileRepository_ListPublic_Call{Call: _e.mock.On("ListPublic", ctx, usernamePrefix, discordPrefix, limit, cursor)}
+}
+
+func (_c *MockProfileRepository_ListPublic_Call) Run(run func(ctx context.Context, usernamePrefix string, discordPrefix string, limit int, cursor string)) *MockProfileRepository_ListPublic_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 int
+		if args[3] != nil {
+			arg3 = args[3].(int)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProfileRepository_ListPublic_Call) Return(profiles []repository.Profile, s string, err error) *MockProfileRepository_ListPublic_Call {
+	_c.Call.Return(profiles, s, err)
+	return _c
+}
+
+func (_c *MockProfileRepository_ListPublic_Call) RunAndReturn(run func(ctx context.Context, usernamePrefix string, discordPrefix string, limit int, cursor string) ([]repository.Profile, string, error)) *MockProfileRepository_ListPublic_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ResolveUsername provides a mock function for the type MockProfileRepository
 func (_mock *MockProfileRepository) ResolveUsername(ctx context.Context, username string) (string, error) {
 	ret := _mock.Called(ctx, username)

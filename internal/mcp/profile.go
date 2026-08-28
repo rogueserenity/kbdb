@@ -40,6 +40,11 @@ var deleteProfileTool = &mcp.Tool{
 	Description: "Deletes your own public profile, freeing its username for reuse and removing your avatar if one is set. This only makes you undiscoverable - your builds, keyboards, and other items keep their own visibility and are untouched. Idempotent: deleting when you have no profile succeeds.",
 }
 
+var listProfilesTool = &mcp.Tool{
+	Name:        "list_profiles",
+	Description: "Lists discoverable profiles in the public directory, ordered by username. Returns an abbreviated shape; call get_profile with a row's user_id for a profile's full details. username and discord_username are optional begins-with prefix filters and are mutually exclusive - pass at most one.",
+}
+
 func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.GetProfileInput, schema.GetProfileOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetProfileInput) (*mcp.CallToolResult, schema.GetProfileOutput, error) {
 		if strings.TrimSpace(in.Identifier) == "" {
@@ -130,6 +135,30 @@ func handleDeleteProfile(repo repository.ProfileRepository, images repository.Pr
 		}
 
 		return nil, schema.DeleteProfileOutput{}, nil
+	}
+}
+
+func handleListProfiles(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.ListProfilesInput, schema.ListProfilesOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListProfilesInput) (*mcp.CallToolResult, schema.ListProfilesOutput, error) {
+		if in.Username != "" && in.DiscordUsername != "" {
+			return nil, schema.ListProfilesOutput{}, errors.New("username and discord_username are mutually exclusive")
+		}
+
+		profiles, nextCursor, err := repo.ListPublic(ctx, in.Username, in.DiscordUsername, clampListLimit(in.Limit), in.Cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			return nil, schema.ListProfilesOutput{}, errors.New("invalid cursor; restart from the first page (a cursor can't be reused with a different filter)")
+		}
+		if err != nil {
+			log.FromContext(ctx).Error("listing profiles", log.Error, err)
+			return nil, schema.ListProfilesOutput{}, errors.New("failed to list profiles")
+		}
+
+		items := make([]schema.ProfileSummary, len(profiles))
+		for i, p := range profiles {
+			items[i] = repomcp.ProfileToMCPSummary(p)
+		}
+
+		return nil, schema.ListProfilesOutput{Profiles: items, NextCursor: nextCursor}, nil
 	}
 }
 
