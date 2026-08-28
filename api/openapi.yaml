@@ -192,12 +192,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [content_type]
-              properties:
-                content_type:
-                  type: string
-                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+              $ref: "#/components/schemas/ImageUploadRequest"
       responses:
         "201":
           description: >
@@ -398,12 +393,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [content_type]
-              properties:
-                content_type:
-                  type: string
-                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+              $ref: "#/components/schemas/ImageUploadRequest"
       responses:
         "201":
           description: >
@@ -653,12 +643,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [content_type]
-              properties:
-                content_type:
-                  type: string
-                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+              $ref: "#/components/schemas/ImageUploadRequest"
       responses:
         "201":
           description: >
@@ -982,12 +967,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [content_type]
-              properties:
-                content_type:
-                  type: string
-                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+              $ref: "#/components/schemas/ImageUploadRequest"
       responses:
         "201":
           description: >
@@ -1160,12 +1140,7 @@ paths:
         content:
           application/json:
             schema:
-              type: object
-              required: [content_type]
-              properties:
-                content_type:
-                  type: string
-                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+              $ref: "#/components/schemas/ImageUploadRequest"
       responses:
         "201":
           description: >
@@ -1531,6 +1506,19 @@ components:
           type: string
         visibility:
           $ref: "#/components/schemas/Visibility"
+
+    ImageUploadRequest:
+      type: object
+      description: >
+        Request body for every image-upload endpoint (keyboard, switch,
+        profile avatar, keycap kit, build). The upload is two-step: this
+        call allocates a slot and returns a presigned S3 PUT URL, then the
+        client PUTs the bytes to that URL with a matching Content-Type.
+      required: [content_type]
+      properties:
+        content_type:
+          type: string
+          description: Open vocabulary — validated against the "image_content_type" lookup at request time.
 
     KeyboardImage:
       type: object
