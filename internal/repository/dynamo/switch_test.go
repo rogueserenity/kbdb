@@ -303,13 +303,16 @@ func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePath() {
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_ConcurrentDelete_ReturnsErrNotFound() {
-	// UpdateItem's attribute_exists(id) fails: the classify GetItem finds
-	// nothing, so the row was deleted concurrently - 404, not 409.
+	// UpdateItem's attribute_exists(id) fails: the classify GetItem (which
+	// must be strongly consistent) finds nothing, so the row was deleted
+	// concurrently - 404, not 409.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
+		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
+			return in.ConsistentRead != nil && *in.ConsistentRead
+		})).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
@@ -320,8 +323,9 @@ func (s *SwitchRepositorySuite) TestUpdate_ConcurrentDelete_ReturnsErrNotFound()
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_ConditionFailsButRowPresent_ReturnsErrMutationConflict() {
-	// attribute_exists(id) failed yet a consistent GetItem still sees the
-	// row - a lagging replica; report the conflict rather than a false 404.
+	// attribute_exists(id) failed yet the consistent classify GetItem still
+	// sees the row - a concurrent write that has since completed; report the
+	// conflict rather than a false 404.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})

@@ -207,16 +207,23 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 }
 
 // classifySwitchConflict resolves an UpdateItem ConditionalCheckFailed on
-// attribute_exists(id): a consistent GetItem that finds nothing means the
-// row was deleted concurrently (ErrNotFound); a row still present means the
-// failed condition raced a lagging replica (ErrMutationConflict).
+// attribute_exists(id): a strongly-consistent GetItem that finds nothing
+// means the row was deleted concurrently (ErrNotFound); a row still present
+// means the failed condition raced a concurrent write that has since
+// completed (ErrMutationConflict). ConsistentRead is required here - an
+// eventually-consistent read against a lagging replica could still show a
+// just-deleted row and misreport the 404 as a 409.
 func (r *SwitchRepository) classifySwitchConflict(ctx context.Context, ownerID, id string) error {
-	_, err := r.Get(ctx, ownerID, id)
-	if errors.Is(err, repository.ErrNotFound) {
-		return repository.ErrNotFound
-	}
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      &r.tableName,
+		Key:            switchKey(ownerID, id),
+		ConsistentRead: aws.Bool(true),
+	})
 	if err != nil {
 		return fmt.Errorf("classifying switch %q conflict for owner %q: %w", id, ownerID, err)
+	}
+	if len(out.Item) == 0 {
+		return repository.ErrNotFound
 	}
 	return repository.ErrMutationConflict
 }
