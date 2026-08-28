@@ -3,9 +3,9 @@ package dynamo
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/stretchr/testify/mock"
@@ -242,119 +242,107 @@ func (s *SwitchRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	s.Nil(sw)
 }
 
+// updatedItem mirrors an UpdateItem ALL_NEW response: the request body's
+// SET/REMOVE clauses applied on top of whatever was stored, with version
+// bumped. Tests build the "after" state directly rather than replaying the
+// expression.
+func (s *SwitchRepositorySuite) updatedItem(version int) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"user_id": &types.AttributeValueMemberS{Value: "alice"},
+		"id":      &types.AttributeValueMemberS{Value: "sw1"},
+		"brand":   &types.AttributeValueMemberS{Value: "Gateron"},
+		"version": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", version)},
+	}
+}
+
 func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
+	// No GetItem on the happy path - UpdateItem carries image_path/version
+	// forward by not naming them, so there's no read to merge.
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
-			var sw repository.Switch
-			if err := attributevalue.UnmarshalMap(in.Item, &sw); err != nil {
-				return false
-			}
-			return sw.Brand == "Gateron" && sw.Version == 1
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			key := in.Key["id"].(*types.AttributeValueMemberS)
+			return key.Value == "sw1" &&
+				strings.Contains(*in.ConditionExpression, "attribute_exists") &&
+				in.ReturnValues == types.ReturnValueAllNew
 		})).
-		Return(&dynamodb.PutItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem(1)}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
 	s.Equal("Gateron", sw.Brand)
+	s.Equal(1, sw.Version)
 }
 
-func (s *SwitchRepositorySuite) TestUpdate_PreservesExistingImagePathAndVersion() {
-	getOutput := s.getItemOutput(3)
-	getOutput.Item["image_path"] = &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"}
+func (s *SwitchRepositorySuite) TestUpdate_OmittedOptionalFields_AreRemoved() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(getOutput, nil)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
-			var sw repository.Switch
-			if err := attributevalue.UnmarshalMap(in.Item, &sw); err != nil {
-				return false
-			}
-			return sw.Version == 4 && sw.ImagePath != nil && *sw.ImagePath == "switches/alice/sw1/image"
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			// manufacturer/pins/factory_lubed/notes are nil on the input
+			// struct, so each must appear in a REMOVE clause.
+			return strings.Contains(*in.UpdateExpression, "REMOVE")
 		})).
-		Return(&dynamodb.PutItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem(1)}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
+
+	s.Require().NoError(err)
+}
+
+func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePathAndVersion() {
+	after := s.updatedItem(4)
+	after["image_path"] = &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"}
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.UpdateItemOutput{Attributes: after}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
+	s.Equal(4, sw.Version)
 	s.Require().NotNil(sw.ImagePath)
 	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image"), *sw.ImagePath)
 }
 
-func (s *SwitchRepositorySuite) TestUpdate_CASConflict_RetriesThenSucceeds() {
-	firstGet := s.getItemOutput(0)
-	secondGet := s.getItemOutput(1)
-	secondGet.Item["image_path"] = &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"}
-
+func (s *SwitchRepositorySuite) TestUpdate_ConcurrentDelete_ReturnsErrNotFound() {
+	// UpdateItem's attribute_exists(id) fails: the classify GetItem finds
+	// nothing, so the row was deleted concurrently - 404, not 409.
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(firstGet, nil).Once()
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{}).Once()
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(secondGet, nil).Once()
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
-			var sw repository.Switch
-			err := attributevalue.UnmarshalMap(in.Item, &sw)
-			if err != nil {
-				return false
-			}
-			return sw.Version == 2 && sw.Brand == "Gateron" && sw.ImagePath != nil
-		})).
-		Return(&dynamodb.PutItemOutput{}, nil).Once()
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
-
-	s.Require().NoError(err)
-	s.Require().NotNil(sw)
-	s.Equal("Gateron", sw.Brand)
-	s.Require().NotNil(sw.ImagePath)
-}
-
-func (s *SwitchRepositorySuite) TestUpdate_CASConflictExhausted_ReturnsError() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil).Times(maxSwitchMutationAttempts)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSwitchMutationAttempts)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
-
-	s.Require().Error(err)
-	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(sw)
-}
-
-func (s *SwitchRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1"})
+	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(sw)
 }
 
-func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
+func (s *SwitchRepositorySuite) TestUpdate_ConditionFailsButRowPresent_ReturnsErrMutationConflict() {
+	// attribute_exists(id) failed yet a consistent GetItem still sees the
+	// row - a lagging replica; report the conflict rather than a false 404.
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
 		Return(s.getItemOutput(0), nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
+
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(sw)
+}
+
+func (s *SwitchRepositorySuite) TestUpdate_UpdateItemError_Propagates() {
 	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.Anything).
+		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
@@ -366,7 +354,7 @@ func (s *SwitchRepositorySuite) TestUpdate_PutItemError_Propagates() {
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
+	// No EXPECT() on UpdateItem - see repository.ErrNoUserID.
 	sw, err := s.repo.Update(s.T().Context(), repository.Switch{ID: "sw1"})
 
 	s.Require().Error(err)
@@ -413,18 +401,14 @@ func (s *SwitchRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutp
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
+	// One UpdateItem, no GetItem: image_path is a single owner-scoped
+	// attribute with no read-derived value.
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
-			var sw repository.Switch
-			if err := attributevalue.UnmarshalMap(in.Item, &sw); err != nil {
-				return false
-			}
-			return sw.Version == 1 && sw.ImagePath != nil && *sw.ImagePath == "switches/alice/sw1/image"
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			return strings.Contains(*in.UpdateExpression, "SET") &&
+				strings.Contains(*in.ConditionExpression, "attribute_exists")
 		})).
-		Return(&dynamodb.PutItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image")
@@ -434,8 +418,8 @@ func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
 
 func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.SetImagePath(ctx, "sw1", "p")
@@ -443,42 +427,36 @@ func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
-func (s *SwitchRepositorySuite) TestSetImagePath_CASConflictExhausted_ReturnsError() {
+func (s *SwitchRepositorySuite) TestSetImagePath_UpdateItemError_Propagates() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil).Times(maxSwitchMutationAttempts)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{}).Times(maxSwitchMutationAttempts)
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.SetImagePath(ctx, "sw1", "p")
 
-	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Require().Error(err)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
+	// No EXPECT() on UpdateItem - see repository.ErrNoUserID.
 	err := s.repo.SetImagePath(s.T().Context(), "sw1", "p")
 
 	s.Require().Error(err)
 }
 
 func (s *SwitchRepositorySuite) TestClearImagePath_Succeeds() {
-	getOutput := s.getItemOutput(0)
-	getOutput.Item["image_path"] = &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"}
+	// REMOVE under attribute_exists(id), ALL_OLD returns the pre-image whose
+	// image_path is the cleared key.
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(getOutput, nil)
-	s.mockClient.EXPECT().
-		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
-			var sw repository.Switch
-			if err := attributevalue.UnmarshalMap(in.Item, &sw); err != nil {
-				return false
-			}
-			return sw.ImagePath == nil
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			return strings.Contains(*in.UpdateExpression, "REMOVE") &&
+				in.ReturnValues == types.ReturnValueAllOld
 		})).
-		Return(&dynamodb.PutItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"image_path": &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"},
+		}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	cleared, err := s.repo.ClearImagePath(ctx, "sw1")
@@ -488,11 +466,14 @@ func (s *SwitchRepositorySuite) TestClearImagePath_Succeeds() {
 	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image"), *cleared)
 }
 
-func (s *SwitchRepositorySuite) TestClearImagePath_ImageAlreadyAbsent_SucceedsWithoutWriting() {
+func (s *SwitchRepositorySuite) TestClearImagePath_ImageAlreadyAbsent_ReturnsNilWithoutError() {
+	// The REMOVE still runs (idempotent); ALL_OLD has no image_path, so
+	// there was nothing to clear - nil, nil.
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
-	// No EXPECT() on PutItem - an absent image is a no-op, not a write.
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "sw1"},
+		}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	cleared, err := s.repo.ClearImagePath(ctx, "sw1")
@@ -503,8 +484,8 @@ func (s *SwitchRepositorySuite) TestClearImagePath_ImageAlreadyAbsent_SucceedsWi
 
 func (s *SwitchRepositorySuite) TestClearImagePath_NotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	cleared, err := s.repo.ClearImagePath(ctx, "sw1")
@@ -514,7 +495,7 @@ func (s *SwitchRepositorySuite) TestClearImagePath_NotFound_ReturnsErrNotFound()
 }
 
 func (s *SwitchRepositorySuite) TestClearImagePath_NoUserIDInContext_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - see repository.ErrNoUserID.
+	// No EXPECT() on UpdateItem - see repository.ErrNoUserID.
 	cleared, err := s.repo.ClearImagePath(s.T().Context(), "sw1")
 
 	s.Require().Error(err)

@@ -14,14 +14,8 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
-	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
-
-// errSwitchImageAlreadyAbsent signals ClearImagePath's mutateSwitch closure
-// found no ImagePath set - ClearImagePath treats this as success, not an
-// error.
-var errSwitchImageAlreadyAbsent = errors.New("image already absent from switch")
 
 // SwitchRepository is the DynamoDB-backed repository.SwitchRepository.
 type SwitchRepository struct {
@@ -149,39 +143,90 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 	return &sw, nil
 }
 
-// Update goes through mutateSwitch rather than a naive whole-item PutItem:
-// sw (built from the request body) never has ImagePath or Version set, so
-// overwriting the stored item wholesale would wipe the image and desync
-// Version from mutateSwitch's CAS loop.
+// Update rewrites the caller's switch from the request body with a single
+// UpdateItem: named attributes are SET (or REMOVEd when the body omitted an
+// optional field), and image_path/version - which the body never carries -
+// survive by not being named. version is bumped in the same expression so a
+// concurrent ImagePath UpdateItem still observes a monotonic counter.
+//
+// The only ConditionExpression is attribute_exists(id): a full-body PUT is
+// last-write-wins against a concurrent PUT, and the update must not
+// resurrect a row a concurrent Delete just removed. A condition failure
+// therefore means the row is gone; classifySwitchConflict re-reads with a
+// consistent GetItem to tell ErrNotFound (404) from a lagging replica that
+// still shows the row (ErrMutationConflict, 409).
 func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("updating switch %q: %w", sw.ID, repository.ErrNoUserID)
 	}
 
-	updated, err := r.mutateSwitch(ctx, ownerID, sw.ID, func(existing *repository.Switch) error {
-		existing.Brand = sw.Brand
-		existing.Manufacturer = sw.Manufacturer
-		existing.Name = sw.Name
-		existing.Type = sw.Type
-		existing.Pins = sw.Pins
-		existing.FactoryLubed = sw.FactoryLubed
-		existing.Material = sw.Material
-		existing.Force = sw.Force
-		existing.Spring = sw.Spring
-		existing.Purchase = sw.Purchase
-		existing.Notes = sw.Notes
-		existing.Visibility = sw.Visibility
-		return nil
-	})
-	if errors.Is(err, repository.ErrNotFound) {
-		return nil, repository.ErrNotFound
-	}
+	update := expression.
+		Set(expression.Name("brand"), expression.Value(sw.Brand)).
+		Set(expression.Name("name"), expression.Value(sw.Name)).
+		Set(expression.Name("type"), expression.Value(sw.Type)).
+		Set(expression.Name("material"), expression.Value(sw.Material)).
+		Set(expression.Name("force"), expression.Value(sw.Force)).
+		Set(expression.Name("spring"), expression.Value(sw.Spring)).
+		Set(expression.Name("purchase"), expression.Value(sw.Purchase)).
+		Set(expression.Name("visibility"), expression.Value(sw.Visibility)).
+		Set(
+			expression.Name("version"),
+			expression.Plus(
+				expression.IfNotExists(expression.Name("version"), expression.Value(0)),
+				expression.Value(1),
+			),
+		)
+	update = setOrRemovePtr(update, "manufacturer", sw.Manufacturer)
+	update = setOrRemovePtr(update, "pins", sw.Pins)
+	update = setOrRemovePtr(update, "factory_lubed", sw.FactoryLubed)
+	update = setOrRemovePtr(update, "notes", sw.Notes)
+
+	expr, err := expression.NewBuilder().
+		WithUpdate(update).
+		WithCondition(expression.AttributeExists(expression.Name("id"))).
+		Build()
 	if err != nil {
+		return nil, fmt.Errorf("building switch update expression for switch %q: %w", sw.ID, err)
+	}
+
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       switchKey(ownerID, sw.ID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllNew,
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return nil, r.classifySwitchConflict(ctx, ownerID, sw.ID)
+		}
 		return nil, fmt.Errorf("updating switch %q for owner %q: %w", sw.ID, ownerID, err)
 	}
 
-	return updated, nil
+	var updated repository.Switch
+	if err := attributevalue.UnmarshalMap(out.Attributes, &updated); err != nil {
+		return nil, fmt.Errorf("unmarshalling updated switch %q for owner %q: %w", sw.ID, ownerID, err)
+	}
+
+	return &updated, nil
+}
+
+// classifySwitchConflict resolves an UpdateItem ConditionalCheckFailed on
+// attribute_exists(id): a consistent GetItem that finds nothing means the
+// row was deleted concurrently (ErrNotFound); a row still present means the
+// failed condition raced a lagging replica (ErrMutationConflict).
+func (r *SwitchRepository) classifySwitchConflict(ctx context.Context, ownerID, id string) error {
+	_, err := r.Get(ctx, ownerID, id)
+	if errors.Is(err, repository.ErrNotFound) {
+		return repository.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("classifying switch %q conflict for owner %q: %w", id, ownerID, err)
+	}
+	return repository.ErrMutationConflict
 }
 
 // Delete implements repository.SwitchRepository. Idempotent: a nonexistent
@@ -206,113 +251,105 @@ func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-const maxSwitchMutationAttempts = 3
-
-// mutateSwitch is a hand-rolled Version-based CAS retry loop, mirroring
-// [(*KeycapSetRepository).mutateSet]/[(*KeyboardRepository).mutateKeyboard]:
-// DynamoDB has no built-in optimistic-locking primitive the Go SDK exposes,
-// so a mutation that must coexist with Update's own whole-item write reads,
-// mutates, and conditionally rewrites the whole item under a Version guard.
-func (r *SwitchRepository) mutateSwitch(
-	ctx context.Context,
-	ownerID, switchID string,
-	mutate func(sw *repository.Switch) error,
-) (*repository.Switch, error) {
-	for range maxSwitchMutationAttempts {
-		sw, err := r.Get(ctx, ownerID, switchID)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := mutate(sw); err != nil {
-			return nil, err
-		}
-
-		expectedVersion := sw.Version
-		sw.Version++
-		sw.UserID = ownerID
-
-		item, err := attributevalue.MarshalMap(*sw)
-		if err != nil {
-			return nil, fmt.Errorf("marshalling switch %q for owner %q: %w", switchID, ownerID, err)
-		}
-
-		// expectedVersion is 0 both for a real version:0 item and for a
-		// pre-Version item with no version attribute at all (Get/UnmarshalMap
-		// defaults a missing attribute to the zero value) - attribute_not_exists
-		// covers the latter, since DynamoDB never matches an equality condition
-		// against an absent attribute.
-		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
-		if expectedVersion == 0 {
-			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
-		}
-		expr, err := expression.NewBuilder().
-			WithCondition(versionCondition).
-			Build()
-		if err != nil {
-			return nil, fmt.Errorf("building switch mutation condition for switch %q: %w", switchID, err)
-		}
-
-		_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
-			TableName:                 &r.tableName,
-			Item:                      item,
-			ConditionExpression:       expr.Condition(),
-			ExpressionAttributeNames:  expr.Names(),
-			ExpressionAttributeValues: expr.Values(),
-		})
-		if err == nil {
-			return sw, nil
-		}
-
-		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); !ok {
-			return nil, fmt.Errorf("mutating switch %q owner %q: %w", switchID, ownerID, err)
-		}
-		// Lost the CAS race - another writer updated Version first. Loop
-		// and retry from a fresh Get.
-		log.FromContext(ctx).Warn("switch CAS retry", log.SwitchID, switchID, "attempted_version", expectedVersion)
+// switchKey builds the base-table primary key for a switch.
+func switchKey(ownerID, switchID string) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"user_id": &types.AttributeValueMemberS{Value: ownerID},
+		"id":      &types.AttributeValueMemberS{Value: switchID},
 	}
-
-	return nil, fmt.Errorf("mutating switch %q owner %q: %w", switchID, ownerID, repository.ErrMutationConflict)
 }
 
-// SetImagePath implements repository.SwitchRepository.
+// setOrRemovePtr adds a SET for an optional pointer field when it's
+// populated, or a REMOVE when it's nil - so a PUT-style Update that omits an
+// optional field clears the stored attribute, matching the whole-item
+// replace semantics callers expect.
+func setOrRemovePtr[T any](update expression.UpdateBuilder, name string, v *T) expression.UpdateBuilder {
+	if v == nil {
+		return update.Remove(expression.Name(name))
+	}
+	return update.Set(expression.Name(name), expression.Value(*v))
+}
+
+// SetImagePath implements repository.SwitchRepository. One UpdateItem SET
+// under attribute_exists(id) - image_path isn't version-guarded, it's a
+// single owner-scoped attribute with no read-derived value.
 func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return fmt.Errorf("setting image path for switch %q: %w", id, repository.ErrNoUserID)
 	}
 
-	_, err := r.mutateSwitch(ctx, ownerID, id, func(sw *repository.Switch) error {
-		sw.ImagePath = &key
-		return nil
+	expr, err := expression.NewBuilder().
+		WithUpdate(expression.Set(expression.Name("image_path"), expression.Value(key))).
+		WithCondition(expression.AttributeExists(expression.Name("id"))).
+		Build()
+	if err != nil {
+		return fmt.Errorf("building switch image path update for switch %q: %w", id, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       switchKey(ownerID, id),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
 	})
-	return err
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return repository.ErrNotFound
+		}
+		return fmt.Errorf("setting image path for switch %q owner %q: %w", id, ownerID, err)
+	}
+
+	return nil
 }
 
-// ClearImagePath implements repository.SwitchRepository.
+// ClearImagePath implements repository.SwitchRepository. One UpdateItem
+// REMOVE under attribute_exists(id), with ReturnValues ALL_OLD: the
+// pre-image's image_path (or its absence) is the "what was cleared" answer,
+// so no sentinel and no read are needed to report "nothing was set".
 func (r *SwitchRepository) ClearImagePath(ctx context.Context, id string) (*repository.SwitchImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("clearing image path for switch %q: %w", id, repository.ErrNoUserID)
 	}
 
-	var cleared *repository.SwitchImageKey
-	_, err := r.mutateSwitch(ctx, ownerID, id, func(sw *repository.Switch) error {
-		if sw.ImagePath == nil {
-			return errSwitchImageAlreadyAbsent
-		}
-		cleared = sw.ImagePath
-		sw.ImagePath = nil
-		return nil
-	})
-	if errors.Is(err, errSwitchImageAlreadyAbsent) {
-		return nil, nil //nolint:nilnil // no image already set is a valid, expected result
-	}
+	expr, err := expression.NewBuilder().
+		WithUpdate(expression.Remove(expression.Name("image_path"))).
+		WithCondition(expression.AttributeExists(expression.Name("id"))).
+		Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("building switch image path clear for switch %q: %w", id, err)
 	}
 
-	return cleared, nil
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       switchKey(ownerID, id),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllOld,
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return nil, repository.ErrNotFound
+		}
+		return nil, fmt.Errorf("clearing image path for switch %q owner %q: %w", id, ownerID, err)
+	}
+
+	old := struct {
+		ImagePath *repository.SwitchImageKey `dynamodbav:"image_path"`
+	}{}
+	if err := attributevalue.UnmarshalMap(out.Attributes, &old); err != nil {
+		return nil, fmt.Errorf("unmarshalling cleared switch %q image path for owner %q: %w", id, ownerID, err)
+	}
+	if old.ImagePath == nil {
+		return nil, nil //nolint:nilnil // no image already set is a valid, expected result
+	}
+
+	return old.ImagePath, nil
 }
 
 // decodeCursor reverses encodeCursor, returning nil (no key) for an empty
