@@ -233,4 +233,39 @@ var _ = Describe("Updating a switch", func() {
 			})
 		})
 	})
+
+	Context("given the switch was just deleted", func() {
+		var switchID string
+
+		BeforeEach(func(ctx SpecContext) {
+			switchID = "update-after-delete-" + uuid.NewString()
+			Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
+
+			delResp, err := client.Delete(ctx, ownerID, switchID, ownerToken)
+			Expect(err).NotTo(HaveOccurred())
+			Expect(delResp.StatusCode).To(Equal(http.StatusNoContent))
+		})
+
+		Context("given the caller is the owner", func() {
+			When("updating the switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, switchID, ownerToken,
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 404 and does not resurrect the switch", func(ctx SpecContext) {
+					By("returning 404 with a problem+json body")
+					Expect(resp.StatusCode).To(Equal(http.StatusNotFound))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+
+					By("leaving the switch gone - the update did not recreate it")
+					getResp, err := client.Get(ctx, ownerID, switchID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(getResp.StatusCode).To(Equal(http.StatusNotFound))
+				})
+			})
+		})
+	})
 })

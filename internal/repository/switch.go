@@ -62,9 +62,6 @@ type Switch struct {
 	Notes        *string         `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility   Visibility      `dynamodbav:"visibility" json:"visibility"`
 	ImagePath    *SwitchImageKey `dynamodbav:"image_path,omitempty" json:"-"`
-	// Version is a repository-internal CAS guard against lost updates on
-	// concurrent ImagePath mutations, not exposed via the API.
-	Version int `dynamodbav:"version" json:"-"`
 }
 
 // SwitchRepository provides access to switches. List/Get take an explicit
@@ -100,16 +97,14 @@ type SwitchRepository interface {
 	// Delete. Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// SetImagePath sets the caller's switch's ImagePath. Returns
-	// ErrNotFound if id doesn't exist, or ErrMutationConflict if
-	// concurrent writers exhaust the retry budget.
+	// SetImagePath sets the caller's switch's ImagePath. Returns ErrNotFound
+	// if id doesn't exist.
 	SetImagePath(ctx context.Context, id string, key SwitchImageKey) error
 
 	// ClearImagePath clears the caller's switch's ImagePath and returns the
 	// key that was cleared, or nil if it was already unset. Idempotent: a
 	// switch with no ImagePath already set is not an error. Returns
-	// ErrNotFound if id doesn't exist, or ErrMutationConflict if concurrent
-	// writers exhaust the retry budget.
+	// ErrNotFound if id doesn't exist.
 	ClearImagePath(ctx context.Context, id string) (*SwitchImageKey, error)
 }
 

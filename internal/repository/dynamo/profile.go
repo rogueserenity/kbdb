@@ -194,7 +194,7 @@ func (r *ProfileRepository) Update(ctx context.Context, p repository.Profile) (*
 
 // errProfileAvatarAlreadyAbsent signals ClearAvatarPath's mutateProfile
 // closure found no AvatarPath set - ClearAvatarPath treats this as success,
-// not an error. Mirrors errSwitchImageAlreadyAbsent.
+// not an error.
 var errProfileAvatarAlreadyAbsent = errors.New("avatar already absent from profile")
 
 // SetAvatarPath implements repository.ProfileRepository.

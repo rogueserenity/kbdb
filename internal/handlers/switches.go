@@ -232,13 +232,7 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, images repository.Swit
 		sw.ID = id
 
 		updated, err := switchRepo.Update(r.Context(), sw)
-		if errors.Is(err, repository.ErrNotFound) {
-			problem.NotFound(w, "resource not found")
-			return
-		}
-		if err != nil {
-			log.FromContext(r.Context()).Error("updating switch", log.Error, err, log.SwitchID, id)
-			problem.Internal(w, "failed to update switch")
+		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
 		}
 

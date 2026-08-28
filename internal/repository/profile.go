@@ -51,7 +51,7 @@ type Profile struct {
 	DiscordPK      *string `dynamodbav:"discord_pk,omitempty" json:"-"`
 
 	// Version is a CAS guard against lost updates on concurrent whole-item
-	// rewrites, same as Switch.Version.
+	// rewrites, checked and bumped by mutateProfile's retry loop.
 	Version int `dynamodbav:"version" json:"-"`
 }
 
