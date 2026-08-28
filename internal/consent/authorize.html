@@ -20,10 +20,30 @@
     background: #141316;
     color: #ede7dd;
   }
+  /* Reads as a link, acts as a button. Kept below the consent card's visual
+     weight (muted-foreground) so it's findable when wanted, ignorable when not. */
+  #switch-account {
+    display: block;
+    margin: -0.5rem 0 1.5rem;
+    padding: 0;
+    border: 0;
+    background: none;
+    font: inherit;
+    font-size: 0.875rem;
+    color: #9c9499;
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    cursor: pointer;
+  }
+  #switch-account:hover { color: #ede7dd; }
+  #switch-account:disabled { cursor: default; opacity: 0.6; }
+  #switch-account:focus-visible { outline: 2px solid #e8a33d; outline-offset: 2px; }
+  #status .who { color: #e8a33d; }
 </style>
 </head>
 <body>
   <h3 id="status">Loading…</h3>
+  <button type="button" id="switch-account" hidden>Not you? Use a different account</button>
   <stytch-login id="login-el"></stytch-login>
   <stytch-identity-provider id="idp-el"></stytch-identity-provider>
 
@@ -67,8 +87,49 @@
       options: {},
     };
 
+    // identityLabel picks the most human-recognizable string the IdP session
+    // carries. There's no kbdb username here (that lives behind the API, which
+    // the caller hasn't been authorized for yet), and a Discord login carries
+    // only a numeric provider_subject - so this falls back to naming the
+    // provider, and to nothing if even that's absent.
+    function identityLabel(user) {
+      if (!user) return null;
+      const name = [user.name?.first_name, user.name?.last_name].filter(Boolean).join(' ').trim();
+      if (name) return name;
+      const email = user.emails?.find((e) => e.email)?.email;
+      if (email) return email;
+      const provider = user.providers?.[0]?.provider_type;
+      if (provider) return provider.charAt(0).toUpperCase() + provider.slice(1) + ' account';
+      return null;
+    }
+
     function showSignedIn() {
-      document.getElementById('status').textContent = 'Signed in';
+      const who = identityLabel(idpClient.user.getSync());
+      const statusEl = document.getElementById('status');
+      const switchEl = document.getElementById('switch-account');
+
+      if (who) {
+        statusEl.textContent = 'Signed in as ';
+        const whoEl = document.createElement('span');
+        whoEl.className = 'who';
+        whoEl.textContent = who;
+        statusEl.appendChild(whoEl);
+        switchEl.textContent = 'Not you? Use a different account';
+      } else {
+        statusEl.textContent = 'Signed in';
+        switchEl.textContent = 'Use a different account';
+      }
+
+      switchEl.hidden = false;
+      switchEl.onclick = async () => {
+        switchEl.disabled = true;
+        switchEl.textContent = 'Signing out…';
+        // revoke is best-effort - a reload clears the in-page session either way,
+        // and on reload session.getSync() is null so the login widget shows.
+        try { await idpClient.session.revoke(); } catch (e) { console.warn('session.revoke failed', e); }
+        window.location.reload();
+      };
+
       document.getElementById('login-el').style.display = 'none';
       const idp = document.getElementById('idp-el');
       idp.style.display = 'block';

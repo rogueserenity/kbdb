@@ -1,0 +1,48 @@
+package main
+
+// CLI is the kbdb-migrate command tree, parsed by Kong. Every option binds to
+// an env var (KBDB_-prefixed, matching the functional-test convention in
+// test/functional/support/env.go) as well as a flag, so it can be driven
+// either way.
+type CLI struct {
+	Login   LoginCmd   `cmd:"" help:"Obtain an access token via a browser OAuth flow (Discord or email OTP) and cache it."`
+	Dump    DumpCmd    `cmd:"" help:"Download every entity you own plus its images into a local directory."`
+	Restore RestoreCmd `cmd:"" help:"Recreate a dump's entities and images in the target environment."`
+	Verify  VerifyCmd  `cmd:"" help:"Check a restored environment against the dump (fields and image hashes)."`
+}
+
+// LoginCmd runs the OAuth 2.0 authorization-code + PKCE flow against the IdP
+// the issuer advertises, capturing the resulting access token to the on-disk
+// cache used by the other subcommands.
+type LoginCmd struct {
+	Issuer   string `env:"KBDB_OIDC_ISSUER_BASE_URL" required:"" help:"OIDC issuer base URL, e.g. https://auth.jay.mykeebs.dev."`
+	ClientID string `env:"KBDB_OIDC_CLIENT_ID" help:"OAuth client ID. If unset and the issuer supports RFC 7591, one is registered dynamically and cached."`
+	Port     int    `default:"8765" help:"Localhost port for the redirect listener. Must match a registered redirect URI; 8765 is the one kbdb provisions."`
+}
+
+// DumpCmd walks every collection the token's subject owns and writes a
+// directory-per-item tree under Out.
+type DumpCmd struct {
+	BaseURL string `env:"KBDB_API_BASE_URL" required:"" help:"API base URL, e.g. https://api.jay.mykeebs.dev."`
+	Token   string `env:"KBDB_AUTH_TOKEN" help:"Bearer token. Overrides the login cache. If unset, the login cache for --issuer is used."`
+	Issuer  string `env:"KBDB_OIDC_ISSUER_BASE_URL" help:"Issuer whose login-cache entry to use when --token is unset."`
+	Out     string `required:"" type:"path" help:"Output directory for the dump."`
+}
+
+// RestoreCmd recreates the entities and images in a dump directory in the
+// environment BaseURL points at, as the restore token's subject.
+type RestoreCmd struct {
+	BaseURL string `env:"KBDB_API_BASE_URL" required:"" help:"Target API base URL."`
+	Token   string `env:"KBDB_AUTH_TOKEN" help:"Bearer token for the target. Overrides the login cache."`
+	Issuer  string `env:"KBDB_OIDC_ISSUER_BASE_URL" help:"Issuer whose login-cache entry to use when --token is unset."`
+	In      string `required:"" type:"path" help:"Dump directory produced by 'kbdb-migrate dump'."`
+}
+
+// VerifyCmd compares a dump directory against a restored environment using the
+// id-map.json the restore wrote.
+type VerifyCmd struct {
+	BaseURL string `env:"KBDB_API_BASE_URL" required:"" help:"Target API base URL (the one restored into)."`
+	Token   string `env:"KBDB_AUTH_TOKEN" help:"Bearer token for the target. Overrides the login cache."`
+	Issuer  string `env:"KBDB_OIDC_ISSUER_BASE_URL" help:"Issuer whose login-cache entry to use when --token is unset."`
+	In      string `required:"" type:"path" help:"Dump directory, containing the id-map.json a prior restore wrote."`
+}
