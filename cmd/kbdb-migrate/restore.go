@@ -43,6 +43,8 @@ func (c *RestoreCmd) Run(ctx context.Context) error {
 	}
 	m.RestoredAt = time.Now()
 
+	fmt.Printf("restoring into %s (subject %s)\n\n", client.baseURL, client.subject)
+
 	if err := restoreKeyboards(ctx, client, c.In, m); err != nil {
 		return err
 	}
@@ -52,15 +54,23 @@ func (c *RestoreCmd) Run(ctx context.Context) error {
 	if err := restoreKeycapSets(ctx, client, c.In, m); err != nil {
 		return err
 	}
-	if err := restoreProfile(ctx, client, c.In); err != nil {
-		return err
-	}
+	// Profiles are intentionally not restored - see the package doc.
 	if err := restoreBuilds(ctx, client, c.In, m); err != nil {
 		return err
 	}
 
-	fmt.Printf("restore complete; id map written to %s\n", m.path)
+	fmt.Printf("\nrestore complete; id map written to %s\n", m.path)
 	return nil
+}
+
+// progress prints a "keyboards 3/24 <id> -> <newid>" style line.
+func progress(entity string, i, total int, oldID, newID string) {
+	fmt.Printf("  %s %d/%d %s -> %s\n", entity, i, total, oldID, newID)
+}
+
+// skipResume prints a "keyboards 3/24 <id> (already restored, skipped)" line.
+func skipResume(entity string, i, total int, oldID string) {
+	fmt.Printf("  %s %d/%d %s (already restored, skipped)\n", entity, i, total, oldID)
 }
 
 // itemDirs returns the sorted immediate subdirectories of dumpDir/sub (one per
@@ -91,8 +101,13 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 	if err != nil {
 		return err
 	}
-	for _, oldID := range oldIDs {
+	total := len(oldIDs)
+	if total > 0 {
+		fmt.Printf("keyboards (%d)...\n", total)
+	}
+	for i, oldID := range oldIDs {
 		if _, done := m.Keyboards[oldID]; done {
+			skipResume("keyboards", i+1, total, oldID)
 			continue
 		}
 		itemDir := filepath.Join(dumpDir, "keyboards", oldID)
@@ -121,6 +136,7 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 		if err := m.save(); err != nil {
 			return err
 		}
+		progress("keyboards", i+1, total, oldID, created.Id)
 
 		if err := restoreArrayImages(ctx, client, itemDir,
 			client.userPath("keyboards/"+created.Id+"/images"),
@@ -142,8 +158,13 @@ func restoreSwitches(ctx context.Context, client *apiClient, dumpDir string, m *
 	if err != nil {
 		return err
 	}
-	for _, oldID := range oldIDs {
+	total := len(oldIDs)
+	if total > 0 {
+		fmt.Printf("switches (%d)...\n", total)
+	}
+	for i, oldID := range oldIDs {
 		if _, done := m.Switches[oldID]; done {
+			skipResume("switches", i+1, total, oldID)
 			continue
 		}
 		itemDir := filepath.Join(dumpDir, "switches", oldID)
@@ -174,6 +195,7 @@ func restoreSwitches(ctx context.Context, client *apiClient, dumpDir string, m *
 		if err := m.save(); err != nil {
 			return err
 		}
+		progress("switches", i+1, total, oldID, created.Id)
 
 		if err := restoreSwitchImage(ctx, client, itemDir, created.Id); err != nil {
 			return fmt.Errorf("switch %s image: %w", created.Id, err)
@@ -189,7 +211,11 @@ func restoreKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m
 	if err != nil {
 		return err
 	}
-	for _, oldSetID := range oldIDs {
+	total := len(oldIDs)
+	if total > 0 {
+		fmt.Printf("keycap-sets (%d)...\n", total)
+	}
+	for i, oldSetID := range oldIDs {
 		setDir := filepath.Join(dumpDir, "keycap-sets", oldSetID)
 
 		var full api.KeycapSet
@@ -219,6 +245,9 @@ func restoreKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m
 			if err := m.save(); err != nil {
 				return err
 			}
+			progress("keycap-sets", i+1, total, oldSetID, createdSet.Id)
+		} else {
+			skipResume("keycap-sets", i+1, total, oldSetID)
 		}
 
 		var primaryKitID string
@@ -250,6 +279,7 @@ func restoreKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m
 			if err := m.save(); err != nil {
 				return err
 			}
+			fmt.Printf("    kit %q -> %s\n", kit.Name, createdKit.KitId)
 
 			kitDir := filepath.Join(setDir, "kits", kit.KitId)
 			if err := restoreKitImage(ctx, client, kitDir, mapped.NewID, createdKit.KitId); err != nil {
@@ -260,43 +290,6 @@ func restoreKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m
 	return nil
 }
 
-// ---- profile ----
-
-func restoreProfile(ctx context.Context, client *apiClient, dumpDir string) error {
-	profDir := filepath.Join(dumpDir, "profile")
-	itemPath := filepath.Join(profDir, "item.json")
-	if _, err := os.Stat(itemPath); os.IsNotExist(err) {
-		return nil
-	}
-
-	var full api.Profile
-	if err := readJSONFile(itemPath, &full); err != nil {
-		return err
-	}
-	input := api.ProfileInput{
-		Bio:             full.Bio,
-		DiscordUsername: full.DiscordUsername,
-		Discoverable:    full.Discoverable,
-		Links:           full.Links,
-		Username:        full.Username,
-	}
-
-	path := "/v1/profile/" + client.subject
-	err := client.doJSON(ctx, http.MethodPost, path, input, nil)
-	var apiErr *apiError
-	if errors.As(err, &apiErr) && apiErr.Status == http.StatusConflict {
-		// Already have a profile for this subject: replace it. A
-		// username-unavailable conflict is fatal and surfaces here.
-		if err := client.doJSON(ctx, http.MethodPut, path, input, nil); err != nil {
-			return fmt.Errorf("replacing existing profile: %w", err)
-		}
-	} else if err != nil {
-		return fmt.Errorf("creating profile: %w", err)
-	}
-
-	return restoreAvatarImage(ctx, client, profDir, path)
-}
-
 // ---- builds ----
 
 func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *idMap) error {
@@ -304,8 +297,13 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 	if err != nil {
 		return err
 	}
-	for _, oldID := range oldIDs {
+	total := len(oldIDs)
+	if total > 0 {
+		fmt.Printf("builds (%d)...\n", total)
+	}
+	for i, oldID := range oldIDs {
 		if _, done := m.Builds[oldID]; done {
+			skipResume("builds", i+1, total, oldID)
 			continue
 		}
 		itemDir := filepath.Join(dumpDir, "builds", oldID)
@@ -327,6 +325,7 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 		if err := m.save(); err != nil {
 			return err
 		}
+		progress("builds", i+1, total, oldID, created.Id)
 
 		if err := restoreArrayImages(ctx, client, itemDir,
 			client.userPath("builds/"+created.Id+"/images"),
@@ -417,7 +416,7 @@ func restoreArrayImages(ctx context.Context, client *apiClient, itemDir, imagesP
 		return err
 	}
 
-	for _, entry := range manifest {
+	for j, entry := range manifest {
 		if _, done := mapped.Images[entry.ImageID]; done {
 			continue
 		}
@@ -439,6 +438,7 @@ func restoreArrayImages(ctx context.Context, client *apiClient, itemDir, imagesP
 		if err := verifyParentImageHash(ctx, client, parentPath, upload.ImageId, entry.SHA256); err != nil {
 			return err
 		}
+		fmt.Printf("    image %d/%d uploaded and verified\n", j+1, len(manifest))
 	}
 	return nil
 }
@@ -486,22 +486,6 @@ func restoreSwitchImage(ctx context.Context, client *apiClient, itemDir, switchI
 		return fmt.Errorf("re-fetching switch %s to verify image: %w", switchID, err)
 	}
 	return verifyURLHash(ctx, topLevelImageURL(body), entry.SHA256)
-}
-
-// restoreAvatarImage restores profDir/avatar.<ext> onto the caller's profile.
-func restoreAvatarImage(ctx context.Context, client *apiClient, profDir, profilePath string) error {
-	entry, data, found, err := loadSingleImageManifest(profDir, "avatar")
-	if err != nil || !found {
-		return err
-	}
-	if err := uploadSingleSlot(ctx, client, profilePath+"/image", entry, data); err != nil {
-		return err
-	}
-	body, err := client.getRaw(ctx, profilePath)
-	if err != nil {
-		return fmt.Errorf("re-fetching profile to verify avatar: %w", err)
-	}
-	return verifyURLHash(ctx, avatarURL(body), entry.SHA256)
 }
 
 // restoreKitImage restores kitDir/image.<ext> onto one kit of a keycap set,
@@ -553,19 +537,6 @@ func topLevelImageURL(body []byte) string {
 		return ""
 	}
 	return v.Image.URL
-}
-
-// avatarURL reads {"avatar":{"url"}} from a body, "" if absent.
-func avatarURL(body []byte) string {
-	var v struct {
-		Avatar *struct {
-			URL string `json:"url"`
-		} `json:"avatar"`
-	}
-	if err := json.Unmarshal(body, &v); err != nil || v.Avatar == nil {
-		return ""
-	}
-	return v.Avatar.URL
 }
 
 // kitImageURL finds kits[kit_id==kitID].image.url in a keycap set body.

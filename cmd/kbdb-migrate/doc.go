@@ -1,7 +1,7 @@
 // Command kbdb-migrate dumps every entity a user owns (keyboards, switches,
-// keycap sets, builds, profile) and every associated S3 image to a local
-// directory, and restores such a dump into another environment through the
-// same public REST API.
+// keycap sets, builds) and every associated S3 image to a local directory, and
+// restores such a dump into another environment through the same public REST
+// API.
 //
 // It exists to take a complete, verifiable offline copy before a
 // backwards-incompatible data-model change, and doubles as a way to move a
@@ -29,6 +29,12 @@
 // It never touches lookups. Lookup seeding has its own path
 // (scripts/sync-lookups.sh); dump captures lookups/lookups.json for reference
 // and diffing only, and restore ignores it.
+//
+// It does not dump or restore the profile. A profile's username is globally
+// unique and identity-bound: moving data between two accounts means both
+// accounts exist, so the source username is already taken and can't be
+// recreated under the target without renaming or colliding. Profiles are set
+// up per account by hand.
 //
 // It uses no AWS credentials. Image bytes move over presigned URLs the REST
 // API mints, so it works identically against any environment the caller can

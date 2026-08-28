@@ -49,20 +49,32 @@ func (c *VerifyCmd) Run(ctx context.Context) error {
 	}
 	m.ensureMaps()
 
+	fmt.Printf("verifying %s (subject %s) against %s\n\n", client.baseURL, client.subject, c.In)
+
 	var results []verifyResult
-	results = append(results, verifyKeyboards(ctx, client, c.In, &m)...)
-	results = append(results, verifySwitches(ctx, client, c.In, &m)...)
-	results = append(results, verifyKeycapSets(ctx, client, c.In, &m)...)
-	results = append(results, verifyBuilds(ctx, client, c.In, &m)...)
-	results = append(results, verifyProfile(ctx, client, c.In)...)
+	for _, step := range []struct {
+		name string
+		run  func() []verifyResult
+	}{
+		{"keyboards", func() []verifyResult { return verifyKeyboards(ctx, client, c.In, &m) }},
+		{"switches", func() []verifyResult { return verifySwitches(ctx, client, c.In, &m) }},
+		{"keycap-sets", func() []verifyResult { return verifyKeycapSets(ctx, client, c.In, &m) }},
+		{"builds", func() []verifyResult { return verifyBuilds(ctx, client, c.In, &m) }},
+	} {
+		fmt.Printf("checking %s...\n", step.name)
+		got := step.run()
+		for _, r := range got {
+			line := fmt.Sprintf("  %-20s %-10s %s -> %s", r.status, r.entity, r.oldID, r.newID)
+			if r.detail != "" {
+				line += "  (" + r.detail + ")"
+			}
+			fmt.Println(line)
+		}
+		results = append(results, got...)
+	}
 
 	bad := 0
 	for _, r := range results {
-		line := fmt.Sprintf("%-11s %-10s %s -> %s", r.status, r.entity, r.oldID, r.newID)
-		if r.detail != "" {
-			line += "  (" + r.detail + ")"
-		}
-		fmt.Println(line)
 		if r.status != statusOK {
 			bad++
 		}
@@ -243,34 +255,6 @@ func verifyBuilds(ctx context.Context, client *apiClient, dumpDir string, m *idM
 		out = append(out, r)
 	}
 	return out
-}
-
-func verifyProfile(ctx context.Context, client *apiClient, dumpDir string) []verifyResult {
-	profDir := filepath.Join(dumpDir, "profile")
-	dumpBody, err := os.ReadFile(filepath.Join(profDir, "item.json")) //nolint:gosec // dump dir.
-	if os.IsNotExist(err) {
-		return nil
-	}
-	r := verifyResult{entity: "profile", oldID: "-", newID: client.subject}
-	if err != nil {
-		r.status, r.detail = statusMissing, err.Error()
-		return []verifyResult{r}
-	}
-	liveBody, err := client.getRaw(ctx, "/v1/profile/"+client.subject)
-	if err != nil {
-		r.status, r.detail = statusMissing, err.Error()
-		return []verifyResult{r}
-	}
-	if ok, detail := compareScalars(dumpBody, liveBody, "avatar"); !ok {
-		r.status, r.detail = statusFieldMismatch, detail
-		return []verifyResult{r}
-	}
-	if st, detail := verifySingleImage(ctx, profDir, "avatar", avatarURL(liveBody)); st != statusOK {
-		r.status, r.detail = st, detail
-		return []verifyResult{r}
-	}
-	r.status = statusOK
-	return []verifyResult{r}
 }
 
 // compareBuildRefs checks that the live build's remapped references match what

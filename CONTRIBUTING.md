@@ -44,7 +44,7 @@ Most iteration just needs `mise run func-test` again once those are exported —
 
 ## Backing up / moving a user's data (`kbdb-migrate`)
 
-`cmd/kbdb-migrate` is a standalone CLI that dumps every entity a user owns (keyboards, switches, keycap sets, builds, profile) plus every S3 image to a local directory, and restores such a dump into another environment through the same public REST API. Use it to take a verifiable backup before a data-model change, or to move a user's data between environments. It uses **no AWS credentials** — image bytes move over presigned URLs — and never touches lookups (`scripts/sync-lookups.sh` owns those; the dump captures `lookups/lookups.json` for diffing only).
+`cmd/kbdb-migrate` is a standalone CLI that dumps every entity a user owns (keyboards, switches, keycap sets, builds) plus every S3 image to a local directory, and restores such a dump into another environment through the same public REST API. Use it to take a verifiable backup before a data-model change, or to move a user's data between environments. It uses **no AWS credentials** — image bytes move over presigned URLs — and never touches lookups (`scripts/sync-lookups.sh` owns those; the dump captures `lookups/lookups.json` for diffing only). It also skips the **profile**: the username is globally unique and identity-bound, so it can't be recreated under a different account — set profiles up per account by hand.
 
 ```sh
 mise run migrate-build          # -> bin/kbdb-migrate
@@ -63,7 +63,9 @@ bin/kbdb-migrate restore --base-url <target base url> --in ./dump
 bin/kbdb-migrate verify --base-url <target base url> --in ./dump
 ```
 
-`login` runs a standard OAuth 2.0 authorization-code + PKCE flow and binds a **fixed** localhost port (`8765`) for the redirect, because IdP redirect URIs are exact-match. For a **dev** Stytch project this is already provisioned (redirect `http://localhost:8765/authorize.html`, SDK domain `http://localhost:8765`, and dynamic client registration is enabled so no client ID is needed). For a **prod** (Stytch Live) project, someone must first add that redirect URI and SDK domain in the Stytch dashboard and provision an OAuth client, then pass `--client-id` (or set `KBDB_OIDC_CLIENT_ID`). The token is cached under `~/.config/kbdb-migrate/`; `dump`/`restore`/`verify` also accept `--token` / `KBDB_AUTH_TOKEN` directly.
+`login` runs a standard OAuth 2.0 authorization-code + PKCE flow and binds a **fixed** localhost port (`8765`) for the redirect, because IdP redirect URIs are exact-match. For a **dev** Stytch project this is already provisioned (redirect `http://localhost:8765/authorize.html`, SDK domain `http://localhost:8765`, and dynamic client registration is enabled so no client ID is needed). For a **prod** (Stytch Live) project, someone must first add that redirect URI and SDK domain in the Stytch dashboard and provision an OAuth client, then pass `--client-id` (or set `KBDB_OIDC_CLIENT_ID`). The token is cached under `~/.config/kbdb-migrate/` keyed by issuer host; `dump`/`restore`/`verify` also accept `--token` / `KBDB_AUTH_TOKEN` directly.
+
+**Moving data between two accounts on the same issuer** (step 1 and step 3 are different people): the second `login` opens the browser with the first account's IdP session still live, so it lands on the consent screen already "Signed in" as the wrong account. Click **"Not you? Use a different account"** on that page to drop the session and sign in as the target account.
 
 Restore always **creates new** items (new server-generated IDs), recording an old→new `id-map.json` in the dump directory; builds are restored last with their keyboard/switch/keycap-kit references remapped through that map, and a re-run resumes from wherever a failure stopped.
 

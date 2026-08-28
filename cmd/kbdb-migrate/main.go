@@ -21,8 +21,8 @@ func main() {
 		kong.Name("kbdb-migrate"),
 		kong.Description("Dump and restore a kbdb user's entities and images via the public REST API."),
 		kong.UsageOnError(),
+		kong.BindTo(context.Background(), (*context.Context)(nil)),
 	)
 
-	err := kctx.Run(context.Background())
-	kctx.FatalIfErrorf(err)
+	kctx.FatalIfErrorf(kctx.Run())
 }

@@ -119,12 +119,9 @@ func (c *DumpCmd) Run(ctx context.Context) error {
 	counts["keycap_sets"] = ksCount
 	totalImages += ksImgs
 
-	profCount, profImgs, err := dumpProfile(ctx, client, c.Out)
-	if err != nil {
-		return err
-	}
-	counts["profile"] = profCount
-	totalImages += profImgs
+	// Profiles are intentionally not dumped or restored: the username is
+	// globally unique and identity-bound, so it can't be recreated under a
+	// different account without renaming or colliding. See the package doc.
 
 	buildsN, buildsImgs, err := dumpSimpleCollection(ctx, client, c.Out, buildsSpec)
 	if err != nil {
@@ -149,23 +146,31 @@ func (c *DumpCmd) Run(ctx context.Context) error {
 		return err
 	}
 
-	fmt.Printf("dump complete: %s\n", c.Out)
-	for _, k := range []string{"keyboards", "switches", "keycap_sets", "builds", "profile", "images"} {
+	fmt.Printf("\ndump complete\n")
+	fmt.Printf("  source:  %s (subject %s)\n", client.baseURL, client.subject)
+	fmt.Printf("  output:  %s\n\n", c.Out)
+	for _, k := range []string{"keyboards", "switches", "keycap_sets", "builds", "images"} {
 		fmt.Printf("  %-12s %d\n", k, counts[k])
 	}
+	fmt.Printf("\nEach count above equals the number the API's list endpoint returned;\n")
+	fmt.Printf("cross-check against list_keyboards / list_switches / list_keycap_sets /\n")
+	fmt.Printf("list_builds if you want independent confirmation.\n")
 	return nil
 }
 
 // dumpSimpleCollection dumps one collection with either an images[] array or a
 // single image slot. Returns (item count, image count).
 func dumpSimpleCollection(ctx context.Context, client *apiClient, outDir string, spec entitySpec) (int, int, error) {
+	fmt.Printf("listing %s...\n", spec.name)
 	items, err := client.listAll(ctx, client.userPath(spec.name))
 	if err != nil {
 		return 0, 0, fmt.Errorf("listing %s: %w", spec.name, err)
 	}
+	total := len(items)
+	fmt.Printf("  %d %s listed\n", total, spec.name)
 
 	imageCount := 0
-	for _, summary := range items {
+	for i, summary := range items {
 		id, err := idField(summary)
 		if err != nil {
 			return 0, 0, fmt.Errorf("%s: %w", spec.name, err)
@@ -192,8 +197,17 @@ func dumpSimpleCollection(ctx context.Context, client *apiClient, outDir string,
 			return 0, 0, fmt.Errorf("%s %s: %w", spec.name, id, err)
 		}
 		imageCount += n
+		fmt.Printf("  %s %d/%d %s (%d image%s)\n", spec.name, i+1, total, id, n, plural(n))
 	}
-	return len(items), imageCount, nil
+	return total, imageCount, nil
+}
+
+// plural returns "s" unless n == 1, for simple count messages.
+func plural(n int) string {
+	if n == 1 {
+		return ""
+	}
+	return "s"
 }
 
 // saveImageRefs downloads each ref into dir, writing image files plus a
@@ -265,13 +279,16 @@ func downloadOne(ctx context.Context, dir, basename string, ref imageRef) (image
 // dumpKeycapSets dumps keycap sets with their nested kits[] and per-kit
 // images. Returns (set count, image count).
 func dumpKeycapSets(ctx context.Context, client *apiClient, outDir string) (int, int, error) {
+	fmt.Println("listing keycap-sets...")
 	items, err := client.listAll(ctx, client.userPath("keycap-sets"))
 	if err != nil {
 		return 0, 0, fmt.Errorf("listing keycap sets: %w", err)
 	}
+	total := len(items)
+	fmt.Printf("  %d keycap-sets listed\n", total)
 
 	imageCount := 0
-	for _, summary := range items {
+	for i, summary := range items {
 		id, err := idField(summary)
 		if err != nil {
 			return 0, 0, fmt.Errorf("keycap sets: %w", err)
@@ -300,6 +317,7 @@ func dumpKeycapSets(ctx context.Context, client *apiClient, outDir string) (int,
 		if err := json.Unmarshal(body, &set); err != nil {
 			return 0, 0, fmt.Errorf("reading keycap set %s kits: %w", id, err)
 		}
+		kitImages := 0
 		for _, kit := range set.Kits {
 			if kit.Image == nil || kit.Image.URL == "" {
 				continue
@@ -315,51 +333,13 @@ func dumpKeycapSets(ctx context.Context, client *apiClient, outDir string) (int,
 			if err := writeJSONFile(filepath.Join(kitDir, "image.manifest.json"), entry); err != nil {
 				return 0, 0, err
 			}
-			imageCount++
+			kitImages++
 		}
+		imageCount += kitImages
+		fmt.Printf("  keycap-sets %d/%d %s (%d kit%s, %d kit image%s)\n",
+			i+1, total, id, len(set.Kits), plural(len(set.Kits)), kitImages, plural(kitImages))
 	}
-	return len(items), imageCount, nil
-}
-
-// dumpProfile dumps the caller's profile and avatar. Returns (0 or 1, image
-// count) — 0 if the caller has no profile yet.
-func dumpProfile(ctx context.Context, client *apiClient, outDir string) (int, int, error) {
-	body, err := client.getRaw(ctx, "/v1/profile/"+client.subject)
-	if err != nil {
-		var apiErr *apiError
-		if ok := asAPIError(err, &apiErr); ok && apiErr.Status == 404 {
-			return 0, 0, nil
-		}
-		return 0, 0, fmt.Errorf("fetching profile: %w", err)
-	}
-
-	profDir := filepath.Join(outDir, "profile")
-	if err := os.MkdirAll(profDir, 0o700); err != nil {
-		return 0, 0, fmt.Errorf("creating %s: %w", profDir, err)
-	}
-	if err := os.WriteFile(filepath.Join(profDir, "item.json"), body, 0o600); err != nil {
-		return 0, 0, fmt.Errorf("writing profile item.json: %w", err)
-	}
-
-	var v struct {
-		Avatar *struct {
-			URL string `json:"url"`
-		} `json:"avatar"`
-	}
-	if err := json.Unmarshal(body, &v); err != nil {
-		return 0, 0, fmt.Errorf("reading avatar: %w", err)
-	}
-	if v.Avatar == nil || v.Avatar.URL == "" {
-		return 1, 0, nil
-	}
-	entry, err := downloadOne(ctx, profDir, "avatar", imageRef{url: v.Avatar.URL})
-	if err != nil {
-		return 0, 0, fmt.Errorf("profile avatar: %w", err)
-	}
-	if err := writeJSONFile(filepath.Join(profDir, "avatar.manifest.json"), entry); err != nil {
-		return 0, 0, err
-	}
-	return 1, 1, nil
+	return total, imageCount, nil
 }
 
 // dumpLookups writes lookups/lookups.json for reference/diff. Never restored.

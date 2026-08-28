@@ -107,27 +107,57 @@ func (c *LoginCmd) Run(ctx context.Context) error {
 	return nil
 }
 
-// discoverOIDC fetches {issuer}/.well-known/openid-configuration.
+// discoverOIDC resolves the issuer's endpoints. It reads RFC 8414
+// Authorization Server Metadata (/.well-known/oauth-authorization-server)
+// first, since that is where this IdP advertises registration_endpoint, and
+// falls back to the OIDC document (/.well-known/openid-configuration). Fields
+// missing from the primary doc are backfilled from the fallback.
 func discoverOIDC(ctx context.Context, issuer string) (oidcMetadata, error) {
-	discoveryURL := strings.TrimRight(issuer, "/") + "/.well-known/openid-configuration"
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, discoveryURL, nil)
+	base := strings.TrimRight(issuer, "/")
+	primary, errPrimary := fetchMetadata(ctx, base+"/.well-known/oauth-authorization-server")
+	fallback, errFallback := fetchMetadata(ctx, base+"/.well-known/openid-configuration")
+
+	if errPrimary != nil && errFallback != nil {
+		return oidcMetadata{}, fmt.Errorf("no usable discovery document for %s: %w", issuer, errPrimary)
+	}
+
+	meta := primary
+	if errPrimary != nil {
+		meta = fallback
+	}
+	if meta.AuthorizationEndpoint == "" {
+		meta.AuthorizationEndpoint = fallback.AuthorizationEndpoint
+	}
+	if meta.TokenEndpoint == "" {
+		meta.TokenEndpoint = fallback.TokenEndpoint
+	}
+	if meta.RegistrationEndpoint == "" {
+		meta.RegistrationEndpoint = fallback.RegistrationEndpoint
+	}
+
+	if meta.AuthorizationEndpoint == "" || meta.TokenEndpoint == "" {
+		return oidcMetadata{}, fmt.Errorf("discovery for %s is missing authorization/token endpoints", issuer)
+	}
+	return meta, nil
+}
+
+// fetchMetadata GETs one metadata URL and decodes it.
+func fetchMetadata(ctx context.Context, metadataURL string) (oidcMetadata, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, metadataURL, nil)
 	if err != nil {
-		return oidcMetadata{}, fmt.Errorf("building discovery request: %w", err)
+		return oidcMetadata{}, fmt.Errorf("building request for %s: %w", metadataURL, err)
 	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
-		return oidcMetadata{}, fmt.Errorf("fetching %s: %w", discoveryURL, err)
+		return oidcMetadata{}, fmt.Errorf("fetching %s: %w", metadataURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return oidcMetadata{}, fmt.Errorf("%s returned HTTP %d", discoveryURL, resp.StatusCode)
+		return oidcMetadata{}, fmt.Errorf("%s returned HTTP %d", metadataURL, resp.StatusCode)
 	}
 	var meta oidcMetadata
 	if err := json.NewDecoder(resp.Body).Decode(&meta); err != nil {
-		return oidcMetadata{}, fmt.Errorf("decoding discovery document: %w", err)
-	}
-	if meta.AuthorizationEndpoint == "" || meta.TokenEndpoint == "" {
-		return oidcMetadata{}, fmt.Errorf("discovery document from %s is missing authorization/token endpoints", discoveryURL)
+		return oidcMetadata{}, fmt.Errorf("decoding %s: %w", metadataURL, err)
 	}
 	return meta, nil
 }
