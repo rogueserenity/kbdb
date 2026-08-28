@@ -381,25 +381,35 @@ var errProfileVersionConflict = errors.New("profile version CAS conflict")
 // Otherwise the only item is the profile Put and any failure - a lost
 // version CAS, or the profile deleted out from under us failing
 // attribute_exists(user_id) - is treated as a retry; the fresh Get then
-// either succeeds or returns ErrNotFound. Returns nil if err isn't a
-// conditional-check cancellation.
+// either succeeds or returns ErrNotFound.
+//
+// A TransactionConflict on any reason (DynamoDB rejecting the whole
+// transaction because another write to a targeted item is in flight) is
+// also a retry, mirroring Delete()'s profileDeleteShouldRetry. Returns nil
+// if err isn't a cancellation this function recognises.
 func mapProfileUpdateConflict(err error, usernameChanged bool) error {
 	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
 	if !ok {
 		return nil
 	}
 
-	failed := func(i int) bool {
+	reasonIs := func(i int, code string) bool {
 		return i < len(txErr.CancellationReasons) &&
 			txErr.CancellationReasons[i].Code != nil &&
-			*txErr.CancellationReasons[i].Code == "ConditionalCheckFailed"
+			*txErr.CancellationReasons[i].Code == code
 	}
+	failed := func(i int) bool { return reasonIs(i, "ConditionalCheckFailed") }
 
 	if usernameChanged && failed(2) {
 		return repository.ErrUsernameTaken
 	}
 	if failed(0) || (usernameChanged && failed(1)) {
 		return errProfileVersionConflict
+	}
+	for i := range txErr.CancellationReasons {
+		if reasonIs(i, "TransactionConflict") {
+			return errProfileVersionConflict
+		}
 	}
 	return nil
 }

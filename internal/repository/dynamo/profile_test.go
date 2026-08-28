@@ -490,6 +490,33 @@ func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflict_RetriesThenSuccee
 	s.Equal(2, got.Version)
 }
 
+// A TransactionConflict cancellation (DynamoDB rejecting the whole
+// transaction while another write to a targeted item is in flight) is a
+// retry, mirroring Delete()'s profileDeleteShouldRetry - not a raw error
+// that would surface as a 500.
+func (s *ProfileRepositorySuite) TestUpdate_TransactionConflict_RetriesThenSucceeds() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil).Once()
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil).Once()
+
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("TransactionConflict")},
+			},
+		}).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
+
+	s.Require().NoError(err)
+	s.Equal(1, got.Version)
+}
+
 func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflictExhaustsRetries_ReturnsErrMutationConflict() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
 		Return(storedProfileItem(0, nil), nil)
