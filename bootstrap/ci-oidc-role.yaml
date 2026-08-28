@@ -186,6 +186,8 @@ Resources:
                   - s3:GetEncryptionConfiguration
                   - s3:PutBucketTagging
                   - s3:GetBucketTagging
+                  - s3:PutBucketCORS
+                  - s3:GetBucketCORS
                   - s3:ListBucket
                 Resource: !Sub arn:aws:s3:::kbdb-images-${AWS::AccountId}-kbdb-pr-*
               - Sid: ImagesBucketObjects
