@@ -62,11 +62,6 @@ type Switch struct {
 	Notes        *string         `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility   Visibility      `dynamodbav:"visibility" json:"visibility"`
 	ImagePath    *SwitchImageKey `dynamodbav:"image_path,omitempty" json:"-"`
-	// Version is a repository-internal monotonic write counter, bumped by
-	// every Update, not exposed via the API. Writes use conditional
-	// UpdateItem for update-only semantics rather than reading this back for
-	// CAS, but it stays as the hook for a future full-body re-merge.
-	Version int `dynamodbav:"version" json:"-"`
 }
 
 // SwitchRepository provides access to switches. List/Get take an explicit

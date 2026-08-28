@@ -2,7 +2,6 @@ package dynamo
 
 import (
 	"errors"
-	"fmt"
 	"strings"
 	"testing"
 
@@ -246,18 +245,17 @@ func (s *SwitchRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 // SET/REMOVE clauses applied on top of whatever was stored, with version
 // bumped. Tests build the "after" state directly rather than replaying the
 // expression.
-func (s *SwitchRepositorySuite) updatedItem(version int) map[string]types.AttributeValue {
+func (s *SwitchRepositorySuite) updatedItem() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
 		"user_id": &types.AttributeValueMemberS{Value: "alice"},
 		"id":      &types.AttributeValueMemberS{Value: "sw1"},
 		"brand":   &types.AttributeValueMemberS{Value: "Gateron"},
-		"version": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", version)},
 	}
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
-	// No GetItem on the happy path - UpdateItem carries image_path/version
-	// forward by not naming them, so there's no read to merge.
+	// No GetItem on the happy path - UpdateItem carries image_path forward
+	// by not naming it, so there's no read to merge.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			key := in.Key["id"].(*types.AttributeValueMemberS)
@@ -265,14 +263,13 @@ func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
 				strings.Contains(*in.ConditionExpression, "attribute_exists") &&
 				in.ReturnValues == types.ReturnValueAllNew
 		})).
-		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem(1)}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem()}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
 	s.Equal("Gateron", sw.Brand)
-	s.Equal(1, sw.Version)
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_OmittedOptionalFields_AreRemoved() {
@@ -282,7 +279,7 @@ func (s *SwitchRepositorySuite) TestUpdate_OmittedOptionalFields_AreRemoved() {
 			// struct, so each must appear in a REMOVE clause.
 			return strings.Contains(*in.UpdateExpression, "REMOVE")
 		})).
-		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem(1)}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem()}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	_, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
@@ -290,8 +287,8 @@ func (s *SwitchRepositorySuite) TestUpdate_OmittedOptionalFields_AreRemoved() {
 	s.Require().NoError(err)
 }
 
-func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePathAndVersion() {
-	after := s.updatedItem(4)
+func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePath() {
+	after := s.updatedItem()
 	after["image_path"] = &types.AttributeValueMemberS{Value: "switches/alice/sw1/image"}
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
@@ -301,7 +298,6 @@ func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePathAndVersion()
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().NoError(err)
-	s.Equal(4, sw.Version)
 	s.Require().NotNil(sw.ImagePath)
 	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image"), *sw.ImagePath)
 }
@@ -331,7 +327,7 @@ func (s *SwitchRepositorySuite) TestUpdate_ConditionFailsButRowPresent_ReturnsEr
 		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
+		Return(s.getItemOutput(), nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
@@ -390,14 +386,12 @@ func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 	s.Require().Error(err)
 }
 
-func (s *SwitchRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutput {
-	item := map[string]types.AttributeValue{
+func (s *SwitchRepositorySuite) getItemOutput() *dynamodb.GetItemOutput {
+	return &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{
 		"user_id": &types.AttributeValueMemberS{Value: "alice"},
 		"id":      &types.AttributeValueMemberS{Value: "sw1"},
 		"brand":   &types.AttributeValueMemberS{Value: "Gateron"},
-		"version": &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", version)},
-	}
-	return &dynamodb.GetItemOutput{Item: item}
+	}}
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {

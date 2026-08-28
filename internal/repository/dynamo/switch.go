@@ -145,9 +145,8 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 
 // Update rewrites the caller's switch from the request body with a single
 // UpdateItem: named attributes are SET (or REMOVEd when the body omitted an
-// optional field), and image_path/version - which the body never carries -
-// survive by not being named. version is bumped in the same expression so a
-// concurrent ImagePath UpdateItem still observes a monotonic counter.
+// optional field), and image_path - which the body never carries - survives
+// by not being named.
 //
 // The only ConditionExpression is attribute_exists(id): a full-body PUT is
 // last-write-wins against a concurrent PUT, and the update must not
@@ -169,14 +168,7 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 		Set(expression.Name("force"), expression.Value(sw.Force)).
 		Set(expression.Name("spring"), expression.Value(sw.Spring)).
 		Set(expression.Name("purchase"), expression.Value(sw.Purchase)).
-		Set(expression.Name("visibility"), expression.Value(sw.Visibility)).
-		Set(
-			expression.Name("version"),
-			expression.Plus(
-				expression.IfNotExists(expression.Name("version"), expression.Value(0)),
-				expression.Value(1),
-			),
-		)
+		Set(expression.Name("visibility"), expression.Value(sw.Visibility))
 	update = setOrRemovePtr(update, "manufacturer", sw.Manufacturer)
 	update = setOrRemovePtr(update, "pins", sw.Pins)
 	update = setOrRemovePtr(update, "factory_lubed", sw.FactoryLubed)
