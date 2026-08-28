@@ -64,6 +64,7 @@ var _ = Describe("Getting a profile over MCP", func() {
 
 					out := decodeGetProfileOutput(result)
 					Expect(out.Profile.Username).To(Equal(username))
+					Expect(out.Profile.UserID).To(Equal(ownerID))
 					Expect(out.Profile.Bio).NotTo(BeNil())
 					Expect(*out.Profile.Bio).To(Equal("keebs"))
 					Expect(out.Profile.Links).To(HaveLen(1))

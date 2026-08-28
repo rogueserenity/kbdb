@@ -70,10 +70,10 @@ type ListProfilesOutput struct {
 }
 
 // ProfileSummary is a list_profiles row - no bio or links; use UserID to
-// chain to get_profile.
+// chain to get_profile or the collection tools.
 type ProfileSummary struct {
 	Username        string  `json:"username" jsonschema:"the profile's unique username"`
-	UserID          string  `json:"user_id" jsonschema:"the profile owner's user id; pass to get_profile"`
+	UserID          string  `json:"user_id" jsonschema:"the profile owner's user id; pass to get_profile or as the user_id argument to list_keyboards, list_builds, and the other collection tools"`
 	DiscordUsername *string `json:"discord_username,omitempty" jsonschema:"the owner's Discord username, if given"`
 	HasAvatar       bool    `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
 }
@@ -103,10 +103,11 @@ type DeleteProfileImageOutput struct{}
 // Profile is a user's public identity. HasAvatar reports whether an avatar
 // is on file; MCP never serves the image itself.
 type Profile struct {
-	Username        string       `json:"username" jsonschema:"the profile's unique username"`
-	Discoverable    bool         `json:"discoverable" jsonschema:"whether the profile is listed in the public directory"`
-	DiscordUsername *string      `json:"discord_username,omitempty" jsonschema:"the owner's Discord username, if given"`
-	Bio             *string      `json:"bio,omitempty" jsonschema:"free-form bio, if given"`
+	Username        string        `json:"username" jsonschema:"the profile's unique username"`
+	UserID          string        `json:"user_id" jsonschema:"the profile owner's user id; pass it as the user_id argument to list_keyboards, list_builds, and the other collection tools"`
+	Discoverable    bool          `json:"discoverable" jsonschema:"whether the profile is listed in the public directory"`
+	DiscordUsername *string       `json:"discord_username,omitempty" jsonschema:"the owner's Discord username, if given"`
+	Bio             *string       `json:"bio,omitempty" jsonschema:"free-form bio, if given"`
 	Links           []ProfileLink `json:"links,omitempty" jsonschema:"the profile's links (name/url pairs)"`
-	HasAvatar       bool         `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
+	HasAvatar       bool          `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
 }

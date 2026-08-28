@@ -9,11 +9,11 @@ import (
 )
 
 // ProfileToAPI maps a repository.Profile to its wire shape, presigning the
-// avatar if set and never emitting the IdP subject. Errors only if
-// presigning fails.
+// avatar if set. Errors only if presigning fails.
 func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.ProfileImageStore) (api.Profile, error) {
 	out := api.Profile{
 		Username:        p.Username,
+		UserId:          &p.OwnerID,
 		Discoverable:    &p.Discoverable,
 		DiscordUsername: p.DiscordUsername,
 		Bio:             p.Bio,
@@ -36,7 +36,7 @@ func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.P
 func ProfileToAPISummary(ctx context.Context, p repository.Profile, images repository.ProfileImageStore) (api.ProfileSummary, error) {
 	summary := api.ProfileSummary{
 		Username:        &p.Username,
-		UserId:          &p.StytchUserID,
+		UserId:          &p.OwnerID,
 		DiscordUsername: p.DiscordUsername,
 	}
 
@@ -51,7 +51,7 @@ func ProfileToAPISummary(ctx context.Context, p repository.Profile, images repos
 	return summary, nil
 }
 
-// ProfileToRepo maps a ProfileInput to a repository.Profile. StytchUserID,
+// ProfileToRepo maps a ProfileInput to a repository.Profile. OwnerID,
 // AvatarPath, and the GSI discriminators are set downstream, not here.
 func ProfileToRepo(in api.ProfileInput) repository.Profile {
 	p := repository.Profile{

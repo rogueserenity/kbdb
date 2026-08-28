@@ -45,7 +45,7 @@ func (s *GetProfileSuite) newRequest(ctx context.Context, identifier string) *ht
 
 func (s *GetProfileSuite) TestDiscoverableByID_200() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: true, Bio: strp("keebs")}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: true, Bio: strp("keebs")}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "user-alice"))
@@ -54,6 +54,8 @@ func (s *GetProfileSuite) TestDiscoverableByID_200() {
 	var body api.Profile
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
 	s.Equal("alice", body.Username)
+	s.Require().NotNil(body.UserId)
+	s.Equal("user-alice", *body.UserId) // needed to address the {userId} collection routes
 	s.Require().NotNil(body.Bio)
 	s.Equal("keebs", *body.Bio)
 }
@@ -62,7 +64,7 @@ func (s *GetProfileSuite) TestDiscoverableByUsername_200() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "alice").Return(nil, repository.ErrNotFound)
 	s.mockRepo.EXPECT().ResolveUsername(mock.Anything, "alice").Return("user-alice", nil)
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: true}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: true}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "alice"))
@@ -73,7 +75,7 @@ func (s *GetProfileSuite) TestDiscoverableByUsername_200() {
 func (s *GetProfileSuite) TestNonDiscoverable_Owner_200() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
 	s.mockRepo.EXPECT().Get(ctx, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "user-alice"))
@@ -84,7 +86,7 @@ func (s *GetProfileSuite) TestNonDiscoverable_Owner_200() {
 func (s *GetProfileSuite) TestNonDiscoverable_OtherCaller_404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-bob")
 	s.mockRepo.EXPECT().Get(ctx, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "user-alice"))
@@ -95,7 +97,7 @@ func (s *GetProfileSuite) TestNonDiscoverable_OtherCaller_404() {
 
 func (s *GetProfileSuite) TestNonDiscoverable_Anonymous_404() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "user-alice"))
@@ -181,7 +183,7 @@ func validInput() api.ProfileInput {
 func (s *CreateProfileSuite) TestValidInput_201() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
 		return p.Username == "alice"
-	})).Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+	})).Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 
 	rec := s.post("user-alice", validInput())
 
@@ -333,7 +335,7 @@ func (s *UpdateProfileSuite) put(caller string, body any) *httptest.ResponseReco
 func (s *UpdateProfileSuite) TestValidInput_200() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
 		return p.Username == "alice"
-	})).Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+	})).Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 
 	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
 
@@ -341,7 +343,8 @@ func (s *UpdateProfileSuite) TestValidInput_200() {
 	var body api.Profile
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
 	s.Equal("alice", body.Username)
-	s.NotContains(rec.Body.String(), "user-alice") // IdP subject never leaked
+	s.Require().NotNil(body.UserId)
+	s.Equal("user-alice", *body.UserId)
 }
 
 func (s *UpdateProfileSuite) TestNotOwner_404_NoRepoCall() {
@@ -450,7 +453,7 @@ func (s *DeleteProfileSuite) del(caller string) *httptest.ResponseRecorder {
 
 func (s *DeleteProfileSuite) TestDeletesProfile_204() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything).Return(nil)
 
 	rec := s.del("user-alice")
@@ -482,7 +485,7 @@ func (s *DeleteProfileSuite) TestNoProfile_204_Idempotent() {
 func (s *DeleteProfileSuite) TestAvatarDeletedBeforeDBDelete() {
 	key := repository.ProfileImageKey("profiles/user-alice/avatar")
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &key}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &key}, nil)
 
 	var order []string
 	s.mockImages.EXPECT().Delete(mock.Anything, key).
@@ -501,7 +504,7 @@ func (s *DeleteProfileSuite) TestAvatarDeletedBeforeDBDelete() {
 func (s *DeleteProfileSuite) TestAvatarDeleteFails_500_NoDBDelete() {
 	key := repository.ProfileImageKey("profiles/user-alice/avatar")
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &key}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &key}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 down"))
 
 	rec := s.del("user-alice")
@@ -521,7 +524,7 @@ func (s *DeleteProfileSuite) TestGetError_500() {
 
 func (s *DeleteProfileSuite) TestDeleteError_500() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything).Return(errors.New("dynamo down"))
 
 	rec := s.del("user-alice")
@@ -531,7 +534,7 @@ func (s *DeleteProfileSuite) TestDeleteError_500() {
 
 func (s *DeleteProfileSuite) TestMutationConflict_409() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything).Return(repository.ErrMutationConflict)
 
 	rec := s.del("user-alice")
@@ -565,7 +568,7 @@ func (s *ListProfilesSuite) TestNoFilters_PassesEmptyPrefixes() {
 	s.mockRepo.EXPECT().
 		ListPublic(mock.Anything, "", "", 20, "").
 		Return([]repository.Profile{
-			{StytchUserID: "user-alice", Username: "alice", Discoverable: true},
+			{OwnerID: "user-alice", Username: "alice", Discoverable: true},
 		}, "", nil)
 
 	rec := httptest.NewRecorder()
@@ -642,7 +645,7 @@ func (s *ListProfilesSuite) TestAvatarPresigned_WhenSet() {
 	s.mockRepo.EXPECT().
 		ListPublic(mock.Anything, "", "", 20, "").
 		Return([]repository.Profile{
-			{StytchUserID: "user-alice", Username: "alice", Discoverable: true, AvatarPath: &key},
+			{OwnerID: "user-alice", Username: "alice", Discoverable: true, AvatarPath: &key},
 		}, "", nil)
 	s.mockImages.EXPECT().PresignGet(mock.Anything, key).Return("https://signed/avatar", nil)
 
@@ -835,7 +838,7 @@ var deleteProfileImageTestKey = repository.ProfileImageKey("profiles/user-alice/
 
 func (s *DeleteProfileImageSuite) TestSucceeds() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).Return(nil)
 	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(&deleteProfileImageTestKey, nil)
 
@@ -847,7 +850,7 @@ func (s *DeleteProfileImageSuite) TestSucceeds() {
 
 func (s *DeleteProfileImageSuite) TestNoAvatar_204_WithoutS3Call() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
@@ -884,7 +887,7 @@ func (s *DeleteProfileImageSuite) TestNoProfile_404() {
 
 func (s *DeleteProfileImageSuite) TestS3DeleteError_500_DoesNotClearDBRecord() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).
 		Return(errors.New("s3: access denied"))
 
@@ -898,7 +901,7 @@ func (s *DeleteProfileImageSuite) TestS3DeleteError_500_DoesNotClearDBRecord() {
 
 func (s *DeleteProfileImageSuite) TestMutationConflict_409() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).Return(nil)
 	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(nil, repository.ErrMutationConflict)
 

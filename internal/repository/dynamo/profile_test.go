@@ -57,7 +57,7 @@ func (s *ProfileRepositorySuite) TestGet_Succeeds() {
 	p, err := s.repo.Get(s.T().Context(), "user-alice")
 
 	s.Require().NoError(err)
-	s.Equal("user-alice", p.StytchUserID)
+	s.Equal("user-alice", p.OwnerID)
 	s.Equal("alice", p.Username)
 	s.True(p.Discoverable)
 	s.Require().NotNil(p.Bio)
@@ -114,7 +114,7 @@ func (s *ProfileRepositorySuite) TestCreate_WritesProfileAndClaimAtomically() {
 	got, err := s.repo.Create(ctx, repository.Profile{Username: "alice"})
 
 	s.Require().NoError(err)
-	s.Equal("user-alice", got.StytchUserID)
+	s.Equal("user-alice", got.OwnerID)
 	s.Equal(0, got.Version)
 
 	profilePut := captured.TransactItems[0].Put
@@ -797,7 +797,7 @@ func (s *ProfileRepositorySuite) TestListPublic_QueriesUsernameIndex_NoPrefix() 
 	s.Empty(next)
 	s.Require().Len(profiles, 2)
 	s.Equal("alice", profiles[0].Username)
-	s.Equal("user-alice", profiles[0].StytchUserID)
+	s.Equal("user-alice", profiles[0].OwnerID)
 	s.True(profiles[0].Discoverable)
 }
 

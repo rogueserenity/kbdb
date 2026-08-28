@@ -83,7 +83,7 @@ func (s *VerifyTokenSuite) TestCheckAudience_AudContainsExpected_Succeeds() {
 	s.NoError(err)
 }
 
-// Stytch tokens carry aud as a multi-value array (e.g. [project_id, ...]),
+// Some IdPs carry aud as a multi-value array (e.g. [project_id, ...]),
 // not just the expected value alone - this must still succeed.
 func (s *VerifyTokenSuite) TestCheckAudience_AudIsMultiValueContainingExpected_Succeeds() {
 	err := s.verifier.checkAudience(fakeToken{aud: []string{"someone-else", "expected-audience"}})

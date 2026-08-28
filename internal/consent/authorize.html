@@ -1,4 +1,10 @@
 <!DOCTYPE html>
+<!--
+  This page and logout.html are the only IdP-specific code in kbdb: they
+  embed the deployment's IdP browser SDK (currently Stytch's @stytch/vanilla-js)
+  by its own symbol and custom-element names. Swapping IdPs means rewriting
+  these two files; nothing else in the codebase references the IdP by name.
+-->
 <html>
 <head>
 <meta charset="utf-8" />
@@ -24,9 +30,9 @@
   <script type="module">
     import { StytchClient, StytchIdentityProvider, StytchUI, Products, OAuthProviders } from 'https://esm.sh/@stytch/vanilla-js@6.2.0';
 
-    const PUBLIC_TOKEN = {{.StytchPublicToken}};
+    const PUBLIC_TOKEN = {{.IDPConsentPublicToken}};
     // customBaseUrl keeps the OIDC "iss" matching the discovery domain.
-    const stytch = new StytchClient(PUBLIC_TOKEN, {
+    const idpClient = new StytchClient(PUBLIC_TOKEN, {
       customBaseUrl: {{.OIDCIssuerBaseURL}},
     });
 
@@ -66,19 +72,19 @@
       document.getElementById('login-el').style.display = 'none';
       const idp = document.getElementById('idp-el');
       idp.style.display = 'block';
-      idp.render({ client: stytch, presentation });
+      idp.render({ client: idpClient, presentation });
     }
 
     async function render() {
       try {
         // Discord's redirect back overwrites our OAuth query params with
-        // Stytch's own (?token=...) - save/restore via localStorage.
+        // the IdP's own (?token=...) - save/restore via localStorage.
         let params = new URLSearchParams(window.location.search);
 
         if (params.has('client_id')) {
           localStorage.setItem('kbdb_oauth_qs', window.location.search);
         } else if (params.has('token')) {
-          await stytch.authenticateByUrl({ session_duration_minutes: 60 });
+          await idpClient.authenticateByUrl({ session_duration_minutes: 60 });
           const savedQs = localStorage.getItem('kbdb_oauth_qs');
           if (savedQs) {
             window.history.replaceState({}, '', window.location.pathname + savedQs);
@@ -89,9 +95,9 @@
         // getSync() is a local cache read - re-verify against the server so
         // a session revoked from mykeebs-web's origin is actually caught.
         let loggedIn = false;
-        if (stytch.session.getSync() != null) {
+        if (idpClient.session.getSync() != null) {
           try {
-            await stytch.session.authenticate({ session_duration_minutes: 60 });
+            await idpClient.session.authenticate({ session_duration_minutes: 60 });
             loggedIn = true;
           } catch {
             loggedIn = false;
@@ -107,7 +113,7 @@
           login.style.display = 'block';
           const bareRedirectUrl = window.location.origin + window.location.pathname;
           login.render({
-            client: stytch,
+            client: idpClient,
             config: {
               products: [Products.oauth, Products.otp],
               oauthOptions: {

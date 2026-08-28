@@ -16,7 +16,7 @@ info:
 servers:
   - url: https://api.mykeebs.info
 security:
-  - CognitoAuth: []
+  - BearerAuth: []
 
 tags:
   - name: keyboards
@@ -42,7 +42,7 @@ paths:
       operationId: listKeyboards
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         If userId is the caller's own subject, lists all of the caller's keyboards. Otherwise, lists only that user's keyboards explicitly shared with the caller (possibly empty).
       parameters:
@@ -93,7 +93,7 @@ paths:
       operationId: getKeyboard
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         Returns the keyboard if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the keyboard does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
       responses:
@@ -249,7 +249,7 @@ paths:
       operationId: listSwitches
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         If userId is the caller's own subject, lists all of the caller's switches. Otherwise, lists only that user's switches explicitly shared with the caller (possibly empty).
       parameters:
@@ -300,7 +300,7 @@ paths:
       operationId: getSwitch
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         Returns the switch if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the switch does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
       responses:
@@ -490,7 +490,7 @@ paths:
       operationId: getProfile
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         Returns the profile identified by identifier, which may be either
         the owner's IdP subject or their username. A non-discoverable
@@ -590,7 +590,7 @@ paths:
       operationId: listProfiles
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         The public directory. Returns only profiles with discoverable set to
         true; a row carries user_id so a client can chain to
@@ -705,7 +705,7 @@ paths:
       operationId: listKeycapSets
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         If userId is the caller's own subject, lists all of the caller's keycap sets. Otherwise, lists only that user's keycap sets explicitly shared with the caller (possibly empty).
       parameters:
@@ -756,7 +756,7 @@ paths:
       operationId: getKeycapSet
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         Returns the keycap set if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the keycap set does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
       responses:
@@ -1032,7 +1032,7 @@ paths:
       operationId: listBuilds
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         If userId is the caller's own subject, lists all of the caller's builds. Otherwise, lists only that user's builds explicitly shared with the caller (possibly empty).
       parameters:
@@ -1083,7 +1083,7 @@ paths:
       operationId: getBuild
       security:
         - {}
-        - CognitoAuth: []
+        - BearerAuth: []
       description: >
         Returns the build if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the build does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
       responses:
@@ -1262,11 +1262,11 @@ paths:
 
 components:
   securitySchemes:
-    CognitoAuth:
+    BearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: Cognito-issued JWT (Authorization Bearer <token>).
+      description: An IdP-issued OIDC JWT (Authorization Bearer <token>).
 
   parameters:
     UserId:
@@ -1275,9 +1275,9 @@ components:
       required: true
       schema:
         type: string
-        format: uuid
       description: >
-        Cognito subject (UUID) of the item's owner. If this matches the
+        The IdP subject of the item's owner — the `sub` claim of an access
+        token, and the `user_id` field of a profile. If this matches the
         authenticated caller's own subject, the request is against their own
         collection. If it names a different user, the request is against
         that user's collection: reads return only items that user has
@@ -1286,8 +1286,8 @@ components:
         to avoid revealing that an item exists but isn't shared); writes
         (create/update/delete) always fail with a 404 in this case, since a
         caller can never modify another user's items. Not a PII/security
-        concern to expose in a URL — Cognito subjects are opaque UUIDs, not
-        derived from email or any other identifying attribute.
+        concern to expose in a URL — an IdP subject is an opaque identifier,
+        not derived from email or any other identifying attribute.
     KeyboardId:
       name: keyboardId
       in: path
@@ -1858,6 +1858,13 @@ components:
         - $ref: "#/components/schemas/ProfileInput"
         - type: object
           properties:
+            user_id:
+              type: string
+              description: >
+                The profile owner's IdP subject. Use it as the {userId} path
+                segment on the collection routes (GET /v1/keyboards/{userId},
+                /v1/builds/{userId}, etc.). Resolve a profile by username here
+                first, then read that user's collections by this id.
             avatar:
               oneOf:
                 - $ref: "#/components/schemas/ProfileImage"
@@ -1877,9 +1884,9 @@ components:
         user_id:
           type: string
           description: >
-            The profile owner's IdP subject. Present so a client can then
-            call GET /v1/profile/{user_id}. Only ever returned here (for
-            discoverable profiles), never on the single-profile response.
+            The profile owner's IdP subject, same value as Profile.user_id on
+            the single-profile response. Present so a client can chain to
+            GET /v1/profile/{user_id} or read the user's collections.
         discord_username:
           type: [string, "null"]
         avatar:

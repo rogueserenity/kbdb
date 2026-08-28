@@ -1,6 +1,7 @@
-// Package consent hosts the Stytch consent/authorization page kbdb serves
+// Package consent hosts the IdP consent/authorization page kbdb serves
 // at GET /authorize, so MCP clients can authenticate against kbdb
-// standalone without depending on mykeebs-web being deployed.
+// standalone without depending on mykeebs-web being deployed. The embedded
+// HTML wires up whatever IdP browser SDK the deployment uses.
 package consent
 
 import (
@@ -21,16 +22,16 @@ var authorizeTemplate = template.Must(template.New("authorize.html").Parse(autho
 // (including escaping a </script> breakout attempt), so fields are passed
 // raw, not pre-quoted.
 type templateData struct {
-	StytchPublicToken string
-	OIDCIssuerBaseURL string
+	IDPConsentPublicToken string
+	OIDCIssuerBaseURL     string
 }
 
-// Handler serves GET /authorize: kbdb's Stytch consent/login page.
-func Handler(stytchPublicToken, oidcIssuerBaseURL string) http.Handler {
+// Handler serves GET /authorize: kbdb's IdP consent/login page.
+func Handler(idpConsentPublicToken, oidcIssuerBaseURL string) http.Handler {
 	var buf bytes.Buffer
 	data := templateData{
-		StytchPublicToken: stytchPublicToken,
-		OIDCIssuerBaseURL: oidcIssuerBaseURL,
+		IDPConsentPublicToken: idpConsentPublicToken,
+		OIDCIssuerBaseURL:     oidcIssuerBaseURL,
 	}
 	if err := authorizeTemplate.Execute(&buf, data); err != nil {
 		log.Fatalf("consent: rendering authorize.html: %v", err)

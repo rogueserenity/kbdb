@@ -29,7 +29,7 @@ import (
 // Metadata (the OIDC issuer MCP clients should authenticate against); the
 // metadata's "resource" field is derived per-request rather than passed in
 // statically — see [github.com/rogueserenity/kbdb/internal/mcp.Handlers]
-// for why. stytchPublicToken configures the GET /authorize consent page and
+// for why. idpConsentPublicToken configures the GET /authorize consent page and
 // GET /logout (see internal/consent); logoutReturnOrigins restricts
 // /logout's return_to param. version is advertised to MCP clients in the
 // server's initialize handshake.
@@ -45,7 +45,7 @@ func New(
 	buildImageStore repository.BuildImageStore,
 	profileRepo repository.ProfileRepository,
 	profileImageStore repository.ProfileImageStore,
-	issuerURL, stytchPublicToken, version string,
+	issuerURL, idpConsentPublicToken, version string,
 	logoutReturnOrigins []string,
 ) http.Handler {
 	validate := restOpenAPIValidator()
@@ -54,8 +54,8 @@ func New(
 
 	// Not part of api/openapi.yaml, so not wrapped in validate - see
 	// internal/consent.
-	mux.Handle("GET /authorize", consent.Handler(stytchPublicToken, issuerURL))
-	mux.Handle("GET /logout", consent.LogoutHandler(stytchPublicToken, issuerURL, logoutReturnOrigins))
+	mux.Handle("GET /authorize", consent.Handler(idpConsentPublicToken, issuerURL))
+	mux.Handle("GET /logout", consent.LogoutHandler(idpConsentPublicToken, issuerURL, logoutReturnOrigins))
 
 	// security: [] in api/openapi.yaml - always anonymous. No PUT/DELETE:
 	// lookup categories are static, deploy-time data (internal/lookup),
@@ -63,7 +63,7 @@ func New(
 	mux.Handle("GET /v1/lookups", validate(http.HandlerFunc(handlers.ListLookups)))
 	mux.Handle("GET /v1/lookups/{category}", validate(http.HandlerFunc(handlers.GetLookup)))
 
-	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public switches (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/switches",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, switchImageStore))))
@@ -80,7 +80,7 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}/image",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitchImage(switchRepo, switchImageStore))))
 
-	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, keyboardImageStore))))
@@ -97,7 +97,7 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}/images/{imageId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboardImage(keyboardRepo, keyboardImageStore))))
 
-	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, imageStore))))
@@ -120,7 +120,7 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapKitImage(keycapSetRepo, imageStore))))
 
-	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers see
+	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, buildImageStore))))
@@ -137,13 +137,13 @@ func New(
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}/images/{imageId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuildImage(buildRepo, buildImageStore))))
 
-	// security: [{}, CognitoAuth] in api/openapi.yaml - anonymous callers may
+	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers may
 	// read discoverable profiles; the handler applies the
 	// discoverable-or-owner rule itself (see internal/profileread).
 	mux.Handle("GET /v1/profile/{identifier}",
 		middleware.OptionalAuth(verifier)(validate(handlers.GetProfile(profileRepo, profileImageStore))))
 	// Same path as the GET, POST only. Default OidcAuthorizer at the gateway
-	// (security: [CognitoAuth] in api/openapi.yaml, no anonymous override);
+	// (security: [BearerAuth] in api/openapi.yaml, no anonymous override);
 	// the handler requires {identifier} to be the caller's own subject via
 	// authz.IsOwner (a username there, or anyone else's subject, is 404).
 	mux.Handle("POST /v1/profile/{identifier}",

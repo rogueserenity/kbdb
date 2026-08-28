@@ -27,7 +27,7 @@ func profileImageKeyPtr(s string) *repository.ProfileImageKey {
 
 func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 	p := repository.Profile{
-		StytchUserID:    "user-alice",
+		OwnerID:         "user-alice",
 		Username:        "alice",
 		Discoverable:    true,
 		DiscordUsername: strPtr("alice_kb"),
@@ -42,6 +42,8 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
+	s.Require().NotNil(out.UserId)
+	s.Equal("user-alice", *out.UserId)
 	s.Require().NotNil(out.Discoverable)
 	s.True(*out.Discoverable)
 	s.Require().NotNil(out.DiscordUsername)
@@ -54,15 +56,18 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 	s.Nil(out.Avatar)
 }
 
-func (s *ProfileMapperSuite) TestProfileToAPI_NeverLeaksSubject() {
-	// api.Profile has no field for the IdP subject; this pins that.
+func (s *ProfileMapperSuite) TestProfileToAPI_ExposesSubjectAsUserID() {
+	// user_id is on the single-profile response so callers can address the
+	// {userId}-keyed collection routes.
 	out, err := ProfileToAPI(s.T().Context(), repository.Profile{
-		StytchUserID: "user-secret",
-		Username:     "alice",
+		OwnerID:  "user-alice",
+		Username: "alice",
 	}, mocks.NewMockProfileImageStore(s.T()))
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
+	s.Require().NotNil(out.UserId)
+	s.Equal("user-alice", *out.UserId)
 }
 
 func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
@@ -121,7 +126,7 @@ func (s *ProfileMapperSuite) TestProfileToRepo_MapsBodyFields_NotAvatarOrDerived
 	s.Require().Len(p.Links, 1)
 	s.Equal(repository.ProfileLink{Name: "Twitch", URL: "https://twitch.tv/alice"}, p.Links[0])
 	// Not set from the body:
-	s.Empty(p.StytchUserID)
+	s.Empty(p.OwnerID)
 	s.Nil(p.AvatarPath)
 	s.Nil(p.DiscoverablePK)
 	s.Nil(p.DiscordUsernameLC)

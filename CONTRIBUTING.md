@@ -58,15 +58,15 @@ These scripts derive your AWS account ID and region automatically from your acti
 
 You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
-### Stytch OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_STYTCH_PUBLIC_TOKEN`)
+### IdP OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_IDP_CONSENT_PUBLIC_TOKEN`)
 
-All three scripts also require these three vars:
+All three scripts also require these three vars. kbdb is IdP-agnostic (see [Identity provider requirements](README.md#identity-provider-requirements)); this project is currently run against a Stytch **Test** project, and the parenthetical guidance below reflects that.
 
-- `KBDB_OIDC_ISSUER_BASE_URL` — your Stytch **Test** project's issuer base URL: `https://test.stytch.com/v1/public/{project_id}`.
-- `KBDB_OIDC_AUDIENCE` — the `aud` claim on every access token, REST and MCP alike: your Stytch project ID. Stytch always includes the project ID in `aud` regardless of client type, so one value covers both flows — no separate MCP audience needed.
-- `KBDB_STYTCH_PUBLIC_TOKEN` — your Stytch project's public token (Stytch dashboard → your project → API keys → Public token). Rendered client-side into the `GET /authorize` consent page to construct the Stytch SDK client - safe to embed client-side by design, but still varies per stack.
+- `KBDB_OIDC_ISSUER_BASE_URL` — your IdP project's OIDC issuer base URL (for a Stytch Test project: `https://test.stytch.com/v1/public/{project_id}`).
+- `KBDB_OIDC_AUDIENCE` — the `aud` claim on every access token, REST and MCP alike: typically your IdP project ID. Some IdPs (Stytch included) put the project ID in `aud` regardless of client type, so one value covers both flows — no separate MCP audience needed.
+- `KBDB_IDP_CONSENT_PUBLIC_TOKEN` — your IdP's browser-SDK public token (for Stytch: dashboard → your project → API keys → Public token). Rendered client-side into the `GET /authorize` consent page to construct the IdP SDK client - safe to embed client-side by design, but still varies per stack.
 
-Test is for dev/personal stacks only — never point a dev stack at a Stytch Live project.
+Test is for dev/personal stacks only — never point a dev stack at a live/production IdP project.
 
 To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
 
@@ -76,7 +76,7 @@ To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to 
 
 ### Logout return origins (`KBDB_LOGOUT_RETURN_ORIGINS`)
 
-All three scripts also require `KBDB_LOGOUT_RETURN_ORIGINS` — a comma-separated list of browser origins `GET /logout` is allowed to redirect back to via its `return_to` param (see `internal/consent`), same format as `KBDB_CORS_ALLOW_ORIGINS` above. `/logout` revokes the Stytch session on this stack's own origin (something `mykeebs-web`'s `signOut()` can't do itself, since the session lives on a different origin than `mykeebs-web`), then redirects to `return_to` — restricted to this allowlist so it isn't an open redirect.
+All three scripts also require `KBDB_LOGOUT_RETURN_ORIGINS` — a comma-separated list of browser origins `GET /logout` is allowed to redirect back to via its `return_to` param (see `internal/consent`), same format as `KBDB_CORS_ALLOW_ORIGINS` above. `/logout` revokes the IdP session on this stack's own origin (something `mykeebs-web`'s `signOut()` can't do itself, since the session lives on a different origin than `mykeebs-web`), then redirects to `return_to` — restricted to this allowlist so it isn't an open redirect.
 
 ### Custom domain (`api.<your-name>.mykeebs.dev`)
 
@@ -195,6 +195,6 @@ The WorkOS emulator (`ghcr.io/workos/emulate`) stands in for WorkOS in functiona
 
 ## Conventions
 
-- **Commit messages and PR titles** follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject` (e.g. `fix(ci): scope Cognito IAM permissions to account/region`). Common types: `feat`, `fix`, `chore`, `docs`, `test`, `ci`, `refactor`.
+- **Commit messages and PR titles** follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject` (e.g. `fix(ci): scope IAM permissions to account/region`). Common types: `feat`, `fix`, `chore`, `docs`, `test`, `ci`, `refactor`.
 - **Mise tasks live in `scripts/`**, one `.sh` file per task, referenced from `mise.toml` via `file = "scripts/<name>.sh"` — even one-liners. Add a new task the same way.
 - Package layout, mocking patterns, and other code-level conventions are documented in `CLAUDE.md`.

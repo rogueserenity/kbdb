@@ -134,7 +134,7 @@ jobs:
             --parameter-overrides "SkipApiRepository=true" \
               "OidcIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
               "OidcAudience=client_local_kbdb" \
-              "StytchPublicToken=public-token-test-local-kbdb" \
+              "IdpConsentPublicToken=public-token-test-local-kbdb" \
               "CorsAllowOrigins=http://localhost:5173" \
               "LogoutReturnOrigins=http://localhost:5173" \
             --tags "kbdb:pr=pr-${{ github.event.pull_request.number }}" \

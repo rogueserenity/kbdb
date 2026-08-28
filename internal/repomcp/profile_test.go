@@ -21,7 +21,7 @@ func (s *ProfileMapperSuite) TestProfileToMCP_FullProfile() {
 	discord := "alice_kb"
 	bio := "keebs"
 	p := repository.Profile{
-		StytchUserID:    "user-alice",
+		OwnerID:         "user-alice",
 		Username:        "alice",
 		Discoverable:    true,
 		DiscordUsername: &discord,
@@ -34,6 +34,7 @@ func (s *ProfileMapperSuite) TestProfileToMCP_FullProfile() {
 	out := ProfileToMCP(p)
 
 	s.Equal("alice", out.Username)
+	s.Equal("user-alice", out.UserID)
 	s.True(out.Discoverable)
 	s.Require().NotNil(out.DiscordUsername)
 	s.Equal("alice_kb", *out.DiscordUsername)
@@ -85,7 +86,7 @@ func (s *ProfileMapperSuite) TestProfileFromMCP_MapsWritableFields() {
 func (s *ProfileMapperSuite) TestProfileFromMCP_ServerOwnedFieldsUnset() {
 	p := ProfileFromMCP(schema.ProfileInput{Username: "alice"})
 
-	s.Empty(p.StytchUserID)
+	s.Empty(p.OwnerID)
 	s.Nil(p.AvatarPath)
 	s.Nil(p.DiscoverablePK)
 	s.Nil(p.Links)

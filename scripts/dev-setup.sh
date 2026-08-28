@@ -23,7 +23,7 @@ REPO_URI="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${REPO_NAME}"
 S3_BUCKET="kbdb-sam-artifacts-${ACCOUNT_ID}"
 OIDC_ISSUER_BASE_URL="${KBDB_OIDC_ISSUER_BASE_URL:?set KBDB_OIDC_ISSUER_BASE_URL - see CONTRIBUTING.md}"
 OIDC_AUDIENCE="${KBDB_OIDC_AUDIENCE:?set KBDB_OIDC_AUDIENCE - see CONTRIBUTING.md}"
-STYTCH_PUBLIC_TOKEN="${KBDB_STYTCH_PUBLIC_TOKEN:?set KBDB_STYTCH_PUBLIC_TOKEN - see CONTRIBUTING.md}"
+IDP_CONSENT_PUBLIC_TOKEN="${KBDB_IDP_CONSENT_PUBLIC_TOKEN:?set KBDB_IDP_CONSENT_PUBLIC_TOKEN - see CONTRIBUTING.md}"
 LOGOUT_RETURN_ORIGINS="${KBDB_LOGOUT_RETURN_ORIGINS:?set KBDB_LOGOUT_RETURN_ORIGINS - see CONTRIBUTING.md}"
 
 # Optional - see CONTRIBUTING.md's "Custom domain" section. Unset by
@@ -87,7 +87,7 @@ sam deploy --template-file "$NO_REPO_TEMPLATE" \
   --parameter-overrides \
     "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
     "OidcAudience=${OIDC_AUDIENCE}" \
-    "StytchPublicToken=${STYTCH_PUBLIC_TOKEN}" \
+    "IdpConsentPublicToken=${IDP_CONSENT_PUBLIC_TOKEN}" \
     "LogoutReturnOrigins=${LOGOUT_RETURN_ORIGINS}" \
     "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \
@@ -133,7 +133,7 @@ aws cloudformation create-change-set --stack-name "$STACK_NAME" \
   --parameters \
     ParameterKey=OidcIssuerBaseUrl,UsePreviousValue=true \
     ParameterKey=OidcAudience,UsePreviousValue=true \
-    ParameterKey=StytchPublicToken,UsePreviousValue=true \
+    ParameterKey=IdpConsentPublicToken,UsePreviousValue=true \
     ParameterKey=LogoutReturnOrigins,UsePreviousValue=true \
     ParameterKey=CustomDomainName,UsePreviousValue=true \
     ParameterKey=CustomDomainCertificateArn,UsePreviousValue=true \
@@ -156,7 +156,7 @@ sam deploy --stack-name "$STACK_NAME" \
   --parameter-overrides \
     "OidcIssuerBaseUrl=${OIDC_ISSUER_BASE_URL}" \
     "OidcAudience=${OIDC_AUDIENCE}" \
-    "StytchPublicToken=${STYTCH_PUBLIC_TOKEN}" \
+    "IdpConsentPublicToken=${IDP_CONSENT_PUBLIC_TOKEN}" \
     "LogoutReturnOrigins=${LOGOUT_RETURN_ORIGINS}" \
     "${DOMAIN_PARAMS[@]+"${DOMAIN_PARAMS[@]}"}" \
   --capabilities CAPABILITY_IAM \

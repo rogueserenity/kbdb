@@ -37,13 +37,14 @@ func (s *HandleGetProfileSuite) TestBlankIdentifier_Errors() {
 
 func (s *HandleGetProfileSuite) TestDiscoverableByID_Returned() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: true, Bio: sp("keebs")}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: true, Bio: sp("keebs")}, nil)
 
 	handler := handleGetProfile(s.mockRepo)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetProfileInput{Identifier: "user-alice"})
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Profile.Username)
+	s.Equal("user-alice", out.Profile.UserID) // needed for the collection tools
 	s.Require().NotNil(out.Profile.Bio)
 	s.Equal("keebs", *out.Profile.Bio)
 	s.False(out.Profile.HasAvatar)
@@ -53,7 +54,7 @@ func (s *HandleGetProfileSuite) TestDiscoverableByUsername_Returned() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "alice").Return(nil, repository.ErrNotFound)
 	s.mockRepo.EXPECT().ResolveUsername(mock.Anything, "alice").Return("user-alice", nil)
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: true}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: true}, nil)
 
 	handler := handleGetProfile(s.mockRepo)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetProfileInput{Identifier: "alice"})
@@ -65,7 +66,7 @@ func (s *HandleGetProfileSuite) TestDiscoverableByUsername_Returned() {
 func (s *HandleGetProfileSuite) TestNonDiscoverable_Owner_Returned() {
 	ctx := ctxpkg.WithUserID(s.T().Context(), "user-alice")
 	s.mockRepo.EXPECT().Get(ctx, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
 
 	handler := handleGetProfile(s.mockRepo)
 	_, out, err := handler(ctx, nil, schema.GetProfileInput{Identifier: "user-alice"})
@@ -76,7 +77,7 @@ func (s *HandleGetProfileSuite) TestNonDiscoverable_Owner_Returned() {
 
 func (s *HandleGetProfileSuite) TestNonDiscoverable_OtherCaller_NotFoundError() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
 
 	handler := handleGetProfile(s.mockRepo)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetProfileInput{Identifier: "user-alice"})
@@ -128,7 +129,7 @@ func (s *HandleCreateProfileSuite) call(in schema.CreateProfileInput) (schema.Cr
 func (s *HandleCreateProfileSuite) TestValid_Created() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
 		return p.Username == "alice"
-	})).Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+	})).Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 
 	out, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
 
@@ -210,7 +211,7 @@ func (s *HandleUpdateProfileSuite) call(in schema.UpdateProfileInput) (schema.Up
 func (s *HandleUpdateProfileSuite) TestValid_Updated() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.MatchedBy(func(p repository.Profile) bool {
 		return p.Username == "alice"
-	})).Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+	})).Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 
 	out, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
 
@@ -285,7 +286,7 @@ func (s *HandleDeleteProfileSuite) call() error {
 
 func (s *HandleDeleteProfileSuite) TestDeletesProfile_NoError() {
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything).Return(nil)
 
 	s.Require().NoError(s.call())
@@ -301,7 +302,7 @@ func (s *HandleDeleteProfileSuite) TestNoProfile_IdempotentNoError() {
 func (s *HandleDeleteProfileSuite) TestAvatarDeletedBeforeDBDelete() {
 	key := repository.ProfileImageKey("profiles/" + callerID + "/avatar")
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice", AvatarPath: &key}, nil)
 
 	var order []string
 	s.mockImages.EXPECT().Delete(mock.Anything, key).
@@ -318,7 +319,7 @@ func (s *HandleDeleteProfileSuite) TestAvatarDeletedBeforeDBDelete() {
 func (s *HandleDeleteProfileSuite) TestAvatarDeleteFails_ErrorNoDBDelete() {
 	key := repository.ProfileImageKey("profiles/" + callerID + "/avatar")
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice", AvatarPath: &key}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 down"))
 
 	s.Require().Error(s.call())
@@ -333,7 +334,7 @@ func (s *HandleDeleteProfileSuite) TestGetError_GenericError() {
 
 func (s *HandleDeleteProfileSuite) TestDeleteError_GenericError() {
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything).Return(errors.New("dynamo down"))
 
 	s.Require().Error(s.call())
@@ -363,7 +364,7 @@ func (s *HandleListProfilesSuite) TestNoFilters_ReturnsSummaries() {
 	s.mockRepo.EXPECT().
 		ListPublic(mock.Anything, "", "", defaultListLimit, "").
 		Return([]repository.Profile{
-			{StytchUserID: "user-alice", Username: "alice", Discoverable: true},
+			{OwnerID: "user-alice", Username: "alice", Discoverable: true},
 		}, "next", nil)
 
 	out, err := s.call(schema.ListProfilesInput{})
@@ -529,7 +530,7 @@ func (s *HandleDeleteProfileImageSuite) avatarKey() repository.ProfileImageKey {
 func (s *HandleDeleteProfileImageSuite) TestDeletesAvatar_S3BeforeDB() {
 	key := s.avatarKey()
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice", AvatarPath: &key}, nil)
 
 	var order []string
 	s.mockImages.EXPECT().Delete(mock.Anything, key).
@@ -545,7 +546,7 @@ func (s *HandleDeleteProfileImageSuite) TestDeletesAvatar_S3BeforeDB() {
 
 func (s *HandleDeleteProfileImageSuite) TestNoAvatar_IdempotentNoS3Call() {
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 
 	s.Require().NoError(s.call())
 	s.mockImages.AssertNotCalled(s.T(), "Delete", mock.Anything, mock.Anything)
@@ -560,7 +561,7 @@ func (s *HandleDeleteProfileImageSuite) TestNoProfile_NotFoundError() {
 func (s *HandleDeleteProfileImageSuite) TestS3DeleteFails_ErrorNoDBClear() {
 	key := s.avatarKey()
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
-		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice", AvatarPath: &key}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 down"))
 
 	s.Require().Error(s.call())

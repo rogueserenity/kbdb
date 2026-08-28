@@ -26,7 +26,7 @@ func Resolve(ctx context.Context, repo repository.ProfileRepository, identifier 
 	if p.Discoverable {
 		return p, true, nil
 	}
-	if caller, ok := kbdbctx.UserID(ctx); ok && caller == p.StytchUserID {
+	if caller, ok := kbdbctx.UserID(ctx); ok && caller == p.OwnerID {
 		return p, true, nil
 	}
 

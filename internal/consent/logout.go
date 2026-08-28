@@ -23,17 +23,17 @@ var logoutTemplate = template.Must(template.New("logout.html").Parse(logoutHTML)
 // which is user-controlled via the return_to query param), so fields are
 // passed raw, not pre-quoted.
 type logoutTemplateData struct {
-	StytchPublicToken string
-	OIDCIssuerBaseURL string
-	ReturnTo          string
+	IDPConsentPublicToken string
+	OIDCIssuerBaseURL     string
+	ReturnTo              string
 }
 
-// LogoutHandler serves GET /logout: revokes the Stytch session on this
+// LogoutHandler serves GET /logout: revokes the IdP session on this
 // origin (see internal/consent's package doc for why that can't be done
 // from mykeebs-web's own origin), then redirects to return_to.
 // allowedReturnOrigins restricts return_to to known callers, since it would
 // otherwise be an open redirect.
-func LogoutHandler(stytchPublicToken, oidcIssuerBaseURL string, allowedReturnOrigins []string) http.Handler {
+func LogoutHandler(idpConsentPublicToken, oidcIssuerBaseURL string, allowedReturnOrigins []string) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			w.Header().Set("Allow", http.MethodGet)
@@ -48,9 +48,9 @@ func LogoutHandler(stytchPublicToken, oidcIssuerBaseURL string, allowedReturnOri
 		}
 
 		data := logoutTemplateData{
-			StytchPublicToken: stytchPublicToken,
-			OIDCIssuerBaseURL: oidcIssuerBaseURL,
-			ReturnTo:          returnTo,
+			IDPConsentPublicToken: idpConsentPublicToken,
+			OIDCIssuerBaseURL:     oidcIssuerBaseURL,
+			ReturnTo:              returnTo,
 		}
 
 		var buf bytes.Buffer

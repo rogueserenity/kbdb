@@ -15,13 +15,16 @@ type ProfileLink struct {
 }
 
 // Profile is a user's public identity - one per user, partitioned by the
-// IdP subject (StytchUserID), no sort key.
+// IdP subject (OwnerID), no sort key.
 //
-// StytchUserID is never accepted in a request body and never appears in the
-// single-profile API/MCP response; it surfaces only as ProfileSummary.user_id
-// in the directory list, for discoverable profiles.
+// OwnerID is never accepted in a request body, but it is returned on
+// every read - as user_id on the single-profile API/MCP response and as
+// ProfileSummary.user_id in the directory list - since callers need it to
+// address the {userId}-keyed collection routes. The json:"-" here is because
+// the wire mapping lives in internal/repoapi / internal/repomcp, not because
+// the value is withheld.
 type Profile struct {
-	StytchUserID string `dynamodbav:"user_id" json:"-"`
+	OwnerID string `dynamodbav:"user_id" json:"-"`
 
 	Username string `dynamodbav:"username" json:"username"`
 
@@ -53,17 +56,17 @@ type Profile struct {
 }
 
 // ProfileRepository provides access to profiles. Reads take an explicit
-// stytchUserID (a profile is readable by anyone, subject to the caller's
+// ownerID (a profile is readable by anyone, subject to the caller's
 // discoverable check); writes read the caller from ctx, since a user can
 // only write their own profile.
 type ProfileRepository interface {
-	// Get returns the profile keyed by stytchUserID, or ErrNotFound. Applies
+	// Get returns the profile keyed by ownerID, or ErrNotFound. Applies
 	// no visibility check - the caller does that against Discoverable.
-	Get(ctx context.Context, stytchUserID string) (*Profile, error)
+	Get(ctx context.Context, ownerID string) (*Profile, error)
 
 	// ResolveUsername returns the IdP subject that owns username, or
 	// ErrNotFound.
-	ResolveUsername(ctx context.Context, username string) (stytchUserID string, err error)
+	ResolveUsername(ctx context.Context, username string) (ownerID string, err error)
 
 	// Create writes p as the caller's profile plus the { username -> user_id }
 	// claim, atomically. Returns ErrAlreadyExists (this user already has a
