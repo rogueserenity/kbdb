@@ -241,10 +241,7 @@ func (s *SwitchRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	s.Nil(sw)
 }
 
-// updatedItem mirrors an UpdateItem ALL_NEW response: the request body's
-// SET/REMOVE clauses applied on top of whatever was stored, with version
-// bumped. Tests build the "after" state directly rather than replaying the
-// expression.
+// updatedItem is a stand-in for an UpdateItem ALL_NEW response.
 func (s *SwitchRepositorySuite) updatedItem() map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
 		"user_id": &types.AttributeValueMemberS{Value: "alice"},
@@ -254,8 +251,7 @@ func (s *SwitchRepositorySuite) updatedItem() map[string]types.AttributeValue {
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
-	// No GetItem on the happy path - UpdateItem carries image_path forward
-	// by not naming it, so there's no read to merge.
+	// A bare EXPECT() on UpdateItem, no GetItem: the happy path never reads.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			key := in.Key["id"].(*types.AttributeValueMemberS)
@@ -275,8 +271,7 @@ func (s *SwitchRepositorySuite) TestUpdate_Succeeds() {
 func (s *SwitchRepositorySuite) TestUpdate_OmittedOptionalFields_AreRemoved() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
-			// manufacturer/pins/factory_lubed/notes are nil on the input
-			// struct, so each must appear in a REMOVE clause.
+			// the four nil optional fields become a REMOVE clause
 			return strings.Contains(*in.UpdateExpression, "REMOVE")
 		})).
 		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem()}, nil)
@@ -303,12 +298,10 @@ func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePath() {
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_ConcurrentDelete_ReturnsErrNotFound() {
-	// UpdateItem's attribute_exists(id) fails: the classify GetItem (which
-	// must be strongly consistent) finds nothing, so the row was deleted
-	// concurrently - 404, not 409.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
+	// The classify read must be strongly consistent (see classifySwitchConflict).
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
 			return in.ConsistentRead != nil && *in.ConsistentRead
@@ -323,9 +316,7 @@ func (s *SwitchRepositorySuite) TestUpdate_ConcurrentDelete_ReturnsErrNotFound()
 }
 
 func (s *SwitchRepositorySuite) TestUpdate_ConditionFailsButRowPresent_ReturnsErrMutationConflict() {
-	// attribute_exists(id) failed yet the consistent classify GetItem still
-	// sees the row - a concurrent write that has since completed; report the
-	// conflict rather than a false 404.
+	// Condition failed but the row is still there: a concurrent write, not a delete.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
@@ -399,8 +390,6 @@ func (s *SwitchRepositorySuite) getItemOutput() *dynamodb.GetItemOutput {
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
-	// One UpdateItem, no GetItem: image_path is a single owner-scoped
-	// attribute with no read-derived value.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			return strings.Contains(*in.UpdateExpression, "SET") &&
@@ -445,8 +434,6 @@ func (s *SwitchRepositorySuite) TestSetImagePath_NoUserIDInContext_ReturnsError(
 }
 
 func (s *SwitchRepositorySuite) TestClearImagePath_Succeeds() {
-	// REMOVE under attribute_exists(id), ALL_OLD returns the pre-image whose
-	// image_path is the cleared key.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			return strings.Contains(*in.UpdateExpression, "REMOVE") &&
@@ -465,8 +452,7 @@ func (s *SwitchRepositorySuite) TestClearImagePath_Succeeds() {
 }
 
 func (s *SwitchRepositorySuite) TestClearImagePath_ImageAlreadyAbsent_ReturnsNilWithoutError() {
-	// The REMOVE still runs (idempotent); ALL_OLD has no image_path, so
-	// there was nothing to clear - nil, nil.
+	// The REMOVE still runs; ALL_OLD without image_path means nothing was set.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{

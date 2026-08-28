@@ -97,8 +97,8 @@ type SwitchRepository interface {
 	// Delete. Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// SetImagePath sets the caller's switch's ImagePath with a single
-	// conditional UpdateItem. Returns ErrNotFound if id doesn't exist.
+	// SetImagePath sets the caller's switch's ImagePath. Returns ErrNotFound
+	// if id doesn't exist.
 	SetImagePath(ctx context.Context, id string, key SwitchImageKey) error
 
 	// ClearImagePath clears the caller's switch's ImagePath and returns the

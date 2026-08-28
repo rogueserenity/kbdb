@@ -143,17 +143,13 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 	return &sw, nil
 }
 
-// Update rewrites the caller's switch from the request body with a single
-// UpdateItem: named attributes are SET (or REMOVEd when the body omitted an
-// optional field), and image_path - which the body never carries - survives
-// by not being named.
+// Update rewrites the caller's switch from the request body. image_path is
+// left unnamed so it carries forward - the body never sets it.
 //
-// The only ConditionExpression is attribute_exists(id): a full-body PUT is
-// last-write-wins against a concurrent PUT, and the update must not
-// resurrect a row a concurrent Delete just removed. A condition failure
-// therefore means the row is gone; classifySwitchConflict re-reads with a
-// consistent GetItem to tell ErrNotFound (404) from a lagging replica that
-// still shows the row (ErrMutationConflict, 409).
+// The condition is attribute_exists(id) alone: a full-body write is
+// last-write-wins, but it must not resurrect a row a concurrent Delete just
+// removed. classifySwitchConflict turns the resulting condition failure
+// into a 404 or a 409.
 func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -206,13 +202,10 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 	return &updated, nil
 }
 
-// classifySwitchConflict resolves an UpdateItem ConditionalCheckFailed on
-// attribute_exists(id): a strongly-consistent GetItem that finds nothing
-// means the row was deleted concurrently (ErrNotFound); a row still present
-// means the failed condition raced a concurrent write that has since
-// completed (ErrMutationConflict). ConsistentRead is required here - an
-// eventually-consistent read against a lagging replica could still show a
-// just-deleted row and misreport the 404 as a 409.
+// classifySwitchConflict re-reads after an attribute_exists(id) condition
+// failure: gone -> ErrNotFound (404), still there -> ErrMutationConflict
+// (409). The read must be strongly consistent, or a lagging replica showing
+// a just-deleted row turns a 404 into a 409.
 func (r *SwitchRepository) classifySwitchConflict(ctx context.Context, ownerID, id string) error {
 	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
 		TableName:      &r.tableName,
@@ -238,10 +231,7 @@ func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
-		Key: map[string]types.AttributeValue{
-			"user_id": &types.AttributeValueMemberS{Value: ownerID},
-			"id":      &types.AttributeValueMemberS{Value: id},
-		},
+		Key:       switchKey(ownerID, id),
 	})
 	if err != nil {
 		return fmt.Errorf("deleting switch %q for owner %q: %w", id, ownerID, err)
@@ -250,7 +240,6 @@ func (r *SwitchRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-// switchKey builds the base-table primary key for a switch.
 func switchKey(ownerID, switchID string) map[string]types.AttributeValue {
 	return map[string]types.AttributeValue{
 		"user_id": &types.AttributeValueMemberS{Value: ownerID},
@@ -258,10 +247,8 @@ func switchKey(ownerID, switchID string) map[string]types.AttributeValue {
 	}
 }
 
-// setOrRemovePtr adds a SET for an optional pointer field when it's
-// populated, or a REMOVE when it's nil - so a PUT-style Update that omits an
-// optional field clears the stored attribute, matching the whole-item
-// replace semantics callers expect.
+// setOrRemovePtr SETs an optional field when set, REMOVEs it when nil, so an
+// Update that omits a field clears it rather than leaving the stale value.
 func setOrRemovePtr[T any](update expression.UpdateBuilder, name string, v *T) expression.UpdateBuilder {
 	if v == nil {
 		return update.Remove(expression.Name(name))
@@ -269,9 +256,7 @@ func setOrRemovePtr[T any](update expression.UpdateBuilder, name string, v *T) e
 	return update.Set(expression.Name(name), expression.Value(*v))
 }
 
-// SetImagePath implements repository.SwitchRepository. One UpdateItem SET
-// under attribute_exists(id) - image_path isn't version-guarded, it's a
-// single owner-scoped attribute with no read-derived value.
+// SetImagePath implements repository.SwitchRepository.
 func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -304,10 +289,8 @@ func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repo
 	return nil
 }
 
-// ClearImagePath implements repository.SwitchRepository. One UpdateItem
-// REMOVE under attribute_exists(id), with ReturnValues ALL_OLD: the
-// pre-image's image_path (or its absence) is the "what was cleared" answer,
-// so no sentinel and no read are needed to report "nothing was set".
+// ClearImagePath implements repository.SwitchRepository. ALL_OLD reports the
+// key that was cleared, or nil when nothing was set.
 func (r *SwitchRepository) ClearImagePath(ctx context.Context, id string) (*repository.SwitchImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
