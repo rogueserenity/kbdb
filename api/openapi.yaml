@@ -1518,6 +1518,7 @@ components:
       properties:
         content_type:
           type: string
+          example: image/png
           description: Open vocabulary — validated against the "image_content_type" lookup at request time.
 
     KeyboardImage:
