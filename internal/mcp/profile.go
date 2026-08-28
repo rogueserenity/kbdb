@@ -9,6 +9,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/profileread"
 	"github.com/rogueserenity/kbdb/internal/profilevalidate"
@@ -43,6 +44,16 @@ var deleteProfileTool = &mcp.Tool{
 var listProfilesTool = &mcp.Tool{
 	Name:        "list_profiles",
 	Description: "Lists discoverable profiles in the public directory, ordered by username. Returns an abbreviated shape; call get_profile with a row's user_id for a profile's full details. username and discord_username are optional begins-with prefix filters and are mutually exclusive - pass at most one.",
+}
+
+var setProfileImageTool = &mcp.Tool{
+	Name:        "set_profile_image",
+	Description: "Mints a presigned URL to upload your profile's avatar to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header. Your profile has at most one avatar; calling this again replaces it. Fails if you have no profile yet.",
+}
+
+var deleteProfileImageTool = &mcp.Tool{
+	Name:        "delete_profile_image",
+	Description: "Removes your profile's avatar. Idempotent: deleting when your profile has no avatar succeeds. Fails if you have no profile.",
 }
 
 func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[schema.GetProfileInput, schema.GetProfileOutput] {
@@ -121,8 +132,6 @@ func handleDeleteProfile(repo repository.ProfileRepository, images repository.Pr
 			return nil, schema.DeleteProfileOutput{}, errors.New("failed to delete profile")
 		}
 
-		// DB-then-S3 ordering: drop the avatar object first, hard-fail on
-		// error, matching internal/repository's single-image delete policy.
 		if p.AvatarPath != nil {
 			if err := images.Delete(ctx, *p.AvatarPath); err != nil {
 				log.FromContext(ctx).Error("deleting profile avatar object", log.Error, err, log.ProfileID, ownerID)
@@ -159,6 +168,68 @@ func handleListProfiles(repo repository.ProfileRepository) mcp.ToolHandlerFor[sc
 		}
 
 		return nil, schema.ListProfilesOutput{Profiles: items, NextCursor: nextCursor}, nil
+	}
+}
+
+func handleSetProfileImage(
+	repo repository.ProfileRepository,
+	images repository.ProfileImageStore,
+) mcp.ToolHandlerFor[schema.SetProfileImageInput, schema.SetProfileImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.SetProfileImageInput) (*mcp.CallToolResult, schema.SetProfileImageOutput, error) {
+		if fieldErr := lookup.ValidateImageContentType(ctx, in.ContentType); fieldErr != nil {
+			return nil, schema.SetProfileImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
+		}
+
+		key, err := repository.NewProfileImageKey(ctx)
+		if err != nil {
+			log.FromContext(ctx).Error("building profile image key", log.Error, err)
+			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
+		}
+
+		if mutErr := handleMutationError(ctx, repo.SetAvatarPath(ctx, key)); mutErr != nil {
+			return nil, schema.SetProfileImageOutput{}, mutErr
+		}
+
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		if err != nil {
+			log.FromContext(ctx).Error("presigning profile image upload", log.Error, err)
+			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
+		}
+
+		return nil, schema.SetProfileImageOutput{UploadURL: uploadURL}, nil
+	}
+}
+
+func handleDeleteProfileImage(
+	repo repository.ProfileRepository,
+	images repository.ProfileImageStore,
+) mcp.ToolHandlerFor[schema.DeleteProfileImageInput, schema.DeleteProfileImageOutput] {
+	return func(ctx context.Context, _ *mcp.CallToolRequest, _ schema.DeleteProfileImageInput) (*mcp.CallToolResult, schema.DeleteProfileImageOutput, error) {
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.DeleteProfileImageOutput{}, err
+		}
+
+		p, err := repo.Get(ctx, ownerID)
+		if mutErr := handleMutationError(ctx, err, log.ProfileID, ownerID); mutErr != nil {
+			return nil, schema.DeleteProfileImageOutput{}, mutErr
+		}
+
+		if p.AvatarPath == nil {
+			return nil, schema.DeleteProfileImageOutput{}, nil
+		}
+
+		if err := images.Delete(ctx, *p.AvatarPath); err != nil {
+			log.FromContext(ctx).Error("deleting profile avatar object", log.Error, err, log.ProfileID, ownerID)
+			return nil, schema.DeleteProfileImageOutput{}, errors.New("failed to delete profile image")
+		}
+
+		if _, err := repo.ClearAvatarPath(ctx); err != nil {
+			log.FromContext(ctx).Error("clearing profile avatar path", log.Error, err, log.ProfileID, ownerID)
+			return nil, schema.DeleteProfileImageOutput{}, errors.New("failed to delete profile image")
+		}
+
+		return nil, schema.DeleteProfileImageOutput{}, nil
 	}
 }
 

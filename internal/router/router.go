@@ -161,6 +161,14 @@ func New(
 	// The public directory: anonymous OK, only discoverable profiles returned.
 	mux.Handle("GET /v1/profiles",
 		middleware.OptionalAuth(verifier)(validate(handlers.ListProfiles(profileRepo, profileImageStore))))
+	// Avatar upload/removal - single-slot image, the switch pattern. Default
+	// OidcAuthorizer at the gateway; {identifier} must be the caller's own
+	// subject (authz.IsOwner), and the response to POST is a presigned S3
+	// PUT URL, not the image bytes.
+	mux.Handle("POST /v1/profile/{identifier}/image",
+		middleware.RequireAuthorizerIdentity(validate(handlers.SetProfileImage(profileRepo, profileImageStore))))
+	mux.Handle("DELETE /v1/profile/{identifier}/image",
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteProfileImage(profileRepo, profileImageStore))))
 
 	// MCP: /mcp verifies auth in-process (middleware.RequireAuth), not via
 	// API Gateway's native authorizer - see that middleware's doc comment

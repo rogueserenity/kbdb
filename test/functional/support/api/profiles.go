@@ -75,3 +75,15 @@ func (c *ProfilesClient) Update(ctx context.Context, userID, token, body string)
 func (c *ProfilesClient) Delete(ctx context.Context, userID, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodDelete, "/v1/profile/"+userID, token, nil)
 }
+
+// SetImage calls POST /v1/profile/{identifier}/image with body as the raw
+// JSON request body. The caller owns closing resp.Body.
+func (c *ProfilesClient) SetImage(ctx context.Context, identifier, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/profile/"+identifier+"/image", token, bytes.NewBufferString(body))
+}
+
+// DeleteImage calls DELETE /v1/profile/{identifier}/image. The caller owns
+// closing resp.Body.
+func (c *ProfilesClient) DeleteImage(ctx context.Context, identifier, token string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodDelete, "/v1/profile/"+identifier+"/image", token, nil)
+}

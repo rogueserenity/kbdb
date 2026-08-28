@@ -78,6 +78,28 @@ type ProfileSummary struct {
 	HasAvatar       bool    `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
 }
 
+// SetProfileImageInput is the set_profile_image tool's input. It takes no
+// user id - a write always targets the caller's own profile - and doesn't
+// carry the image bytes themselves (see UploadURL on the output).
+type SetProfileImageInput struct {
+	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+}
+
+// SetProfileImageOutput is the set_profile_image tool's output. UploadURL
+// is a presigned S3 PUT URL - the caller uploads the image bytes directly
+// to it; the tool call itself never carries image bytes.
+type SetProfileImageOutput struct {
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the avatar bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+}
+
+// DeleteProfileImageInput is the delete_profile_image tool's input. It
+// takes none: a delete always targets the caller's own profile.
+type DeleteProfileImageInput struct{}
+
+// DeleteProfileImageOutput is the delete_profile_image tool's output.
+// Deleting is idempotent, so there is no payload.
+type DeleteProfileImageOutput struct{}
+
 // Profile is a user's public identity. HasAvatar reports whether an avatar
 // is on file; MCP never serves the image itself.
 type Profile struct {

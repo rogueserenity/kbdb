@@ -38,6 +38,68 @@ func (_m *MockProfileRepository) EXPECT() *MockProfileRepository_Expecter {
 	return &MockProfileRepository_Expecter{mock: &_m.Mock}
 }
 
+// ClearAvatarPath provides a mock function for the type MockProfileRepository
+func (_mock *MockProfileRepository) ClearAvatarPath(ctx context.Context) (*repository.ProfileImageKey, error) {
+	ret := _mock.Called(ctx)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ClearAvatarPath")
+	}
+
+	var r0 *repository.ProfileImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context) (*repository.ProfileImageKey, error)); ok {
+		return returnFunc(ctx)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context) *repository.ProfileImageKey); ok {
+		r0 = returnFunc(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.ProfileImageKey)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context) error); ok {
+		r1 = returnFunc(ctx)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProfileRepository_ClearAvatarPath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ClearAvatarPath'
+type MockProfileRepository_ClearAvatarPath_Call struct {
+	*mock.Call
+}
+
+// ClearAvatarPath is a helper method to define mock.On call
+//   - ctx context.Context
+func (_e *MockProfileRepository_Expecter) ClearAvatarPath(ctx any) *MockProfileRepository_ClearAvatarPath_Call {
+	return &MockProfileRepository_ClearAvatarPath_Call{Call: _e.mock.On("ClearAvatarPath", ctx)}
+}
+
+func (_c *MockProfileRepository_ClearAvatarPath_Call) Run(run func(ctx context.Context)) *MockProfileRepository_ClearAvatarPath_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProfileRepository_ClearAvatarPath_Call) Return(profileImageKey *repository.ProfileImageKey, err error) *MockProfileRepository_ClearAvatarPath_Call {
+	_c.Call.Return(profileImageKey, err)
+	return _c
+}
+
+func (_c *MockProfileRepository_ClearAvatarPath_Call) RunAndReturn(run func(ctx context.Context) (*repository.ProfileImageKey, error)) *MockProfileRepository_ClearAvatarPath_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockProfileRepository
 func (_mock *MockProfileRepository) Create(ctx context.Context, p repository.Profile) (*repository.Profile, error) {
 	ret := _mock.Called(ctx, p)
@@ -379,6 +441,63 @@ func (_c *MockProfileRepository_ResolveUsername_Call) Return(stytchUserID string
 }
 
 func (_c *MockProfileRepository_ResolveUsername_Call) RunAndReturn(run func(ctx context.Context, username string) (string, error)) *MockProfileRepository_ResolveUsername_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// SetAvatarPath provides a mock function for the type MockProfileRepository
+func (_mock *MockProfileRepository) SetAvatarPath(ctx context.Context, key repository.ProfileImageKey) error {
+	ret := _mock.Called(ctx, key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SetAvatarPath")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.ProfileImageKey) error); ok {
+		r0 = returnFunc(ctx, key)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockProfileRepository_SetAvatarPath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetAvatarPath'
+type MockProfileRepository_SetAvatarPath_Call struct {
+	*mock.Call
+}
+
+// SetAvatarPath is a helper method to define mock.On call
+//   - ctx context.Context
+//   - key repository.ProfileImageKey
+func (_e *MockProfileRepository_Expecter) SetAvatarPath(ctx any, key any) *MockProfileRepository_SetAvatarPath_Call {
+	return &MockProfileRepository_SetAvatarPath_Call{Call: _e.mock.On("SetAvatarPath", ctx, key)}
+}
+
+func (_c *MockProfileRepository_SetAvatarPath_Call) Run(run func(ctx context.Context, key repository.ProfileImageKey)) *MockProfileRepository_SetAvatarPath_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 repository.ProfileImageKey
+		if args[1] != nil {
+			arg1 = args[1].(repository.ProfileImageKey)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProfileRepository_SetAvatarPath_Call) Return(err error) *MockProfileRepository_SetAvatarPath_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockProfileRepository_SetAvatarPath_Call) RunAndReturn(run func(ctx context.Context, key repository.ProfileImageKey) error) *MockProfileRepository_SetAvatarPath_Call {
 	_c.Call.Return(run)
 	return _c
 }

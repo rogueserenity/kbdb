@@ -10,6 +10,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
+	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/profileread"
 	"github.com/rogueserenity/kbdb/internal/profilevalidate"
@@ -232,10 +233,8 @@ func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileI
 // DeleteProfile removes the caller's profile. {identifier} must be the
 // caller's own subject (anything else is 404, not 403). A leaf delete -
 // nothing references a Profile - so no cascade; it only makes the user
-// undiscoverable. If an avatar is on file, its object is removed first
-// (DB-then-S3 ordering, matching the single-image delete policy in
-// internal/repository); a failed object delete aborts before the DB
-// delete. Idempotent: no profile is still 204.
+// undiscoverable. Any avatar object is removed too. Idempotent: no profile
+// is still 204.
 func DeleteProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.PathValue("identifier")
@@ -265,6 +264,99 @@ func DeleteProfile(repo repository.ProfileRepository, images repository.ProfileI
 		}
 
 		if handleMutationError(w, r, repo.Delete(r.Context()), log.ProfileID, userID) {
+			return
+		}
+
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// SetProfileImage sets (or replaces) the caller's avatar. {identifier} must
+// be the caller's own subject; anything else - a username, another user's
+// subject - is 404, as is a caller with no profile yet (both not 403).
+// Doesn't upload the image itself: the response is a presigned S3 PUT URL
+// the client uploads directly to. The repository mutation (which checks the
+// profile exists) runs before presigning, so a 404 doesn't pay for a
+// wasted S3 round trip. The avatar is a single fixed key, so a re-upload
+// overwrites in place - no need to delete first.
+func SetProfileImage(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.PathValue("identifier")
+
+		if !authz.IsOwner(r.Context(), userID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		var in api.SetProfileImageJSONRequestBody
+		if err := json.NewDecoder(r.Body).Decode(&in); err != nil {
+			problem.BadRequest(w, "invalid request body")
+			return
+		}
+
+		if fieldErr := lookup.ValidateImageContentType(r.Context(), in.ContentType); fieldErr != nil {
+			problem.ValidationFailed(w, "one or more fields are not approved lookup values", []problem.InvalidParam{
+				{Name: "content_type", Reason: fmt.Sprintf("%q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)},
+			})
+			return
+		}
+
+		key, err := repository.NewProfileImageKey(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("building profile image key", log.Error, err, log.ProfileID, userID)
+			problem.Internal(w, "failed to set profile image")
+			return
+		}
+
+		if handleMutationError(w, r, repo.SetAvatarPath(r.Context(), key), log.ProfileID, userID) {
+			return
+		}
+
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		if err != nil {
+			log.FromContext(r.Context()).Error("presigning profile image upload", log.Error, err, log.ProfileID, userID)
+			problem.Internal(w, "failed to set profile image")
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(api.ProfileImageUpload{UploadUrl: uploadURL})
+	}
+}
+
+// DeleteProfileImage removes the caller's avatar. {identifier} must be the
+// caller's own subject; anything else - a username, another user's subject,
+// a caller with no profile - is 404 (not 403). Idempotent: a profile with
+// no avatar set is still 204. Deletes the S3 object before the DB record,
+// same retry-safety reasoning as the single-image delete policy in
+// internal/repository.
+func DeleteProfileImage(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := r.PathValue("identifier")
+
+		if !authz.IsOwner(r.Context(), userID) {
+			problem.NotFound(w, "resource not found")
+			return
+		}
+
+		p, err := repo.Get(r.Context(), userID)
+		if handleMutationError(w, r, err, log.ProfileID, userID) {
+			return
+		}
+
+		if p.AvatarPath == nil {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+
+		if err := images.Delete(r.Context(), *p.AvatarPath); err != nil {
+			log.FromContext(r.Context()).Error("deleting profile avatar object", log.Error, err, log.ProfileID, userID)
+			problem.Internal(w, "failed to delete profile image")
+			return
+		}
+
+		if _, err := repo.ClearAvatarPath(r.Context()); handleMutationError(w, r, err, log.ProfileID, userID) {
 			return
 		}
 
