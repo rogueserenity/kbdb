@@ -498,6 +498,22 @@ Resources:
             Method: get
             Auth:
               Authorizer: NONE
+        # Avatar upload/removal. Default OidcAuthorizer applies (no anonymous
+        # override) - {identifier} must be the caller's own subject, checked
+        # at the app layer by authz.IsOwner. The avatar objects reuse the
+        # existing ImagesBucket IAM statement (${ImagesBucket.Arn}/*).
+        SetProfileImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profile/{identifier}/image
+            Method: post
+        DeleteProfileImageEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/profile/{identifier}/image
+            Method: delete
         # Auth: NONE at the gateway (security: [{}, CognitoAuth] in
         # api/openapi.yaml - anonymous callers are allowed); the app enforces
         # per-item visibility itself via middleware.OptionalAuth and

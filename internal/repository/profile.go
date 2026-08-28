@@ -87,6 +87,17 @@ type ProfileRepository interface {
 	// At most one of usernamePrefix / discordPrefix may be set (the caller
 	// enforces this), each a begins_with filter on its directory index.
 	ListPublic(ctx context.Context, usernamePrefix, discordPrefix string, limit int, cursor string) ([]Profile, string, error)
+
+	// SetAvatarPath sets the caller's profile's AvatarPath to key. Returns
+	// ErrNotFound if the caller has no profile. Goes through the same
+	// whole-item rewrite as Update, so the directory-GSI keys and every
+	// other field carry forward untouched.
+	SetAvatarPath(ctx context.Context, key ProfileImageKey) error
+
+	// ClearAvatarPath clears the caller's profile's AvatarPath and returns
+	// the key that was cleared, or nil if it was already unset (idempotent,
+	// not an error). Returns ErrNotFound if the caller has no profile.
+	ClearAvatarPath(ctx context.Context) (*ProfileImageKey, error)
 }
 
 // ProfileImageKey is the object key a profile's avatar is stored under.

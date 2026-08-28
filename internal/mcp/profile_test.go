@@ -431,3 +431,144 @@ func (s *HandleListProfilesSuite) TestInvalidCursor_Error() {
 
 	s.Require().Error(err)
 }
+
+type HandleSetProfileImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+}
+
+func TestHandleSetProfileImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleSetProfileImageSuite))
+}
+
+func (s *HandleSetProfileImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+}
+
+func (s *HandleSetProfileImageSuite) call(in schema.SetProfileImageInput) (schema.SetProfileImageOutput, error) {
+	_, out, err := handleSetProfileImage(s.mockRepo, s.mockImages)(callerContext(s.T()), nil, in)
+	return out, err
+}
+
+func (s *HandleSetProfileImageSuite) avatarKey() repository.ProfileImageKey {
+	return repository.ProfileImageKey("profiles/" + callerID + "/avatar")
+}
+
+func (s *HandleSetProfileImageSuite) TestValid_ReturnsUploadURL() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+		Return("https://example.com/put", nil)
+
+	out, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/put", out.UploadURL)
+}
+
+func (s *HandleSetProfileImageSuite) TestUnapprovedContentType_ErrorNoRepoCall() {
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "application/pdf"})
+
+	s.Require().Error(err)
+	s.mockRepo.AssertNotCalled(s.T(), "SetAvatarPath", mock.Anything, mock.Anything)
+}
+
+func (s *HandleSetProfileImageSuite) TestNoProfile_NotFoundError() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(repository.ErrNotFound)
+
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleSetProfileImageSuite) TestMutationConflict_RetryableError() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(repository.ErrMutationConflict)
+
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleSetProfileImageSuite) TestPresignError_GenericError() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+		Return("", errors.New("s3 down"))
+
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+
+	s.Require().Error(err)
+}
+
+type HandleDeleteProfileImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+}
+
+func TestHandleDeleteProfileImageSuite(t *testing.T) {
+	suite.Run(t, new(HandleDeleteProfileImageSuite))
+}
+
+func (s *HandleDeleteProfileImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+}
+
+func (s *HandleDeleteProfileImageSuite) call() error {
+	_, _, err := handleDeleteProfileImage(s.mockRepo, s.mockImages)(callerContext(s.T()), nil, schema.DeleteProfileImageInput{})
+	return err
+}
+
+func (s *HandleDeleteProfileImageSuite) avatarKey() repository.ProfileImageKey {
+	return repository.ProfileImageKey("profiles/" + callerID + "/avatar")
+}
+
+func (s *HandleDeleteProfileImageSuite) TestDeletesAvatar_S3BeforeDB() {
+	key := s.avatarKey()
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+
+	var order []string
+	s.mockImages.EXPECT().Delete(mock.Anything, key).
+		Run(func(context.Context, repository.ProfileImageKey) { order = append(order, "s3") }).
+		Return(nil)
+	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).
+		Run(func(context.Context) { order = append(order, "db") }).
+		Return(&key, nil)
+
+	s.Require().NoError(s.call())
+	s.Equal([]string{"s3", "db"}, order)
+}
+
+func (s *HandleDeleteProfileImageSuite) TestNoAvatar_IdempotentNoS3Call() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice"}, nil)
+
+	s.Require().NoError(s.call())
+	s.mockImages.AssertNotCalled(s.T(), "Delete", mock.Anything, mock.Anything)
+}
+
+func (s *HandleDeleteProfileImageSuite) TestNoProfile_NotFoundError() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).Return(nil, repository.ErrNotFound)
+
+	s.Require().Error(s.call())
+}
+
+func (s *HandleDeleteProfileImageSuite) TestS3DeleteFails_ErrorNoDBClear() {
+	key := s.avatarKey()
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{StytchUserID: callerID, Username: "alice", AvatarPath: &key}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 down"))
+
+	s.Require().Error(s.call())
+	s.mockRepo.AssertNotCalled(s.T(), "ClearAvatarPath", mock.Anything)
+}
+
+func (s *HandleDeleteProfileImageSuite) TestGetError_GenericError() {
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).Return(nil, errors.New("dynamo down"))
+
+	s.Require().Error(s.call())
+}

@@ -630,6 +630,72 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
+  /v1/profile/{identifier}/image:
+    parameters:
+      - $ref: "#/components/parameters/ProfileIdentifier"
+    post:
+      tags: [profiles]
+      summary: Set (or replace) the caller's avatar
+      operationId: setProfileImage
+      description: >
+        identifier must be the caller's own IdP subject (not a username) —
+        setting an avatar for anyone else, or when the caller has no
+        profile, always returns 404. A profile has at most one avatar —
+        calling this again replaces it, no need to delete first. Does not
+        upload the image itself: the response is a presigned S3 PUT URL the
+        client uploads the actual image bytes to directly. The presigned URL
+        requires the exact content_type given here on the upload — this lets
+        the API reject an unsupported content_type up front, before ever
+        issuing a presigned URL, and lets S3 reject an upload that doesn't
+        match what was requested.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type]
+              properties:
+                content_type:
+                  type: string
+                  description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+      responses:
+        "201":
+          description: >
+            An avatar slot has been allocated; upload the image bytes to
+            upload_url (HTTP PUT, with a Content-Type header matching the
+            content_type given in the request) to complete it.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileImageUpload"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [profiles]
+      summary: Remove the caller's avatar
+      operationId: deleteProfileImage
+      description: >
+        identifier must be the caller's own IdP subject (not a username) —
+        removing an avatar for anyone else, or when the caller has no
+        profile, always returns 404. Idempotent: a profile with no avatar
+        set still returns 204.
+      responses:
+        "204":
+          description: Deleted, or the profile had no avatar.
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
   /v1/users/{userId}/keycap-sets:
     parameters:
       - $ref: "#/components/parameters/UserId"

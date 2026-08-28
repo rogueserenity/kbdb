@@ -73,3 +73,23 @@ func listProfileUsernames(out listProfilesOutput) []string {
 	}
 	return names
 }
+
+// approvedImageContentType is a value seeded in the image_content_type
+// lookup category.
+const approvedImageContentType = "image/png"
+
+type setProfileImageOutput struct {
+	UploadURL string `json:"upload_url"`
+}
+
+func decodeSetProfileImageOutput(result *sdkmcp.CallToolResult) setProfileImageOutput {
+	GinkgoHelper()
+
+	raw, err := json.Marshal(result.StructuredContent)
+	Expect(err).NotTo(HaveOccurred())
+
+	var out setProfileImageOutput
+	Expect(json.Unmarshal(raw, &out)).To(Succeed())
+
+	return out
+}

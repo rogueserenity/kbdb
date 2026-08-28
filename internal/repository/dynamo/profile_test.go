@@ -465,6 +465,112 @@ func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflictExhaustsRetries_Re
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 }
 
+func (s *ProfileRepositorySuite) TestSetAvatarPath_NoUserID_ReturnsErrNoUserID() {
+	err := s.repo.SetAvatarPath(s.T().Context(), "profiles/user-alice/avatar")
+
+	s.Require().ErrorIs(err, repository.ErrNoUserID)
+}
+
+func (s *ProfileRepositorySuite) TestSetAvatarPath_SetsKeyViaWholeItemPut() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, map[string]types.AttributeValue{
+			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
+			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
+			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
+			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
+		}), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar")
+	s.Require().NoError(err)
+
+	// Only the profile item is written - no username change, so no claim moves.
+	s.Require().Len(captured.TransactItems, 1)
+	item := captured.TransactItems[0].Put.Item
+	s.Equal("profiles/user-alice/avatar", item["avatar_path"].(*types.AttributeValueMemberS).Value)
+
+	// The whole-item Put must not drop the sparse-GSI attributes or username
+	// when it only touches avatar_path.
+	s.Equal("1", item["discoverable_pk"].(*types.AttributeValueMemberS).Value)
+	s.Equal("1", item["discord_pk"].(*types.AttributeValueMemberS).Value)
+	s.Equal("alice_kb", item["discord_username_lc"].(*types.AttributeValueMemberS).Value)
+	s.Equal("alice", item["username"].(*types.AttributeValueMemberS).Value)
+}
+
+func (s *ProfileRepositorySuite) TestSetAvatarPath_NoProfile_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar")
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *ProfileRepositorySuite) TestClearAvatarPath_NoUserID_ReturnsErrNoUserID() {
+	_, err := s.repo.ClearAvatarPath(s.T().Context())
+
+	s.Require().ErrorIs(err, repository.ErrNoUserID)
+}
+
+func (s *ProfileRepositorySuite) TestClearAvatarPath_ClearsKeyAndReturnsIt_KeepingSparseGSIAttrs() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, map[string]types.AttributeValue{
+			"avatar_path":         &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar"},
+			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
+			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
+			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
+			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
+		}), nil)
+
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	cleared, err := s.repo.ClearAvatarPath(s.updateCtx())
+	s.Require().NoError(err)
+	s.Require().NotNil(cleared)
+	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar"), *cleared)
+
+	item := captured.TransactItems[0].Put.Item
+	s.NotContains(item, "avatar_path")
+	s.Equal("1", item["discoverable_pk"].(*types.AttributeValueMemberS).Value)
+	s.Equal("1", item["discord_pk"].(*types.AttributeValueMemberS).Value)
+	s.Equal("alice_kb", item["discord_username_lc"].(*types.AttributeValueMemberS).Value)
+	s.Equal("alice", item["username"].(*types.AttributeValueMemberS).Value)
+}
+
+func (s *ProfileRepositorySuite) TestClearAvatarPath_NoAvatarSet_ReturnsNilWithoutWriting() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfileItem(0, nil), nil)
+	// No EXPECT() on TransactWriteItems - an absent avatar is a no-op, not a write.
+
+	cleared, err := s.repo.ClearAvatarPath(s.updateCtx())
+
+	s.Require().NoError(err)
+	s.Nil(cleared)
+}
+
+func (s *ProfileRepositorySuite) TestClearAvatarPath_NoProfile_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	cleared, err := s.repo.ClearAvatarPath(s.updateCtx())
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(cleared)
+}
+
 func (s *ProfileRepositorySuite) TestDelete_NoUserID_ReturnsErrNoUserID() {
 	err := s.repo.Delete(s.T().Context())
 

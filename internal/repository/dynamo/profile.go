@@ -192,6 +192,61 @@ func (r *ProfileRepository) Update(ctx context.Context, p repository.Profile) (*
 	return updated, nil
 }
 
+// errProfileAvatarAlreadyAbsent signals ClearAvatarPath's mutateProfile
+// closure found no AvatarPath set - ClearAvatarPath treats this as success,
+// not an error. Mirrors errSwitchImageAlreadyAbsent.
+var errProfileAvatarAlreadyAbsent = errors.New("avatar already absent from profile")
+
+// SetAvatarPath implements repository.ProfileRepository.
+func (r *ProfileRepository) SetAvatarPath(ctx context.Context, key repository.ProfileImageKey) error {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return fmt.Errorf("setting avatar path: %w", repository.ErrNoUserID)
+	}
+
+	_, err := r.mutateProfile(ctx, ownerID, func(p *repository.Profile) error {
+		p.AvatarPath = &key
+		return nil
+	})
+	if errors.Is(err, repository.ErrNotFound) {
+		return repository.ErrNotFound
+	}
+	if err != nil {
+		return fmt.Errorf("setting avatar path for user %q: %w", ownerID, err)
+	}
+
+	return nil
+}
+
+// ClearAvatarPath implements repository.ProfileRepository.
+func (r *ProfileRepository) ClearAvatarPath(ctx context.Context) (*repository.ProfileImageKey, error) {
+	ownerID, ok := kbdbctx.UserID(ctx)
+	if !ok {
+		return nil, fmt.Errorf("clearing avatar path: %w", repository.ErrNoUserID)
+	}
+
+	var cleared *repository.ProfileImageKey
+	_, err := r.mutateProfile(ctx, ownerID, func(p *repository.Profile) error {
+		if p.AvatarPath == nil {
+			return errProfileAvatarAlreadyAbsent
+		}
+		cleared = p.AvatarPath
+		p.AvatarPath = nil
+		return nil
+	})
+	if errors.Is(err, errProfileAvatarAlreadyAbsent) {
+		return nil, nil //nolint:nilnil // no avatar already set is a valid, expected result
+	}
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil, repository.ErrNotFound
+	}
+	if err != nil {
+		return nil, fmt.Errorf("clearing avatar path for user %q: %w", ownerID, err)
+	}
+
+	return cleared, nil
+}
+
 // mutateProfile is a Version-based CAS retry loop like
 // [(*SwitchRepository).mutateSwitch], except the rewrite is a
 // TransactWriteItems: when mutate changes Username, the { username ->

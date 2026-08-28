@@ -14,6 +14,7 @@ import (
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -676,4 +677,233 @@ func (s *ListProfilesSuite) TestInvalidCursor_400() {
 
 	s.Equal(http.StatusBadRequest, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+type SetProfileImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+	handler    http.HandlerFunc
+}
+
+func TestSetProfileImageSuite(t *testing.T) {
+	suite.Run(t, new(SetProfileImageSuite))
+}
+
+func (s *SetProfileImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+	s.handler = SetProfileImage(s.mockRepo, s.mockImages)
+}
+
+func (s *SetProfileImageSuite) newRequest(ctx context.Context, identifier, body string) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/v1/profile/"+identifier+"/image", strings.NewReader(body))
+	req.SetPathValue("identifier", identifier)
+	return req
+}
+
+func (s *SetProfileImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "user-alice")
+}
+
+const setProfileImageTestKey = repository.ProfileImageKey("profiles/user-alice/avatar")
+
+func (s *SetProfileImageSuite) TestSucceeds() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusCreated, rec.Code)
+	s.Equal("application/json", rec.Header().Get("Content-Type"))
+	var got struct {
+		UploadURL string `json:"upload_url"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Equal("https://example.com/presigned-put", got.UploadURL)
+}
+
+func (s *SetProfileImageSuite) TestNotOwner_404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "user-bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetProfileImageSuite) TestUsernameIdentifier_404() {
+	// A username can never be the caller's own subject, so authz.IsOwner
+	// rejects it - writes address the profile by IdP subject only.
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *SetProfileImageSuite) TestAnonymous_404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context(), "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *SetProfileImageSuite) TestInvalidBody_400() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", "not json"))
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetProfileImageSuite) TestUnapprovedContentType_400() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"application/pdf"}`))
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("content_type", got.InvalidParams[0].Name)
+}
+
+func (s *SetProfileImageSuite) TestNoProfile_404() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *SetProfileImageSuite) TestMutationConflict_409() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrMutationConflict)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusConflict, rec.Code)
+}
+
+func (s *SetProfileImageSuite) TestPresignError_500() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+type DeleteProfileImageSuite struct {
+	suite.Suite
+
+	mockRepo   *mocks.MockProfileRepository
+	mockImages *mocks.MockProfileImageStore
+	handler    http.HandlerFunc
+}
+
+func TestDeleteProfileImageSuite(t *testing.T) {
+	suite.Run(t, new(DeleteProfileImageSuite))
+}
+
+func (s *DeleteProfileImageSuite) SetupTest() {
+	s.mockRepo = mocks.NewMockProfileRepository(s.T())
+	s.mockImages = mocks.NewMockProfileImageStore(s.T())
+	s.handler = DeleteProfileImage(s.mockRepo, s.mockImages)
+}
+
+func (s *DeleteProfileImageSuite) newRequest(ctx context.Context) *http.Request {
+	req := httptest.NewRequestWithContext(ctx, http.MethodDelete, "/v1/profile/user-alice/image", nil)
+	req.SetPathValue("identifier", "user-alice")
+	return req
+}
+
+func (s *DeleteProfileImageSuite) ownerCtx() context.Context {
+	return kbdbctx.WithUserID(s.T().Context(), "user-alice")
+}
+
+var deleteProfileImageTestKey = repository.ProfileImageKey("profiles/user-alice/avatar")
+
+func (s *DeleteProfileImageSuite) TestSucceeds() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).Return(nil)
+	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(&deleteProfileImageTestKey, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteProfileImageSuite) TestNoAvatar_204_WithoutS3Call() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice"}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
+func (s *DeleteProfileImageSuite) TestNotOwner_404() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "user-bob")
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteProfileImageSuite) TestAnonymous_404() {
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+}
+
+func (s *DeleteProfileImageSuite) TestNoProfile_404() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNotFound, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
+func (s *DeleteProfileImageSuite) TestS3DeleteError_500_DoesNotClearDBRecord() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).
+		Return(errors.New("s3: access denied"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	// No .EXPECT() for ClearAvatarPath - the DB record must survive so a
+	// retry can re-attempt the S3 delete.
+}
+
+func (s *DeleteProfileImageSuite) TestMutationConflict_409() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{StytchUserID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).Return(nil)
+	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(nil, repository.ErrMutationConflict)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusConflict, rec.Code)
 }
