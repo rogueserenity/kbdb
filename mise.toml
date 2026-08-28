@@ -69,3 +69,8 @@ file = "scripts/func-test.sh"
 alias = "cx"
 description = "Generate a TypeScript client from api/openapi.yaml into ts-client/ (dev-only scratch dir, requires Docker)"
 file = "scripts/client-gen.sh"
+
+[tasks.migrate-build]
+alias = "mb"
+description = "Build the kbdb-migrate dump/restore CLI into bin/ (not covered by sam build)"
+file = "scripts/migrate-build.sh"
