@@ -207,6 +207,20 @@ func (s *CreateBuildSuite) TestCreateBuild_AlreadyExists_Returns409() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *CreateBuildSuite) TestCreateBuild_MutationConflict_Returns409() {
+	s.stubOwnedKeyboard()
+	s.mockBuildRepo.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	req := s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 func (s *CreateBuildSuite) TestCreateBuild_RepositoryError_Returns500() {
 	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().

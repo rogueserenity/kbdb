@@ -277,6 +277,20 @@ func (s *CreateProfileSuite) TestUsernameTaken_409_UsernameUnavailableType() {
 	s.Equal(`the username "alice" is already taken`, body.Detail)
 }
 
+func (s *CreateProfileSuite) TestMutationConflict_409_ConflictType() {
+	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	rec := s.post("user-alice", validInput())
+
+	s.Equal(http.StatusConflict, rec.Code)
+	var body struct {
+		Type string `json:"type"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
+	s.Equal("https://mykeebs.info/errors/conflict", body.Type)
+}
+
 func (s *CreateProfileSuite) TestRepoError_500() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamo down"))

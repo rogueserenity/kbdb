@@ -179,6 +179,15 @@ func (s *HandleCreateProfileSuite) TestUsernameTaken_Error() {
 	s.Equal(`username "alice" is already taken`, err.Error())
 }
 
+func (s *HandleCreateProfileSuite) TestMutationConflict_Error() {
+	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+
+	s.Require().ErrorIs(err, errMutationConflict)
+}
+
 func (s *HandleCreateProfileSuite) TestRepoError_GenericError() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamo down"))

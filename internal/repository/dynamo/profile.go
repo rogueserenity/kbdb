@@ -147,18 +147,18 @@ func mapProfileCreateConflict(err error) error {
 		return nil
 	}
 
-	failed := func(i int, code string) bool {
+	failed := func(i int) bool {
 		return i < len(txErr.CancellationReasons) &&
 			txErr.CancellationReasons[i].Code != nil &&
-			*txErr.CancellationReasons[i].Code == code
+			*txErr.CancellationReasons[i].Code == "ConditionalCheckFailed"
 	}
 
 	switch {
-	case failed(0, "ConditionalCheckFailed"):
+	case failed(0):
 		return repository.ErrAlreadyExists
-	case failed(1, "ConditionalCheckFailed"):
+	case failed(1):
 		return repository.ErrUsernameTaken
-	case failed(0, "TransactionConflict"), failed(1, "TransactionConflict"):
+	case hasCancellationReason(err, "TransactionConflict"):
 		return repository.ErrMutationConflict
 	default:
 		return nil
