@@ -94,15 +94,33 @@ var _ = Describe("Listing profiles over MCP", func() {
 		})
 
 		Context("given a username prefix filter", func() {
-			When("list_profiles is called", func() {
-				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "list_profiles", map[string]any{"username": discoverableName})
-				})
+			Context("given the prefix is given verbatim", func() {
+				When("list_profiles is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "list_profiles", map[string]any{"username": discoverableName})
+					})
 
-				It("returns only the matching discoverable profile", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.IsError).To(BeFalse())
-					Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ConsistOf(discoverableName))
+					It("returns only the matching discoverable profile", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+						Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ConsistOf(discoverableName))
+					})
+				})
+			})
+
+			Context("given the prefix is uppercased", func() {
+				When("list_profiles is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "list_profiles", map[string]any{
+							"username": strings.ToUpper(discoverableName),
+						})
+					})
+
+					It("still matches the all-lowercase stored username", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+						Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ConsistOf(discoverableName))
+					})
 				})
 			})
 		})

@@ -584,8 +584,9 @@ var directoryIndexKeys = map[string]map[string]struct{}{
 }
 
 // ListPublic implements repository.ProfileRepository. discordPrefix routes
-// to the discord index (begins_with, lowercased), else the username index;
-// the handler guarantees at most one prefix. A bad cursor, or one minted
+// to the discord index, else the username index; either prefix is
+// lowercased before the begins_with, matching the all-lowercase stored
+// sort keys. The handler guarantees at most one prefix. A bad cursor, or one minted
 // under a different index or prefix filter than the current call, is
 // repository.ErrInvalidCursor.
 func (r *ProfileRepository) ListPublic(
@@ -600,10 +601,10 @@ func (r *ProfileRepository) ListPublic(
 	}
 
 	indexName := discoverableUsernameIndex
-	activePrefix := usernamePrefix
+	activePrefix := strings.ToLower(usernamePrefix)
 	keyCond := expression.Key("discoverable_pk").Equal(expression.Value(directoryPKValue))
 	if usernamePrefix != "" {
-		keyCond = keyCond.And(expression.KeyBeginsWith(expression.Key("username"), usernamePrefix))
+		keyCond = keyCond.And(expression.KeyBeginsWith(expression.Key("username"), activePrefix))
 	}
 	if discordPrefix != "" {
 		indexName = discoverableDiscordIndex

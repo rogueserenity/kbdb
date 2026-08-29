@@ -956,6 +956,27 @@ func (s *ProfileRepositorySuite) TestListPublic_UsernamePrefix_AddsBeginsWith() 
 	s.Equal("alice", profiles[0].Username)
 }
 
+func (s *ProfileRepositorySuite) TestListPublic_UsernamePrefix_Lowercased() {
+	// Stored usernames are all-lowercase, so a mixed-case caller prefix
+	// must be lowercased before the begins_with or it matches nothing.
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return *in.IndexName == "DiscoverableUsernameIndex" &&
+				containsAttrName(in.ExpressionAttributeNames, "username") &&
+				exprValuesContainS(in.ExpressionAttributeValues, "al") // lowercased
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{discoverableRow("user-alice", "alice")},
+		}, nil).Twice()
+
+	for _, prefix := range []string{"Al", "AL"} {
+		profiles, _, err := s.repo.ListPublic(s.T().Context(), prefix, "", 20, "")
+		s.Require().NoError(err)
+		s.Require().Len(profiles, 1)
+		s.Equal("alice", profiles[0].Username)
+	}
+}
+
 func (s *ProfileRepositorySuite) TestListPublic_DiscordPrefix_UsesDiscordIndex_Lowercased() {
 	s.mockClient.EXPECT().
 		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
