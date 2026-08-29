@@ -1806,10 +1806,13 @@ components:
       properties:
         username:
           type: string
-          pattern: "^[a-z0-9_-]{3,20}$"
+          pattern: "^[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]$"
           description: >
-            Lowercase letters, digits, hyphen, underscore; 3–20 characters;
-            never starting with "user-". Unique across all profiles,
+            Lowercase letters, digits, hyphen, period, underscore; 3–32
+            characters; no leading/trailing period, hyphen, or underscore;
+            no consecutive periods; never starting with "user-". A
+            Discord-compatible superset, so any Discord @handle (3+ chars)
+            is a valid username. Unique across all profiles,
             case-sensitively (the charset has no uppercase). Used as
             /u/{username} in the frontend and as an identifier on
             GET /v1/profile/{identifier}.

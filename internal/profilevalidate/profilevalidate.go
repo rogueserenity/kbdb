@@ -26,9 +26,16 @@ const (
 	maxBio      = 500
 )
 
-// usernamePattern mirrors ProfileInput.username in api/openapi.yaml; the
-// "user-" prefix ban is a separate check.
-var usernamePattern = regexp.MustCompile(`^[a-z0-9_-]{3,20}$`)
+// usernamePattern mirrors ProfileInput.username in api/openapi.yaml: the
+// Discord-handle rule plus hyphen and a 3-char minimum, so every valid
+// Discord username is also a valid kbdb username. RE2 has no lookahead, so
+// the no-consecutive-periods rule is a separate strings.Contains check and
+// the "user-" prefix ban is a separate check.
+var usernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]$`)
+
+func validUsername(s string) bool {
+	return usernamePattern.MatchString(s) && !strings.Contains(s, "..")
+}
 
 var discordUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.]{0,30}[a-z0-9]$`)
 
@@ -52,10 +59,10 @@ func Normalize(p *repository.Profile) {
 func Validate(p repository.Profile) []FieldError {
 	var errs []FieldError
 
-	if !usernamePattern.MatchString(p.Username) {
+	if !validUsername(p.Username) {
 		errs = append(errs, FieldError{
 			Name:   "username",
-			Reason: "must be 3-20 characters of lowercase letters, digits, hyphen, or underscore",
+			Reason: "must be 3-32 characters of lowercase letters, digits, hyphen, period, or underscore, not starting or ending with a period, hyphen, or underscore, with no consecutive periods",
 		})
 	} else if strings.HasPrefix(p.Username, "user-") {
 		errs = append(errs, FieldError{

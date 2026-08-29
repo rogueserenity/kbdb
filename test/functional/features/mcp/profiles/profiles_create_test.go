@@ -64,6 +64,31 @@ var _ = Describe("Creating a profile over MCP", func() {
 			})
 		})
 
+		Context("given a username containing a period and a hyphen", func() {
+			BeforeEach(func() {
+				username = "my.kb-" + uuid.NewString()[:8]
+			})
+
+			When("create_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_profile", map[string]any{
+						"username":     username,
+						"discoverable": true,
+					})
+				})
+
+				It("creates the profile and it is then readable by that username", func(ctx SpecContext) {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					read, readErr := client.CallTool(ctx, "get_profile", map[string]any{"identifier": username})
+					Expect(readErr).NotTo(HaveOccurred())
+					Expect(read.IsError).To(BeFalse())
+					Expect(decodeGetProfileOutput(read).Profile.Username).To(Equal(username))
+				})
+			})
+		})
+
 		Context("given a blank discord_username", func() {
 			When("create_profile is called", func() {
 				BeforeEach(func(ctx SpecContext) {
@@ -120,6 +145,10 @@ var _ = Describe("Creating a profile over MCP", func() {
 			},
 			Entry("username fails the pattern", map[string]any{"username": "AB"}),
 			Entry(`username starts with "user-"`, map[string]any{"username": "user-alice"}),
+			Entry("username has a leading period", map[string]any{"username": ".lead"}),
+			Entry("username has a trailing underscore", map[string]any{"username": "trail_"}),
+			Entry("username has consecutive periods", map[string]any{"username": "a..b"}),
+			Entry("username is over 32 characters", map[string]any{"username": strings.Repeat("x", 33)}),
 			Entry("a link url is http not https", map[string]any{
 				"username": "aaa",
 				"links":    []map[string]any{{"name": "s", "url": "http://x.example"}},
