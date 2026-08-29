@@ -19,10 +19,8 @@ type KeycapKitPurchase struct {
 
 // KeycapKit is one purchase within a KeycapSet (e.g. "Base", "Extension").
 // KitID is server-generated and unique within its parent set, not globally.
-// It's kept as a field here (not just the Kits map's key) so callers that
-// already have a KeycapKit value - e.g. AggregateOrderStatus, or a mapping
-// helper that only sees one entry at a time - don't need the parent map to
-// learn it.
+// Kept as a field too (not just the Kits map's key), so a single KeycapKit
+// value is still self-describing.
 type KeycapKit struct {
 	KitID     string             `dynamodbav:"kit_id" json:"kit_id"`
 	Name      string             `dynamodbav:"name" json:"name"`
@@ -43,15 +41,11 @@ type KeycapSet struct {
 	Material   *string    `dynamodbav:"material,omitempty" json:"material,omitempty"`
 	Notes      *string    `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility Visibility `dynamodbav:"visibility" json:"visibility"`
-	// Kits is stored as a DynamoDB map keyed by KitID (not a list), so a
-	// single kit can be addressed directly (kits.<kit_id>) by an UpdateItem
-	// call instead of requiring a whole-item read-modify-write. No
-	// display-order requirement exists today - if one appears, add a seq
-	// field to KeycapKit rather than switching back to a list.
+	// Keyed by KitID, so a single kit is addressable via UpdateItem
+	// (kits.<kit_id>) without a whole-item read-modify-write.
 	Kits map[string]KeycapKit `dynamodbav:"kits,omitempty" json:"kits,omitempty"`
-	// PrimaryKitID names the kit (by KitID) whose image represents this set
-	// in a list/grid view. Reads must still treat a dangling reference (kit
-	// deleted, or never set) as absent rather than erroring.
+	// PrimaryKitID names the kit whose image represents this set in a
+	// list/grid view. Reads must treat a dangling reference as absent.
 	PrimaryKitID *string `dynamodbav:"primary_kit_id,omitempty" json:"primary_kit_id,omitempty"`
 }
 
@@ -157,22 +151,16 @@ type KeycapSetRepository interface {
 
 	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist.
 	// primary controls the set's PrimaryKitID: nil leaves it untouched,
-	// true makes this kit primary (replacing whichever kit held it
-	// before), false clears it but only if this kit is the current primary
-	// - that clear isn't atomic with the rest of the update (DynamoDB can't
-	// express a value-conditional REMOVE alongside unconditional actions in
-	// one UpdateItem), but is safe even if lost to a race: PrimaryKitID's
-	// read path already tolerates a dangling reference as absent.
+	// true makes this kit primary, false clears it but only if this kit is
+	// the current primary - not atomic with the rest of the update, and
+	// never fails the call on its own (PrimaryKitID's read path tolerates
+	// a dangling reference as absent).
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
 	// DeleteKit removes the kit matching kitID from setID's Kits. Callers
 	// clean up any image it had in a KeycapKitImageStore themselves, before
 	// calling DeleteKit. If kitID was the set's PrimaryKitID, that's
-	// cleared to nil too, on a best-effort basis (not atomic with the
-	// removal itself, for the same reason as UpdateKit's primary=false
-	// case) - a caller may very briefly observe a PrimaryKitID naming a
-	// kit that was just removed, but never persistently: the read path
-	// already tolerates a dangling reference as absent. Idempotent: a
+	// cleared too, same caveats as UpdateKit's primary=false. Idempotent: a
 	// kitID not present in the set is not an error. Returns ErrNotFound if
 	// setID doesn't exist for the owner.
 	DeleteKit(ctx context.Context, setID, kitID string) error

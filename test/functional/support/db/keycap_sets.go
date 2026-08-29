@@ -17,6 +17,7 @@ func SeedKeycapSet(ctx context.Context, ownerID, id, visibility string) error {
 		"id":         id,
 		"brand":      "GMK",
 		"name":       "Laser",
+		"kits":       map[string]any{},
 		"visibility": visibility,
 	})
 }

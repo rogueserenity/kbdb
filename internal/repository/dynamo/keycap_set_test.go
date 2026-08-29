@@ -571,9 +571,6 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryTrue_SetsPrimaryKitIDInS
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalse_ClearsPrimaryKitID() {
-	// The first (mock.Anything) EXPECT() greedily claims the update-kit
-	// call, so the second, more specific one is left to match only the
-	// clear-primary call - avoids ambiguity between two MatchedBy predicates.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.UpdateItemOutput{Attributes: s.itemWithKit("Base", nil)}, nil).
@@ -610,7 +607,7 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalse_NotActuallyPrimary
 	s.Require().NoError(err)
 }
 
-func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalse_ClearPrimaryError_Propagates() {
+func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalse_ClearPrimaryError_DoesNotFailTheUpdate() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.UpdateItemOutput{Attributes: s.itemWithKit("Base", nil)}, nil).
@@ -624,8 +621,8 @@ func (s *KeycapSetRepositorySuite) TestUpdateKit_PrimaryFalse_ClearPrimaryError_
 	primary := false
 	kit, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, &primary)
 
-	s.Require().Error(err)
-	s.Nil(kit)
+	s.Require().NoError(err)
+	s.Require().NotNil(kit)
 }
 
 func (s *KeycapSetRepositorySuite) TestUpdateKit_KitMissingFromResponse_ReturnsError() {
@@ -797,7 +794,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_UpdateItemError_Propagates() {
 	s.Require().Error(err)
 }
 
-func (s *KeycapSetRepositorySuite) TestDeleteKit_ClearPrimaryError_Propagates() {
+func (s *KeycapSetRepositorySuite) TestDeleteKit_ClearPrimaryError_DoesNotFailTheDelete() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.UpdateItemOutput{}, nil).
@@ -810,7 +807,7 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_ClearPrimaryError_Propagates() 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.DeleteKit(ctx, "ks1", "kit1")
 
-	s.Require().Error(err)
+	s.Require().NoError(err)
 }
 
 func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError() {

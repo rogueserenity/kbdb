@@ -12,6 +12,7 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
+	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -128,8 +129,7 @@ func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSe
 	if err != nil {
 		return nil, fmt.Errorf("marshalling keycap set %q for owner %q: %w", ks.ID, ks.UserID, err)
 	}
-	// AddKit's SET kits.<kit_id> needs "kits" to already exist as a Map -
-	// DynamoDB won't auto-vivify it. omitempty drops it above; force it.
+	// AddKit needs kits to exist as a Map - DynamoDB won't auto-vivify it.
 	if _, ok := item["kits"]; !ok {
 		item["kits"] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
 	}
@@ -149,9 +149,9 @@ func (r *KeycapSetRepository) Create(ctx context.Context, ks repository.KeycapSe
 	return &ks, nil
 }
 
-// Update implements repository.KeycapSetRepository. Kits and PrimaryKitID
-// aren't named, so they're left untouched. id is the sort key, so the
-// condition can only fail when no item exists at (user_id, id) - ErrNotFound.
+// Update implements repository.KeycapSetRepository. Kits/PrimaryKitID
+// aren't named, so left untouched; id is the sort key, so a condition
+// failure only ever means ErrNotFound.
 func (r *KeycapSetRepository) Update(ctx context.Context, ks repository.KeycapSet) (*repository.KeycapSet, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -329,9 +329,7 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 	}
 
 	if primary != nil && !*primary {
-		if err := r.clearPrimaryIfMatches(ctx, ownerID, setID, kit.KitID); err != nil {
-			return nil, fmt.Errorf("un-priming kit %q in keycap set %q owner %q: %w", kit.KitID, setID, ownerID, err)
-		}
+		r.clearPrimaryIfMatches(ctx, ownerID, setID, kit.KitID)
 	}
 
 	var updated repository.KeycapSet
@@ -347,11 +345,9 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 }
 
 // clearPrimaryIfMatches best-effort clears primary_kit_id if it names
-// kitID. Not atomic with the caller's own write - DynamoDB can't gate one
-// action of an UpdateItem on a value while leaving others unconditional -
-// but harmless if lost to a race: PrimaryKitID's read path already
-// tolerates a dangling reference as absent.
-func (r *KeycapSetRepository) clearPrimaryIfMatches(ctx context.Context, ownerID, setID, kitID string) error {
+// kitID. Not atomic with the caller's write; failures are logged, not
+// returned - the read path already tolerates a dangling reference.
+func (r *KeycapSetRepository) clearPrimaryIfMatches(ctx context.Context, ownerID, setID, kitID string) {
 	_, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:           &r.tableName,
 		Key:                 keycapSetKey(ownerID, setID),
@@ -362,12 +358,10 @@ func (r *KeycapSetRepository) clearPrimaryIfMatches(ctx context.Context, ownerID
 		},
 	})
 	if err != nil {
-		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
-			return nil
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); !ok {
+			log.FromContext(ctx).Warn("clearing primary kit id failed", log.KeycapSetID, setID, log.KeycapKitID, kitID, log.Error, err)
 		}
-		return err
 	}
-	return nil
 }
 
 // DeleteKit implements repository.KeycapSetRepository. Idempotent: a kitID
@@ -402,9 +396,7 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 		return fmt.Errorf("deleting kit %q from keycap set %q owner %q: %w", kitID, setID, ownerID, err)
 	}
 
-	if err := r.clearPrimaryIfMatches(ctx, ownerID, setID, kitID); err != nil {
-		return fmt.Errorf("clearing primary kit id after deleting kit %q from keycap set %q owner %q: %w", kitID, setID, ownerID, err)
-	}
+	r.clearPrimaryIfMatches(ctx, ownerID, setID, kitID)
 
 	return nil
 }
