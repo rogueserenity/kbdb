@@ -67,51 +67,57 @@ var _ = Describe("Listing profiles over MCP", func() {
 			})
 		})
 
-		When("list_profiles is called with no filter", func() {
-			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "list_profiles", map[string]any{})
-			})
+		Context("given no filter", func() {
+			When("list_profiles is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_profiles", map[string]any{})
+				})
 
-			It("includes the discoverable profile but not the non-discoverable one, with no bio or links", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
+				It("includes the discoverable profile but not the non-discoverable one, with no bio or links", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
 
-				out := decodeListProfilesOutput(result)
-				names := listProfileUsernames(out)
-				Expect(names).To(ContainElement(discoverableName))
-				Expect(names).NotTo(ContainElement(hiddenName))
+					out := decodeListProfilesOutput(result)
+					names := listProfileUsernames(out)
+					Expect(names).To(ContainElement(discoverableName))
+					Expect(names).NotTo(ContainElement(hiddenName))
 
-				for _, p := range out.Profiles {
-					if p.Username == discoverableName {
-						Expect(p.UserID).To(Equal(ownerID))
-						Expect(p.Bio).To(BeNil())
-						Expect(p.Links).To(BeEmpty())
+					for _, p := range out.Profiles {
+						if p.Username == discoverableName {
+							Expect(p.UserID).To(Equal(ownerID))
+							Expect(p.Bio).To(BeNil())
+							Expect(p.Links).To(BeEmpty())
+						}
 					}
-				}
+				})
 			})
 		})
 
-		When("list_profiles is called with a username prefix", func() {
-			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "list_profiles", map[string]any{"username": discoverableName})
-			})
+		Context("given a username prefix filter", func() {
+			When("list_profiles is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_profiles", map[string]any{"username": discoverableName})
+				})
 
-			It("returns only the matching discoverable profile", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
-				Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ConsistOf(discoverableName))
+				It("returns only the matching discoverable profile", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+					Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ConsistOf(discoverableName))
+				})
 			})
 		})
 
-		When("list_profiles is called with a lowercased discord_username prefix of a mixed-case handle", func() {
-			BeforeEach(func(ctx SpecContext) {
-				result, err = client.CallTool(ctx, "list_profiles", map[string]any{"discord_username": "mixed_c"})
-			})
+		Context("given a discord_username prefix filter", func() {
+			When("list_profiles is called with a lowercased prefix of a mixed-case handle", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_profiles", map[string]any{"discord_username": "mixed_c"})
+				})
 
-			It("matches via the discord index", func() {
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
-				Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ContainElement(discoverableName))
+				It("matches via the discord index", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+					Expect(listProfileUsernames(decodeListProfilesOutput(result))).To(ContainElement(discoverableName))
+				})
 			})
 		})
 	})

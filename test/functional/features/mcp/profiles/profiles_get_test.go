@@ -53,34 +53,38 @@ var _ = Describe("Getting a profile over MCP", func() {
 				Expect(db.DeleteProfile(ctx, ownerID, username)).To(Succeed())
 			})
 
-			When("get_profile is called with the user id", func() {
-				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_profile", map[string]any{"identifier": ownerID})
-				})
+			Context("given the identifier is the user id", func() {
+				When("get_profile is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "get_profile", map[string]any{"identifier": ownerID})
+					})
 
-				It("returns the full profile", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.IsError).To(BeFalse())
+					It("returns the full profile", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
 
-					out := decodeGetProfileOutput(result)
-					Expect(out.Profile.Username).To(Equal(username))
-					Expect(out.Profile.UserID).To(Equal(ownerID))
-					Expect(out.Profile.Bio).NotTo(BeNil())
-					Expect(*out.Profile.Bio).To(Equal("keebs"))
-					Expect(out.Profile.Links).To(HaveLen(1))
-					Expect(out.Profile.HasAvatar).To(BeFalse())
+						out := decodeGetProfileOutput(result)
+						Expect(out.Profile.Username).To(Equal(username))
+						Expect(out.Profile.UserID).To(Equal(ownerID))
+						Expect(out.Profile.Bio).NotTo(BeNil())
+						Expect(*out.Profile.Bio).To(Equal("keebs"))
+						Expect(out.Profile.Links).To(HaveLen(1))
+						Expect(out.Profile.HasAvatar).To(BeFalse())
+					})
 				})
 			})
 
-			When("get_profile is called with the username", func() {
-				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "get_profile", map[string]any{"identifier": username})
-				})
+			Context("given the identifier is the username", func() {
+				When("get_profile is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "get_profile", map[string]any{"identifier": username})
+					})
 
-				It("resolves the username and returns the profile", func() {
-					Expect(err).NotTo(HaveOccurred())
-					Expect(result.IsError).To(BeFalse())
-					Expect(decodeGetProfileOutput(result).Profile.Username).To(Equal(username))
+					It("resolves the username and returns the profile", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+						Expect(decodeGetProfileOutput(result).Profile.Username).To(Equal(username))
+					})
 				})
 			})
 		})
