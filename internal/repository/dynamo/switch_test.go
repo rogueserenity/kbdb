@@ -297,37 +297,17 @@ func (s *SwitchRepositorySuite) TestUpdate_ReturnsPersistedImagePath() {
 	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image"), *sw.ImagePath)
 }
 
-func (s *SwitchRepositorySuite) TestUpdate_ConcurrentDelete_ReturnsErrNotFound() {
+func (s *SwitchRepositorySuite) TestUpdate_ConditionFails_ReturnsErrNotFound() {
+	// attribute_exists(id) on the sort key can only fail when no item exists
+	// at (user_id, id) - a concurrent delete. No follow-up read.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
-	// The classify read must be strongly consistent (see classifySwitchConflict).
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
-			return in.ConsistentRead != nil && *in.ConsistentRead
-		})).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
-	s.Nil(sw)
-}
-
-func (s *SwitchRepositorySuite) TestUpdate_ConditionFailsButRowPresent_ReturnsErrMutationConflict() {
-	// Condition failed but the row is still there: a concurrent write, not a delete.
-	s.mockClient.EXPECT().
-		UpdateItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(), nil)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	sw, err := s.repo.Update(ctx, repository.Switch{ID: "sw1", Brand: "Gateron"})
-
-	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 	s.Nil(sw)
 }
 
@@ -381,13 +361,6 @@ func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 	s.Require().Error(err)
 }
 
-func (s *SwitchRepositorySuite) getItemOutput() *dynamodb.GetItemOutput {
-	return &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{
-		"user_id": &types.AttributeValueMemberS{Value: "alice"},
-		"id":      &types.AttributeValueMemberS{Value: "sw1"},
-		"brand":   &types.AttributeValueMemberS{Value: "Gateron"},
-	}}
-}
 
 func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
 	s.mockClient.EXPECT().
