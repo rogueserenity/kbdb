@@ -2,6 +2,7 @@ package switches_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -86,8 +87,31 @@ var _ = Describe("Listing switches", func() {
 					By("returning 200 OK")
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).NotTo(HaveOccurred())
+
+					var page struct {
+						Items []struct {
+							ID string `json:"id"`
+						} `json:"items"`
+					}
+					Expect(json.Unmarshal(body, &page)).To(Succeed())
+					ids := make([]string, len(page.Items))
+					for i, item := range page.Items {
+						ids[i] = item.ID
+					}
+
 					By("including all three seeded switches")
-					Expect(itemIDs(resp)).To(ContainElements(publicID, authenticatedID, privateID))
+					Expect(ids).To(ContainElements(publicID, authenticatedID, privateID))
+
+					By("omitting the image key on image-less switches rather than emitting it as null")
+					var raw struct {
+						Items []map[string]json.RawMessage `json:"items"`
+					}
+					Expect(json.Unmarshal(body, &raw)).To(Succeed())
+					for _, item := range raw.Items {
+						Expect(item).NotTo(HaveKey("image"))
+					}
 				})
 			})
 		})

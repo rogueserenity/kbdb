@@ -1583,9 +1583,7 @@ components:
         order_status:
           type: string
         image:
-          oneOf:
-            - $ref: "#/components/schemas/KeyboardImage"
-            - type: "null"
+          $ref: "#/components/schemas/KeyboardImage"
           description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Keyboard resource).
 
     KeyboardListPage:
@@ -1729,9 +1727,7 @@ components:
             id:
               type: string
             image:
-              oneOf:
-                - $ref: "#/components/schemas/SwitchImage"
-                - type: "null"
+              $ref: "#/components/schemas/SwitchImage"
               description: >
                 Managed via the dedicated image endpoint, not via PUT on
                 the switch itself — see POST/DELETE
@@ -1750,9 +1746,7 @@ components:
           type: string
           description: Open vocabulary — validated against the "switch_type" lookup at request time.
         image:
-          oneOf:
-            - $ref: "#/components/schemas/SwitchImage"
-            - type: "null"
+          $ref: "#/components/schemas/SwitchImage"
           description: A freshly-minted presigned URL to the switch's image, if it has one set.
 
     SwitchListPage:
@@ -1855,9 +1849,7 @@ components:
                 /v1/builds/{userId}, etc.). Resolve a profile by username here
                 first, then read that user's collections by this id.
             avatar:
-              oneOf:
-                - $ref: "#/components/schemas/ProfileImage"
-                - type: "null"
+              $ref: "#/components/schemas/ProfileImage"
               description: >
                 Managed via the dedicated image endpoints, not via a body
                 PUT — see POST/DELETE .../profile/{userId}/image.
@@ -1879,9 +1871,7 @@ components:
         discord_username:
           type: [string, "null"]
         avatar:
-          oneOf:
-            - $ref: "#/components/schemas/ProfileImage"
-            - type: "null"
+          $ref: "#/components/schemas/ProfileImage"
 
     ProfileListPage:
       type: object
@@ -1947,9 +1937,7 @@ components:
               type: string
               description: Server-generated identifier for this kit, unique within the keycap set.
             image:
-              oneOf:
-                - $ref: "#/components/schemas/KeycapKitImage"
-                - type: "null"
+              $ref: "#/components/schemas/KeycapKitImage"
               description: >
                 Managed via the dedicated image endpoint, not via PUT on
                 the kit itself — see POST/DELETE
@@ -2030,12 +2018,10 @@ components:
             Same derived aggregate as KeycapSet.order_status - see there
             for the bubble-up rule.
         primary_kit_image:
-          oneOf:
-            - $ref: "#/components/schemas/KeycapKitImage"
-            - type: "null"
+          $ref: "#/components/schemas/KeycapKitImage"
           description: >
             The primary kit's image, if the set has one designated and it
-            has an image set. Null otherwise — including when the
+            has an image set. Omitted otherwise — including when the
             designated primary kit no longer exists.
 
     KeycapSetListPage:
@@ -2341,9 +2327,7 @@ components:
           type: string
           format: date
         image:
-          oneOf:
-            - $ref: "#/components/schemas/BuildImage"
-            - type: "null"
+          $ref: "#/components/schemas/BuildImage"
           description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Build resource).
         keyboard:
           $ref: "#/components/schemas/BuildSummaryKeyboard"

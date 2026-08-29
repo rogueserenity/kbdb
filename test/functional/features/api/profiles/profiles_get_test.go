@@ -2,6 +2,7 @@ package profiles_test
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
 
 	"github.com/google/uuid"
@@ -78,8 +79,11 @@ var _ = Describe("Getting a profile", func() {
 				It("returns the full profile including the IdP subject as user_id", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
+					body, err := io.ReadAll(resp.Body)
+					Expect(err).NotTo(HaveOccurred())
+
 					var got profileBody
-					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(json.Unmarshal(body, &got)).To(Succeed())
 					Expect(got.Username).To(Equal(username))
 					Expect(got.Bio).NotTo(BeNil())
 					Expect(*got.Bio).To(Equal("keebs enjoyer"))
@@ -88,6 +92,11 @@ var _ = Describe("Getting a profile", func() {
 
 					By("returning the IdP subject as user_id so the caller can address the collection routes")
 					Expect(got.UserID).To(Equal(ownerID))
+
+					By("omitting the avatar key entirely rather than emitting it as null")
+					var raw map[string]json.RawMessage
+					Expect(json.Unmarshal(body, &raw)).To(Succeed())
+					Expect(raw).NotTo(HaveKey("avatar"))
 				})
 			})
 		})
