@@ -496,9 +496,9 @@ func (s *HandleDeleteKeyboardSuite) TestImageDeleteFails_ReturnsError_DoesNotDel
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, mock.Anything, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb-1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img-1", Path: "keyboards/alice/kb-1/images/img-1"},
-		}}, nil)
+		})}, nil)
 	s.mockKeyboardImages.EXPECT().
 		DeleteKeyboardImage(mock.Anything, repository.KeyboardImageKey("keyboards/alice/kb-1/images/img-1")).
 		Return(errors.New("s3 unavailable"))
@@ -589,10 +589,10 @@ func (s *HandleListKeyboardImagesSuite) TestSucceeds() {
 		Return(&repository.Keyboard{
 			ID:         "kb-1",
 			Visibility: repository.VisibilityPrivate,
-			Images: []repository.KeyboardImage{
+			Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 				{ImageID: "img-1", Path: "keyboards/caller-0001/kb-1/images/img-1"},
 				{ImageID: "img-2", Path: "keyboards/caller-0001/kb-1/images/img-2"},
-			},
+			}),
 		}, nil)
 
 	handler := handleListKeyboardImages(s.mockRepo)
@@ -725,9 +725,9 @@ func (s *HandleDeleteKeyboardImageSuite) TestSucceeds() {
 	key := repository.KeyboardImageKey("keyboards/u/kb-1/images/img-1")
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, mock.Anything, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb-1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img-1", Path: key},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().DeleteKeyboardImage(mock.Anything, key).Return(nil)
 	s.mockKeyboards.EXPECT().DeleteImage(mock.Anything, "kb-1", "img-1").Return(&key, nil)
 
@@ -766,9 +766,9 @@ func (s *HandleDeleteKeyboardImageSuite) TestMutationConflict_ReturnsError() {
 	key := repository.KeyboardImageKey("keyboards/u/kb-1/images/img-1")
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, mock.Anything, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb-1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img-1", Path: key},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().DeleteKeyboardImage(mock.Anything, key).Return(nil)
 	s.mockKeyboards.EXPECT().
 		DeleteImage(mock.Anything, "kb-1", "img-1").
@@ -795,9 +795,9 @@ func (s *HandleDeleteKeyboardImageSuite) TestS3DeleteFails_ReturnsError_DoesNotD
 	key := repository.KeyboardImageKey("keyboards/u/kb-1/images/img-1")
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, mock.Anything, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb-1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img-1", Path: key},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().DeleteKeyboardImage(mock.Anything, key).Return(errors.New("s3 unavailable"))
 
 	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)

@@ -39,16 +39,19 @@ func deleteBuildImages(ctx context.Context, images repository.BuildImageStore, b
 // deleteKeyboardImages - see [DeleteKeyboard]'s doc comment for why this
 // gates the keyboard's own DB delete.
 func deleteKeyboardImages(ctx context.Context, images repository.KeyboardImageStore, kb *repository.Keyboard) error {
-	errs := make([]error, len(kb.Images))
+	errs := make([]error, 0, len(kb.Images))
+	var mu sync.Mutex
 	var wg sync.WaitGroup
-	for i, img := range kb.Images {
+	for _, entry := range kb.Images {
 		wg.Add(1)
-		go func(i int, key repository.KeyboardImageKey) {
+		go func(key repository.KeyboardImageKey) {
 			defer wg.Done()
 			if err := images.DeleteKeyboardImage(ctx, key); err != nil {
-				errs[i] = err
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
 			}
-		}(i, img.Path)
+		}(entry.Path)
 	}
 	wg.Wait()
 	return errors.Join(errs...)

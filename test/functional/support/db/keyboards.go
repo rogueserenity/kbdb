@@ -9,11 +9,9 @@ import (
 
 // SeedKeyboard PutItems a keyboard directly into DynamoDB, bypassing the
 // API - for specs that need keyboard fixture data in place before
-// exercising a different route. version is set to 0, matching what Create
-// would have set it to - Update/AddImage/DeleteImage condition their write
-// on version via a CAS loop, which fails on a fixture item missing the
-// attribute entirely (attribute_not_exists != 0), not just a genuine
-// version mismatch.
+// exercising a different route. images is seeded as an empty map, matching
+// what Create writes - AddImage/DeleteImage address images.<id> in place,
+// and DynamoDB rejects a nested-path write when the parent map is absent.
 //
 // The nested design/pcb/purchase groups are populated so reads exercise
 // their real DynamoDB round trip. Seeding only the top-level fields would
@@ -29,7 +27,7 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 		"name":       "Q1",
 		"size":       "60%",
 		"visibility": visibility,
-		"version":    0,
+		"images":     map[string]any{},
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
 			"plates":   []string{"Brass"},
@@ -46,7 +44,8 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 // SeedKeyboardWithImage is [SeedKeyboard] plus a single Images entry, whose
 // path doesn't need a real S3 object behind it - presigning a GET URL
 // doesn't check the object exists, only specs that fetch the URL's content
-// would need that.
+// would need that. Images is a map keyed by image id, each entry carrying a
+// seq ordering key (see repository.KeyboardImageEntry).
 func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility string) error {
 	table := NewDynamoTable(ctx, support.KeyboardTableName())
 	return table.PutItem(ctx, map[string]any{
@@ -56,7 +55,6 @@ func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility
 		"name":       "Q1",
 		"size":       "60%",
 		"visibility": visibility,
-		"version":    0,
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
 			"plates":   []string{"Brass"},
@@ -67,8 +65,11 @@ func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility
 			"price":        329.99,
 			"order_status": "Delivered",
 		},
-		"images": []map[string]any{
-			{"image_id": imageID, "path": fmt.Sprintf("keyboards/%s/%s/images/%s", ownerID, id, imageID)},
+		"images": map[string]any{
+			imageID: map[string]any{
+				"path": fmt.Sprintf("keyboards/%s/%s/images/%s", ownerID, id, imageID),
+				"seq":  0,
+			},
 		},
 	})
 }

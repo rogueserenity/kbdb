@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -41,10 +42,52 @@ type KeyboardPurchase struct {
 	OrderStatus  *string  `dynamodbav:"order_status,omitempty" json:"order_status,omitempty"`
 }
 
-// KeyboardImage is one entry in Keyboard.Images.
+// KeyboardImageEntry is one value in the Keyboard.Images map (keyed by
+// image id). Seq is a repository-internal ordering key: on add it's set to
+// time.Now().UnixNano(), so a new image sorts after existing ones without
+// reading the current max. Wall-clock, not a monotonic source - a backward
+// clock step between two adds could misorder one image (cosmetic on a
+// single-user list, and self-heals if the images are ever reordered). The
+// API/MCP layers sort on Seq to present images in add order; it's not in
+// JSON. A future reorder endpoint would renumber entries 0..n - a later
+// add's nanosecond stamp still sorts last.
+type KeyboardImageEntry struct {
+	Path KeyboardImageKey `dynamodbav:"path" json:"-"`
+	Seq  int              `dynamodbav:"seq" json:"-"`
+}
+
+// KeyboardImage is an image id paired with its stored entry, the ordered
+// element type the API/MCP layers work with. SortedKeyboardImages builds a
+// []KeyboardImage from a Keyboard.Images map.
 type KeyboardImage struct {
-	ImageID string           `dynamodbav:"image_id" json:"image_id"`
-	Path    KeyboardImageKey `dynamodbav:"path" json:"-"`
+	ImageID string
+	Path    KeyboardImageKey
+	Seq     int
+}
+
+// SortedKeyboardImages flattens an Images map into a slice ordered by Seq
+// (ascending), the order images were added in.
+func SortedKeyboardImages(images map[string]KeyboardImageEntry) []KeyboardImage {
+	out := make([]KeyboardImage, 0, len(images))
+	for id, entry := range images {
+		out = append(out, KeyboardImage{ImageID: id, Path: entry.Path, Seq: entry.Seq})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	return out
+}
+
+// KeyboardImagesMap builds an Images map from an ordered slice, assigning
+// Seq by position. The inverse of SortedKeyboardImages, for callers holding
+// images as a list (e.g. reload tooling, tests).
+func KeyboardImagesMap(images []KeyboardImage) map[string]KeyboardImageEntry {
+	if len(images) == 0 {
+		return nil
+	}
+	out := make(map[string]KeyboardImageEntry, len(images))
+	for i, img := range images {
+		out[img.ImageID] = KeyboardImageEntry{Path: img.Path, Seq: i}
+	}
+	return out
 }
 
 // Keyboard is a mechanical keyboard in a user's collection, or shared with
@@ -66,10 +109,10 @@ type Keyboard struct {
 	Purchase   KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
 	Notes      *string          `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility Visibility       `dynamodbav:"visibility" json:"visibility"`
-	Images     []KeyboardImage  `dynamodbav:"images,omitempty" json:"images,omitempty"`
-	// Version is a repository-internal CAS guard against lost updates on
-	// concurrent Images mutations, not exposed via the API.
-	Version int `dynamodbav:"version" json:"-"`
+	// Images is keyed by image id. AddImage/DeleteImage address a single
+	// entry in place (images.<id>); the API/MCP layers project it to an
+	// ordered list via SortedKeyboardImages, sorting on each entry's Seq.
+	Images map[string]KeyboardImageEntry `dynamodbav:"images,omitempty" json:"-"`
 }
 
 // KeyboardRepository provides access to keyboards.
@@ -104,16 +147,17 @@ type KeyboardRepository interface {
 	// Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// AddImage appends image to the keyboard's Images (image.ImageID must
-	// already be set). Returns ErrNotFound if the keyboard doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	// AddImage adds image (image.ImageID must be set) to the keyboard's
+	// Images map with a server-assigned Seq that sorts it after every
+	// existing image (see KeyboardImageEntry.Seq); image.Seq is ignored.
+	// Returns ErrNotFound if the keyboard doesn't exist, or a wrapped
+	// duplicate-id error if image.ImageID is already present.
 	AddImage(ctx context.Context, keyboardID string, image KeyboardImage) error
 
-	// DeleteImage removes the image matching imageID from keyboardID's
-	// Images and returns the key that was cleared, or nil if it wasn't
-	// there. Idempotent: an imageID not present is not an error. Returns
-	// ErrNotFound if keyboardID doesn't exist for the owner, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	// DeleteImage removes imageID from keyboardID's Images map and returns
+	// the key that was cleared, or nil if it wasn't there. Idempotent: an
+	// imageID not present is not an error. Returns ErrNotFound if keyboardID
+	// doesn't exist for the owner.
 	DeleteImage(ctx context.Context, keyboardID, imageID string) (*KeyboardImageKey, error)
 }
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -13,7 +13,6 @@ import (
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
-	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -28,11 +27,6 @@ var errEmptyKeyboardImageID = errors.New("image id must not be empty")
 // uuid.NewString(), but caught here rather than silently persisting an
 // ambiguous duplicate.
 var errDuplicateKeyboardImageID = errors.New("image id already exists for this keyboard")
-
-// errKeyboardImageAlreadyAbsent signals DeleteImage's mutateKeyboard
-// closure found no matching image - DeleteImage treats this as success,
-// not an error.
-var errKeyboardImageAlreadyAbsent = errors.New("image already absent from keyboard")
 
 // KeyboardRepository is the DynamoDB-backed repository.KeyboardRepository.
 type KeyboardRepository struct {
@@ -144,6 +138,11 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling keyboard %q for owner %q: %w", kb.ID, kb.UserID, err)
 	}
+	// AddImage addresses images.<id> in place - DynamoDB won't auto-vivify
+	// the parent Map, so seed an empty one.
+	if _, ok := item["images"]; !ok {
+		item["images"] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
+	}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
 		TableName:           &r.tableName,
@@ -160,36 +159,65 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 	return &kb, nil
 }
 
-// Update goes through mutateKeyboard rather than a naive whole-item
-// PutItem: kb (built from the request body) never has Images or Version
-// set, so overwriting the stored item wholesale would wipe every image
-// and desync Version from mutateKeyboard's CAS loop.
+// keyboardKey builds the base-table primary key for a keyboard.
+func keyboardKey(ownerID, keyboardID string) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"user_id": &types.AttributeValueMemberS{Value: ownerID},
+		"id":      &types.AttributeValueMemberS{Value: keyboardID},
+	}
+}
+
+// Update rewrites the caller's keyboard from the request body with a single
+// UpdateItem. images isn't named, so it carries forward.
+// id is the sort key, so a failed attribute_exists(id) can only mean the
+// keyboard is gone -> ErrNotFound.
 func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("updating keyboard %q: %w", kb.ID, repository.ErrNoUserID)
 	}
 
-	updated, err := r.mutateKeyboard(ctx, ownerID, kb.ID, func(existing *repository.Keyboard) error {
-		existing.Brand = kb.Brand
-		existing.Name = kb.Name
-		existing.Size = kb.Size
-		existing.Layout = kb.Layout
-		existing.Design = kb.Design
-		existing.PCB = kb.PCB
-		existing.Purchase = kb.Purchase
-		existing.Notes = kb.Notes
-		existing.Visibility = kb.Visibility
-		return nil
-	})
-	if errors.Is(err, repository.ErrNotFound) {
-		return nil, repository.ErrNotFound
-	}
+	update := expression.
+		Set(expression.Name("brand"), expression.Value(kb.Brand)).
+		Set(expression.Name("name"), expression.Value(kb.Name)).
+		Set(expression.Name("design"), expression.Value(kb.Design)).
+		Set(expression.Name("pcb"), expression.Value(kb.PCB)).
+		Set(expression.Name("purchase"), expression.Value(kb.Purchase)).
+		Set(expression.Name("visibility"), expression.Value(kb.Visibility))
+	update = setOrRemovePtr(update, "size", kb.Size)
+	update = setOrRemovePtr(update, "layout", kb.Layout)
+	update = setOrRemovePtr(update, "notes", kb.Notes)
+
+	expr, err := expression.NewBuilder().
+		WithUpdate(update).
+		WithCondition(expression.AttributeExists(expression.Name("id"))).
+		Build()
 	if err != nil {
+		return nil, fmt.Errorf("building keyboard update expression for keyboard %q: %w", kb.ID, err)
+	}
+
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       keyboardKey(ownerID, kb.ID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllNew,
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return nil, repository.ErrNotFound
+		}
 		return nil, fmt.Errorf("updating keyboard %q for owner %q: %w", kb.ID, ownerID, err)
 	}
 
-	return updated, nil
+	var updated repository.Keyboard
+	if err := attributevalue.UnmarshalMap(out.Attributes, &updated); err != nil {
+		return nil, fmt.Errorf("unmarshalling updated keyboard %q for owner %q: %w", kb.ID, ownerID, err)
+	}
+
+	return &updated, nil
 }
 
 // Delete implements repository.KeyboardRepository. Idempotent: a
@@ -202,10 +230,7 @@ func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
 
 	_, err := r.client.DeleteItem(ctx, &dynamodb.DeleteItemInput{
 		TableName: &r.tableName,
-		Key: map[string]types.AttributeValue{
-			"user_id": &types.AttributeValueMemberS{Value: ownerID},
-			"id":      &types.AttributeValueMemberS{Value: id},
-		},
+		Key:       keyboardKey(ownerID, id),
 	})
 	if err != nil {
 		return fmt.Errorf("deleting keyboard %q for owner %q: %w", id, ownerID, err)
@@ -214,78 +239,12 @@ func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
 	return nil
 }
 
-const maxKeyboardMutationAttempts = 3
-
-// mutateKeyboard is a hand-rolled Version-based CAS retry loop: DynamoDB
-// can't address a List element by an inner field like image_id, so image
-// mutations must decode/mutate/re-encode the whole Images slice, and the Go
-// SDK has no built-in optimistic-locking primitive. Mirrors
-// [(*KeycapSetRepository).mutateSet]/[(*BuildRepository).mutateBuild], minus
-// Build's refMarker transaction bookkeeping - a keyboard has no analogous
-// cross-entity reference set to maintain here.
-func (r *KeyboardRepository) mutateKeyboard(
-	ctx context.Context,
-	ownerID, keyboardID string,
-	mutate func(kb *repository.Keyboard) error,
-) (*repository.Keyboard, error) {
-	for range maxKeyboardMutationAttempts {
-		kb, err := r.Get(ctx, ownerID, keyboardID)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := mutate(kb); err != nil {
-			return nil, err
-		}
-
-		expectedVersion := kb.Version
-		kb.Version++
-		kb.UserID = ownerID
-
-		item, err := attributevalue.MarshalMap(*kb)
-		if err != nil {
-			return nil, fmt.Errorf("marshalling keyboard %q for owner %q: %w", keyboardID, ownerID, err)
-		}
-
-		// expectedVersion is 0 both for a real version:0 item and for a
-		// pre-Version item with no version attribute at all (Get/UnmarshalMap
-		// defaults a missing attribute to the zero value) - attribute_not_exists
-		// covers the latter, since DynamoDB never matches an equality condition
-		// against an absent attribute.
-		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
-		if expectedVersion == 0 {
-			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
-		}
-		expr, err := expression.NewBuilder().
-			WithCondition(versionCondition).
-			Build()
-		if err != nil {
-			return nil, fmt.Errorf("building keyboard mutation condition for keyboard %q: %w", keyboardID, err)
-		}
-
-		_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
-			TableName:                 &r.tableName,
-			Item:                      item,
-			ConditionExpression:       expr.Condition(),
-			ExpressionAttributeNames:  expr.Names(),
-			ExpressionAttributeValues: expr.Values(),
-		})
-		if err == nil {
-			return kb, nil
-		}
-
-		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); !ok {
-			return nil, fmt.Errorf("mutating keyboard %q owner %q: %w", keyboardID, ownerID, err)
-		}
-		// Lost the CAS race - another writer updated Version first. Loop
-		// and retry from a fresh Get.
-		log.FromContext(ctx).Warn("keyboard CAS retry", log.KeyboardID, keyboardID, "attempted_version", expectedVersion)
-	}
-
-	return nil, fmt.Errorf("mutating keyboard %q owner %q: %w", keyboardID, ownerID, repository.ErrMutationConflict)
-}
-
-// AddImage implements repository.KeyboardRepository.
+// AddImage implements repository.KeyboardRepository. One UpdateItem sets
+// images.<id> = {path, seq}. Seq is time.Now().UnixNano(), so a new image
+// sorts after every existing one without reading the current max (see
+// KeyboardImageEntry.Seq for the wall-clock caveat). The condition rejects
+// a missing keyboard or a duplicate id server-side; on failure a
+// consistent GetItem (keyboardExists) tells the two apart.
 func (r *KeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) error {
 	if image.ImageID == "" {
 		return fmt.Errorf("adding image to keyboard %q: %w", keyboardID, errEmptyKeyboardImageID)
@@ -296,40 +255,114 @@ func (r *KeyboardRepository) AddImage(ctx context.Context, keyboardID string, im
 		return fmt.Errorf("adding image to keyboard %q: %w", keyboardID, repository.ErrNoUserID)
 	}
 
-	_, err := r.mutateKeyboard(ctx, ownerID, keyboardID, func(kb *repository.Keyboard) error {
-		if slices.ContainsFunc(kb.Images, func(existing repository.KeyboardImage) bool { return existing.ImageID == image.ImageID }) {
+	imagePath := "images." + image.ImageID
+	entry := repository.KeyboardImageEntry{Path: image.Path, Seq: int(time.Now().UnixNano())}
+	update := expression.Set(expression.Name(imagePath), expression.Value(entry))
+	cond := expression.AttributeExists(expression.Name("id")).
+		And(expression.AttributeNotExists(expression.Name(imagePath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return fmt.Errorf("building add-image expression for keyboard %q: %w", keyboardID, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       keyboardKey(ownerID, keyboardID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			exists, existsErr := r.keyboardExists(ctx, ownerID, keyboardID)
+			if existsErr != nil {
+				return fmt.Errorf("classifying add-image conflict for keyboard %q: %w", keyboardID, existsErr)
+			}
+			if !exists {
+				return repository.ErrNotFound
+			}
 			return fmt.Errorf("adding image %q to keyboard %q: %w", image.ImageID, keyboardID, errDuplicateKeyboardImageID)
 		}
-		kb.Images = append(kb.Images, image)
-		return nil
-	})
-	return err
+		return fmt.Errorf("adding image %q to keyboard %q owner %q: %w", image.ImageID, keyboardID, ownerID, err)
+	}
+
+	return nil
 }
 
-// DeleteImage implements repository.KeyboardRepository.
+// keyboardExists is a strongly consistent existence check for classifying a
+// compound-condition failure (attribute_exists(id) AND attribute_...(images.<id>)).
+func (r *KeyboardRepository) keyboardExists(ctx context.Context, ownerID, id string) (bool, error) {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      &r.tableName,
+		Key:            keyboardKey(ownerID, id),
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(out.Item) > 0, nil
+}
+
+// DeleteImage implements repository.KeyboardRepository. REMOVE images.<id>
+// under attribute_exists(images.<id>), with ALL_OLD so the removed entry's
+// path is the returned key. A missing id (condition fails but the keyboard
+// exists) is a nil-nil success.
 func (r *KeyboardRepository) DeleteImage(ctx context.Context, keyboardID, imageID string) (*repository.KeyboardImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("deleting image from keyboard %q: %w", keyboardID, repository.ErrNoUserID)
 	}
 
-	var removed *repository.KeyboardImageKey
-	_, err := r.mutateKeyboard(ctx, ownerID, keyboardID, func(kb *repository.Keyboard) error {
-		idx := slices.IndexFunc(kb.Images, func(existing repository.KeyboardImage) bool { return existing.ImageID == imageID })
-		if idx == -1 {
-			return errKeyboardImageAlreadyAbsent
-		}
-		key := kb.Images[idx].Path
-		removed = &key
-		kb.Images = slices.Delete(kb.Images, idx, idx+1)
-		return nil
-	})
-	if errors.Is(err, errKeyboardImageAlreadyAbsent) {
-		return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
-	}
+	imagePath := "images." + imageID
+	expr, err := expression.NewBuilder().
+		WithUpdate(expression.Remove(expression.Name(imagePath))).
+		WithCondition(
+			expression.AttributeExists(expression.Name("id")).
+				And(expression.AttributeExists(expression.Name(imagePath))),
+		).
+		Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("building delete-image expression for keyboard %q: %w", keyboardID, err)
 	}
 
-	return removed, nil
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       keyboardKey(ownerID, keyboardID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllOld,
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return r.classifyDeleteImageConflict(ctx, ownerID, keyboardID)
+		}
+		return nil, fmt.Errorf("deleting image %q from keyboard %q owner %q: %w", imageID, keyboardID, ownerID, err)
+	}
+
+	var old repository.Keyboard
+	if err := attributevalue.UnmarshalMap(out.Attributes, &old); err != nil {
+		return nil, fmt.Errorf("unmarshalling pre-delete keyboard %q for owner %q: %w", keyboardID, ownerID, err)
+	}
+	entry, ok := old.Images[imageID]
+	if !ok {
+		return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
+	}
+	return &entry.Path, nil
+}
+
+// classifyDeleteImageConflict: keyboard gone -> ErrNotFound; keyboard
+// present means the image id simply wasn't there -> nil-nil (idempotent).
+func (r *KeyboardRepository) classifyDeleteImageConflict(ctx context.Context, ownerID, keyboardID string) (*repository.KeyboardImageKey, error) {
+	exists, err := r.keyboardExists(ctx, ownerID, keyboardID)
+	if err != nil {
+		return nil, fmt.Errorf("classifying delete-image conflict for keyboard %q: %w", keyboardID, err)
+	}
+	if !exists {
+		return nil, repository.ErrNotFound
+	}
+	return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
 }
