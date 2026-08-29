@@ -45,7 +45,7 @@ func (r *SwitchRepository) List(
 		return []repository.Switch{}, "", nil
 	}
 
-	startKey, err := decodeCursor(cursor)
+	startKey, _, _, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", fmt.Errorf("decoding cursor: %w", err)
 	}
@@ -82,7 +82,7 @@ func (r *SwitchRepository) List(
 		return nil, "", fmt.Errorf("unmarshalling switches for owner %q: %w", ownerID, err)
 	}
 
-	nextCursor, err := encodeCursor(out.LastEvaluatedKey)
+	nextCursor, err := encodeCursor(out.LastEvaluatedKey, "", "")
 	if err != nil {
 		return nil, "", fmt.Errorf("encoding next cursor: %w", err)
 	}
@@ -315,36 +315,51 @@ func (r *SwitchRepository) ClearImagePath(ctx context.Context, id string) (*repo
 	return old.ImagePath, nil
 }
 
-// decodeCursor reverses encodeCursor, returning nil (no key) for an empty
-// cursor.
-func decodeCursor(cursor string) (map[string]types.AttributeValue, error) {
+// cursorEnvelope is the JSON payload base64-encoded into a cursor string.
+// idx and pfx bind a cursor to the index and prefix filter it was minted
+// under; List callers that take no filter leave both empty, and decoding
+// always returns "" for them, so those paths behave exactly as before this
+// field existed.
+type cursorEnvelope struct {
+	Key map[string]string `json:"k,omitempty"`
+	Idx string            `json:"idx,omitempty"`
+	Pfx string            `json:"pfx,omitempty"`
+}
+
+// decodeCursor reverses encodeCursor, returning a nil key (no key) for an
+// empty cursor. idx/pfx are the index name and active prefix filter the
+// cursor was minted under, empty for callers with no filter.
+func decodeCursor(cursor string) (key map[string]types.AttributeValue, idx, pfx string, err error) {
 	if cursor == "" {
-		return nil, nil //nolint:nilnil // no key is a valid, expected result
+		return nil, "", "", nil //nolint:nilnil // no key is a valid, expected result
 	}
 
 	raw, err := base64.URLEncoding.DecodeString(cursor)
 	if err != nil {
-		return nil, fmt.Errorf("invalid cursor encoding: %w", err)
+		return nil, "", "", fmt.Errorf("invalid cursor encoding: %w", err)
 	}
 
-	var key map[string]string
-	if err := json.Unmarshal(raw, &key); err != nil {
-		return nil, fmt.Errorf("invalid cursor contents: %w", err)
+	var env cursorEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, "", "", fmt.Errorf("invalid cursor contents: %w", err)
 	}
 
-	out := make(map[string]types.AttributeValue, len(key))
-	for k, v := range key {
+	out := make(map[string]types.AttributeValue, len(env.Key))
+	for k, v := range env.Key {
 		out[k] = &types.AttributeValueMemberS{Value: v}
 	}
 
-	return out, nil
+	return out, env.Idx, env.Pfx, nil
 }
 
 // encodeCursor is decodeCursor's inverse. Every LastEvaluatedKey paginated
 // here is string-valued (base-table user_id/id and the directory GSI
 // keys), so a plain map[string]string round-trips it without
-// attributevalue's cursor-unfriendly type-tagged encoding.
-func encodeCursor(key map[string]types.AttributeValue) (string, error) {
+// attributevalue's cursor-unfriendly type-tagged encoding. idx/pfx are
+// stamped into the envelope so a future decodeCursor call can bind the
+// cursor back to the filter it was minted under; pass "" for callers with
+// no filter.
+func encodeCursor(key map[string]types.AttributeValue, idx, pfx string) (string, error) {
 	if len(key) == 0 {
 		return "", nil
 	}
@@ -358,7 +373,7 @@ func encodeCursor(key map[string]types.AttributeValue) (string, error) {
 		plain[k] = s.Value
 	}
 
-	raw, err := json.Marshal(plain)
+	raw, err := json.Marshal(cursorEnvelope{Key: plain, Idx: idx, Pfx: pfx})
 	if err != nil {
 		return "", fmt.Errorf("marshalling cursor: %w", err)
 	}

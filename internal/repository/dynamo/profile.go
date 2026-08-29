@@ -574,8 +574,12 @@ const (
 	directoryPKValue          = "1"
 )
 
-// directoryIndexKeys is each GSI's LastEvaluatedKey attribute set, used to
-// reject a cursor minted for the other filter.
+// directoryIndexKeys is each GSI's LastEvaluatedKey attribute set. A
+// decoded cursor's key attributes must match this structurally, not just
+// its (client-supplied, unsigned) idx/pfx labels - otherwise a forged
+// cursor could carry labels matching the current call while its actual key
+// addresses a different index, reaching DynamoDB as a malformed
+// ExclusiveStartKey instead of being rejected locally.
 var directoryIndexKeys = map[string]map[string]struct{}{
 	discoverableUsernameIndex: {"discoverable_pk": {}, "username": {}, "user_id": {}},
 	discoverableDiscordIndex:  {"discord_pk": {}, "discord_username_lc": {}, "user_id": {}},
@@ -583,7 +587,8 @@ var directoryIndexKeys = map[string]map[string]struct{}{
 
 // ListPublic implements repository.ProfileRepository. discordPrefix routes
 // to the discord index (begins_with, lowercased), else the username index;
-// the handler guarantees at most one prefix. A bad/mismatched cursor is
+// the handler guarantees at most one prefix. A bad cursor, or one minted
+// under a different index or prefix filter than the current call, is
 // repository.ErrInvalidCursor.
 func (r *ProfileRepository) ListPublic(
 	ctx context.Context,
@@ -591,24 +596,31 @@ func (r *ProfileRepository) ListPublic(
 	limit int,
 	cursor string,
 ) ([]repository.Profile, string, error) {
-	startKey, err := decodeCursor(cursor)
+	startKey, cursorIdx, cursorPfx, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", fmt.Errorf("%w: %w", repository.ErrInvalidCursor, err)
 	}
 
 	indexName := discoverableUsernameIndex
+	activePrefix := usernamePrefix
 	keyCond := expression.Key("discoverable_pk").Equal(expression.Value(directoryPKValue))
 	if usernamePrefix != "" {
 		keyCond = keyCond.And(expression.KeyBeginsWith(expression.Key("username"), usernamePrefix))
 	}
 	if discordPrefix != "" {
 		indexName = discoverableDiscordIndex
+		activePrefix = strings.ToLower(discordPrefix)
 		keyCond = expression.Key("discord_pk").Equal(expression.Value(directoryPKValue)).
-			And(expression.KeyBeginsWith(expression.Key("discord_username_lc"), strings.ToLower(discordPrefix)))
+			And(expression.KeyBeginsWith(expression.Key("discord_username_lc"), activePrefix))
 	}
 
-	if !cursorMatchesIndex(startKey, indexName) {
-		return nil, "", fmt.Errorf("%w: minted for a different filter", repository.ErrInvalidCursor)
+	if len(startKey) > 0 {
+		if cursorIdx != indexName || cursorPfx != activePrefix {
+			return nil, "", fmt.Errorf("%w: filter changed since this cursor was issued", repository.ErrInvalidCursor)
+		}
+		if !cursorMatchesIndex(startKey, indexName) {
+			return nil, "", fmt.Errorf("%w: key does not match its claimed index", repository.ErrInvalidCursor)
+		}
 	}
 
 	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
@@ -634,7 +646,7 @@ func (r *ProfileRepository) ListPublic(
 		return nil, "", fmt.Errorf("unmarshalling discoverable profiles: %w", err)
 	}
 
-	nextCursor, err := encodeCursor(out.LastEvaluatedKey)
+	nextCursor, err := encodeCursor(out.LastEvaluatedKey, indexName, activePrefix)
 	if err != nil {
 		return nil, "", fmt.Errorf("encoding next cursor: %w", err)
 	}
@@ -643,12 +655,8 @@ func (r *ProfileRepository) ListPublic(
 }
 
 // cursorMatchesIndex reports whether startKey's attributes are exactly
-// directoryIndexKeys[indexName]. An empty key always matches.
+// directoryIndexKeys[indexName].
 func cursorMatchesIndex(startKey map[string]types.AttributeValue, indexName string) bool {
-	if len(startKey) == 0 {
-		return true
-	}
-
 	want := directoryIndexKeys[indexName]
 	if len(startKey) != len(want) {
 		return false

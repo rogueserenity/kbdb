@@ -1061,6 +1061,94 @@ func (s *ProfileRepositorySuite) TestListPublic_CursorFromOtherFilter_ReturnsErr
 	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
 }
 
+func (s *ProfileRepositorySuite) TestListPublic_CursorFromDifferentPrefix_SameIndex_ReturnsErrInvalidCursor() {
+	// Page 1: username=a -> a username-index cursor bound to prefix "a".
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id":         &types.AttributeValueMemberS{Value: "user-alice"},
+				"discoverable_pk": &types.AttributeValueMemberS{Value: "1"},
+				"username":        &types.AttributeValueMemberS{Value: "alice"},
+			},
+		}, nil).Once()
+
+	_, cursor, err := s.repo.ListPublic(s.T().Context(), "a", "", 20, "")
+	s.Require().NoError(err)
+	s.Require().NotEmpty(cursor)
+
+	// Replaying it under a narrower prefix on the same index must be
+	// rejected, not silently queried against the broader scan.
+	_, _, err = s.repo.ListPublic(s.T().Context(), "al", "", 20, cursor)
+	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_CursorSamePrefix_RoundTrips() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return len(in.ExclusiveStartKey) == 0
+		})).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id":         &types.AttributeValueMemberS{Value: "user-alice"},
+				"discoverable_pk": &types.AttributeValueMemberS{Value: "1"},
+				"username":        &types.AttributeValueMemberS{Value: "alice"},
+			},
+		}, nil).Once()
+
+	_, cursor, err := s.repo.ListPublic(s.T().Context(), "al", "", 20, "")
+	s.Require().NoError(err)
+	s.Require().NotEmpty(cursor)
+
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			return len(in.ExclusiveStartKey) == 3
+		})).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
+
+	_, _, err = s.repo.ListPublic(s.T().Context(), "al", "", 20, cursor)
+	s.Require().NoError(err)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_DiscordCursorReplayedUnderUsernameFilter_ReturnsErrInvalidCursor() {
+	// Page 1: discord_username=cool -> a discord-index cursor.
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.Anything).
+		Return(&dynamodb.QueryOutput{
+			Items: []map[string]types.AttributeValue{},
+			LastEvaluatedKey: map[string]types.AttributeValue{
+				"user_id":             &types.AttributeValueMemberS{Value: "user-alice"},
+				"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
+				"discord_username_lc": &types.AttributeValueMemberS{Value: "cool"},
+			},
+		}, nil).Once()
+
+	_, cursor, err := s.repo.ListPublic(s.T().Context(), "", "cool", 20, "")
+	s.Require().NoError(err)
+	s.Require().NotEmpty(cursor)
+
+	_, _, err = s.repo.ListPublic(s.T().Context(), "al", "", 20, cursor)
+	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
+}
+
+func (s *ProfileRepositorySuite) TestListPublic_ForgedCursorLabelsMatchButKeyDoesNot_ReturnsErrInvalidCursor() {
+	// A cursor whose idx/pfx labels claim the username index/prefix "a",
+	// but whose key attributes actually belong to the discord index. The
+	// label check alone would pass this straight to Query as a malformed
+	// ExclusiveStartKey; the structural check must catch it first.
+	forged, err := encodeCursor(map[string]types.AttributeValue{
+		"user_id":             &types.AttributeValueMemberS{Value: "user-alice"},
+		"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
+		"discord_username_lc": &types.AttributeValueMemberS{Value: "cool"},
+	}, "DiscoverableUsernameIndex", "a")
+	s.Require().NoError(err)
+
+	_, _, listErr := s.repo.ListPublic(s.T().Context(), "a", "", 20, forged)
+	s.Require().ErrorIs(listErr, repository.ErrInvalidCursor)
+}
+
 func (s *ProfileRepositorySuite) TestListPublic_QueryError_Propagates() {
 	s.mockClient.EXPECT().
 		Query(mock.Anything, mock.Anything).
