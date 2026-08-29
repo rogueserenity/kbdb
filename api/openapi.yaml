@@ -1299,8 +1299,9 @@ components:
         type: string
       description: >
         Either a profile owner's IdP subject or their username. The username
-        charset (^[a-z0-9_-]{3,20}$, and never starting with "user-") is
-        disjoint from IdP subject values, so the two never collide.
+        charset (^[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]$, no consecutive periods,
+        and never starting with "user-") is disjoint from IdP subject values,
+        so the two never collide.
     Limit:
       name: limit
       in: query
