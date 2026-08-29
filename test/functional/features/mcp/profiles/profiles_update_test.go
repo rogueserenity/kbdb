@@ -146,6 +146,23 @@ var _ = Describe("Updating a profile over MCP", func() {
 			})
 		})
 
+		Context("given a malformed discord_username", func() {
+			When("update_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "update_profile", map[string]any{
+						"username":         username,
+						"discoverable":     true,
+						"discord_username": "na@me",
+					})
+				})
+
+				It("returns a tool error", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeTrue())
+				})
+			})
+		})
+
 		Context("given the new username is taken by another user", func() {
 			var (
 				otherID   string

@@ -259,8 +259,10 @@ Resources:
   #   - DiscoverableUsernameIndex: discoverable_pk -> username. Answers
   #     "list all discoverable profiles" (Query with no sort-key condition)
   #     and "search by username prefix" (begins_with).
-  #   - DiscoverableDiscordIndex: discord_pk -> discord_username_lc. Answers
-  #     "search by Discord handle prefix".
+  #   - DiscoverableDiscordIndex: discord_pk -> discord_username. Answers
+  #     "search by Discord handle prefix". discord_username is validated
+  #     lowercase-only (internal/profilevalidate), so it doubles as its own
+  #     sort key with no separate lowercased copy needed.
   # The discoverable_pk / discord_pk attributes are written by the app ONLY
   # when discoverable is true (discord_pk additionally requires a
   # discord_username), so non-discoverable profiles are simply absent from
@@ -285,7 +287,7 @@ Resources:
           AttributeType: S
         - AttributeName: discord_pk
           AttributeType: S
-        - AttributeName: discord_username_lc
+        - AttributeName: discord_username
           AttributeType: S
       KeySchema:
         - AttributeName: user_id
@@ -303,7 +305,7 @@ Resources:
           KeySchema:
             - AttributeName: discord_pk
               KeyType: HASH
-            - AttributeName: discord_username_lc
+            - AttributeName: discord_username
               KeyType: RANGE
           Projection:
             ProjectionType: ALL

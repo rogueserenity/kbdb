@@ -21,15 +21,20 @@ type FieldError struct {
 }
 
 const (
-	maxLinks           = 5
-	maxLinkName        = 32
-	maxDiscordUsername = 32
-	maxBio             = 500
+	maxLinks    = 5
+	maxLinkName = 32
+	maxBio      = 500
 )
 
 // usernamePattern mirrors ProfileInput.username in api/openapi.yaml; the
 // "user-" prefix ban is a separate check.
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_-]{3,20}$`)
+
+var discordUsernamePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_.]{0,30}[a-z0-9]$`)
+
+func validDiscordUsername(s string) bool {
+	return discordUsernamePattern.MatchString(s) && !strings.Contains(s, "..")
+}
 
 // Normalize coerces a blank (empty or all-whitespace) DiscordUsername to nil
 // in place, treating it as not provided rather than a validation failure.
@@ -59,10 +64,10 @@ func Validate(p repository.Profile) []FieldError {
 		})
 	}
 
-	if p.DiscordUsername != nil && utf8.RuneCountInString(*p.DiscordUsername) > maxDiscordUsername {
+	if p.DiscordUsername != nil && !validDiscordUsername(*p.DiscordUsername) {
 		errs = append(errs, FieldError{
 			Name:   "discord_username",
-			Reason: "must be at most 32 characters",
+			Reason: "must be 2-32 characters of lowercase letters, digits, period, or underscore, not starting or ending with a period or underscore, with no consecutive periods",
 		})
 	}
 

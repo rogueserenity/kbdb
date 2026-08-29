@@ -46,7 +46,7 @@ var _ = Describe("Listing profiles over MCP", func() {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
 				Username:        discoverableName,
 				Discoverable:    true,
-				DiscordUsername: "Mixed_Case",
+				DiscordUsername: "mixed_case",
 				Bio:             "should not appear in the directory row",
 				Links:           []map[string]string{{"name": "Site", "url": "https://example.com"}},
 			})).To(Succeed())
@@ -108,9 +108,9 @@ var _ = Describe("Listing profiles over MCP", func() {
 		})
 
 		Context("given a discord_username prefix filter", func() {
-			When("list_profiles is called with a lowercased prefix of a mixed-case handle", func() {
+			When("list_profiles is called with an uppercased prefix", func() {
 				BeforeEach(func(ctx SpecContext) {
-					result, err = client.CallTool(ctx, "list_profiles", map[string]any{"discord_username": "mixed_c"})
+					result, err = client.CallTool(ctx, "list_profiles", map[string]any{"discord_username": "MIXED_C"})
 				})
 
 				It("matches via the discord index", func() {

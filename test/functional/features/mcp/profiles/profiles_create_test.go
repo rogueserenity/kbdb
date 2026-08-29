@@ -127,6 +127,9 @@ var _ = Describe("Creating a profile over MCP", func() {
 			Entry("discord_username over 32", map[string]any{
 				"username": "aaa", "discord_username": strings.Repeat("x", 33),
 			}),
+			Entry("discord_username has an invalid character", map[string]any{
+				"username": "aaa", "discord_username": "na@me",
+			}),
 			Entry("bio over 500", map[string]any{
 				"username": "aaa", "bio": strings.Repeat("x", 501),
 			}),

@@ -137,7 +137,7 @@ func (s *ProfileRepositorySuite) TestCreate_NonDiscoverable_OmitsAllGSIKeys() {
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
-	discord := "Alice_KB"
+	discord := "alice_kb"
 	_, err := s.repo.Create(ctx, repository.Profile{
 		Username: "alice", Discoverable: false, DiscordUsername: &discord,
 	})
@@ -146,7 +146,6 @@ func (s *ProfileRepositorySuite) TestCreate_NonDiscoverable_OmitsAllGSIKeys() {
 	item := captured.TransactItems[0].Put.Item
 	s.NotContains(item, "discoverable_pk")
 	s.NotContains(item, "discord_pk")
-	s.NotContains(item, "discord_username_lc")
 }
 
 func (s *ProfileRepositorySuite) TestCreate_DiscoverableNoDiscord_SetsOnlyDiscoverablePK() {
@@ -166,10 +165,9 @@ func (s *ProfileRepositorySuite) TestCreate_DiscoverableNoDiscord_SetsOnlyDiscov
 	s.Require().NotNil(p.DiscoverablePK)
 	s.Equal("1", *p.DiscoverablePK)
 	s.Nil(p.DiscordPK)
-	s.Nil(p.DiscordUsernameLC)
 }
 
-func (s *ProfileRepositorySuite) TestCreate_DiscoverableWithDiscord_SetsAllGSIKeysLowercased() {
+func (s *ProfileRepositorySuite) TestCreate_DiscoverableWithDiscord_SetsAllGSIKeys() {
 	var captured *dynamodb.TransactWriteItemsInput
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
@@ -179,7 +177,7 @@ func (s *ProfileRepositorySuite) TestCreate_DiscoverableWithDiscord_SetsAllGSIKe
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
-	discord := "Alice_KB"
+	discord := "alice_kb"
 	_, err := s.repo.Create(ctx, repository.Profile{
 		Username: "alice", Discoverable: true, DiscordUsername: &discord,
 	})
@@ -190,8 +188,8 @@ func (s *ProfileRepositorySuite) TestCreate_DiscoverableWithDiscord_SetsAllGSIKe
 	s.Equal("1", *p.DiscoverablePK)
 	s.Require().NotNil(p.DiscordPK)
 	s.Equal("1", *p.DiscordPK)
-	s.Require().NotNil(p.DiscordUsernameLC)
-	s.Equal("alice_kb", *p.DiscordUsernameLC)
+	s.Require().NotNil(p.DiscordUsername)
+	s.Equal("alice_kb", *p.DiscordUsername)
 }
 
 func (s *ProfileRepositorySuite) TestCreate_ProfilePutConditionFails_ReturnsErrAlreadyExists() {
@@ -406,10 +404,9 @@ func (s *ProfileRepositorySuite) TestUpdate_DoesNotNameAvatarPath_SoItCarriesFor
 func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIKeys() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
 		Return(storedProfile(map[string]types.AttributeValue{
-			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
-			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
-			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
-			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
+			"discoverable_pk":  &types.AttributeValueMemberS{Value: "1"},
+			"discord_pk":       &types.AttributeValueMemberS{Value: "1"},
+			"discord_username": &types.AttributeValueMemberS{Value: "alice_kb"},
 		}), nil)
 
 	var captured *dynamodb.UpdateItemInput
@@ -420,7 +417,7 @@ func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIK
 		})).
 		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(nil)}, nil)
 
-	discord := "Alice_KB"
+	discord := "alice_kb"
 	_, err := s.repo.Update(s.updateCtx(), repository.Profile{
 		Username: "alice", Discoverable: false, DiscordUsername: &discord,
 	})
@@ -428,7 +425,6 @@ func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIK
 
 	s.True(removesAttr(captured, "discoverable_pk"))
 	s.True(removesAttr(captured, "discord_pk"))
-	s.True(removesAttr(captured, "discord_username_lc"))
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_ChangedUsername_MovesClaimAtomically() {
@@ -965,7 +961,7 @@ func (s *ProfileRepositorySuite) TestListPublic_DiscordPrefix_UsesDiscordIndex_L
 		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
 			return *in.IndexName == "DiscoverableDiscordIndex" &&
 				containsAttrName(in.ExpressionAttributeNames, "discord_pk") &&
-				containsAttrName(in.ExpressionAttributeNames, "discord_username_lc") &&
+				containsAttrName(in.ExpressionAttributeNames, "discord_username") &&
 				exprValuesContainS(in.ExpressionAttributeValues, "cool") // lowercased
 		})).
 		Return(&dynamodb.QueryOutput{
@@ -1119,9 +1115,9 @@ func (s *ProfileRepositorySuite) TestListPublic_DiscordCursorReplayedUnderUserna
 		Return(&dynamodb.QueryOutput{
 			Items: []map[string]types.AttributeValue{},
 			LastEvaluatedKey: map[string]types.AttributeValue{
-				"user_id":             &types.AttributeValueMemberS{Value: "user-alice"},
-				"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
-				"discord_username_lc": &types.AttributeValueMemberS{Value: "cool"},
+				"user_id":          &types.AttributeValueMemberS{Value: "user-alice"},
+				"discord_pk":       &types.AttributeValueMemberS{Value: "1"},
+				"discord_username": &types.AttributeValueMemberS{Value: "cool"},
 			},
 		}, nil).Once()
 
@@ -1139,9 +1135,9 @@ func (s *ProfileRepositorySuite) TestListPublic_ForgedCursorLabelsMatchButKeyDoe
 	// label check alone would pass this straight to Query as a malformed
 	// ExclusiveStartKey; the structural check must catch it first.
 	forged, err := encodeCursor(map[string]types.AttributeValue{
-		"user_id":             &types.AttributeValueMemberS{Value: "user-alice"},
-		"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
-		"discord_username_lc": &types.AttributeValueMemberS{Value: "cool"},
+		"user_id":          &types.AttributeValueMemberS{Value: "user-alice"},
+		"discord_pk":       &types.AttributeValueMemberS{Value: "1"},
+		"discord_username": &types.AttributeValueMemberS{Value: "cool"},
 	}, "DiscoverableUsernameIndex", "a")
 	s.Require().NoError(err)
 

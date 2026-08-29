@@ -38,10 +38,6 @@ type Profile struct {
 	// it forward from the stored item rather than touching it.
 	AvatarPath *ProfileImageKey `dynamodbav:"avatar_path,omitempty" json:"-"`
 
-	// DiscordUsernameLC is the lowercased DiscordUsername, the sort key of
-	// DiscoverableDiscordIndex. Set only when Discoverable && DiscordUsername != nil.
-	DiscordUsernameLC *string `dynamodbav:"discord_username_lc,omitempty" json:"-"`
-
 	// DiscoverablePK / DiscordPK are the constant ("1") partition keys of the
 	// two sparse directory GSIs, written only when the profile belongs in
 	// each index (DiscordPK additionally requires DiscordUsername != nil).

@@ -1825,8 +1825,10 @@ components:
           type: string
           maxLength: 32
           description: >
-            Free text, not verified against Discord. Discord's current
-            username limit is 32 characters.
+            Not verified against Discord's directory, but must match the
+            shape of a Discord @handle: 2-32 chars, lowercase letters,
+            digits, period, or underscore, no leading/trailing period or
+            underscore, no consecutive periods.
         bio:
           type: string
           maxLength: 500

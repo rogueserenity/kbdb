@@ -3,7 +3,6 @@ package db
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
@@ -48,7 +47,6 @@ func SeedProfile(ctx context.Context, ownerID string, opts SeedProfileOptions) e
 		item["discoverable_pk"] = "1"
 		if opts.DiscordUsername != "" {
 			item["discord_pk"] = "1"
-			item["discord_username_lc"] = strings.ToLower(opts.DiscordUsername)
 		}
 	}
 
