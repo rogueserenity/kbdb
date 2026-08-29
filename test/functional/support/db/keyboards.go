@@ -9,11 +9,9 @@ import (
 
 // SeedKeyboard PutItems a keyboard directly into DynamoDB, bypassing the
 // API - for specs that need keyboard fixture data in place before
-// exercising a different route. version is set to 0, matching what Create
-// would have set it to - Update/AddImage/DeleteImage condition their write
-// on version via a CAS loop, which fails on a fixture item missing the
-// attribute entirely (attribute_not_exists != 0), not just a genuine
-// version mismatch.
+// exercising a different route. images is seeded as an empty map, matching
+// what Create writes - AddImage/DeleteImage address images.<id> in place,
+// and DynamoDB rejects a nested-path write when the parent map is absent.
 //
 // The nested design/pcb/purchase groups are populated so reads exercise
 // their real DynamoDB round trip. Seeding only the top-level fields would
@@ -29,6 +27,7 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 		"name":       "Q1",
 		"size":       "60%",
 		"visibility": visibility,
+		"images":     map[string]any{},
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
 			"plates":   []string{"Brass"},
