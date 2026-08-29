@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"sort"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -36,10 +37,50 @@ type BuildCaseMountType struct {
 	Durometer *string `dynamodbav:"durometer,omitempty" json:"durometer,omitempty"`
 }
 
-// BuildImage is one entry in Build.Images.
+// BuildImageEntry is one value in the Build.Images map (keyed by image id).
+// Seq is a repository-internal ordering key: on add it's set to
+// time.Now().UnixNano(), so a new image sorts after existing ones without
+// reading the current max. Wall-clock, not a monotonic source - a backward
+// clock step between two adds could misorder one image (cosmetic on a
+// single-user list, self-heals on any reorder). The API/MCP layers sort on
+// Seq to present images in add order; it's not in JSON.
+type BuildImageEntry struct {
+	Path BuildImageKey `dynamodbav:"path" json:"-"`
+	Seq  int           `dynamodbav:"seq" json:"-"`
+}
+
+// BuildImage is an image id paired with its stored entry, the ordered
+// element type the API/MCP layers work with. SortedBuildImages builds a
+// []BuildImage from a Build.Images map.
 type BuildImage struct {
-	ImageID string        `dynamodbav:"image_id" json:"image_id"`
-	Path    BuildImageKey `dynamodbav:"path" json:"-"`
+	ImageID string
+	Path    BuildImageKey
+	Seq     int
+}
+
+// SortedBuildImages flattens an Images map into a slice ordered by Seq
+// (ascending), the order images were added in.
+func SortedBuildImages(images map[string]BuildImageEntry) []BuildImage {
+	out := make([]BuildImage, 0, len(images))
+	for id, entry := range images {
+		out = append(out, BuildImage{ImageID: id, Path: entry.Path, Seq: entry.Seq})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
+	return out
+}
+
+// BuildImagesMap builds an Images map from an ordered slice, assigning Seq
+// by position. The inverse of SortedBuildImages, for callers holding images
+// as a list (reload tooling, tests).
+func BuildImagesMap(images []BuildImage) map[string]BuildImageEntry {
+	if len(images) == 0 {
+		return nil
+	}
+	out := make(map[string]BuildImageEntry, len(images))
+	for i, img := range images {
+		out[img.ImageID] = BuildImageEntry{Path: img.Path, Seq: i}
+	}
+	return out
 }
 
 // Build has UserID as the DynamoDB partition key and ID as the sort key.
@@ -56,10 +97,10 @@ type Build struct {
 	BuildDate     *string               `dynamodbav:"build_date,omitempty" json:"build_date,omitempty"`
 	Notes         *string               `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility    Visibility            `dynamodbav:"visibility" json:"visibility"`
-	Images        []BuildImage          `dynamodbav:"images,omitempty" json:"images,omitempty"`
-	// Version is a repository-internal CAS guard against lost updates on
-	// concurrent Images mutations, not exposed via the API.
-	Version int `dynamodbav:"version" json:"-"`
+	// Images is keyed by image id. AddImage/DeleteImage address a single
+	// entry in place (images.<id>); the API/MCP layers project it to an
+	// ordered list via SortedBuildImages, sorting on each entry's Seq.
+	Images map[string]BuildImageEntry `dynamodbav:"images,omitempty" json:"-"`
 }
 
 // BuildRepository provides access to builds.
@@ -74,22 +115,27 @@ type BuildRepository interface {
 	// Create returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, b Build) (*Build, error)
 
-	// Update returns ErrNotFound if no build with that ID exists for the
-	// owner, or ErrMutationConflict if concurrent writers exhaust the
-	// retry budget.
+	// Update replaces the body-settable fields and re-diffs the build's
+	// ref-markers in one TransactWriteItems. Returns ErrNotFound if no build
+	// with that ID exists for the owner, or ErrMutationConflict if the
+	// transaction keeps losing to concurrent writers.
 	Update(ctx context.Context, b Build) (*Build, error)
 
-	// Delete removes the caller's build with the given id. Callers clean up
-	// any images it had in a BuildImageStore themselves, before calling
-	// Delete. Returns ErrNotFound if id doesn't exist.
+	// Delete removes the caller's build and its ref-markers, atomically.
+	// Callers clean up any images it had in a BuildImageStore themselves,
+	// before calling Delete. Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// AddImage returns ErrNotFound if the parent build doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	// AddImage adds image (image.ImageID must be set) to the build's Images
+	// map with a server-assigned Seq that sorts it after every existing
+	// image; image.Seq is ignored. Returns ErrNotFound if the parent build
+	// doesn't exist, or a wrapped duplicate-id error if image.ImageID is
+	// already present.
 	AddImage(ctx context.Context, buildID string, image BuildImage) error
 
-	// DeleteImage is idempotent: an imageID not present in the build
-	// returns (nil, nil), not an error.
+	// DeleteImage removes imageID from buildID's Images map and returns the
+	// key that was cleared. Idempotent: an imageID not present returns
+	// (nil, nil). Returns ErrNotFound if buildID doesn't exist.
 	DeleteImage(ctx context.Context, buildID, imageID string) (*BuildImageKey, error)
 
 	// FindBuildsReferencingKeyboard returns the ids of every build owned by

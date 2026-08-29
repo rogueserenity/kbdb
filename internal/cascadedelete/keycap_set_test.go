@@ -171,9 +171,9 @@ func (s *DeleteKeycapSetSuite) TestCascade_ReferencingBuilds_DeletesEachBuildIma
 		Return([]string{"build-1", "build-2"}, nil)
 	s.mockBuilds.EXPECT().
 		Get(s.ctx, "alice", "build-1").
-		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build-1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: "builds/alice/build-1/images/img1"},
-		}}, nil)
+		})}, nil)
 	s.mockBuildImages.EXPECT().
 		DeleteBuildImage(s.ctx, repository.BuildImageKey("builds/alice/build-1/images/img1")).
 		Return(nil)
@@ -208,9 +208,9 @@ func (s *DeleteKeycapSetSuite) TestCascade_BuildImageDeleteFails_ReturnsErrorWit
 		Return([]string{"build-1"}, nil)
 	s.mockBuilds.EXPECT().
 		Get(s.ctx, "alice", "build-1").
-		Return(&repository.Build{ID: "build-1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build-1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: "builds/alice/build-1/images/img1"},
-		}}, nil)
+		})}, nil)
 	s.mockBuildImages.EXPECT().
 		DeleteBuildImage(s.ctx, repository.BuildImageKey("builds/alice/build-1/images/img1")).
 		Return(errors.New("s3 unavailable"))

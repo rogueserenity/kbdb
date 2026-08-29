@@ -53,9 +53,9 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 		BuildDate:  &buildDate,
 		Notes:      &notes,
 		Visibility: repository.VisibilityPublic,
-		Images: []repository.BuildImage{
+		Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img-1", Path: repository.BuildImageKey("builds/u-1/build-1/images/img-1")},
-		},
+		}),
 	}, true)
 
 	s.Equal("build-1", out.ID)
@@ -218,7 +218,7 @@ func (s *BuildToMCPSummarySuite) TestKeyboardRepositoryError_ReturnsError() {
 func (s *BuildToMCPSummarySuite) TestHasImages_ReportsTrue() {
 	b := repository.Build{
 		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
-		Images: []repository.BuildImage{{ImageID: "img-1"}},
+		Images: repository.BuildImagesMap([]repository.BuildImage{{ImageID: "img-1"}}),
 	}
 
 	keyboards := mocks.NewMockKeyboardRepository(s.T())

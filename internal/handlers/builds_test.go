@@ -974,10 +974,10 @@ func (s *DeleteBuildSuite) TestDeleteBuild_ImagesPresent_DeletesEachFromS3Before
 	key2 := repository.BuildImageKey("builds/alice/build1/images/img2")
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: key1},
 			{ImageID: "img2", Path: key2},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, key1).
 		Return(nil)
@@ -998,9 +998,9 @@ func (s *DeleteBuildSuite) TestDeleteBuild_ImageDeleteFails_Returns500_DoesNotDe
 	key1 := repository.BuildImageKey("builds/alice/build1/images/img1")
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: key1},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, key1).
 		Return(errors.New("s3 unavailable"))
@@ -1248,9 +1248,9 @@ var deleteBuildImageTestKey = repository.BuildImageKey("builds/alice/build1/imag
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Succeeds() {
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: deleteBuildImageTestKey},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
 		Return(nil)
@@ -1308,9 +1308,9 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotFound_Returns404() {
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_MutationConflict_Returns409() {
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: deleteBuildImageTestKey},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
 		Return(nil)
@@ -1340,9 +1340,9 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_RepositoryError_Returns500(
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_S3DeleteError_Returns500_DoesNotDeleteDBRecord() {
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: []repository.BuildImage{
+		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img1", Path: deleteBuildImageTestKey},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
 		Return(errors.New("s3: access denied"))

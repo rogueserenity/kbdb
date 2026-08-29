@@ -21,16 +21,19 @@ type KeyboardResult struct {
 // deleteBuildImages - see [DeleteKeyboard]'s doc comment for why this
 // gates the build's own DB delete.
 func deleteBuildImages(ctx context.Context, images repository.BuildImageStore, build *repository.Build) error {
-	errs := make([]error, len(build.Images))
+	errs := make([]error, 0, len(build.Images))
+	var mu sync.Mutex
 	var wg sync.WaitGroup
-	for i, img := range build.Images {
+	for _, entry := range build.Images {
 		wg.Add(1)
-		go func(i int, key repository.BuildImageKey) {
+		go func(key repository.BuildImageKey) {
 			defer wg.Done()
 			if err := images.DeleteBuildImage(ctx, key); err != nil {
-				errs[i] = err
+				mu.Lock()
+				errs = append(errs, err)
+				mu.Unlock()
 			}
-		}(i, img.Path)
+		}(entry.Path)
 	}
 	wg.Wait()
 	return errors.Join(errs...)

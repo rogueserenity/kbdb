@@ -176,15 +176,17 @@ func (s *BuildToAPISuite) TestMalformedStoredBuildDate_ReturnsError() {
 
 func (s *BuildToAPISuite) TestImagesPopulated_MintsFreshPresignedURLPerImage() {
 	b := fullRepoBuild()
-	b.Images = []repository.BuildImage{
-		{ImageID: "img1", Path: repository.BuildImageKey("builds/alice/build1/images/img1")},
-		{ImageID: "img2", Path: repository.BuildImageKey("builds/alice/build1/images/img2")},
+	img1 := repository.BuildImageKey("builds/alice/build1/images/img1")
+	img2 := repository.BuildImageKey("builds/alice/build1/images/img2")
+	b.Images = map[string]repository.BuildImageEntry{
+		"img1": {Path: img1, Seq: 0},
+		"img2": {Path: img2, Seq: 1},
 	}
 
 	d := newBuildToAPIDeps(s.T())
 	d.expectFullyResolvable()
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("https://example.com/img1", nil)
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[1].Path).Return("https://example.com/img2", nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img2).Return("https://example.com/img2", nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -199,12 +201,11 @@ func (s *BuildToAPISuite) TestImagesPopulated_MintsFreshPresignedURLPerImage() {
 
 func (s *BuildToAPISuite) TestPresignFails_ReturnsError() {
 	b := fullRepoBuild()
-	b.Images = []repository.BuildImage{
-		{ImageID: "img1", Path: repository.BuildImageKey("builds/alice/build1/images/img1")},
-	}
+	imgPath := repository.BuildImageKey("builds/alice/build1/images/img1")
+	b.Images = map[string]repository.BuildImageEntry{"img1": {Path: imgPath}}
 
 	d := newBuildToAPIDeps(s.T())
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("", errors.New("s3: access denied"))
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
 
 	_, err := d.call(context.Background(), b)
 
@@ -816,16 +817,17 @@ func (s *BuildToAPISummarySuite) TestNoImages_ImageNil() {
 
 func (s *BuildToAPISummarySuite) TestImagesPresent_UsesFirstImageOnly() {
 	b := fullRepoBuild()
-	b.Images = []repository.BuildImage{
-		{ImageID: "img1", Path: repository.BuildImageKey("builds/alice/build1/images/img1")},
-		{ImageID: "img2", Path: repository.BuildImageKey("builds/alice/build1/images/img2")},
+	img1 := repository.BuildImageKey("builds/alice/build1/images/img1")
+	b.Images = map[string]repository.BuildImageEntry{
+		"img1": {Path: img1, Seq: 0},
+		"img2": {Path: "builds/alice/build1/images/img2", Seq: 1},
 	}
 
 	d := newBuildToAPIDeps(s.T())
 	d.keyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, b.Images[0].Path).Return("https://example.com/img1", nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", nil)
 
 	out, err := d.callSummary(context.Background(), b, false)
 	s.Require().NoError(err)

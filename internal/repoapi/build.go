@@ -39,7 +39,7 @@ func BuildToAPI(
 		return api.Build{}, err
 	}
 
-	imgs, err := buildImagesToAPI(ctx, b.Images, images)
+	imgs, err := buildImagesToAPI(ctx, repository.SortedBuildImages(b.Images), images)
 	if err != nil {
 		return api.Build{}, err
 	}
@@ -151,12 +151,12 @@ func BuildToAPISummary(
 	}
 
 	var image *api.BuildImage
-	if len(b.Images) > 0 {
-		url, err := images.PresignGetBuildImage(ctx, b.Images[0].Path)
+	if imgs := repository.SortedBuildImages(b.Images); len(imgs) > 0 {
+		url, err := images.PresignGetBuildImage(ctx, imgs[0].Path)
 		if err != nil {
-			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", b.Images[0].ImageID, err)
+			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", imgs[0].ImageID, err)
 		}
-		image = &api.BuildImage{ImageId: b.Images[0].ImageID, Url: url}
+		image = &api.BuildImage{ImageId: imgs[0].ImageID, Url: url}
 	}
 
 	summary := api.BuildSummary{
@@ -497,8 +497,9 @@ func findKeycapKit(kits map[string]repository.KeycapKit, kitID string) *reposito
 
 // buildImagesToAPI mints a fresh presigned GET URL per image, per request -
 // never persisted, mirroring [KeycapKitToAPI]'s handling of a kit's image.
+// images is already ordered (by Seq) by the caller.
 func buildImagesToAPI(ctx context.Context, images []repository.BuildImage, store repository.BuildImageStore) (*[]api.BuildImage, error) {
-	if images == nil {
+	if len(images) == 0 {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
 	}
 

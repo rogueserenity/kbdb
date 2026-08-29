@@ -51,7 +51,7 @@ func SeedBuild(ctx context.Context, ownerID, id, keyboardID, visibility string) 
 		"id":         id,
 		"keyboard":   keyboardID,
 		"visibility": visibility,
-		"version":    0,
+		"images":     map[string]any{},
 	}); err != nil {
 		return err
 	}
@@ -75,7 +75,7 @@ func SeedBuildWithStabs(ctx context.Context, ownerID, id, keyboardID, visibility
 		"id":         id,
 		"keyboard":   keyboardID,
 		"visibility": visibility,
-		"version":    0,
+		"images":     map[string]any{},
 		"stabs": map[string]any{
 			"name":       "Durock v3",
 			"mount_type": "Screw-in",
@@ -123,7 +123,7 @@ func SeedBuildWithSwitch(ctx context.Context, ownerID, id, switchID, visibility 
 		"id":         id,
 		"switches":   []map[string]any{{"switch": switchID, "count": 1}},
 		"visibility": visibility,
-		"version":    0,
+		"images":     map[string]any{},
 	}); err != nil {
 		return err
 	}
@@ -154,7 +154,7 @@ func SeedBuildWithSwitchAndKeyboard(ctx context.Context, ownerID, id, keyboardID
 		"keyboard":   keyboardID,
 		"switches":   []map[string]any{{"switch": switchID, "count": 1}},
 		"visibility": visibility,
-		"version":    0,
+		"images":     map[string]any{},
 	}); err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func SeedBuildWithSwitchesAndKeyboard(ctx context.Context, ownerID, id, keyboard
 		"keyboard":   keyboardID,
 		"switches":   switches,
 		"visibility": visibility,
-		"version":    0,
+		"images":     map[string]any{},
 	}); err != nil {
 		return err
 	}
@@ -282,7 +282,7 @@ func SeedBuildWithKeycapKit(ctx context.Context, ownerID, id, keycapSetID, kitID
 		"id":          id,
 		"keycap_kits": []map[string]any{{"keycap_set": keycapSetID, "kit": kitID}},
 		"visibility":  visibility,
-		"version":     0,
+		"images":      map[string]any{},
 	}); err != nil {
 		return err
 	}
@@ -314,7 +314,7 @@ func SeedBuildWithKeycapKitAndKeyboard(ctx context.Context, ownerID, id, keyboar
 		"keyboard":    keyboardID,
 		"keycap_kits": []map[string]any{{"keycap_set": keycapSetID, "kit": kitID}},
 		"visibility":  visibility,
-		"version":     0,
+		"images":      map[string]any{},
 	}); err != nil {
 		return err
 	}

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -377,13 +376,13 @@ func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.Bu
 			return
 		}
 
-		idx := slices.IndexFunc(b.Images, func(img repository.BuildImage) bool { return img.ImageID == imageID })
-		if idx == -1 {
+		entry, ok := b.Images[imageID]
+		if !ok {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		if err := images.DeleteBuildImage(r.Context(), b.Images[idx].Path); err != nil {
+		if err := images.DeleteBuildImage(r.Context(), entry.Path); err != nil {
 			log.FromContext(r.Context()).Error("deleting build image object", log.Error, err, log.BuildID, buildID)
 			problem.Internal(w, "failed to delete build image")
 			return
@@ -427,16 +426,19 @@ func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildIm
 			return
 		}
 
-		errs := make([]error, len(b.Images))
+		var errsMu sync.Mutex
+		var errs []error
 		var wg sync.WaitGroup
-		for i, img := range b.Images {
+		for _, entry := range b.Images {
 			wg.Add(1)
-			go func(i int, key repository.BuildImageKey) {
+			go func(key repository.BuildImageKey) {
 				defer wg.Done()
 				if err := images.DeleteBuildImage(ctx, key); err != nil {
-					errs[i] = err
+					errsMu.Lock()
+					errs = append(errs, err)
+					errsMu.Unlock()
 				}
-			}(i, img.Path)
+			}(entry.Path)
 		}
 		wg.Wait()
 
