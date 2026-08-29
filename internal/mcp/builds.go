@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -294,16 +293,19 @@ func handleDeleteBuild(
 			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
 		}
 
-		errs := make([]error, len(b.Images))
+		var errsMu sync.Mutex
+		var errs []error
 		var wg sync.WaitGroup
-		for i, img := range b.Images {
+		for _, entry := range b.Images {
 			wg.Add(1)
-			go func(i int, key repository.BuildImageKey) {
+			go func(key repository.BuildImageKey) {
 				defer wg.Done()
 				if err := images.DeleteBuildImage(ctx, key); err != nil {
-					errs[i] = err
+					errsMu.Lock()
+					errs = append(errs, err)
+					errsMu.Unlock()
 				}
-			}(i, img.Path)
+			}(entry.Path)
 		}
 		wg.Wait()
 
@@ -371,8 +373,9 @@ func handleListBuildImages(
 			return nil, schema.ListBuildImagesOutput{}, err
 		}
 
-		images := make([]schema.BuildImage, len(b.Images))
-		for i, img := range b.Images {
+		sorted := repository.SortedBuildImages(b.Images)
+		images := make([]schema.BuildImage, len(sorted))
+		for i, img := range sorted {
 			images[i] = schema.BuildImage{ImageID: img.ImageID}
 		}
 
@@ -402,12 +405,12 @@ func handleDeleteBuildImage(
 			return nil, schema.DeleteBuildImageOutput{}, mutErr
 		}
 
-		idx := slices.IndexFunc(b.Images, func(img repository.BuildImage) bool { return img.ImageID == in.ImageID })
-		if idx == -1 {
+		entry, ok := b.Images[in.ImageID]
+		if !ok {
 			return nil, schema.DeleteBuildImageOutput{}, nil
 		}
 
-		if err := images.DeleteBuildImage(ctx, b.Images[idx].Path); err != nil {
+		if err := images.DeleteBuildImage(ctx, entry.Path); err != nil {
 			log.FromContext(ctx).Error("deleting build image object", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.DeleteBuildImageOutput{}, errors.New("failed to delete build image")
 		}

@@ -3,10 +3,12 @@ package dynamo
 import (
 	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
 	"github.com/stretchr/testify/mock"
@@ -261,37 +263,68 @@ func (s *BuildRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	s.Nil(b)
 }
 
+
+// storedBuild is a GetItemOutput for build b1 referencing keyboard kb1,
+// optionally with the given image id->seq pairs in its images map.
+func (s *BuildRepositorySuite) storedBuild(seqByImageID map[string]int) *dynamodb.GetItemOutput {
+	item := map[string]types.AttributeValue{
+		"user_id":  &types.AttributeValueMemberS{Value: "alice"},
+		"id":       &types.AttributeValueMemberS{Value: "b1"},
+		"keyboard": &types.AttributeValueMemberS{Value: "kb1"},
+	}
+	if seqByImageID != nil {
+		imgs := map[string]types.AttributeValue{}
+		for id, seq := range seqByImageID {
+			imgs[id] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"path": &types.AttributeValueMemberS{Value: "builds/alice/b1/images/" + id},
+				"seq":  &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", seq)},
+			}}
+		}
+		item["images"] = &types.AttributeValueMemberM{Value: imgs}
+	}
+	return &dynamodb.GetItemOutput{Item: item}
+}
+
+func txCanceled(codes ...string) *types.TransactionCanceledException {
+	reasons := make([]types.CancellationReason, len(codes))
+	for i, c := range codes {
+		reasons[i] = types.CancellationReason{Code: aws.String(c)}
+	}
+	return &types.TransactionCanceledException{CancellationReasons: reasons}
+}
+
 func (s *BuildRepositorySuite) TestUpdate_Succeeds() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
+	// Get (for the marker diff), the transaction, then a Get to return the
+	// persisted build.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil).Twice()
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			if err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b); err != nil {
-				return false
-			}
-			return b.Keyboard == "kb2" && b.Version == 1
+			// Item 0 is an Update action on the build item, not a Put.
+			return in.TransactItems[0].Update != nil && in.TransactItems[0].Put == nil &&
+				strings.Contains(*in.TransactItems[0].Update.ConditionExpression, "attribute_exists")
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb2"})
+	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb1"})
 
 	s.Require().NoError(err)
-	s.Equal("kb2", b.Keyboard)
+	s.Equal("kb1", b.Keyboard)
 }
 
 func (s *BuildRepositorySuite) TestUpdate_ReferenceChange_DiffsMarkers() {
-	// Existing build (via getItemOutput) references kb1; updating to kb2
-	// must add a kb2 marker and remove the kb1 marker, alongside the base
-	// item's own CAS-conditioned Put - three transact items total.
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
+	// Existing build references kb1; updating to kb2 adds a kb2 marker and
+	// removes the kb1 marker, alongside the build item's Update action.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil).Once() // diff-get: still kb1
+	kb2 := s.storedBuild(nil)
+	kb2.Item["keyboard"] = &types.AttributeValueMemberS{Value: "kb2"}
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(kb2, nil).Once() // return-get: reflects the committed kb2
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			if len(in.TransactItems) != 3 {
+			if len(in.TransactItems) != 3 || in.TransactItems[0].Update == nil {
 				return false
 			}
 			var addsKb2, removesKb1 bool
@@ -318,106 +351,75 @@ func (s *BuildRepositorySuite) TestUpdate_ReferenceChange_DiffsMarkers() {
 	s.Equal("kb2", b.Keyboard)
 }
 
-func (s *BuildRepositorySuite) TestUpdate_PreservesExistingImagesAndVersion() {
-	getOutput := s.getItemOutput(3)
-	getOutput.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img1"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/img1"},
-			}},
-		},
-	}
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(getOutput, nil)
+func (s *BuildRepositorySuite) TestUpdate_DoesNotNameImages_SoTheyCarryForward() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(map[string]int{"img1": 0}), nil).Once()
+	var captured *dynamodb.TransactWriteItemsInput
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			if err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b); err != nil {
-				return false
-			}
-			return b.Version == 4 && len(b.Images) == 1 && b.Images[0].ImageID == "img1"
+			captured = in
+			return true
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+	// Return-read shows img1 still present.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(map[string]int{"img1": 0}), nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb2"})
-
+	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb1"})
 	s.Require().NoError(err)
-	s.Require().Len(b.Images, 1)
-	s.Equal("img1", b.Images[0].ImageID)
+
+	expr := *captured.TransactItems[0].Update.UpdateExpression
+	s.NotContains(expr, "images")
+	s.Len(b.Images, 1)
 }
 
-func (s *BuildRepositorySuite) TestUpdate_CASConflict_RetriesThenSucceeds() {
-	// The second Get returns a build with an image (image-from-winner) that
-	// the first Get never saw - proves the retry re-reads fresh state
-	// rather than overlaying onto the first attempt's now-stale struct.
-	firstGet := s.getItemOutput(0)
-	secondGet := s.getItemOutput(1)
-	secondGet.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "image-from-winner"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/image-from-winner"},
-			}},
-		},
-	}
-
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(firstGet, nil).Once()
+func (s *BuildRepositorySuite) TestUpdate_BuildGone_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Once()
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(secondGet, nil).Once()
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b)
-			if err != nil {
-				return false
-			}
-			return b.Version == 2 && b.Keyboard == "kb2" &&
-				len(b.Images) == 1 && b.Images[0].ImageID == "image-from-winner"
-		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+		Return(nil, txCanceled("ConditionalCheckFailed"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb2"})
+	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb1"})
 
-	s.Require().NoError(err)
-	s.Require().NotNil(b)
-	s.Equal("kb2", b.Keyboard)
-	s.Require().Len(b.Images, 1)
-	s.Equal("image-from-winner", b.Images[0].ImageID)
-}
-
-func (s *BuildRepositorySuite) TestUpdate_CASConflictExhausted_ReturnsError() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil).Times(maxBuildMutationAttempts)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Times(maxBuildMutationAttempts)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb2"})
-
-	s.Require().Error(err)
-	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(b)
 }
 
-func (s *BuildRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
+func (s *BuildRepositorySuite) TestUpdate_TransactionConflict_RetriesThenSucceeds() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil).Times(3) // diff-get x2 + final return-get
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, txCanceled("TransactionConflict")).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	b, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb1"})
+
+	s.Require().NoError(err)
+	s.Equal("kb1", b.Keyboard)
+}
+
+func (s *BuildRepositorySuite) TestUpdate_ConflictExhaustsRetries_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, txCanceled("TransactionConflict"))
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.Update(ctx, repository.Build{ID: "b1", Keyboard: "kb1"})
+
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+}
+
+func (s *BuildRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
@@ -428,9 +430,8 @@ func (s *BuildRepositorySuite) TestUpdate_NotFound_ReturnsErrNotFound() {
 }
 
 func (s *BuildRepositorySuite) TestUpdate_TransactWriteItemsError_Propagates() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
@@ -450,17 +451,14 @@ func (s *BuildRepositorySuite) TestUpdate_NoUserIDInContext_ReturnsError() {
 	s.Nil(b)
 }
 
-func (s *BuildRepositorySuite) TestDelete_Succeeds() {
+func (s *BuildRepositorySuite) TestDelete_Succeeds_NoVersionConditionOnBuildItem() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
-	s.mockClient.EXPECT().
-		// One item for the base Build, one marker delete for its keyboard.
-		// The base item's delete is CAS-conditioned on the version this Get
-		// just saw, so a concurrent Update can't leave an orphaned marker.
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			return len(in.TransactItems) == 2 && in.TransactItems[0].Delete != nil &&
-				in.TransactItems[0].Delete.ConditionExpression != nil
+			// The build-item Delete carries no condition now.
+			return in.TransactItems[0].Delete != nil &&
+				in.TransactItems[0].Delete.ConditionExpression == nil
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
 
@@ -470,33 +468,35 @@ func (s *BuildRepositorySuite) TestDelete_Succeeds() {
 	s.Require().NoError(err)
 }
 
-func (s *BuildRepositorySuite) TestDelete_ConcurrentUpdate_RetriesThenSucceeds() {
-	// The second Get sees a build referencing kb2 instead of kb1 - proves
-	// the retry recomputes markers from fresh state (kb2's marker deleted,
-	// not kb1's stale one) rather than reusing the first Get's snapshot.
-	firstGet := s.getItemOutput(0)
-	secondGet := s.getItemOutput(1)
-	secondGet.Item["keyboard"] = &types.AttributeValueMemberS{Value: "kb2"}
-
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(firstGet, nil).Once()
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Once()
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(secondGet, nil).Once()
+func (s *BuildRepositorySuite) TestDelete_DeletesRefMarkers() {
+	// storedBuild references kb1, so the transaction includes the build
+	// Delete plus a kb1 marker Delete.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			if len(in.TransactItems) != 2 || in.TransactItems[1].Delete == nil {
+			if len(in.TransactItems) != 2 {
 				return false
 			}
 			id, ok := in.TransactItems[1].Delete.Key["id"].(*types.AttributeValueMemberS)
-			return ok && id.Value == "zREF#keyboard#kb2#b1"
+			return ok && id.Value == "zREF#keyboard#kb1#b1"
 		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	err := s.repo.Delete(ctx, "b1")
+
+	s.Require().NoError(err)
+}
+
+func (s *BuildRepositorySuite) TestDelete_TransactionConflict_RetriesThenSucceeds() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil).Twice()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, txCanceled("TransactionConflict")).Once()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
@@ -505,34 +505,28 @@ func (s *BuildRepositorySuite) TestDelete_ConcurrentUpdate_RetriesThenSucceeds()
 	s.Require().NoError(err)
 }
 
-func (s *BuildRepositorySuite) TestDelete_CASConflictExhausted_ReturnsError() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil).Times(maxBuildMutationAttempts)
+func (s *BuildRepositorySuite) TestDelete_ConflictExhaustsRetries_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Times(maxBuildMutationAttempts)
+		Return(nil, txCanceled("TransactionConflict"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "b1")
 
-	s.Require().Error(err)
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 }
 
-func (s *BuildRepositorySuite) TestDelete_NotFound_ReturnsErrNotFound() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
+func (s *BuildRepositorySuite) TestDelete_NotFound_IsNoOpSuccess() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
-	// No EXPECT() on TransactWriteItems - a missing build is caught by the
-	// Get before any write is attempted.
+	// No TransactWriteItems - nothing to delete.
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.Delete(ctx, "b1")
 
-	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Require().NoError(err)
 }
 
 func (s *BuildRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
@@ -542,8 +536,7 @@ func (s *BuildRepositorySuite) TestDelete_NoUserIDInContext_ReturnsError() {
 }
 
 func (s *BuildRepositorySuite) TestDelete_GetItemError_Propagates() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
@@ -553,9 +546,8 @@ func (s *BuildRepositorySuite) TestDelete_GetItemError_Propagates() {
 }
 
 func (s *BuildRepositorySuite) TestDelete_TransactWriteItemsError_Propagates() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(s.storedBuild(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
@@ -566,190 +558,111 @@ func (s *BuildRepositorySuite) TestDelete_TransactWriteItemsError_Propagates() {
 	s.Require().Error(err)
 }
 
-func (s *BuildRepositorySuite) getItemOutput(version int) *dynamodb.GetItemOutput {
-	item := map[string]types.AttributeValue{
-		"user_id":  &types.AttributeValueMemberS{Value: "alice"},
-		"id":       &types.AttributeValueMemberS{Value: "b1"},
-		"keyboard": &types.AttributeValueMemberS{Value: "kb1"},
-		"version":  &types.AttributeValueMemberN{Value: fmt.Sprintf("%d", version)},
-	}
-	return &dynamodb.GetItemOutput{Item: item}
-}
-
-// getItemOutputWithImage returns a build (img1) for the DeleteImage tests
-// that need a target image already present to remove.
-func (s *BuildRepositorySuite) getItemOutputWithImage() *dynamodb.GetItemOutput {
-	out := s.getItemOutput(0)
-	out.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img1"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/img1"},
-			}},
-		},
-	}
-	return out
-}
-
-func (s *BuildRepositorySuite) TestAddImage_Succeeds() {
+func (s *BuildRepositorySuite) TestAddImage_Succeeds_PlainUpdateItemNoTransaction() {
+	// One UpdateItem, no GetItem, no transaction. seq is a wall-clock stamp.
+	before := time.Now().UnixNano()
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b)
-			if err != nil {
-				return false
-			}
-			return b.Version == 1 && len(b.Images) == 1 && b.Images[0].ImageID == "img1"
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return strings.Contains(*in.ConditionExpression, "attribute_exists") &&
+				strings.Contains(*in.ConditionExpression, "attribute_not_exists")
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
-		ImageID: "img1",
-		Path:    "builds/alice/b1/images/img1",
-	})
-
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "builds/alice/b1/images/img1"})
 	s.Require().NoError(err)
+
+	entry := captured.ExpressionAttributeValues[":0"].(*types.AttributeValueMemberM)
+	seq, convErr := strconv.ParseInt(entry.Value["seq"].(*types.AttributeValueMemberN).Value, 10, 64)
+	s.Require().NoError(convErr)
+	s.GreaterOrEqual(seq, before)
+	s.LessOrEqual(seq, time.Now().UnixNano())
 }
 
 func (s *BuildRepositorySuite) TestAddImage_ParentBuildNotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
+			return in.ConsistentRead != nil && *in.ConsistentRead
+		})).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "missing", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p"})
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
-func (s *BuildRepositorySuite) TestAddImage_CASConflict_RetriesThenSucceeds() {
-	// The second Get returns a build with an image (image-from-winner) that
-	// the first Get never saw - proves the retry re-reads fresh state and
-	// mutates that, rather than re-applying the mutation to the first
-	// attempt's now-stale in-memory struct.
-	firstGet := s.getItemOutput(0)
-	secondGet := s.getItemOutput(1)
-	secondGet.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "image-from-winner"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/image-from-winner"},
-			}},
-		},
-	}
-
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(firstGet, nil).Once()
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Once()
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(secondGet, nil).Once()
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b)
-			if err != nil {
-				return false
-			}
-			return b.Version == 2 && len(b.Images) == 2 &&
-				b.Images[0].ImageID == "image-from-winner" && b.Images[1].ImageID == "img1"
-		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
-		ImageID: "img1",
-		Path:    "builds/alice/b1/images/img1",
-	})
-
-	s.Require().NoError(err)
-}
-
-func (s *BuildRepositorySuite) TestAddImage_CASConflictExhausted_ReturnsError() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil).Times(maxBuildMutationAttempts)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Times(maxBuildMutationAttempts)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1"})
-
-	s.Require().Error(err)
-	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-}
-
-func (s *BuildRepositorySuite) TestAddImage_EmptyImageID_ReturnsError() {
-	// No EXPECT() on GetItem/PutItem - caught before any DynamoDB call.
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{})
-
-	s.Require().ErrorIs(err, errEmptyImageID)
-}
-
 func (s *BuildRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
-	getOutput := s.getItemOutputWithImage()
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
-		Return(getOutput, nil)
-	// No EXPECT() on PutItem - the duplicate is caught inside the mutate
-	// closure, before any write is attempted.
+		Return(s.storedBuild(nil), nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{
-		ImageID: "img1",
-		Path:    "builds/alice/b1/images/img1",
-	})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p2"})
 
 	s.Require().ErrorIs(err, errDuplicateImageID)
 }
 
-func (s *BuildRepositorySuite) TestAddImage_TransactWriteItemsError_Propagates() {
+func (s *BuildRepositorySuite) TestAddImage_ClassifyGetItemError_Propagates() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p"})
 
 	s.Require().Error(err)
-	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
+	s.Require().NotErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *BuildRepositorySuite) TestAddImage_UpdateItemError_Propagates() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p"})
+
+	s.Require().Error(err)
+}
+
+func (s *BuildRepositorySuite) TestAddImage_EmptyImageID_ReturnsError() {
+	err := s.repo.AddImage(kbdbctx.WithUserID(s.T().Context(), "alice"), "b1", repository.BuildImage{Path: "p"})
+
+	s.Require().Error(err)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_NoUserIDInContext_ReturnsError() {
-	err := s.repo.AddImage(s.T().Context(), "b1", repository.BuildImage{ImageID: "img1"})
+	err := s.repo.AddImage(s.T().Context(), "b1", repository.BuildImage{ImageID: "img1", Path: "p"})
 
 	s.Require().Error(err)
 }
 
 func (s *BuildRepositorySuite) TestDeleteImage_Succeeds() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutputWithImage(), nil)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			if err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b); err != nil {
-				return false
-			}
-			return b.Version == 1 && len(b.Images) == 0
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			return strings.Contains(*in.UpdateExpression, "REMOVE") &&
+				in.ReturnValues == types.ReturnValueAllOld
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"images": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+				"img1": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+					"path": &types.AttributeValueMemberS{Value: "builds/alice/b1/images/img1"},
+					"seq":  &types.AttributeValueMemberN{Value: "0"},
+				}},
+			}},
+		}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	removed, err := s.repo.DeleteImage(ctx, "b1", "img1")
@@ -759,13 +672,16 @@ func (s *BuildRepositorySuite) TestDeleteImage_Succeeds() {
 	s.Equal(repository.BuildImageKey("builds/alice/b1/images/img1"), *removed)
 }
 
-func (s *BuildRepositorySuite) TestDeleteImage_ImageAlreadyAbsent_SucceedsWithoutWriting() {
+func (s *BuildRepositorySuite) TestDeleteImage_ImageAlreadyAbsent_ReturnsNilWithoutError() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutput(0), nil)
+		Return(s.storedBuild(nil), nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	removed, err := s.repo.DeleteImage(ctx, "b1", "no-such-image")
+	removed, err := s.repo.DeleteImage(ctx, "b1", "missing")
 
 	s.Require().NoError(err)
 	s.Nil(removed)
@@ -773,96 +689,28 @@ func (s *BuildRepositorySuite) TestDeleteImage_ImageAlreadyAbsent_SucceedsWithou
 
 func (s *BuildRepositorySuite) TestDeleteImage_ParentBuildNotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
 		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	removed, err := s.repo.DeleteImage(ctx, "missing", "img1")
+	removed, err := s.repo.DeleteImage(ctx, "b1", "img1")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 	s.Nil(removed)
 }
 
-func (s *BuildRepositorySuite) TestDeleteImage_CASConflict_RetriesThenSucceeds() {
-	// The second Get returns a build with an additional image
-	// (image-from-winner) alongside img1 - proves the retry recomputes
-	// state from a fresh Get rather than reusing the first attempt's
-	// now-stale slice.
-	firstGet := s.getItemOutputWithImage()
-	secondGet := s.getItemOutput(1)
-	secondGet.Item["images"] = &types.AttributeValueMemberL{
-		Value: []types.AttributeValue{
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "image-from-winner"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/image-from-winner"},
-			}},
-			&types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
-				"image_id": &types.AttributeValueMemberS{Value: "img1"},
-				"path":     &types.AttributeValueMemberS{Value: "builds/alice/b1/images/img1"},
-			}},
-		},
-	}
-
+func (s *BuildRepositorySuite) TestDeleteImage_UpdateItemError_Propagates() {
 	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(firstGet, nil).Once()
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Once()
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(secondGet, nil).Once()
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			var b repository.Build
-			if err := attributevalue.UnmarshalMap(in.TransactItems[0].Put.Item, &b); err != nil {
-				return false
-			}
-			return b.Version == 2 && len(b.Images) == 1 && b.Images[0].ImageID == "image-from-winner"
-		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	removed, err := s.repo.DeleteImage(ctx, "b1", "img1")
-
-	s.Require().NoError(err)
-	s.Require().NotNil(removed)
-	s.Equal(repository.BuildImageKey("builds/alice/b1/images/img1"), *removed)
-}
-
-func (s *BuildRepositorySuite) TestDeleteImage_CASConflictExhausted_ReturnsError() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutputWithImage(), nil).Times(maxBuildMutationAttempts)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
-		Return(nil, &types.TransactionCanceledException{
-			CancellationReasons: []types.CancellationReason{{Code: aws.String("ConditionalCheckFailed")}},
-		}).Times(maxBuildMutationAttempts)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	removed, err := s.repo.DeleteImage(ctx, "b1", "img1")
-
-	s.Require().Error(err)
-	s.Require().ErrorIs(err, repository.ErrMutationConflict)
-	s.Nil(removed)
-}
-
-func (s *BuildRepositorySuite) TestDeleteImage_TransactWriteItemsError_Propagates() {
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.getItemOutputWithImage(), nil)
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.Anything).
+		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	removed, err := s.repo.DeleteImage(ctx, "b1", "img1")
 
 	s.Require().Error(err)
-	s.Require().NotErrorIs(err, repository.ErrMutationConflict)
 	s.Nil(removed)
 }
 

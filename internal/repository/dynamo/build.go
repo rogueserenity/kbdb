@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -27,10 +27,6 @@ var errEmptyImageID = errors.New("image id must not be empty")
 // one build's Images - practically unreachable given uuid.NewString(), but
 // caught here rather than silently persisting an ambiguous duplicate.
 var errDuplicateImageID = errors.New("image id already exists in this build")
-
-// errImageAlreadyAbsent signals DeleteImage's mutateBuild closure found no
-// matching image - DeleteImage treats this as success, not an error.
-var errImageAlreadyAbsent = errors.New("image already absent from build")
 
 // BuildRepository is the DynamoDB-backed repository.BuildRepository.
 type BuildRepository struct {
@@ -115,13 +111,21 @@ func (r *BuildRepository) List(
 
 // Get implements repository.BuildRepository.
 func (r *BuildRepository) Get(ctx context.Context, ownerID, id string) (*repository.Build, error) {
-	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+	return r.get(ctx, ownerID, id, false)
+}
+
+// get is Get with an explicit consistency choice. Update uses the
+// consistent read for the value it returns to the caller, since that read
+// immediately follows its own committed write.
+func (r *BuildRepository) get(ctx context.Context, ownerID, id string, consistent bool) (*repository.Build, error) {
+	in := &dynamodb.GetItemInput{
 		TableName: &r.tableName,
-		Key: map[string]types.AttributeValue{
-			"user_id": &types.AttributeValueMemberS{Value: ownerID},
-			"id":      &types.AttributeValueMemberS{Value: id},
-		},
-	})
+		Key:       buildKey(ownerID, id),
+	}
+	if consistent {
+		in.ConsistentRead = aws.Bool(true)
+	}
+	out, err := r.client.GetItem(ctx, in)
 	if err != nil {
 		return nil, fmt.Errorf("getting build %q for owner %q: %w", id, ownerID, err)
 	}
@@ -149,6 +153,11 @@ func (r *BuildRepository) Create(ctx context.Context, b repository.Build) (*repo
 	item, err := attributevalue.MarshalMap(b)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling build %q for owner %q: %w", b.ID, b.UserID, err)
+	}
+	// AddImage addresses images.<id> in place - DynamoDB won't auto-vivify
+	// the parent Map, so seed an empty one.
+	if _, ok := item["images"]; !ok {
+		item["images"] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
 	}
 
 	transactItems := []types.TransactWriteItem{
@@ -193,50 +202,136 @@ func isConditionalCheckFailed(err error) bool {
 	return false
 }
 
-// Update goes through mutateBuild rather than a naive whole-item PutItem:
-// b (built from the request body) never has Images or Version set, so
-// overwriting the stored item wholesale would wipe every image and desync
-// Version from mutateBuild's CAS loop.
+const maxBuildMutationAttempts = 3
+
+// buildKey builds the base-table primary key for a build.
+func buildKey(ownerID, buildID string) map[string]types.AttributeValue {
+	return map[string]types.AttributeValue{
+		"user_id": &types.AttributeValueMemberS{Value: ownerID},
+		"id":      &types.AttributeValueMemberS{Value: buildID},
+	}
+}
+
+// Update rewrites the caller's build from the request body and re-diffs its
+// ref-markers, in one TransactWriteItems: an Update action on the build item
+// (SET body fields + Switches/KeycapKits, images/next unnamed so they carry
+// forward, cond attribute_exists(id)) plus a marker Put/Delete per
+// reference delta. The pre-Get is for the old marker set, not carry-forward.
+// A cancellation is classified: build-item ConditionalCheckFailed means the
+// build is gone (ErrNotFound); TransactionConflict retries from a fresh Get.
 func (r *BuildRepository) Update(ctx context.Context, b repository.Build) (*repository.Build, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("updating build %q: %w", b.ID, repository.ErrNoUserID)
 	}
 
-	updated, err := r.mutateBuild(ctx, ownerID, b.ID, func(existing *repository.Build) error {
-		existing.Keyboard = b.Keyboard
-		existing.Plate = b.Plate
-		existing.CaseMountType = b.CaseMountType
-		existing.Stabs = b.Stabs
-		existing.Foam = b.Foam
-		existing.Switches = b.Switches
-		existing.KeycapKits = b.KeycapKits
-		existing.BuildDate = b.BuildDate
-		existing.Notes = b.Notes
-		existing.Visibility = b.Visibility
-		return nil
-	})
-	if errors.Is(err, repository.ErrNotFound) {
-		return nil, repository.ErrNotFound
-	}
+	update := expression.
+		Set(expression.Name("keyboard"), expression.Value(b.Keyboard)).
+		Set(expression.Name("switches"), expression.Value(b.Switches)).
+		Set(expression.Name("keycap_kits"), expression.Value(b.KeycapKits)).
+		Set(expression.Name("visibility"), expression.Value(b.Visibility))
+	update = setOrRemovePtr(update, "plate", b.Plate)
+	update = setOrRemovePtr(update, "case_mount_type", b.CaseMountType)
+	update = setOrRemovePtr(update, "stabs", b.Stabs)
+	update = setOrRemovePtr(update, "foam", b.Foam)
+	update = setOrRemovePtr(update, "build_date", b.BuildDate)
+	update = setOrRemovePtr(update, "notes", b.Notes)
+
+	expr, err := expression.NewBuilder().
+		WithUpdate(update).
+		WithCondition(expression.AttributeExists(expression.Name("id"))).
+		Build()
 	if err != nil {
-		return nil, fmt.Errorf("updating build %q for owner %q: %w", b.ID, ownerID, err)
+		return nil, fmt.Errorf("building build update expression for build %q: %w", b.ID, err)
 	}
 
-	return updated, nil
+	// b carries the desired reference set; the current one comes from a Get
+	// each attempt so a TransactionConflict retry re-diffs against fresh
+	// state. b.ID is set from the request, b.UserID from ctx.
+	b.UserID = ownerID
+	newMarkers := deriveRefMarkers(ownerID, b)
+
+	for range maxBuildMutationAttempts {
+		existing, err := r.Get(ctx, ownerID, b.ID)
+		if err != nil {
+			return nil, err
+		}
+		toAdd, toRemove := diffRefMarkers(deriveRefMarkers(ownerID, *existing), newMarkers)
+
+		transactItems := []types.TransactWriteItem{
+			{Update: &types.Update{
+				TableName:                 &r.tableName,
+				Key:                       buildKey(ownerID, b.ID),
+				UpdateExpression:          expr.Update(),
+				ConditionExpression:       expr.Condition(),
+				ExpressionAttributeNames:  expr.Names(),
+				ExpressionAttributeValues: expr.Values(),
+			}},
+		}
+		for _, m := range toAdd {
+			transactItems = append(transactItems, putMarkerTransactItem(r.tableName, m))
+		}
+		for _, m := range toRemove {
+			transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
+		}
+
+		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
+		if err == nil {
+			// Consistent read: this immediately follows our own commit, and
+			// the value is what the caller gets back as the persisted build.
+			return r.get(ctx, ownerID, b.ID, true)
+		}
+
+		switch classifyBuildTxConflict(err) {
+		case buildTxConflictGone:
+			return nil, repository.ErrNotFound
+		case buildTxConflictRetry:
+			log.FromContext(ctx).Warn("build update retry", log.BuildID, b.ID)
+			continue
+		case buildTxConflictNone:
+			return nil, fmt.Errorf("updating build %q for owner %q: %w", b.ID, ownerID, err)
+		}
+	}
+
+	return nil, fmt.Errorf("updating build %q owner %q: %w", b.ID, ownerID, repository.ErrMutationConflict)
+}
+
+type buildTxConflict int
+
+const (
+	buildTxConflictNone buildTxConflict = iota
+	buildTxConflictGone
+	buildTxConflictRetry
+)
+
+// classifyBuildTxConflict maps a build TransactWriteItems cancellation:
+// reason 0 (the build item) ConditionalCheckFailed means attribute_exists(id)
+// failed - the build is gone; any TransactionConflict is transient
+// contention. buildTxConflictNone if err isn't a transaction cancellation.
+func classifyBuildTxConflict(err error) buildTxConflict {
+	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
+	if !ok {
+		return buildTxConflictNone
+	}
+	for _, reason := range txErr.CancellationReasons {
+		if reason.Code != nil && *reason.Code == "TransactionConflict" {
+			return buildTxConflictRetry
+		}
+	}
+	if len(txErr.CancellationReasons) > 0 && txErr.CancellationReasons[0].Code != nil &&
+		*txErr.CancellationReasons[0].Code == "ConditionalCheckFailed" {
+		return buildTxConflictGone
+	}
+	return buildTxConflictNone
 }
 
 // Delete implements repository.BuildRepository. It Gets the build first
-// (rather than a plain DeleteItem with ReturnValues: ALL_OLD) because a
-// TransactWriteItems Delete has no ReturnValues equivalent, and the deleted
-// build's Images/references must be known up front to also delete its
-// refMarkers in the same transaction. The base item's delete is
-// CAS-conditioned on the version this Get saw: without that, a concurrent
-// Update landing between the Get and the transact-write could change the
-// build's references out from under this call, leaving a refMarker
-// orphaned - deleted for a reference that's no longer current, or never
-// deleted for a reference the concurrent Update just added. On a lost race,
-// retry from a fresh Get, mirroring mutateBuild's CAS loop.
+// because a TransactWriteItems Delete has no ReturnValues equivalent and the
+// deleted build's references must be known to also delete its refMarkers in
+// the same transaction. The build-item Delete carries no version condition -
+// deleting an already-gone row is idempotent. A concurrent Update between
+// the Get and the transaction surfaces as a TransactionConflict, which
+// retries from a fresh Get (re-deriving the current marker set).
 func (r *BuildRepository) Delete(ctx context.Context, id string) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -245,39 +340,15 @@ func (r *BuildRepository) Delete(ctx context.Context, id string) error {
 
 	for range maxBuildMutationAttempts {
 		existing, err := r.Get(ctx, ownerID, id)
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil
+		}
 		if err != nil {
 			return err
 		}
 
-		// existing.Version is 0 both for a real version:0 item and for a
-		// pre-Version item with no version attribute at all (Get/UnmarshalMap
-		// defaults a missing attribute to the zero value) - attribute_not_exists
-		// covers the latter, since DynamoDB never matches an equality condition
-		// against an absent attribute.
-		versionCondition := expression.Name("version").Equal(expression.Value(existing.Version))
-		if existing.Version == 0 {
-			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
-		}
-		expr, err := expression.NewBuilder().
-			WithCondition(versionCondition).
-			Build()
-		if err != nil {
-			return fmt.Errorf("building build delete condition for build %q: %w", id, err)
-		}
-
 		transactItems := []types.TransactWriteItem{
-			{
-				Delete: &types.Delete{
-					TableName: &r.tableName,
-					Key: map[string]types.AttributeValue{
-						"user_id": &types.AttributeValueMemberS{Value: ownerID},
-						"id":      &types.AttributeValueMemberS{Value: id},
-					},
-					ConditionExpression:       expr.Condition(),
-					ExpressionAttributeNames:  expr.Names(),
-					ExpressionAttributeValues: expr.Values(),
-				},
-			},
+			{Delete: &types.Delete{TableName: &r.tableName, Key: buildKey(ownerID, id)}},
 		}
 		for _, m := range deriveRefMarkers(ownerID, *existing) {
 			transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
@@ -288,100 +359,23 @@ func (r *BuildRepository) Delete(ctx context.Context, id string) error {
 			return nil
 		}
 
-		if !isConditionalCheckFailed(err) {
-			return fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
+		if classifyBuildTxConflict(err) == buildTxConflictRetry {
+			log.FromContext(ctx).Warn("build delete retry", log.BuildID, id)
+			continue
 		}
-		// Lost the CAS race - another writer updated Version first. Loop
-		// and retry from a fresh Get.
-		log.FromContext(ctx).Warn("build delete CAS retry", log.BuildID, id, "attempted_version", existing.Version)
+		return fmt.Errorf("deleting build %q for owner %q: %w", id, ownerID, err)
 	}
 
 	return fmt.Errorf("deleting build %q owner %q: %w", id, ownerID, repository.ErrMutationConflict)
 }
 
-const maxBuildMutationAttempts = 3
-
-// mutateBuild is a hand-rolled Version-based CAS retry loop: DynamoDB can't
-// address a List element by an inner field like image_id, so image
-// mutations must decode/mutate/re-encode the whole Images slice, and the Go
-// SDK has no built-in optimistic-locking primitive. Mirrors
-// [(*KeycapSetRepository).mutateSet].
-func (r *BuildRepository) mutateBuild(
-	ctx context.Context,
-	ownerID, buildID string,
-	mutate func(b *repository.Build) error,
-) (*repository.Build, error) {
-	for range maxBuildMutationAttempts {
-		b, err := r.Get(ctx, ownerID, buildID)
-		if err != nil {
-			return nil, err
-		}
-		oldMarkers := deriveRefMarkers(ownerID, *b)
-
-		if err := mutate(b); err != nil {
-			return nil, err
-		}
-
-		expectedVersion := b.Version
-		b.Version++
-
-		item, err := attributevalue.MarshalMap(*b)
-		if err != nil {
-			return nil, fmt.Errorf("marshalling build %q for owner %q: %w", buildID, ownerID, err)
-		}
-
-		// expectedVersion is 0 both for a real version:0 item and for a
-		// pre-Version item with no version attribute at all (Get/UnmarshalMap
-		// defaults a missing attribute to the zero value) - attribute_not_exists
-		// covers the latter, since DynamoDB never matches an equality condition
-		// against an absent attribute.
-		versionCondition := expression.Name("version").Equal(expression.Value(expectedVersion))
-		if expectedVersion == 0 {
-			versionCondition = versionCondition.Or(expression.AttributeNotExists(expression.Name("version")))
-		}
-		expr, err := expression.NewBuilder().
-			WithCondition(versionCondition).
-			Build()
-		if err != nil {
-			return nil, fmt.Errorf("building build mutation condition for build %q: %w", buildID, err)
-		}
-
-		transactItems := []types.TransactWriteItem{
-			{
-				Put: &types.Put{
-					TableName:                 &r.tableName,
-					Item:                      item,
-					ConditionExpression:       expr.Condition(),
-					ExpressionAttributeNames:  expr.Names(),
-					ExpressionAttributeValues: expr.Values(),
-				},
-			},
-		}
-		toAdd, toRemove := diffRefMarkers(oldMarkers, deriveRefMarkers(ownerID, *b))
-		for _, m := range toAdd {
-			transactItems = append(transactItems, putMarkerTransactItem(r.tableName, m))
-		}
-		for _, m := range toRemove {
-			transactItems = append(transactItems, deleteMarkerTransactItem(r.tableName, m))
-		}
-
-		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
-		if err == nil {
-			return b, nil
-		}
-
-		if !isConditionalCheckFailed(err) {
-			return nil, fmt.Errorf("mutating build %q owner %q: %w", buildID, ownerID, err)
-		}
-		// Lost the CAS race - another writer updated Version first. Loop
-		// and retry from a fresh Get.
-		log.FromContext(ctx).Warn("build CAS retry", log.BuildID, buildID, "attempted_version", expectedVersion)
-	}
-
-	return nil, fmt.Errorf("mutating build %q owner %q: %w", buildID, ownerID, repository.ErrMutationConflict)
-}
-
-// AddImage implements repository.BuildRepository.
+// AddImage implements repository.BuildRepository. One UpdateItem sets
+// images.<id> = {path, seq}. Seq is time.Now().UnixNano(), so a new image
+// sorts after every existing one without reading the current max (see
+// BuildImageEntry.Seq for the wall-clock caveat). images is not part of any
+// ref-marker, so this is a plain UpdateItem, no transaction. On the
+// compound-condition failure a consistent GetItem (buildExists) tells
+// build-gone (ErrNotFound) from duplicate-id.
 func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image repository.BuildImage) error {
 	if image.ImageID == "" {
 		return fmt.Errorf("adding image to build %q: %w", buildID, errEmptyImageID)
@@ -392,40 +386,109 @@ func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image re
 		return fmt.Errorf("adding image to build %q: %w", buildID, repository.ErrNoUserID)
 	}
 
-	_, err := r.mutateBuild(ctx, ownerID, buildID, func(b *repository.Build) error {
-		if slices.ContainsFunc(b.Images, func(existing repository.BuildImage) bool { return existing.ImageID == image.ImageID }) {
+	imagePath := "images." + image.ImageID
+	entry := repository.BuildImageEntry{Path: image.Path, Seq: int(time.Now().UnixNano())}
+	update := expression.Set(expression.Name(imagePath), expression.Value(entry))
+	cond := expression.AttributeExists(expression.Name("id")).
+		And(expression.AttributeNotExists(expression.Name(imagePath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return fmt.Errorf("building add-image expression for build %q: %w", buildID, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       buildKey(ownerID, buildID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			exists, existsErr := r.buildExists(ctx, ownerID, buildID)
+			if existsErr != nil {
+				return fmt.Errorf("classifying add-image conflict for build %q: %w", buildID, existsErr)
+			}
+			if !exists {
+				return repository.ErrNotFound
+			}
 			return fmt.Errorf("adding image %q to build %q: %w", image.ImageID, buildID, errDuplicateImageID)
 		}
-		b.Images = append(b.Images, image)
-		return nil
-	})
-	return err
+		return fmt.Errorf("adding image %q to build %q owner %q: %w", image.ImageID, buildID, ownerID, err)
+	}
+
+	return nil
 }
 
-// DeleteImage implements repository.BuildRepository.
+// buildExists is a strongly consistent existence check for classifying a
+// compound-condition failure.
+func (r *BuildRepository) buildExists(ctx context.Context, ownerID, id string) (bool, error) {
+	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+		TableName:      &r.tableName,
+		Key:            buildKey(ownerID, id),
+		ConsistentRead: aws.Bool(true),
+	})
+	if err != nil {
+		return false, err
+	}
+	return len(out.Item) > 0, nil
+}
+
+// DeleteImage implements repository.BuildRepository. One UpdateItem REMOVE
+// images.<id> under attribute_exists(images.<id>), ALL_OLD so the removed
+// entry's path is the returned key. A missing id (condition fails but the
+// build exists) is a nil-nil success. No transaction - images aren't
+// ref-markers.
 func (r *BuildRepository) DeleteImage(ctx context.Context, buildID, imageID string) (*repository.BuildImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("deleting image from build %q: %w", buildID, repository.ErrNoUserID)
 	}
 
-	var removed *repository.BuildImageKey
-	_, err := r.mutateBuild(ctx, ownerID, buildID, func(b *repository.Build) error {
-		idx := slices.IndexFunc(b.Images, func(existing repository.BuildImage) bool { return existing.ImageID == imageID })
-		if idx == -1 {
-			return errImageAlreadyAbsent
-		}
-		key := b.Images[idx].Path
-		removed = &key
-		b.Images = slices.Delete(b.Images, idx, idx+1)
-		return nil
-	})
-	if errors.Is(err, errImageAlreadyAbsent) {
-		return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
-	}
+	imagePath := "images." + imageID
+	expr, err := expression.NewBuilder().
+		WithUpdate(expression.Remove(expression.Name(imagePath))).
+		WithCondition(
+			expression.AttributeExists(expression.Name("id")).
+				And(expression.AttributeExists(expression.Name(imagePath))),
+		).
+		Build()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("building delete-image expression for build %q: %w", buildID, err)
 	}
 
-	return removed, nil
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       buildKey(ownerID, buildID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllOld,
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			exists, existsErr := r.buildExists(ctx, ownerID, buildID)
+			if existsErr != nil {
+				return nil, fmt.Errorf("classifying delete-image conflict for build %q: %w", buildID, existsErr)
+			}
+			if !exists {
+				return nil, repository.ErrNotFound
+			}
+			return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
+		}
+		return nil, fmt.Errorf("deleting image %q from build %q owner %q: %w", imageID, buildID, ownerID, err)
+	}
+
+	var old repository.Build
+	if err := attributevalue.UnmarshalMap(out.Attributes, &old); err != nil {
+		return nil, fmt.Errorf("unmarshalling pre-delete build %q for owner %q: %w", buildID, ownerID, err)
+	}
+	entry, ok := old.Images[imageID]
+	if !ok {
+		return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
+	}
+	return &entry.Path, nil
 }

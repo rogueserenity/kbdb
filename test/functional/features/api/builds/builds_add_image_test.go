@@ -14,6 +14,29 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
+// buildImageIDs GETs the build and returns its image ids in the order the
+// API presents them.
+func buildImageIDs(ctx SpecContext, client *api.BuildsClient, ownerID, buildID, token string) []string {
+	GinkgoHelper()
+	getResp, err := client.Get(ctx, ownerID, buildID, token)
+	Expect(err).NotTo(HaveOccurred())
+	defer func() { _ = getResp.Body.Close() }()
+	Expect(getResp.StatusCode).To(Equal(http.StatusOK))
+
+	var b struct {
+		Images []struct {
+			ImageID string `json:"image_id"`
+		} `json:"images"`
+	}
+	Expect(json.NewDecoder(getResp.Body).Decode(&b)).To(Succeed())
+
+	ids := make([]string, len(b.Images))
+	for i, img := range b.Images {
+		ids[i] = img.ImageID
+	}
+	return ids
+}
+
 var _ = Describe("Adding an image to a build", func() {
 	var (
 		resp       *http.Response
@@ -133,6 +156,37 @@ var _ = Describe("Adding an image to a build", func() {
 					It("returns 400 with a problem+json body", func() {
 						Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
 						Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+					})
+				})
+			})
+
+			Context("given several images added in sequence", func() {
+				When("listing them, then deleting a middle one", func() {
+					It("returns them in add order, and the order survives the delete", func(ctx SpecContext) {
+						By("adding three images in order")
+						ids := make([]string, 3)
+						for i := range ids {
+							addResp, err := client.AddImage(ctx, ownerID, buildID, ownerToken,
+								`{"content_type":"`+approvedImageContentType+`"}`)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
+							var created struct {
+								ImageID string `json:"image_id"`
+							}
+							Expect(json.NewDecoder(addResp.Body).Decode(&created)).To(Succeed())
+							ids[i] = created.ImageID
+						}
+
+						By("GET returning them in add order")
+						Expect(buildImageIDs(ctx, client, ownerID, buildID, ownerToken)).To(Equal(ids))
+
+						By("deleting the middle image")
+						delResp, err := client.DeleteImage(ctx, ownerID, buildID, ids[1], ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(delResp.StatusCode).To(Equal(http.StatusNoContent))
+
+						By("GET returning the remaining two in their original relative order")
+						Expect(buildImageIDs(ctx, client, ownerID, buildID, ownerToken)).To(Equal([]string{ids[0], ids[2]}))
 					})
 				})
 			})
