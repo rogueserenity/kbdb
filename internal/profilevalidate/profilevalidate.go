@@ -31,6 +31,17 @@ const (
 // "user-" prefix ban is a separate check.
 var usernamePattern = regexp.MustCompile(`^[a-z0-9_-]{3,20}$`)
 
+// Normalize coerces a blank (empty or all-whitespace) DiscordUsername to nil
+// in place, treating it as not provided rather than a validation failure.
+// Callers must run this before Validate and before passing p to a
+// repository.ProfileRepository, so a blank handle never reaches the
+// DynamoDB directory GSIs.
+func Normalize(p *repository.Profile) {
+	if p.DiscordUsername != nil && strings.TrimSpace(*p.DiscordUsername) == "" {
+		p.DiscordUsername = nil
+	}
+}
+
 // Validate returns every field-level violation in p's writable body, or nil
 // if valid. Unset optional fields are not violations.
 func Validate(p repository.Profile) []FieldError {

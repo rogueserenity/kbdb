@@ -154,6 +154,42 @@ func (s *ValidateSuite) TestLinkURLBlank_Flagged() {
 	s.Equal([]string{"links[0].url"}, names(profilevalidate.Validate(p)))
 }
 
+func (s *ValidateSuite) TestNormalize_BlankDiscordUsername_SetToNil() {
+	blank := ""
+	p := repository.Profile{Username: "alice_kb", DiscordUsername: &blank}
+
+	profilevalidate.Normalize(&p)
+
+	s.Nil(p.DiscordUsername)
+}
+
+func (s *ValidateSuite) TestNormalize_WhitespaceDiscordUsername_SetToNil() {
+	whitespace := "   "
+	p := repository.Profile{Username: "alice_kb", DiscordUsername: &whitespace}
+
+	profilevalidate.Normalize(&p)
+
+	s.Nil(p.DiscordUsername)
+}
+
+func (s *ValidateSuite) TestNormalize_NonBlankDiscordUsername_Unchanged() {
+	discord := "alice_kb"
+	p := repository.Profile{Username: "alice_kb", DiscordUsername: &discord}
+
+	profilevalidate.Normalize(&p)
+
+	s.Require().NotNil(p.DiscordUsername)
+	s.Equal("alice_kb", *p.DiscordUsername)
+}
+
+func (s *ValidateSuite) TestNormalize_NilDiscordUsername_Unchanged() {
+	p := repository.Profile{Username: "alice_kb"}
+
+	profilevalidate.Normalize(&p)
+
+	s.Nil(p.DiscordUsername)
+}
+
 func (s *ValidateSuite) TestSecondLinkIndexInFieldName() {
 	p := valid()
 	p.Links = []repository.ProfileLink{

@@ -64,6 +64,24 @@ var _ = Describe("Creating a profile over MCP", func() {
 			})
 		})
 
+		Context("given a blank discord_username", func() {
+			When("create_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_profile", map[string]any{
+						"username":         username,
+						"discoverable":     true,
+						"discord_username": "   ",
+					})
+				})
+
+				It("creates the profile with discord_username absent, not empty", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+					Expect(decodeGetProfileOutput(result).Profile.DiscordUsername).To(BeNil())
+				})
+			})
+		})
+
 		Context("given a username already claimed by another user", func() {
 			var otherID string
 

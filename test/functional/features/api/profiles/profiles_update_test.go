@@ -37,9 +37,10 @@ var _ = Describe("Updating a profile", func() {
 	Context("given the caller has a profile", func() {
 		BeforeEach(func(ctx SpecContext) {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
-				Username:     username,
-				Discoverable: true,
-				Bio:          "original bio",
+				Username:        username,
+				Discoverable:    true,
+				Bio:             "original bio",
+				DiscordUsername: "alice_kb",
 				Links: []map[string]string{
 					{"name": "Twitch", "url": "https://twitch.tv/alice"},
 				},
@@ -139,6 +140,25 @@ var _ = Describe("Updating a profile", func() {
 
 				It("returns 200 with no self-conflict on the username claim", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+				})
+			})
+		})
+
+		Context("given a PUT with a blank discord_username", func() {
+			When("updating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, ownerToken, fmt.Sprintf(
+						`{"username": %q, "discoverable": true, "discord_username": "   "}`, username))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 200 with discord_username cleared, not empty", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.DiscordUsername).To(BeNil())
 				})
 			})
 		})

@@ -110,6 +110,30 @@ var _ = Describe("Creating a profile", func() {
 			})
 		})
 
+		Context("given a blank discord_username", func() {
+			var body string
+
+			BeforeEach(func() {
+				body = fmt.Sprintf(`{"username": %q, "discoverable": true, "discord_username": "   "}`, username)
+			})
+
+			When("creating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken, body)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("creates the profile with discord_username absent, not empty", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.DiscordUsername).To(BeNil())
+				})
+			})
+		})
+
 		Context("given a username already claimed by another user", func() {
 			var otherID string
 

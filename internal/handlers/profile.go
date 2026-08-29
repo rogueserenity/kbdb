@@ -20,8 +20,9 @@ import (
 
 // validateProfileInput writes a 400 listing every field-level violation and
 // returns false if any check fails.
-func validateProfileInput(w http.ResponseWriter, p repository.Profile) (ok bool) {
-	fieldErrs := profilevalidate.Validate(p)
+func validateProfileInput(w http.ResponseWriter, p *repository.Profile) (ok bool) {
+	profilevalidate.Normalize(p)
+	fieldErrs := profilevalidate.Validate(*p)
 	if len(fieldErrs) == 0 {
 		return true
 	}
@@ -151,7 +152,7 @@ func CreateProfile(repo repository.ProfileRepository, images repository.ProfileI
 
 		p := repoapi.ProfileToRepo(in)
 
-		if !validateProfileInput(w, p) {
+		if !validateProfileInput(w, &p) {
 			return
 		}
 
@@ -208,7 +209,7 @@ func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileI
 
 		p := repoapi.ProfileToRepo(in)
 
-		if !validateProfileInput(w, p) {
+		if !validateProfileInput(w, &p) {
 			return
 		}
 
