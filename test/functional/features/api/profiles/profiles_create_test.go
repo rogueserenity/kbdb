@@ -208,8 +208,6 @@ var _ = Describe("Creating a profile", func() {
 			},
 			Entry("username fails the pattern",
 				`{"username": "AB"}`, "username"),
-			Entry(`username starts with "user-"`,
-				`{"username": "user-alice"}`, "username"),
 			Entry("username has a leading period",
 				`{"username": ".lead"}`, "username"),
 			Entry("username has a trailing underscore",

@@ -28,7 +28,7 @@ var getProfileTool = &mcp.Tool{
 
 var createProfileTool = &mcp.Tool{
 	Name:        "create_profile",
-	Description: "Creates your own public profile. You may have only one profile - creating a second fails. username must be 3-32 chars of lowercase letters, digits, hyphen, period, or underscore, must not start or end with a period, hyphen, or underscore, must not contain consecutive periods, must not start with \"user-\", and must be unique across all users. Any Discord handle (3+ chars) is a valid username. Omitting an optional field (discord_username, bio, links) leaves it unset.",
+	Description: "Creates your own public profile. You may have only one profile - creating a second fails. username must be 3-32 chars of lowercase letters, digits, hyphen, period, or underscore, must not start or end with a period, hyphen, or underscore, must not contain consecutive periods, and must be unique across all users. Any Discord handle (3+ chars) is a valid username. Omitting an optional field (discord_username, bio, links) leaves it unset.",
 }
 
 var updateProfileTool = &mcp.Tool{

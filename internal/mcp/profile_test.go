@@ -144,12 +144,6 @@ func (s *HandleCreateProfileSuite) TestInvalidUsername_ErrorNoRepoCall() {
 	s.Contains(err.Error(), "username")
 }
 
-func (s *HandleCreateProfileSuite) TestUserPrefixUsername_Error() {
-	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "user-alice"}})
-
-	s.Require().Error(err)
-}
-
 func (s *HandleCreateProfileSuite) TestLinkHTTPURL_Error() {
 	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{
 		Username: "alice",

@@ -226,12 +226,6 @@ func (s *CreateProfileSuite) TestInvalidUsername_400_InvalidParams() {
 	s.Equal("username", body.InvalidParams[0].Name)
 }
 
-func (s *CreateProfileSuite) TestUserPrefixUsername_400() {
-	rec := s.post("user-alice", api.ProfileInput{Username: "user-alice"})
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-}
-
 func (s *CreateProfileSuite) TestLinkHTTPURL_400_IndexedParam() {
 	in := validInput()
 	in.Links = &[]api.ProfileLink{{Name: "site", Url: "http://x.example"}}

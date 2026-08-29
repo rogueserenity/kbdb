@@ -15,7 +15,7 @@ type GetProfileInput struct {
 // and update_profile. A write is a full replace, so an omitted optional
 // field clears it. No user_id: a write always targets the caller's profile.
 type ProfileInput struct {
-	Username        string        `json:"username" jsonschema:"3-32 chars of lowercase letters, digits, hyphen, period, or underscore; no leading/trailing period, hyphen, or underscore; no consecutive periods; must not start with \"user-\"; a Discord-compatible superset; unique across all profiles"`
+	Username        string        `json:"username" jsonschema:"3-32 chars of lowercase letters, digits, hyphen, period, or underscore; no leading/trailing period, hyphen, or underscore; no consecutive periods; a Discord-compatible superset; unique across all profiles"`
 	Discoverable    bool          `json:"discoverable" jsonschema:"whether the profile is listed in the public directory and readable by anyone; when false only you can read it"`
 	DiscordUsername *string       `json:"discord_username,omitempty" jsonschema:"2-32 chars, lowercase letters, digits, period, or underscore, no leading/trailing period or underscore, no consecutive periods; not verified against Discord"`
 	Bio             *string       `json:"bio,omitempty" jsonschema:"free-form bio; at most 500 characters"`

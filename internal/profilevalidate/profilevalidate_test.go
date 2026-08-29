@@ -73,6 +73,7 @@ func (s *ValidateSuite) TestUsernameDiscordSupersetShapes_OK() {
 		"keeps-hyphen",
 		"alice_kb",
 		"a1b",
+		"user-alice", // "user-" prefix is allowed; it isn't special anymore
 		strings.Repeat("x", 32),
 	} {
 		p := valid()
@@ -100,24 +101,6 @@ func (s *ValidateSuite) TestUsernameInvalidShapes_Flagged() {
 
 		s.Equal([]string{"username"}, names(profilevalidate.Validate(p)), "expected %q to be invalid", v)
 	}
-}
-
-func (s *ValidateSuite) TestUsernameUserPrefix_Flagged() {
-	p := valid()
-	p.Username = "user-alice"
-
-	errs := profilevalidate.Validate(p)
-	s.Require().Len(errs, 1)
-	s.Equal("username", errs[0].Name)
-	s.Contains(errs[0].Reason, `"user-"`)
-}
-
-func (s *ValidateSuite) TestUsernameUnderscoreOnlyPrefix_NotFlaggedAsUserBan() {
-	// "users" contains "user" but not the "user-" prefix.
-	p := valid()
-	p.Username = "users_r_us"
-
-	s.Empty(profilevalidate.Validate(p))
 }
 
 func (s *ValidateSuite) TestDiscordUsernameOver32Runes_Flagged() {

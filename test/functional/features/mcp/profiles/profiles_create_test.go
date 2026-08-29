@@ -144,7 +144,6 @@ var _ = Describe("Creating a profile over MCP", func() {
 				Expect(result.IsError).To(BeTrue())
 			},
 			Entry("username fails the pattern", map[string]any{"username": "AB"}),
-			Entry(`username starts with "user-"`, map[string]any{"username": "user-alice"}),
 			Entry("username has a leading period", map[string]any{"username": ".lead"}),
 			Entry("username has a trailing underscore", map[string]any{"username": "trail_"}),
 			Entry("username has consecutive periods", map[string]any{"username": "a..b"}),
