@@ -982,9 +982,9 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_ImageDeleteFails_Returns500_Doe
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
-		}}, nil)
+		})}, nil)
 	s.mockKeyboardImages.EXPECT().
 		DeleteKeyboardImage(mock.Anything, repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")).
 		Return(errors.New("s3 unavailable"))
@@ -1188,9 +1188,9 @@ var deleteKeyboardImageTestKey = repository.KeyboardImageKey("keyboards/alice/kb
 func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_Succeeds() {
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img1", Path: deleteKeyboardImageTestKey},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
 		Return(nil)
@@ -1248,9 +1248,9 @@ func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_NotFound_Returns404()
 func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_MutationConflict_Returns409() {
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img1", Path: deleteKeyboardImageTestKey},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
 		Return(nil)
@@ -1280,9 +1280,9 @@ func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_RepositoryError_Retur
 func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_S3DeleteError_Returns500_DoesNotDeleteDBRecord() {
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img1", Path: deleteKeyboardImageTestKey},
-		}}, nil)
+		})}, nil)
 	s.mockImages.EXPECT().
 		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
 		Return(errors.New("s3: access denied"))

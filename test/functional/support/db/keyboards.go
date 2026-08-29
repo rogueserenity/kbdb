@@ -29,7 +29,6 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 		"name":       "Q1",
 		"size":       "60%",
 		"visibility": visibility,
-		"version":    0,
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
 			"plates":   []string{"Brass"},
@@ -46,7 +45,8 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 // SeedKeyboardWithImage is [SeedKeyboard] plus a single Images entry, whose
 // path doesn't need a real S3 object behind it - presigning a GET URL
 // doesn't check the object exists, only specs that fetch the URL's content
-// would need that.
+// would need that. Images is a map keyed by image id, each entry carrying a
+// seq ordering key (see repository.KeyboardImageEntry).
 func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility string) error {
 	table := NewDynamoTable(ctx, support.KeyboardTableName())
 	return table.PutItem(ctx, map[string]any{
@@ -56,7 +56,6 @@ func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility
 		"name":       "Q1",
 		"size":       "60%",
 		"visibility": visibility,
-		"version":    0,
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
 			"plates":   []string{"Brass"},
@@ -67,8 +66,11 @@ func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility
 			"price":        329.99,
 			"order_status": "Delivered",
 		},
-		"images": []map[string]any{
-			{"image_id": imageID, "path": fmt.Sprintf("keyboards/%s/%s/images/%s", ownerID, id, imageID)},
+		"images": map[string]any{
+			imageID: map[string]any{
+				"path": fmt.Sprintf("keyboards/%s/%s/images/%s", ownerID, id, imageID),
+				"seq":  0,
+			},
 		},
 	})
 }

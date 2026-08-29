@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -384,13 +383,13 @@ func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repo
 			return
 		}
 
-		idx := slices.IndexFunc(kb.Images, func(img repository.KeyboardImage) bool { return img.ImageID == imageID })
-		if idx == -1 {
+		entry, ok := kb.Images[imageID]
+		if !ok {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		if err := images.DeleteKeyboardImage(r.Context(), kb.Images[idx].Path); err != nil {
+		if err := images.DeleteKeyboardImage(r.Context(), entry.Path); err != nil {
 			log.FromContext(r.Context()).Error("deleting keyboard image object", log.Error, err, log.KeyboardID, keyboardID)
 			problem.Internal(w, "failed to delete keyboard image")
 			return

@@ -405,10 +405,10 @@ func (s *BuildToAPISuite) TestKeyboardWithImage_MintsFreshPresignedURLForFirstIm
 	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
-			Images: []repository.KeyboardImage{
+			Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 				{ImageID: "img1", Path: imgPath},
 				{ImageID: "img2", Path: repository.KeyboardImageKey("keyboards/alice/kb1/images/img2")},
-			},
+			}),
 		}, nil)
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
@@ -445,7 +445,7 @@ func (s *BuildToAPISuite) TestKeyboardImagePresignFails_ReturnsError() {
 	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
-			Images: []repository.KeyboardImage{{ImageID: "img1", Path: imgPath}},
+			Images: repository.KeyboardImagesMap([]repository.KeyboardImage{{ImageID: "img1", Path: imgPath}}),
 		}, nil)
 	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
 

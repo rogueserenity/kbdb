@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -207,8 +206,9 @@ func handleListKeyboardImages(
 			return nil, schema.ListKeyboardImagesOutput{}, err
 		}
 
-		images := make([]schema.KeyboardImage, len(kb.Images))
-		for i, img := range kb.Images {
+		sorted := repository.SortedKeyboardImages(kb.Images)
+		images := make([]schema.KeyboardImage, len(sorted))
+		for i, img := range sorted {
 			images[i] = schema.KeyboardImage{ImageID: img.ImageID}
 		}
 
@@ -274,12 +274,12 @@ func handleDeleteKeyboardImage(
 			return nil, schema.DeleteKeyboardImageOutput{}, mutErr
 		}
 
-		idx := slices.IndexFunc(kb.Images, func(img repository.KeyboardImage) bool { return img.ImageID == in.ImageID })
-		if idx == -1 {
+		entry, ok := kb.Images[in.ImageID]
+		if !ok {
 			return nil, schema.DeleteKeyboardImageOutput{}, nil
 		}
 
-		if err := images.DeleteKeyboardImage(ctx, kb.Images[idx].Path); err != nil {
+		if err := images.DeleteKeyboardImage(ctx, entry.Path); err != nil {
 			log.FromContext(ctx).Error("deleting keyboard image object", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.DeleteKeyboardImageOutput{}, errors.New("failed to delete keyboard image")
 		}

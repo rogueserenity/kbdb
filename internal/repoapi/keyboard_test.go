@@ -194,13 +194,15 @@ func (s *KeyboardToAPISuite) TestIsOwnerTrue_IncludesPrice() {
 
 func (s *KeyboardToAPISuite) TestImagesPresent_PresignsEachAndPreservesOrder() {
 	kb := fullRepoKeyboard()
-	kb.Images = []repository.KeyboardImage{
-		{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
-		{ImageID: "img2", Path: "keyboards/alice/kb1/images/img2"},
+	img1 := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+	img2 := repository.KeyboardImageKey("keyboards/alice/kb1/images/img2")
+	kb.Images = map[string]repository.KeyboardImageEntry{
+		"img1": {Path: img1, Seq: 0},
+		"img2": {Path: img2, Seq: 1},
 	}
 	images := mocks.NewMockKeyboardImageStore(s.T())
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, kb.Images[0].Path).Return("https://example.com/img1", nil)
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, kb.Images[1].Path).Return("https://example.com/img2", nil)
+	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img1).Return("https://example.com/img1", nil)
+	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img2).Return("https://example.com/img2", nil)
 
 	out, err := KeyboardToAPI(s.T().Context(), kb, images, true)
 	s.Require().NoError(err)
@@ -224,9 +226,10 @@ func (s *KeyboardToAPISuite) TestNoImages_ImagesFieldNil() {
 
 func (s *KeyboardToAPISuite) TestImagePresignError_Propagates() {
 	kb := fullRepoKeyboard()
-	kb.Images = []repository.KeyboardImage{{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"}}
+	imgPath := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+	kb.Images = map[string]repository.KeyboardImageEntry{"img1": {Path: imgPath}}
 	images := mocks.NewMockKeyboardImageStore(s.T())
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, kb.Images[0].Path).Return("", errors.New("s3: access denied"))
+	images.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
 
 	_, err := KeyboardToAPI(s.T().Context(), kb, images, true)
 
@@ -251,12 +254,13 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_MapsOnlySummaryFields() {
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirstImagePresigned() {
 	kb := fullRepoKeyboard()
-	kb.Images = []repository.KeyboardImage{
-		{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
-		{ImageID: "img2", Path: "keyboards/alice/kb1/images/img2"},
+	img1 := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+	kb.Images = map[string]repository.KeyboardImageEntry{
+		"img1": {Path: img1, Seq: 0},
+		"img2": {Path: "keyboards/alice/kb1/images/img2", Seq: 1},
 	}
 	images := mocks.NewMockKeyboardImageStore(s.T())
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, kb.Images[0].Path).Return("https://example.com/img1", nil)
+	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img1).Return("https://example.com/img1", nil)
 
 	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images)
 	s.Require().NoError(err)
@@ -268,9 +272,10 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirst
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_PresignError_Propagates() {
 	kb := fullRepoKeyboard()
-	kb.Images = []repository.KeyboardImage{{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"}}
+	imgPath := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
+	kb.Images = map[string]repository.KeyboardImageEntry{"img1": {Path: imgPath}}
 	images := mocks.NewMockKeyboardImageStore(s.T())
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, kb.Images[0].Path).Return("", errors.New("s3: access denied"))
+	images.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
 
 	_, err := KeyboardToAPISummary(s.T().Context(), kb, images)
 

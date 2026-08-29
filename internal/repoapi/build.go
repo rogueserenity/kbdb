@@ -321,8 +321,8 @@ func buildKeyboardRefToAPI(
 		Layout: kb.Layout,
 	}
 
-	if resolveImages && len(kb.Images) > 0 {
-		url, err := keyboardImages.PresignGetKeyboardImage(ctx, kb.Images[0].Path)
+	if imgs := repository.SortedKeyboardImages(kb.Images); resolveImages && len(imgs) > 0 {
+		url, err := keyboardImages.PresignGetKeyboardImage(ctx, imgs[0].Path)
 		if err != nil {
 			return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
 		}

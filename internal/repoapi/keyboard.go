@@ -23,7 +23,7 @@ func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repositor
 		return api.Keyboard{}, err
 	}
 
-	imgs, err := keyboardImagesToAPI(ctx, kb.Images, images)
+	imgs, err := keyboardImagesToAPI(ctx, repository.SortedKeyboardImages(kb.Images), images)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -44,9 +44,10 @@ func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repositor
 }
 
 // keyboardImagesToAPI mints a fresh presigned GET URL per image, per
-// request - never persisted, mirroring [buildImagesToAPI].
+// request - never persisted, mirroring [buildImagesToAPI]. images is
+// already ordered (by Seq) by the caller.
 func keyboardImagesToAPI(ctx context.Context, images []repository.KeyboardImage, store repository.KeyboardImageStore) (*[]api.KeyboardImage, error) {
-	if images == nil {
+	if len(images) == 0 {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
 	}
 
@@ -100,12 +101,12 @@ func KeyboardToRepo(in api.KeyboardInput) repository.Keyboard {
 // build's images.
 func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore) (api.KeyboardSummary, error) {
 	var image *api.KeyboardImage
-	if len(kb.Images) > 0 {
-		url, err := images.PresignGetKeyboardImage(ctx, kb.Images[0].Path)
+	if first := repository.SortedKeyboardImages(kb.Images); len(first) > 0 {
+		url, err := images.PresignGetKeyboardImage(ctx, first[0].Path)
 		if err != nil {
-			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", kb.Images[0].ImageID, err)
+			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", first[0].ImageID, err)
 		}
-		image = &api.KeyboardImage{ImageId: kb.Images[0].ImageID, Url: url}
+		image = &api.KeyboardImage{ImageId: first[0].ImageID, Url: url}
 	}
 
 	return api.KeyboardSummary{

@@ -60,9 +60,9 @@ func (s *DeleteKeyboardSuite) TestBlock_KeyboardHadImages_DeletesEachFromS3Befor
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Get(s.ctx, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
-		}}, nil)
+		})}, nil)
 	s.mockKeyboardImages.EXPECT().
 		DeleteKeyboardImage(s.ctx, repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")).
 		Return(nil)
@@ -84,9 +84,9 @@ func (s *DeleteKeyboardSuite) TestBlock_ImageDeleteFails_ReturnsErrorWithoutDele
 		Return(nil, nil)
 	s.mockKeyboards.EXPECT().
 		Get(s.ctx, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: []repository.KeyboardImage{
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
 			{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
-		}}, nil)
+		})}, nil)
 	s.mockKeyboardImages.EXPECT().
 		DeleteKeyboardImage(s.ctx, repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")).
 		Return(errors.New("s3 unavailable"))
