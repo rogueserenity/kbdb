@@ -37,9 +37,10 @@ var _ = Describe("Updating a profile over MCP", func() {
 	Context("given the caller has a profile", func() {
 		BeforeEach(func(ctx SpecContext) {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
-				Username:     username,
-				Discoverable: true,
-				Bio:          "original bio",
+				Username:        username,
+				Discoverable:    true,
+				Bio:             "original bio",
+				DiscordUsername: "alice_kb",
 				Links: []map[string]string{
 					{"name": "Twitch", "url": "https://twitch.tv/alice"},
 				},
@@ -123,6 +124,24 @@ var _ = Describe("Updating a profile over MCP", func() {
 				It("succeeds with no self-conflict", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
+				})
+			})
+		})
+
+		Context("given a blank discord_username", func() {
+			When("update_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "update_profile", map[string]any{
+						"username":         username,
+						"discoverable":     true,
+						"discord_username": "   ",
+					})
+				})
+
+				It("clears discord_username instead of leaving it empty", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+					Expect(decodeGetProfileOutput(result).Profile.DiscordUsername).To(BeNil())
 				})
 			})
 		})
