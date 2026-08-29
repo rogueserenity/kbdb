@@ -56,7 +56,7 @@ func (r *BuildRepository) List(
 		return []repository.Build{}, "", nil
 	}
 
-	startKey, err := decodeCursor(cursor)
+	startKey, _, _, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", fmt.Errorf("decoding cursor: %w", err)
 	}
@@ -101,7 +101,7 @@ func (r *BuildRepository) List(
 		return nil, "", fmt.Errorf("unmarshalling builds for owner %q: %w", ownerID, err)
 	}
 
-	nextCursor, err := encodeCursor(out.LastEvaluatedKey)
+	nextCursor, err := encodeCursor(out.LastEvaluatedKey, "", "")
 	if err != nil {
 		return nil, "", fmt.Errorf("encoding next cursor: %w", err)
 	}

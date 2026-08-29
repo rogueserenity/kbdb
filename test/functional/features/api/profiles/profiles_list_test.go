@@ -230,6 +230,13 @@ var _ = Describe("Listing profiles", func() {
 				})
 				Expect(err).NotTo(HaveOccurred())
 				Expect(bad.StatusCode).To(Equal(http.StatusBadRequest))
+
+				By("rejecting that cursor when reused with a narrower prefix on the same index")
+				narrower, err := client.List(ctx, "", api.ListProfilesQuery{
+					Limit: 2, Username: prefix + "a", Cursor: *page1.NextCursor,
+				})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(narrower.StatusCode).To(Equal(http.StatusBadRequest))
 			})
 		})
 	})

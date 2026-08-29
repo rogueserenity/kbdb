@@ -56,7 +56,7 @@ func (r *KeyboardRepository) List(
 		return []repository.Keyboard{}, "", nil
 	}
 
-	startKey, err := decodeCursor(cursor)
+	startKey, _, _, err := decodeCursor(cursor)
 	if err != nil {
 		return nil, "", fmt.Errorf("decoding cursor: %w", err)
 	}
@@ -93,7 +93,7 @@ func (r *KeyboardRepository) List(
 		return nil, "", fmt.Errorf("unmarshalling keyboards for owner %q: %w", ownerID, err)
 	}
 
-	nextCursor, err := encodeCursor(out.LastEvaluatedKey)
+	nextCursor, err := encodeCursor(out.LastEvaluatedKey, "", "")
 	if err != nil {
 		return nil, "", fmt.Errorf("encoding next cursor: %w", err)
 	}

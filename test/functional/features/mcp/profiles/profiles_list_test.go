@@ -176,6 +176,20 @@ var _ = Describe("Listing profiles over MCP", func() {
 				page2 := decodeListProfilesOutput(second)
 				all := append(listProfileUsernames(page1), listProfileUsernames(page2)...)
 				Expect(all).To(ConsistOf(names))
+
+				By("rejecting that cursor when reused with a narrower prefix on the same index")
+				narrower, narrowerErr := client.CallTool(ctx, "list_profiles", map[string]any{
+					"username": prefix + "a", "limit": 2, "cursor": page1.NextCursor,
+				})
+				Expect(narrowerErr).NotTo(HaveOccurred())
+				Expect(narrower.IsError).To(BeTrue())
+
+				By("rejecting that cursor when reused with a different filter")
+				differentFilter, differentFilterErr := client.CallTool(ctx, "list_profiles", map[string]any{
+					"discord_username": "x", "limit": 2, "cursor": page1.NextCursor,
+				})
+				Expect(differentFilterErr).NotTo(HaveOccurred())
+				Expect(differentFilter.IsError).To(BeTrue())
 			})
 		})
 	})
