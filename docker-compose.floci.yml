@@ -1,6 +1,6 @@
 services:
   workos-emulate:
-    image: ghcr.io/workos/emulate:0.10.0@sha256:e87075cc32610c6a91cd1e12f33e3f46cd70be53f714366ea2964ff266cc774f
+    image: ghcr.io/workos/emulate:0.11.0@sha256:e16d171e5daefb18436abf8582597cfaa7f83d9515dc10f11562b8d591982eb6
     environment:
       # This is the *base* issuer. From v0.10.0 the emulator mints AuthKit
       # access tokens with iss "<base>/user_management/<client_id>" (matching
