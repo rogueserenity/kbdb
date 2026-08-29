@@ -121,7 +121,6 @@ func (r *ProfileRepository) Create(ctx context.Context, p repository.Profile) (*
 func setProfileDirectoryKeys(p *repository.Profile) {
 	p.DiscoverablePK = nil
 	p.DiscordPK = nil
-	p.DiscordUsernameLC = nil
 
 	if !p.Discoverable {
 		return
@@ -131,8 +130,6 @@ func setProfileDirectoryKeys(p *repository.Profile) {
 
 	if p.DiscordUsername != nil {
 		p.DiscordPK = aws.String("1")
-		lc := strings.ToLower(*p.DiscordUsername)
-		p.DiscordUsernameLC = &lc
 	}
 }
 
@@ -394,7 +391,6 @@ func profileUpdateExpression(p *repository.Profile) expression.UpdateBuilder {
 	}
 	update = setOrRemovePtr(update, "discoverable_pk", p.DiscoverablePK)
 	update = setOrRemovePtr(update, "discord_pk", p.DiscordPK)
-	update = setOrRemovePtr(update, "discord_username_lc", p.DiscordUsernameLC)
 	return update
 }
 
@@ -584,7 +580,7 @@ const (
 // ExclusiveStartKey instead of being rejected locally.
 var directoryIndexKeys = map[string]map[string]struct{}{
 	discoverableUsernameIndex: {"discoverable_pk": {}, "username": {}, "user_id": {}},
-	discoverableDiscordIndex:  {"discord_pk": {}, "discord_username_lc": {}, "user_id": {}},
+	discoverableDiscordIndex:  {"discord_pk": {}, "discord_username": {}, "user_id": {}},
 }
 
 // ListPublic implements repository.ProfileRepository. discordPrefix routes
@@ -613,7 +609,7 @@ func (r *ProfileRepository) ListPublic(
 		indexName = discoverableDiscordIndex
 		activePrefix = strings.ToLower(discordPrefix)
 		keyCond = expression.Key("discord_pk").Equal(expression.Value(directoryPKValue)).
-			And(expression.KeyBeginsWith(expression.Key("discord_username_lc"), activePrefix))
+			And(expression.KeyBeginsWith(expression.Key("discord_username"), activePrefix))
 	}
 
 	if len(startKey) > 0 {

@@ -17,7 +17,7 @@ type GetProfileInput struct {
 type ProfileInput struct {
 	Username        string        `json:"username" jsonschema:"3-20 chars of lowercase letters, digits, hyphen, or underscore; must not start with \"user-\"; unique across all profiles"`
 	Discoverable    bool          `json:"discoverable" jsonschema:"whether the profile is listed in the public directory and readable by anyone; when false only you can read it"`
-	DiscordUsername *string       `json:"discord_username,omitempty" jsonschema:"the owner's Discord username; at most 32 characters; not verified against Discord"`
+	DiscordUsername *string       `json:"discord_username,omitempty" jsonschema:"2-32 chars, lowercase letters, digits, period, or underscore, no leading/trailing period or underscore, no consecutive periods; not verified against Discord"`
 	Bio             *string       `json:"bio,omitempty" jsonschema:"free-form bio; at most 500 characters"`
 	Links           []ProfileLink `json:"links,omitempty" jsonschema:"at most 5 name/url pairs; each url must be an https URL"`
 }

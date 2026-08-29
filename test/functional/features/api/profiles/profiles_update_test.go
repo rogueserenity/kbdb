@@ -163,6 +163,22 @@ var _ = Describe("Updating a profile", func() {
 			})
 		})
 
+		Context("given a PUT with a malformed discord_username", func() {
+			When("updating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, ownerToken, fmt.Sprintf(
+						`{"username": %q, "discoverable": true, "discord_username": "na@me"}`, username))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 naming discord_username", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(invalidParamNames(decodeProblem(resp))).To(ContainElement("discord_username"))
+				})
+			})
+		})
+
 		Context("given the new username is taken by another user", func() {
 			var (
 				otherID   string

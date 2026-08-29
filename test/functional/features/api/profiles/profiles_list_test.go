@@ -78,7 +78,7 @@ var _ = Describe("Listing profiles", func() {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
 				Username:        discoverableName,
 				Discoverable:    true,
-				DiscordUsername: "Disc_Handle",
+				DiscordUsername: "disc_handle",
 				Bio:             "should not appear in the directory row",
 				Links:           []map[string]string{{"name": "Site", "url": "https://example.com"}},
 			})).To(Succeed())
@@ -143,10 +143,10 @@ var _ = Describe("Listing profiles", func() {
 		})
 
 		Context("given the discord_username prefix filter", func() {
-			When("listing the directory with a lowercased prefix of a mixed-case handle", func() {
+			When("listing the directory with an uppercased prefix", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.List(ctx, "", api.ListProfilesQuery{Limit: -1, DiscordUsername: "disc_h"})
+					resp, err = client.List(ctx, "", api.ListProfilesQuery{Limit: -1, DiscordUsername: "DISC_H"})
 					Expect(err).NotTo(HaveOccurred())
 				})
 

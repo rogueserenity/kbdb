@@ -129,7 +129,6 @@ func (s *ProfileMapperSuite) TestProfileToRepo_MapsBodyFields_NotAvatarOrDerived
 	s.Empty(p.OwnerID)
 	s.Nil(p.AvatarPath)
 	s.Nil(p.DiscoverablePK)
-	s.Nil(p.DiscordUsernameLC)
 }
 
 func (s *ProfileMapperSuite) TestProfileToRepo_DiscoverableOmitted_DefaultsFalse() {

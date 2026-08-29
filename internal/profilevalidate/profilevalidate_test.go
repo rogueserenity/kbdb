@@ -99,6 +99,34 @@ func (s *ValidateSuite) TestDiscordUsernameExactly32Runes_OK() {
 	s.Empty(profilevalidate.Validate(p))
 }
 
+func (s *ValidateSuite) TestDiscordUsernameValidShapes_OK() {
+	for _, v := range []string{"ab", "a.b_c", "user.name", strings.Repeat("x", 32)} {
+		p := valid()
+		p.DiscordUsername = &v
+
+		s.Empty(profilevalidate.Validate(p), "expected %q to be valid", v)
+	}
+}
+
+func (s *ValidateSuite) TestDiscordUsernameInvalidShapes_Flagged() {
+	cases := []string{
+		"A1",                   // uppercase
+		"has space",            // space
+		".lead",                // leading period
+		"trail_",               // trailing underscore
+		"a..b",                 // consecutive periods
+		"x",                    // too short
+		strings.Repeat("x", 33), // too long
+		"na@me",                // disallowed character
+	}
+	for _, v := range cases {
+		p := valid()
+		p.DiscordUsername = &v
+
+		s.Equal([]string{"discord_username"}, names(profilevalidate.Validate(p)), "expected %q to be invalid", v)
+	}
+}
+
 func (s *ValidateSuite) TestBioOver500Runes_Flagged() {
 	p := valid()
 	long := strings.Repeat("é", 501)
