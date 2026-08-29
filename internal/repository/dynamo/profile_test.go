@@ -416,8 +416,10 @@ func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIK
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_ChangedUsername_MovesClaimAtomically() {
+	// Update's branch Get, then renameProfile's per-attempt Get, both still
+	// "alice".
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfile(nil), nil).Once()
+		Return(storedProfile(nil), nil).Twice()
 
 	var captured *dynamodb.TransactWriteItemsInput
 	s.mockClient.EXPECT().
@@ -523,8 +525,10 @@ func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameProfileGone_ReturnsEr
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_RenameTransactionConflict_RetriesThenSucceeds() {
+	// Every pre-success Get still reads "alice"; only the final read (after
+	// the transaction commits) shows "alice2".
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfile(nil), nil).Once()
+		Return(storedProfile(nil), nil).Times(3)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
@@ -542,6 +546,47 @@ func (s *ProfileRepositorySuite) TestUpdate_RenameTransactionConflict_RetriesThe
 
 	s.Require().NoError(err)
 	s.Equal("alice2", got.Username)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_RenameClaimDeleteRaced_RetriesFromFreshRead() {
+	// The caller's own "alice" claim moved out from under the claim-delete
+	// (reason 1) - a concurrent rename of the same profile. Retry from a
+	// fresh read that now shows the new current username.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(nil), nil).Twice()
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("None")},
+				{Code: aws.String("ConditionalCheckFailed")},
+				{Code: aws.String("None")},
+			},
+		}).Once()
+	// Retry: the profile now reads as "bob"; the transaction targets that
+	// claim and commits.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(map[string]types.AttributeValue{
+			"username": &types.AttributeValueMemberS{Value: "bob"},
+		}), nil).Once()
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(map[string]types.AttributeValue{
+			"username": &types.AttributeValueMemberS{Value: "carol"},
+		}), nil).Once()
+
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "carol", Discoverable: true})
+
+	s.Require().NoError(err)
+	s.Equal("carol", got.Username)
+	// The retry's claim-delete keyed on the fresh username, not the stale one.
+	s.Equal("bob", captured.TransactItems[1].Delete.Key["username"].(*types.AttributeValueMemberS).Value)
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_RenameConflictExhaustsRetries_ReturnsErrMutationConflict() {

@@ -184,7 +184,7 @@ func (r *ProfileRepository) Update(ctx context.Context, p repository.Profile) (*
 	if p.Username == existing.Username {
 		return r.updateProfileItem(ctx, ownerID, update)
 	}
-	return r.renameProfile(ctx, ownerID, existing.Username, p.Username, update)
+	return r.renameProfile(ctx, ownerID, p.Username, update)
 }
 
 // updateProfileItem applies update to the profile item with a single
@@ -229,41 +229,56 @@ func (r *ProfileRepository) updateProfileItem(
 	return &updated, nil
 }
 
-// renameProfile moves the { username -> user_id } claim from oldUsername to
-// newUsername atomically with the profile-item update: [profileUpdate,
-// claimDelete (conditioned on user_id = caller, so a claim reissued to
-// someone else is left alone), claimPut (conditioned on
-// attribute_not_exists, so a taken username fails)]. TransactionConflict is
-// transient contention and retries from a fresh read; a ConditionalCheckFailed
-// on the profile item means it's gone (ErrNotFound), on the new claim means
-// the username is taken (ErrUsernameTaken).
+// renameProfile moves the { username -> user_id } claim to newUsername
+// atomically with the profile-item update:
+//
+//	[profileUpdate (cond attribute_exists(user_id)),
+//	 claimDelete   (cond user_id = caller, so a claim reissued to someone
+//	                else is left alone),
+//	 claimPut      (cond attribute_not_exists, so a taken username fails)]
+//
+// It re-reads the profile each attempt to pick up the current username for
+// the claim-delete key (a concurrent rename of the same profile moves it).
+// Classification of a cancellation: reason 2 ConditionalCheckFailed ->
+// ErrUsernameTaken; reason 0 -> ErrNotFound; reason 1 (the claim moved) or
+// any TransactionConflict -> retry from a fresh read.
 func (r *ProfileRepository) renameProfile(
 	ctx context.Context,
-	ownerID, oldUsername, newUsername string,
+	ownerID, newUsername string,
 	update expression.UpdateBuilder,
 ) (*repository.Profile, error) {
+	expr, err := expression.NewBuilder().
+		WithUpdate(update).
+		WithCondition(expression.AttributeExists(expression.Name("user_id"))).
+		Build()
+	if err != nil {
+		return nil, fmt.Errorf("building profile rename expression for user %q: %w", ownerID, err)
+	}
+
+	claimItem, err := attributevalue.MarshalMap(struct {
+		Username string `dynamodbav:"username"`
+		UserID   string `dynamodbav:"user_id"`
+	}{Username: newUsername, UserID: ownerID})
+	if err != nil {
+		return nil, fmt.Errorf("marshalling username claim for user %q: %w", ownerID, err)
+	}
+
+	claimDeleteExpr, err := expression.NewBuilder().
+		WithCondition(expression.Name("user_id").Equal(expression.Value(ownerID))).
+		Build()
+	if err != nil {
+		return nil, fmt.Errorf("building claim delete condition for user %q: %w", ownerID, err)
+	}
+
 	for range maxProfileMutationAttempts {
-		expr, err := expression.NewBuilder().
-			WithUpdate(update).
-			WithCondition(expression.AttributeExists(expression.Name("user_id"))).
-			Build()
+		existing, err := r.Get(ctx, ownerID)
 		if err != nil {
-			return nil, fmt.Errorf("building profile rename expression for user %q: %w", ownerID, err)
+			return nil, err
 		}
-
-		claimItem, err := attributevalue.MarshalMap(struct {
-			Username string `dynamodbav:"username"`
-			UserID   string `dynamodbav:"user_id"`
-		}{Username: newUsername, UserID: ownerID})
-		if err != nil {
-			return nil, fmt.Errorf("marshalling username claim for user %q: %w", ownerID, err)
-		}
-
-		claimDeleteExpr, err := expression.NewBuilder().
-			WithCondition(expression.Name("user_id").Equal(expression.Value(ownerID))).
-			Build()
-		if err != nil {
-			return nil, fmt.Errorf("building claim delete condition for user %q: %w", ownerID, err)
+		// A concurrent rename may have already made this the same-username
+		// case; the plain UpdateItem path handles it.
+		if existing.Username == newUsername {
+			return r.updateProfileItem(ctx, ownerID, update)
 		}
 
 		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{
@@ -278,7 +293,7 @@ func (r *ProfileRepository) renameProfile(
 				}},
 				{Delete: &types.Delete{
 					TableName:                 &r.usernameTableName,
-					Key:                       map[string]types.AttributeValue{"username": &types.AttributeValueMemberS{Value: oldUsername}},
+					Key:                       map[string]types.AttributeValue{"username": &types.AttributeValueMemberS{Value: existing.Username}},
 					ConditionExpression:       claimDeleteExpr.Condition(),
 					ExpressionAttributeNames:  claimDeleteExpr.Names(),
 					ExpressionAttributeValues: claimDeleteExpr.Values(),
@@ -321,9 +336,11 @@ const (
 
 // classifyProfileRenameConflict maps a rename TransactWriteItems
 // cancellation. Items are [profileUpdate, claimDelete, claimPut]: reason 2
-// ConditionalCheckFailed is the new username being taken; reason 0 is the
-// profile gone; any TransactionConflict is transient and retries. Returns
-// renameConflictNone if err isn't a transaction cancellation.
+// ConditionalCheckFailed is the new username being taken (ErrUsernameTaken);
+// reason 0 is the profile gone (ErrNotFound); reason 1 (the caller's claim
+// moved out from under the delete) or any TransactionConflict is transient
+// and retries from a fresh read. renameConflictNone if err isn't a
+// transaction cancellation.
 func classifyProfileRenameConflict(err error) renameConflict {
 	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
 	if !ok {
@@ -347,6 +364,9 @@ func classifyProfileRenameConflict(err error) renameConflict {
 	}
 	if reason(0) == "ConditionalCheckFailed" {
 		return renameConflictProfileGone
+	}
+	if reason(1) == "ConditionalCheckFailed" {
+		return renameConflictRetry
 	}
 	return renameConflictNone
 }
