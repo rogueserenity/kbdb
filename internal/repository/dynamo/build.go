@@ -111,13 +111,21 @@ func (r *BuildRepository) List(
 
 // Get implements repository.BuildRepository.
 func (r *BuildRepository) Get(ctx context.Context, ownerID, id string) (*repository.Build, error) {
-	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
+	return r.get(ctx, ownerID, id, false)
+}
+
+// get is Get with an explicit consistency choice. Update uses the
+// consistent read for the value it returns to the caller, since that read
+// immediately follows its own committed write.
+func (r *BuildRepository) get(ctx context.Context, ownerID, id string, consistent bool) (*repository.Build, error) {
+	in := &dynamodb.GetItemInput{
 		TableName: &r.tableName,
-		Key: map[string]types.AttributeValue{
-			"user_id": &types.AttributeValueMemberS{Value: ownerID},
-			"id":      &types.AttributeValueMemberS{Value: id},
-		},
-	})
+		Key:       buildKey(ownerID, id),
+	}
+	if consistent {
+		in.ConsistentRead = aws.Bool(true)
+	}
+	out, err := r.client.GetItem(ctx, in)
 	if err != nil {
 		return nil, fmt.Errorf("getting build %q for owner %q: %w", id, ownerID, err)
 	}
@@ -269,7 +277,9 @@ func (r *BuildRepository) Update(ctx context.Context, b repository.Build) (*repo
 
 		_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
 		if err == nil {
-			return r.Get(ctx, ownerID, b.ID)
+			// Consistent read: this immediately follows our own commit, and
+			// the value is what the caller gets back as the persisted build.
+			return r.get(ctx, ownerID, b.ID, true)
 		}
 
 		switch classifyBuildTxConflict(err) {
