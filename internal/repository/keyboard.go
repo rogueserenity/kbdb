@@ -44,11 +44,13 @@ type KeyboardPurchase struct {
 
 // KeyboardImageEntry is one value in the Keyboard.Images map (keyed by
 // image id). Seq is a repository-internal ordering key: on add it's set to
-// time.Now().UnixNano(), which is monotonic enough that a new image always
-// sorts after existing ones without reading the current max. The API/MCP
-// layers sort on Seq to present images in add order; it's not in JSON. A
-// future reorder endpoint would renumber entries 0..n - a later add's
-// nanosecond stamp still sorts last.
+// time.Now().UnixNano(), so a new image sorts after existing ones without
+// reading the current max. Wall-clock, not a monotonic source - a backward
+// clock step between two adds could misorder one image (cosmetic on a
+// single-user list, and self-heals if the images are ever reordered). The
+// API/MCP layers sort on Seq to present images in add order; it's not in
+// JSON. A future reorder endpoint would renumber entries 0..n - a later
+// add's nanosecond stamp still sorts last.
 type KeyboardImageEntry struct {
 	Path KeyboardImageKey `dynamodbav:"path" json:"-"`
 	Seq  int              `dynamodbav:"seq" json:"-"`
@@ -146,10 +148,10 @@ type KeyboardRepository interface {
 	Delete(ctx context.Context, id string) error
 
 	// AddImage adds image (image.ImageID must be set) to the keyboard's
-	// Images map with a server-assigned Seq (one past the current max);
-	// image.Seq is ignored. Returns ErrNotFound if the keyboard doesn't
-	// exist, or a wrapped duplicate-id error if image.ImageID is already
-	// present.
+	// Images map with a server-assigned Seq that sorts it after every
+	// existing image (see KeyboardImageEntry.Seq); image.Seq is ignored.
+	// Returns ErrNotFound if the keyboard doesn't exist, or a wrapped
+	// duplicate-id error if image.ImageID is already present.
 	AddImage(ctx context.Context, keyboardID string, image KeyboardImage) error
 
 	// DeleteImage removes imageID from keyboardID's Images map and returns

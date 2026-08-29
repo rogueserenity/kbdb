@@ -321,12 +321,14 @@ func buildKeyboardRefToAPI(
 		Layout: kb.Layout,
 	}
 
-	if imgs := repository.SortedKeyboardImages(kb.Images); resolveImages && len(imgs) > 0 {
-		url, err := keyboardImages.PresignGetKeyboardImage(ctx, imgs[0].Path)
-		if err != nil {
-			return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
+	if resolveImages {
+		if imgs := repository.SortedKeyboardImages(kb.Images); len(imgs) > 0 {
+			url, err := keyboardImages.PresignGetKeyboardImage(ctx, imgs[0].Path)
+			if err != nil {
+				return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
+			}
+			ref.ImageUrl = &url
 		}
-		ref.ImageUrl = &url
 	}
 
 	return ref, kb.Purchase.Price, nil

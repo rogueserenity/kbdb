@@ -240,12 +240,11 @@ func (r *KeyboardRepository) Delete(ctx context.Context, id string) error {
 }
 
 // AddImage implements repository.KeyboardRepository. One UpdateItem sets
-// images.<id> = {path, seq}. Seq is time.Now().UnixNano(): a monotonic
-// wall-clock stamp, so a new image always sorts after every existing one
-// without reading the current max. (A future reorder endpoint renumbers
-// entries 0..n; a subsequent add's nanosecond stamp is still far larger, so
-// it lands last.) The condition rejects a missing keyboard or a duplicate
-// id server-side; classifyImageConflict tells the two apart.
+// images.<id> = {path, seq}. Seq is time.Now().UnixNano(), so a new image
+// sorts after every existing one without reading the current max (see
+// KeyboardImageEntry.Seq for the wall-clock caveat). The condition rejects
+// a missing keyboard or a duplicate id server-side; on failure a
+// consistent GetItem (keyboardExists) tells the two apart.
 func (r *KeyboardRepository) AddImage(ctx context.Context, keyboardID string, image repository.KeyboardImage) error {
 	if image.ImageID == "" {
 		return fmt.Errorf("adding image to keyboard %q: %w", keyboardID, errEmptyKeyboardImageID)
