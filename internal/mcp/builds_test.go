@@ -835,6 +835,22 @@ func (s *HandleDeleteBuildImageSuite) TestBlankImageID_ReturnsError() {
 	s.Require().ErrorContains(err, "image_id must not be blank")
 }
 
+func (s *HandleDeleteBuildImageSuite) TestDeleteImageNotFound_IdempotentNoError() {
+	key := repository.BuildImageKey("builds/u/build-1/images/img-1")
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1", Images: repository.BuildImagesMap([]repository.BuildImage{
+			{ImageID: "img-1", Path: key},
+		})}, nil)
+	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key).Return(nil)
+	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
+
+	s.Require().NoError(err)
+}
+
 func (s *HandleDeleteBuildImageSuite) TestAlreadyAbsent_StillSucceeds() {
 	s.mockBuilds.EXPECT().
 		Get(mock.Anything, mock.Anything, "build-1").

@@ -553,6 +553,16 @@ func (s *HandleDeleteProfileImageSuite) TestDeletesAvatar_S3BeforeDB() {
 	s.Equal([]string{"s3", "db"}, order)
 }
 
+func (s *HandleDeleteProfileImageSuite) TestClearAvatarPathNotFound_IdempotentNoError() {
+	key := s.avatarKey()
+	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
+		Return(&repository.Profile{OwnerID: callerID, Username: "alice", AvatarPath: &key}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(nil, repository.ErrNotFound)
+
+	s.Require().NoError(s.call())
+}
+
 func (s *HandleDeleteProfileImageSuite) TestNoAvatar_IdempotentNoS3Call() {
 	s.mockRepo.EXPECT().Get(mock.Anything, callerID).
 		Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)

@@ -560,7 +560,7 @@ func DeleteKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images r
 		}
 
 		_, err = keycapSetRepo.ClearKitImagePath(r.Context(), setID, kitID)
-		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
+		if handleClearImageError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 

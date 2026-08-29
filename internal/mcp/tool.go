@@ -108,6 +108,21 @@ func handleMutationError(ctx context.Context, err error, logFields ...any) error
 	return nil
 }
 
+// handleClearImageError is handleMutationError's counterpart for the
+// image-pointer clear that follows a successful S3 object delete in a
+// single-image delete handler. The S3 object is already gone by this
+// point, so repository.ErrNotFound (the entity was deleted concurrently)
+// is the documented idempotent-success state, not errMutationNotFound: it's
+// swallowed rather than routed through handleMutationError.
+// ErrMutationConflict and other errors still go through handleMutationError
+// unchanged.
+func handleClearImageError(ctx context.Context, err error, logFields ...any) error {
+	if errors.Is(err, repository.ErrNotFound) {
+		return nil
+	}
+	return handleMutationError(ctx, err, logFields...)
+}
+
 func clampListLimit(limit int) int {
 	if limit < 1 {
 		return defaultListLimit

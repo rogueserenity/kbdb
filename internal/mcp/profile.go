@@ -231,9 +231,9 @@ func handleDeleteProfileImage(
 			return nil, schema.DeleteProfileImageOutput{}, errors.New("failed to delete profile image")
 		}
 
-		if _, err := repo.ClearAvatarPath(ctx); err != nil {
-			log.FromContext(ctx).Error("clearing profile avatar path", log.Error, err, log.ProfileID, ownerID)
-			return nil, schema.DeleteProfileImageOutput{}, errors.New("failed to delete profile image")
+		_, err = repo.ClearAvatarPath(ctx)
+		if mutErr := handleClearImageError(ctx, err, log.ProfileID, ownerID); mutErr != nil {
+			return nil, schema.DeleteProfileImageOutput{}, mutErr
 		}
 
 		return nil, schema.DeleteProfileImageOutput{}, nil

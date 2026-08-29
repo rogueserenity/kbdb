@@ -285,7 +285,7 @@ func handleDeleteKeyboardImage(
 		}
 
 		_, err = keyboardRepo.DeleteImage(ctx, in.KeyboardID, in.ImageID)
-		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
+		if mutErr := handleClearImageError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
 			return nil, schema.DeleteKeyboardImageOutput{}, mutErr
 		}
 

@@ -394,7 +394,7 @@ func DeleteBuildImage(buildRepo repository.BuildRepository, images repository.Bu
 		}
 
 		_, err = buildRepo.DeleteImage(r.Context(), buildID, imageID)
-		if handleMutationError(w, r, err, log.BuildID, buildID) {
+		if handleClearImageError(w, r, err, log.BuildID, buildID) {
 			return
 		}
 

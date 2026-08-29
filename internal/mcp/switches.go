@@ -252,9 +252,9 @@ func handleDeleteSwitchImage(
 			return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
 		}
 
-		if _, err := switchRepo.ClearImagePath(ctx, in.SwitchID); err != nil {
-			log.FromContext(ctx).Error("clearing switch image path", log.SwitchID, in.SwitchID, log.Error, err)
-			return nil, schema.DeleteSwitchImageOutput{}, errors.New("failed to delete switch image")
+		_, err = switchRepo.ClearImagePath(ctx, in.SwitchID)
+		if mutErr := handleClearImageError(ctx, err, log.SwitchID, in.SwitchID); mutErr != nil {
+			return nil, schema.DeleteSwitchImageOutput{}, mutErr
 		}
 
 		return nil, schema.DeleteSwitchImageOutput{}, nil

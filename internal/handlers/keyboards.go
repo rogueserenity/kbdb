@@ -396,7 +396,7 @@ func DeleteKeyboardImage(keyboardRepo repository.KeyboardRepository, images repo
 		}
 
 		_, err = keyboardRepo.DeleteImage(r.Context(), keyboardID, imageID)
-		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
+		if handleClearImageError(w, r, err, log.KeyboardID, keyboardID) {
 			return
 		}
 
