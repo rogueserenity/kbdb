@@ -101,25 +101,44 @@ var _ = Describe("Listing profiles", func() {
 		})
 
 		Context("given the username prefix filter matches only the discoverable one", func() {
-			When("listing the directory", func() {
-				BeforeEach(func(ctx SpecContext) {
-					var err error
-					resp, err = client.List(ctx, "", api.ListProfilesQuery{Limit: -1, Username: discoverableName})
-					Expect(err).NotTo(HaveOccurred())
+			Context("given the prefix is given verbatim", func() {
+				When("listing the directory", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.List(ctx, "", api.ListProfilesQuery{Limit: -1, Username: discoverableName})
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("returns only the discoverable profile, with user_id but no bio or links", func() {
+						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+						page := decodePage(resp)
+						Expect(usernames(page)).To(ConsistOf(discoverableName))
+
+						row := page.Items[0]
+						By("carrying the owner's user id for the list -> detail chain")
+						Expect(row.UserID).To(Equal(ownerID))
+						By("omitting bio and links from the summary shape")
+						Expect(row.Bio).To(BeNil())
+						Expect(row.Links).To(BeNil())
+					})
 				})
+			})
 
-				It("returns only the discoverable profile, with user_id but no bio or links", func() {
-					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+			Context("given the prefix is uppercased", func() {
+				When("listing the directory", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.List(ctx, "", api.ListProfilesQuery{
+							Limit: -1, Username: strings.ToUpper(discoverableName),
+						})
+						Expect(err).NotTo(HaveOccurred())
+					})
 
-					page := decodePage(resp)
-					Expect(usernames(page)).To(ConsistOf(discoverableName))
-
-					row := page.Items[0]
-					By("carrying the owner's user id for the list -> detail chain")
-					Expect(row.UserID).To(Equal(ownerID))
-					By("omitting bio and links from the summary shape")
-					Expect(row.Bio).To(BeNil())
-					Expect(row.Links).To(BeNil())
+					It("still matches the all-lowercase stored username", func() {
+						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+						Expect(usernames(decodePage(resp))).To(ConsistOf(discoverableName))
+					})
 				})
 			})
 		})
