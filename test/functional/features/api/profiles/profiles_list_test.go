@@ -223,20 +223,39 @@ var _ = Describe("Listing profiles", func() {
 				page2 := decodePage(second)
 				all := append(usernames(page1), usernames(page2)...)
 				Expect(all).To(ConsistOf(names))
+			})
+		})
 
-				By("rejecting that cursor when reused with a different filter")
-				bad, err := client.List(ctx, "", api.ListProfilesQuery{
-					Limit: 2, DiscordUsername: "x", Cursor: *page1.NextCursor,
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(bad.StatusCode).To(Equal(http.StatusBadRequest))
+		Context("given a next_cursor minted under the prefix", func() {
+			var cursor string
 
-				By("rejecting that cursor when reused with a narrower prefix on the same index")
-				narrower, err := client.List(ctx, "", api.ListProfilesQuery{
-					Limit: 2, Username: prefix + "a", Cursor: *page1.NextCursor,
-				})
+			BeforeEach(func(ctx SpecContext) {
+				first, err := client.List(ctx, "", api.ListProfilesQuery{Limit: 2, Username: prefix})
 				Expect(err).NotTo(HaveOccurred())
-				Expect(narrower.StatusCode).To(Equal(http.StatusBadRequest))
+				Expect(first.StatusCode).To(Equal(http.StatusOK))
+				page1 := decodePage(first)
+				Expect(page1.NextCursor).NotTo(BeNil())
+				cursor = *page1.NextCursor
+			})
+
+			When("reusing it with a different filter", func() {
+				It("returns 400", func(ctx SpecContext) {
+					bad, err := client.List(ctx, "", api.ListProfilesQuery{
+						Limit: 2, DiscordUsername: "x", Cursor: cursor,
+					})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(bad.StatusCode).To(Equal(http.StatusBadRequest))
+				})
+			})
+
+			When("reusing it with a narrower prefix on the same index", func() {
+				It("returns 400", func(ctx SpecContext) {
+					narrower, err := client.List(ctx, "", api.ListProfilesQuery{
+						Limit: 2, Username: prefix + "a", Cursor: cursor,
+					})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(narrower.StatusCode).To(Equal(http.StatusBadRequest))
+				})
 			})
 		})
 	})

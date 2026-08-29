@@ -1117,6 +1117,22 @@ func (s *ProfileRepositorySuite) TestListPublic_DiscordCursorReplayedUnderUserna
 	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
 }
 
+func (s *ProfileRepositorySuite) TestListPublic_ForgedCursorLabelsMatchButKeyDoesNot_ReturnsErrInvalidCursor() {
+	// A cursor whose idx/pfx labels claim the username index/prefix "a",
+	// but whose key attributes actually belong to the discord index. The
+	// label check alone would pass this straight to Query as a malformed
+	// ExclusiveStartKey; the structural check must catch it first.
+	forged, err := encodeCursor(map[string]types.AttributeValue{
+		"user_id":             &types.AttributeValueMemberS{Value: "user-alice"},
+		"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
+		"discord_username_lc": &types.AttributeValueMemberS{Value: "cool"},
+	}, "DiscoverableUsernameIndex", "a")
+	s.Require().NoError(err)
+
+	_, _, listErr := s.repo.ListPublic(s.T().Context(), "a", "", 20, forged)
+	s.Require().ErrorIs(listErr, repository.ErrInvalidCursor)
+}
+
 func (s *ProfileRepositorySuite) TestListPublic_QueryError_Propagates() {
 	s.mockClient.EXPECT().
 		Query(mock.Anything, mock.Anything).

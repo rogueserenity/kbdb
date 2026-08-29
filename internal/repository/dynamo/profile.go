@@ -570,6 +570,17 @@ const (
 	directoryPKValue          = "1"
 )
 
+// directoryIndexKeys is each GSI's LastEvaluatedKey attribute set. A
+// decoded cursor's key attributes must match this structurally, not just
+// its (client-supplied, unsigned) idx/pfx labels - otherwise a forged
+// cursor could carry labels matching the current call while its actual key
+// addresses a different index, reaching DynamoDB as a malformed
+// ExclusiveStartKey instead of being rejected locally.
+var directoryIndexKeys = map[string]map[string]struct{}{
+	discoverableUsernameIndex: {"discoverable_pk": {}, "username": {}, "user_id": {}},
+	discoverableDiscordIndex:  {"discord_pk": {}, "discord_username_lc": {}, "user_id": {}},
+}
+
 // ListPublic implements repository.ProfileRepository. discordPrefix routes
 // to the discord index (begins_with, lowercased), else the username index;
 // the handler guarantees at most one prefix. A bad cursor, or one minted
@@ -599,8 +610,13 @@ func (r *ProfileRepository) ListPublic(
 			And(expression.KeyBeginsWith(expression.Key("discord_username_lc"), activePrefix))
 	}
 
-	if len(startKey) > 0 && (cursorIdx != indexName || cursorPfx != activePrefix) {
-		return nil, "", fmt.Errorf("%w: filter changed since this cursor was issued", repository.ErrInvalidCursor)
+	if len(startKey) > 0 {
+		if cursorIdx != indexName || cursorPfx != activePrefix {
+			return nil, "", fmt.Errorf("%w: filter changed since this cursor was issued", repository.ErrInvalidCursor)
+		}
+		if !cursorMatchesIndex(startKey, indexName) {
+			return nil, "", fmt.Errorf("%w: key does not match its claimed index", repository.ErrInvalidCursor)
+		}
 	}
 
 	expr, err := expression.NewBuilder().WithKeyCondition(keyCond).Build()
@@ -632,6 +648,21 @@ func (r *ProfileRepository) ListPublic(
 	}
 
 	return profiles, nextCursor, nil
+}
+
+// cursorMatchesIndex reports whether startKey's attributes are exactly
+// directoryIndexKeys[indexName].
+func cursorMatchesIndex(startKey map[string]types.AttributeValue, indexName string) bool {
+	want := directoryIndexKeys[indexName]
+	if len(startKey) != len(want) {
+		return false
+	}
+	for k := range startKey {
+		if _, ok := want[k]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // ResolveUsername implements repository.ProfileRepository, reading the

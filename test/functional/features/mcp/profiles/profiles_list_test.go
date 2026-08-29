@@ -176,20 +176,39 @@ var _ = Describe("Listing profiles over MCP", func() {
 				page2 := decodeListProfilesOutput(second)
 				all := append(listProfileUsernames(page1), listProfileUsernames(page2)...)
 				Expect(all).To(ConsistOf(names))
+			})
+		})
 
-				By("rejecting that cursor when reused with a narrower prefix on the same index")
-				narrower, narrowerErr := client.CallTool(ctx, "list_profiles", map[string]any{
-					"username": prefix + "a", "limit": 2, "cursor": page1.NextCursor,
-				})
-				Expect(narrowerErr).NotTo(HaveOccurred())
-				Expect(narrower.IsError).To(BeTrue())
+		Context("given a next_cursor minted under the prefix", func() {
+			var cursor string
 
-				By("rejecting that cursor when reused with a different filter")
-				differentFilter, differentFilterErr := client.CallTool(ctx, "list_profiles", map[string]any{
-					"discord_username": "x", "limit": 2, "cursor": page1.NextCursor,
+			BeforeEach(func(ctx SpecContext) {
+				first, err := client.CallTool(ctx, "list_profiles", map[string]any{"username": prefix, "limit": 2})
+				Expect(err).NotTo(HaveOccurred())
+				Expect(first.IsError).To(BeFalse())
+				page1 := decodeListProfilesOutput(first)
+				Expect(page1.NextCursor).NotTo(BeEmpty())
+				cursor = page1.NextCursor
+			})
+
+			When("reusing it with a narrower prefix on the same index", func() {
+				It("returns a tool error", func(ctx SpecContext) {
+					narrower, err := client.CallTool(ctx, "list_profiles", map[string]any{
+						"username": prefix + "a", "limit": 2, "cursor": cursor,
+					})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(narrower.IsError).To(BeTrue())
 				})
-				Expect(differentFilterErr).NotTo(HaveOccurred())
-				Expect(differentFilter.IsError).To(BeTrue())
+			})
+
+			When("reusing it with a different filter", func() {
+				It("returns a tool error", func(ctx SpecContext) {
+					differentFilter, err := client.CallTool(ctx, "list_profiles", map[string]any{
+						"discord_username": "x", "limit": 2, "cursor": cursor,
+					})
+					Expect(err).NotTo(HaveOccurred())
+					Expect(differentFilter.IsError).To(BeTrue())
+				})
 			})
 		})
 	})
