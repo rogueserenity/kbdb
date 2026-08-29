@@ -356,7 +356,7 @@ func DeleteProfileImage(repo repository.ProfileRepository, images repository.Pro
 			return
 		}
 
-		if _, err := repo.ClearAvatarPath(r.Context()); handleMutationError(w, r, err, log.ProfileID, userID) {
+		if _, err := repo.ClearAvatarPath(r.Context()); handleClearImageError(w, r, err, log.ProfileID, userID) {
 			return
 		}
 

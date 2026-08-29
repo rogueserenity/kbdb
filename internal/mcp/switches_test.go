@@ -702,6 +702,20 @@ func (s *HandleDeleteSwitchImageSuite) TestBlankSwitchID_ReturnsError() {
 	s.Require().ErrorContains(err, "switch_id must not be blank")
 }
 
+func (s *HandleDeleteSwitchImageSuite) TestClearImagePathNotFound_IdempotentNoError() {
+	key := repository.SwitchImageKey("switches/u/sw-1/image")
+	s.mockSwitches.EXPECT().
+		Get(mock.Anything, mock.Anything, "sw-1").
+		Return(&repository.Switch{ID: "sw-1", ImagePath: &key}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
+
+	s.Require().NoError(err)
+}
+
 func (s *HandleDeleteSwitchImageSuite) TestAlreadyCleared_StillSucceeds() {
 	s.mockSwitches.EXPECT().
 		Get(mock.Anything, mock.Anything, "sw-1").
@@ -735,7 +749,7 @@ func (s *HandleDeleteSwitchImageSuite) TestMutationConflict_ReturnsConflictError
 	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
 
-	s.Require().ErrorContains(err, "failed to delete switch image")
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteSwitchImageSuite) TestRepositoryError_ReturnsError() {

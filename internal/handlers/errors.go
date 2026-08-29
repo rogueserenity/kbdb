@@ -32,3 +32,19 @@ func handleMutationError(w http.ResponseWriter, r *http.Request, err error, logF
 	}
 	return false
 }
+
+// handleClearImageError is handleMutationError's counterpart for the
+// image-pointer clear that follows a successful S3 object delete in a
+// single-image delete handler. The S3 object is already gone by this
+// point, so repository.ErrNotFound (the entity was deleted concurrently)
+// is the documented idempotent-success state, not a 404: it's swallowed
+// rather than routed through handleMutationError. ErrMutationConflict and
+// other errors still go through handleMutationError unchanged. Returns
+// true if a response was written - callers should return immediately when
+// true.
+func handleClearImageError(w http.ResponseWriter, r *http.Request, err error, logFields ...any) bool {
+	if errors.Is(err, repository.ErrNotFound) {
+		return false
+	}
+	return handleMutationError(w, r, err, logFields...)
+}

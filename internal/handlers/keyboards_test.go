@@ -1204,6 +1204,25 @@ func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_Succeeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
+func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_DeleteImageNotFound_Returns204() {
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
+			{ImageID: "img1", Path: deleteKeyboardImageTestKey},
+		})}, nil)
+	s.mockImages.EXPECT().
+		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
+		Return(nil)
+	s.mockKeyboardRepo.EXPECT().
+		DeleteImage(mock.Anything, "kb1", "img1").
+		Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
 func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_AlreadyAbsent_SucceedsWithoutS3Call() {
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").

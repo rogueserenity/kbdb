@@ -848,6 +848,18 @@ func (s *DeleteProfileImageSuite) TestSucceeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
+func (s *DeleteProfileImageSuite) TestClearAvatarPathNotFound_204() {
+	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
+		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).Return(nil)
+	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
 func (s *DeleteProfileImageSuite) TestNoAvatar_204_WithoutS3Call() {
 	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
 		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)

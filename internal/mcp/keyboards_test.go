@@ -737,6 +737,22 @@ func (s *HandleDeleteKeyboardImageSuite) TestSucceeds() {
 	s.Require().NoError(err)
 }
 
+func (s *HandleDeleteKeyboardImageSuite) TestDeleteImageNotFound_IdempotentNoError() {
+	key := repository.KeyboardImageKey("keyboards/u/kb-1/images/img-1")
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, mock.Anything, "kb-1").
+		Return(&repository.Keyboard{ID: "kb-1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
+			{ImageID: "img-1", Path: key},
+		})}, nil)
+	s.mockImages.EXPECT().DeleteKeyboardImage(mock.Anything, key).Return(nil)
+	s.mockKeyboards.EXPECT().DeleteImage(mock.Anything, "kb-1", "img-1").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
+
+	s.Require().NoError(err)
+}
+
 func (s *HandleDeleteKeyboardImageSuite) TestBlankKeyboardID_ReturnsError() {
 	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: " ", ImageID: "img-1"})

@@ -1264,6 +1264,25 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_Succeeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
+func (s *DeleteBuildImageSuite) TestDeleteBuildImage_DeleteImageNotFound_Returns204() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
+			{ImageID: "img1", Path: deleteBuildImageTestKey},
+		})}, nil)
+	s.mockImages.EXPECT().
+		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
+		Return(nil)
+	s.mockBuildRepo.EXPECT().
+		DeleteImage(mock.Anything, "build1", "img1").
+		Return(nil, repository.ErrNotFound)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
 func (s *DeleteBuildImageSuite) TestDeleteBuildImage_AlreadyAbsent_SucceedsWithoutS3Call() {
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").

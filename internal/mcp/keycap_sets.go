@@ -397,9 +397,9 @@ func handleDeleteKeycapKitImage(
 			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
 		}
 
-		if _, err := keycapSetRepo.ClearKitImagePath(ctx, in.KeycapSetID, in.KitID); err != nil {
-			log.FromContext(ctx).Error("clearing keycap kit image path", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
-			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
+		_, err = keycapSetRepo.ClearKitImagePath(ctx, in.KeycapSetID, in.KitID)
+		if mutErr := handleClearImageError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
+			return nil, schema.DeleteKeycapKitImageOutput{}, mutErr
 		}
 
 		return nil, schema.DeleteKeycapKitImageOutput{}, nil

@@ -1082,6 +1082,24 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_Succeeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
+func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_ClearImagePathNotFound_Returns204() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{ID: "sw1", ImagePath: &deleteSwitchImageTestKey}, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteSwitchImageTestKey).
+		Return(nil)
+	s.mockRepo.EXPECT().
+		ClearImagePath(mock.Anything, "sw1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
 func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_AlreadyAbsent_SucceedsWithoutS3Call() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").

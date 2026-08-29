@@ -1252,6 +1252,20 @@ func (s *HandleDeleteKeycapKitImageSuite) TestBlankKitID_ReturnsError() {
 	s.Require().ErrorContains(err, "kit_id must not be blank")
 }
 
+func (s *HandleDeleteKeycapKitImageSuite) TestClearKitImagePathNotFound_IdempotentNoError() {
+	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, mock.Anything, "ks-1").
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key}}}, nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
+	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, repository.ErrNotFound)
+
+	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
+
+	s.Require().NoError(err)
+}
+
 func (s *HandleDeleteKeycapKitImageSuite) TestAlreadyCleared_StillSucceeds() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
@@ -1296,7 +1310,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestMutationConflict_ReturnsConflictEr
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
 
-	s.Require().ErrorContains(err, "failed to delete kit image")
+	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteKeycapKitImageSuite) TestRepositoryError_ReturnsError() {

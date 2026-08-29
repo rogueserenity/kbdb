@@ -390,7 +390,7 @@ func DeleteSwitchImage(switchRepo repository.SwitchRepository, images repository
 		}
 
 		_, err = switchRepo.ClearImagePath(r.Context(), id)
-		if handleMutationError(w, r, err, log.SwitchID, id) {
+		if handleClearImageError(w, r, err, log.SwitchID, id) {
 			return
 		}
 

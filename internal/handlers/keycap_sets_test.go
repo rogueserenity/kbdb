@@ -1709,6 +1709,24 @@ func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_Succeeds() {
 	s.Equal(http.StatusNoContent, rec.Code)
 }
 
+func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_ClearKitImagePathNotFound_Returns204() {
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", ImagePath: &deleteKeycapKitImageTestKey}}}, nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, deleteKeycapKitImageTestKey).
+		Return(nil)
+	s.mockRepo.EXPECT().
+		ClearKitImagePath(mock.Anything, "ks1", "kit1").
+		Return(nil, repository.ErrNotFound)
+
+	req := s.newRequest(s.ownerCtx())
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusNoContent, rec.Code)
+}
+
 func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_AlreadyAbsent_SucceedsWithoutS3Call() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").

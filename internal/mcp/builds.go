@@ -416,7 +416,7 @@ func handleDeleteBuildImage(
 		}
 
 		_, err = buildRepo.DeleteImage(ctx, in.BuildID, in.ImageID)
-		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
+		if mutErr := handleClearImageError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
 			return nil, schema.DeleteBuildImageOutput{}, mutErr
 		}
 
