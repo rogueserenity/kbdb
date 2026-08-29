@@ -49,10 +49,6 @@ type Profile struct {
 	// profiles out of the indexes without a filter expression.
 	DiscoverablePK *string `dynamodbav:"discoverable_pk,omitempty" json:"-"`
 	DiscordPK      *string `dynamodbav:"discord_pk,omitempty" json:"-"`
-
-	// Version is a CAS guard against lost updates on concurrent whole-item
-	// rewrites, checked and bumped by mutateProfile's retry loop.
-	Version int `dynamodbav:"version" json:"-"`
 }
 
 // ProfileRepository provides access to profiles. Reads take an explicit
@@ -74,8 +70,8 @@ type ProfileRepository interface {
 	Create(ctx context.Context, p Profile) (*Profile, error)
 
 	// Update replaces the body-settable fields of the caller's profile
-	// (username, discoverable, discord_username, bio, links); AvatarPath and
-	// Version carry forward from the stored item. An omitted body field is
+	// (username, discoverable, discord_username, bio, links); AvatarPath
+	// carries forward from the stored item. An omitted body field is
 	// cleared. Returns ErrNotFound if the caller has no profile, or
 	// ErrUsernameTaken if a changed username is claimed by a different user.
 	Update(ctx context.Context, p Profile) (*Profile, error)
@@ -92,9 +88,7 @@ type ProfileRepository interface {
 	ListPublic(ctx context.Context, usernamePrefix, discordPrefix string, limit int, cursor string) ([]Profile, string, error)
 
 	// SetAvatarPath sets the caller's profile's AvatarPath to key. Returns
-	// ErrNotFound if the caller has no profile. Goes through the same
-	// whole-item rewrite as Update, so the directory-GSI keys and every
-	// other field carry forward untouched.
+	// ErrNotFound if the caller has no profile.
 	SetAvatarPath(ctx context.Context, key ProfileImageKey) error
 
 	// ClearAvatarPath clears the caller's profile's AvatarPath and returns
