@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"maps"
-	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
@@ -115,7 +115,6 @@ func (s *ProfileRepositorySuite) TestCreate_WritesProfileAndClaimAtomically() {
 
 	s.Require().NoError(err)
 	s.Equal("user-alice", got.OwnerID)
-	s.Equal(0, got.Version)
 
 	profilePut := captured.TransactItems[0].Put
 	s.Equal("profile-table", *profilePut.TableName)
@@ -242,15 +241,14 @@ func (s *ProfileRepositorySuite) TestCreate_TransactWriteItemsError_Propagates()
 	s.Require().NotErrorIs(err, repository.ErrUsernameTaken)
 }
 
-// storedProfileItem is a GetItemOutput for a profile at the given version,
-// with the fields mutateProfile carries forward populated so a test can
-// assert they survive the rewrite.
-func storedProfileItem(version int, extra map[string]types.AttributeValue) *dynamodb.GetItemOutput {
+// storedProfile is a GetItemOutput for the caller's existing profile;
+// Update reads it once to learn the current username and branch. extra
+// overlays or adds attributes.
+func storedProfile(extra map[string]types.AttributeValue) *dynamodb.GetItemOutput {
 	item := map[string]types.AttributeValue{
 		"user_id":      &types.AttributeValueMemberS{Value: "user-alice"},
 		"username":     &types.AttributeValueMemberS{Value: "alice"},
 		"discoverable": &types.AttributeValueMemberBOOL{Value: true},
-		"version":      &types.AttributeValueMemberN{Value: strconv.Itoa(version)},
 	}
 	maps.Copy(item, extra)
 	return &dynamodb.GetItemOutput{Item: item}
@@ -260,23 +258,38 @@ func (s *ProfileRepositorySuite) updateCtx() context.Context {
 	return kbdbctx.WithUserID(s.T().Context(), "user-alice")
 }
 
+// updatedProfileAttrs is a stand-in for an UpdateItem ALL_NEW response.
+func updatedProfileAttrs(extra map[string]types.AttributeValue) map[string]types.AttributeValue {
+	item := map[string]types.AttributeValue{
+		"user_id":      &types.AttributeValueMemberS{Value: "user-alice"},
+		"username":     &types.AttributeValueMemberS{Value: "alice"},
+		"discoverable": &types.AttributeValueMemberBOOL{Value: true},
+	}
+	maps.Copy(item, extra)
+	return item
+}
+
 func (s *ProfileRepositorySuite) TestUpdate_NoUserID_ReturnsErrNoUserID() {
 	_, err := s.repo.Update(s.T().Context(), repository.Profile{Username: "alice"})
 
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
 }
 
-func (s *ProfileRepositorySuite) TestUpdate_SameUsername_WritesOnlyProfileItem_NoClaimWrites() {
+func (s *ProfileRepositorySuite) TestUpdate_SameUsername_OneUpdateItem_NoTransaction() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil)
 
-	var captured *dynamodb.TransactWriteItemsInput
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(map[string]types.AttributeValue{
+			"bio": &types.AttributeValueMemberS{Value: "updated"},
+		})}, nil)
+	// No EXPECT() on TransactWriteItems - a same-username Update is a single
+	// in-place write.
 
 	newBio := "updated"
 	got, err := s.repo.Update(s.updateCtx(), repository.Profile{
@@ -284,77 +297,112 @@ func (s *ProfileRepositorySuite) TestUpdate_SameUsername_WritesOnlyProfileItem_N
 	})
 
 	s.Require().NoError(err)
-	s.Len(captured.TransactItems, 1)
-	s.NotNil(captured.TransactItems[0].Put)
-	s.Equal("profile-table", *captured.TransactItems[0].Put.TableName)
-	s.Equal(1, got.Version)
+	s.Equal("profile-table", *captured.TableName)
+	s.Equal("user-alice", captured.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	s.Contains(*captured.ConditionExpression, "attribute_exists")
 	s.Require().NotNil(got.Bio)
 	s.Equal("updated", *got.Bio)
 }
 
-func (s *ProfileRepositorySuite) TestUpdate_OmittingBioAndLinks_ClearsThem() {
+func (s *ProfileRepositorySuite) TestUpdate_OmittingBioAndLinks_RemovesThem() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, map[string]types.AttributeValue{
-			"bio":   &types.AttributeValueMemberS{Value: "old bio"},
-			"links": &types.AttributeValueMemberL{Value: []types.AttributeValue{}},
+		Return(storedProfile(map[string]types.AttributeValue{
+			"bio": &types.AttributeValueMemberS{Value: "old bio"},
 		}), nil)
 
-	var captured *dynamodb.TransactWriteItemsInput
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(nil)}, nil)
 
 	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
 	s.Require().NoError(err)
 
-	item := captured.TransactItems[0].Put.Item
-	s.NotContains(item, "bio")
-	s.NotContains(item, "links")
+	// bio and links are absent from the body -> REMOVE clauses.
+	s.True(removesAttr(captured, "bio"), "bio should be REMOVEd")
+	s.True(removesAttr(captured, "links"), "links should be REMOVEd")
 }
 
-func (s *ProfileRepositorySuite) TestUpdate_BodyDoesNotMentionAvatar_CarriesAvatarPathForward() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, map[string]types.AttributeValue{
-			"avatar_path": &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar"},
-		}), nil)
+// removesAttr reports whether in's UpdateExpression REMOVEs the given
+// attribute name (resolving the #placeholder via ExpressionAttributeNames).
+func removesAttr(in *dynamodb.UpdateItemInput, attr string) bool {
+	expr := *in.UpdateExpression
+	remove := ""
+	if i := strings.Index(expr, "REMOVE "); i >= 0 {
+		remove = expr[i:]
+		if j := strings.Index(remove, "SET "); j >= 0 {
+			remove = remove[:j]
+		}
+	}
+	for placeholder, name := range in.ExpressionAttributeNames {
+		if name == attr && strings.Contains(remove, placeholder) {
+			return true
+		}
+	}
+	return false
+}
 
-	var captured *dynamodb.TransactWriteItemsInput
+// setsAttr is removesAttr's counterpart for the SET section.
+func setsAttr(in *dynamodb.UpdateItemInput, attr string) bool {
+	expr := *in.UpdateExpression
+	set := ""
+	if i := strings.Index(expr, "SET "); i >= 0 {
+		set = expr[i:]
+		if j := strings.Index(set, "REMOVE "); j >= 0 {
+			set = set[:j]
+		}
+	}
+	for placeholder, name := range in.ExpressionAttributeNames {
+		if name == attr && strings.Contains(set, placeholder) {
+			return true
+		}
+	}
+	return false
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_DoesNotNameAvatarPath_SoItCarriesForward() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(nil), nil)
+
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(map[string]types.AttributeValue{
+			"avatar_path": &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar"},
+		})}, nil)
 
 	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
 	s.Require().NoError(err)
 
-	item := captured.TransactItems[0].Put.Item
-	s.Equal("profiles/user-alice/avatar",
-		item["avatar_path"].(*types.AttributeValueMemberS).Value)
+	s.False(setsAttr(captured, "avatar_path"), "avatar_path must not be SET")
+	s.False(removesAttr(captured, "avatar_path"), "avatar_path must not be REMOVEd")
+	// ALL_NEW response still carries the stored avatar_path.
 	s.Require().NotNil(got.AvatarPath)
 	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar"), *got.AvatarPath)
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIKeys() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, map[string]types.AttributeValue{
+		Return(storedProfile(map[string]types.AttributeValue{
 			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
 			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
 			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
 			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
 		}), nil)
 
-	var captured *dynamodb.TransactWriteItemsInput
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(nil)}, nil)
 
 	discord := "Alice_KB"
 	_, err := s.repo.Update(s.updateCtx(), repository.Profile{
@@ -362,15 +410,16 @@ func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIK
 	})
 	s.Require().NoError(err)
 
-	item := captured.TransactItems[0].Put.Item
-	s.NotContains(item, "discoverable_pk")
-	s.NotContains(item, "discord_pk")
-	s.NotContains(item, "discord_username_lc")
+	s.True(removesAttr(captured, "discoverable_pk"))
+	s.True(removesAttr(captured, "discord_pk"))
+	s.True(removesAttr(captured, "discord_username_lc"))
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_ChangedUsername_MovesClaimAtomically() {
+	// Update's branch Get, then renameProfile's per-attempt Get, both still
+	// "alice".
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil).Twice()
 
 	var captured *dynamodb.TransactWriteItemsInput
 	s.mockClient.EXPECT().
@@ -379,21 +428,44 @@ func (s *ProfileRepositorySuite) TestUpdate_ChangedUsername_MovesClaimAtomically
 			return true
 		})).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+	// Success re-reads the profile to return it.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(map[string]types.AttributeValue{
+			"username": &types.AttributeValueMemberS{Value: "alice2"},
+		}), nil).Once()
 
-	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
 	s.Require().NoError(err)
+	s.Equal("alice2", got.Username)
 
 	s.Require().Len(captured.TransactItems, 3)
-	s.NotNil(captured.TransactItems[0].Put)
-	s.Require().NotNil(captured.TransactItems[1].Delete)
-	s.Equal("profile-username-table", *captured.TransactItems[1].Delete.TableName)
-	s.Equal("alice",
-		captured.TransactItems[1].Delete.Key["username"].(*types.AttributeValueMemberS).Value)
-	s.Require().NotNil(captured.TransactItems[2].Put)
-	s.Equal("profile-username-table", *captured.TransactItems[2].Put.TableName)
-	s.Equal("attribute_not_exists(username)", *captured.TransactItems[2].Put.ConditionExpression)
-	s.Equal("alice2",
-		captured.TransactItems[2].Put.Item["username"].(*types.AttributeValueMemberS).Value)
+
+	// Item 0 is an Update action on the profile item, not a Put.
+	profileUpdate := captured.TransactItems[0].Update
+	s.Require().NotNil(profileUpdate)
+	s.Nil(captured.TransactItems[0].Put)
+	s.Equal("profile-table", *profileUpdate.TableName)
+	s.Equal("user-alice", profileUpdate.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	s.Contains(*profileUpdate.ConditionExpression, "attribute_exists")
+
+	claimDel := captured.TransactItems[1].Delete
+	s.Require().NotNil(claimDel)
+	s.Equal("profile-username-table", *claimDel.TableName)
+	s.Equal("alice", claimDel.Key["username"].(*types.AttributeValueMemberS).Value)
+	// Conditioned on user_id = caller, so a reissued claim is left alone.
+	ownerVal := ""
+	for _, v := range claimDel.ExpressionAttributeValues {
+		if sv, ok := v.(*types.AttributeValueMemberS); ok {
+			ownerVal = sv.Value
+		}
+	}
+	s.Equal("user-alice", ownerVal)
+
+	claimPut := captured.TransactItems[2].Put
+	s.Require().NotNil(claimPut)
+	s.Equal("profile-username-table", *claimPut.TableName)
+	s.Equal("attribute_not_exists(username)", *claimPut.ConditionExpression)
+	s.Equal("alice2", claimPut.Item["username"].(*types.AttributeValueMemberS).Value)
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_NoProfile_ReturnsErrNotFound() {
@@ -405,9 +477,20 @@ func (s *ProfileRepositorySuite) TestUpdate_NoProfile_ReturnsErrNotFound() {
 	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
+func (s *ProfileRepositorySuite) TestUpdate_SameUsername_ConditionFails_ReturnsErrNotFound() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(nil), nil)
+	s.mockClient.EXPECT().UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
 func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameClaimFails_ReturnsErrUsernameTaken() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
@@ -423,44 +506,99 @@ func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameClaimFails_ReturnsErr
 	s.Require().ErrorIs(err, repository.ErrUsernameTaken)
 }
 
-func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflict_RetriesThenSucceeds() {
-	gomock := s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything)
-	gomock.Return(storedProfileItem(0, nil), nil).Once()
+func (s *ProfileRepositorySuite) TestUpdate_ChangedUsernameProfileGone_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(1, nil), nil).Once()
-
+		Return(storedProfile(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
 			CancellationReasons: []types.CancellationReason{
 				{Code: aws.String("ConditionalCheckFailed")},
+				{Code: aws.String("None")},
+				{Code: aws.String("None")},
 			},
+		})
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_RenameTransactionConflict_RetriesThenSucceeds() {
+	// Every pre-success Get still reads "alice"; only the final read (after
+	// the transaction commits) shows "alice2".
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(nil), nil).Times(3)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{{Code: aws.String("TransactionConflict")}},
 		}).Once()
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(map[string]types.AttributeValue{
+			"username": &types.AttributeValueMemberS{Value: "alice2"},
+		}), nil).Once()
 
-	newBio := "second try wins"
-	got, err := s.repo.Update(s.updateCtx(), repository.Profile{
-		Username: "alice", Discoverable: true, Bio: &newBio,
-	})
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
 
 	s.Require().NoError(err)
-	s.Equal(2, got.Version)
+	s.Equal("alice2", got.Username)
 }
 
-func (s *ProfileRepositorySuite) TestUpdate_VersionCASConflictExhaustsRetries_ReturnsErrMutationConflict() {
+func (s *ProfileRepositorySuite) TestUpdate_RenameClaimDeleteRaced_RetriesFromFreshRead() {
+	// The caller's own "alice" claim moved out from under the claim-delete
+	// (reason 1) - a concurrent rename of the same profile. Retry from a
+	// fresh read that now shows the new current username.
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil).Twice()
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
 			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("None")},
 				{Code: aws.String("ConditionalCheckFailed")},
+				{Code: aws.String("None")},
 			},
+		}).Once()
+	// Retry: the profile now reads as "bob"; the transaction targets that
+	// claim and commits.
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(map[string]types.AttributeValue{
+			"username": &types.AttributeValueMemberS{Value: "bob"},
+		}), nil).Once()
+	var captured *dynamodb.TransactWriteItemsInput
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.TransactWriteItemsOutput{}, nil).Once()
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(map[string]types.AttributeValue{
+			"username": &types.AttributeValueMemberS{Value: "carol"},
+		}), nil).Once()
+
+	got, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "carol", Discoverable: true})
+
+	s.Require().NoError(err)
+	s.Equal("carol", got.Username)
+	// The retry's claim-delete keyed on the fresh username, not the stale one.
+	s.Equal("bob", captured.TransactItems[1].Delete.Key["username"].(*types.AttributeValueMemberS).Value)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_RenameConflictExhaustsRetries_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(nil), nil)
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{{Code: aws.String("TransactionConflict")}},
 		})
 
-	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice", Discoverable: true})
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{Username: "alice2", Discoverable: true})
 
 	s.Require().ErrorIs(err, repository.ErrMutationConflict)
 }
@@ -471,42 +609,29 @@ func (s *ProfileRepositorySuite) TestSetAvatarPath_NoUserID_ReturnsErrNoUserID()
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
 }
 
-func (s *ProfileRepositorySuite) TestSetAvatarPath_SetsKeyViaWholeItemPut() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, map[string]types.AttributeValue{
-			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
-			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
-			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
-			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
-		}), nil)
-
-	var captured *dynamodb.TransactWriteItemsInput
+func (s *ProfileRepositorySuite) TestSetAvatarPath_OneUpdateItem_NoRead() {
+	// No GetItem - SetAvatarPath writes avatar_path directly under
+	// attribute_exists(user_id).
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{}, nil)
 
 	err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar")
 	s.Require().NoError(err)
 
-	// Only the profile item is written - no username change, so no claim moves.
-	s.Require().Len(captured.TransactItems, 1)
-	item := captured.TransactItems[0].Put.Item
-	s.Equal("profiles/user-alice/avatar", item["avatar_path"].(*types.AttributeValueMemberS).Value)
-
-	// The whole-item Put must not drop the sparse-GSI attributes or username
-	// when it only touches avatar_path.
-	s.Equal("1", item["discoverable_pk"].(*types.AttributeValueMemberS).Value)
-	s.Equal("1", item["discord_pk"].(*types.AttributeValueMemberS).Value)
-	s.Equal("alice_kb", item["discord_username_lc"].(*types.AttributeValueMemberS).Value)
-	s.Equal("alice", item["username"].(*types.AttributeValueMemberS).Value)
+	s.Equal("profile-table", *captured.TableName)
+	s.Equal("user-alice", captured.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	s.True(setsAttr(captured, "avatar_path"))
+	s.Contains(*captured.ConditionExpression, "attribute_exists")
 }
 
 func (s *ProfileRepositorySuite) TestSetAvatarPath_NoProfile_ReturnsErrNotFound() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+	s.mockClient.EXPECT().UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 
 	err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar")
 
@@ -519,41 +644,32 @@ func (s *ProfileRepositorySuite) TestClearAvatarPath_NoUserID_ReturnsErrNoUserID
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
 }
 
-func (s *ProfileRepositorySuite) TestClearAvatarPath_ClearsKeyAndReturnsIt_KeepingSparseGSIAttrs() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, map[string]types.AttributeValue{
-			"avatar_path":         &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar"},
-			"discoverable_pk":     &types.AttributeValueMemberS{Value: "1"},
-			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
-			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
-			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
-		}), nil)
-
-	var captured *dynamodb.TransactWriteItemsInput
+func (s *ProfileRepositorySuite) TestClearAvatarPath_RemovesAndReturnsClearedKey() {
+	var captured *dynamodb.UpdateItemInput
 	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"avatar_path": &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar"},
+		}}, nil)
 
 	cleared, err := s.repo.ClearAvatarPath(s.updateCtx())
 	s.Require().NoError(err)
 	s.Require().NotNil(cleared)
 	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar"), *cleared)
 
-	item := captured.TransactItems[0].Put.Item
-	s.NotContains(item, "avatar_path")
-	s.Equal("1", item["discoverable_pk"].(*types.AttributeValueMemberS).Value)
-	s.Equal("1", item["discord_pk"].(*types.AttributeValueMemberS).Value)
-	s.Equal("alice_kb", item["discord_username_lc"].(*types.AttributeValueMemberS).Value)
-	s.Equal("alice", item["username"].(*types.AttributeValueMemberS).Value)
+	s.True(removesAttr(captured, "avatar_path"))
+	s.Equal(types.ReturnValueAllOld, captured.ReturnValues)
 }
 
-func (s *ProfileRepositorySuite) TestClearAvatarPath_NoAvatarSet_ReturnsNilWithoutWriting() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
-	// No EXPECT() on TransactWriteItems - an absent avatar is a no-op, not a write.
+func (s *ProfileRepositorySuite) TestClearAvatarPath_NoAvatarSet_ReturnsNil() {
+	// The REMOVE still runs; ALL_OLD without avatar_path means nothing was set.
+	s.mockClient.EXPECT().UpdateItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: "user-alice"},
+		}}, nil)
 
 	cleared, err := s.repo.ClearAvatarPath(s.updateCtx())
 
@@ -562,8 +678,8 @@ func (s *ProfileRepositorySuite) TestClearAvatarPath_NoAvatarSet_ReturnsNilWitho
 }
 
 func (s *ProfileRepositorySuite) TestClearAvatarPath_NoProfile_ReturnsErrNotFound() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+	s.mockClient.EXPECT().UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
 
 	cleared, err := s.repo.ClearAvatarPath(s.updateCtx())
 
@@ -579,7 +695,7 @@ func (s *ProfileRepositorySuite) TestDelete_NoUserID_ReturnsErrNoUserID() {
 
 func (s *ProfileRepositorySuite) TestDelete_RemovesProfileAndClaimAtomically_BothConditioned() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil)
 
 	var captured *dynamodb.TransactWriteItemsInput
 	s.mockClient.EXPECT().
@@ -622,7 +738,7 @@ func (s *ProfileRepositorySuite) TestDelete_ConcurrentRename_RetriesWithFreshUse
 	// Attempt 1: profile still reads as "alice"; the claim-delete condition
 	// fails because a rename already moved the "alice" claim.
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil).Once()
+		Return(storedProfile(nil), nil).Once()
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
@@ -634,7 +750,7 @@ func (s *ProfileRepositorySuite) TestDelete_ConcurrentRename_RetriesWithFreshUse
 
 	// Attempt 2: fresh Get returns the renamed profile; delete targets the
 	// new claim and succeeds.
-	renamed := storedProfileItem(1, map[string]types.AttributeValue{
+	renamed := storedProfile(map[string]types.AttributeValue{
 		"username": &types.AttributeValueMemberS{Value: "bob"},
 	})
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).Return(renamed, nil).Once()
@@ -655,7 +771,7 @@ func (s *ProfileRepositorySuite) TestDelete_ConcurrentRename_RetriesWithFreshUse
 
 func (s *ProfileRepositorySuite) TestDelete_TransactionConflict_Retries() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
@@ -675,7 +791,7 @@ func (s *ProfileRepositorySuite) TestDelete_TransactionConflict_Retries() {
 
 func (s *ProfileRepositorySuite) TestDelete_ConflictExhaustsRetries_ReturnsErrMutationConflict() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil)
+		Return(storedProfile(nil), nil)
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, &types.TransactionCanceledException{
@@ -712,7 +828,7 @@ func (s *ProfileRepositorySuite) TestDelete_GetError_Propagates() {
 
 func (s *ProfileRepositorySuite) TestDelete_NonRetryableError_PropagatesWithoutRetry() {
 	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfileItem(0, nil), nil).Once()
+		Return(storedProfile(nil), nil).Once()
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamodb: throttled")).Once()

@@ -411,13 +411,16 @@ Resources:
               Action:
                 - dynamodb:Query
               Resource: !Sub "${BuildTable.Arn}/index/BuildRefIndex"
-            # Profile writes (later PRs) touch both tables in one
-            # TransactWriteItems, so both get the full CRUD set now.
+            # Profile writes touch both tables in one TransactWriteItems, so
+            # both get the transaction set; the profile item itself is also
+            # mutated in place via UpdateItem (same-username Update, avatar
+            # path), hence dynamodb:UpdateItem on ProfileTable only.
             - Effect: Allow
               Action:
                 - dynamodb:Query
                 - dynamodb:GetItem
                 - dynamodb:PutItem
+                - dynamodb:UpdateItem
                 - dynamodb:DeleteItem
                 - dynamodb:TransactWriteItems
               Resource: !GetAtt ProfileTable.Arn
