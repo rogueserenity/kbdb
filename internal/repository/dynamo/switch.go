@@ -148,8 +148,8 @@ func (r *SwitchRepository) Create(ctx context.Context, sw repository.Switch) (*r
 //
 // The condition is attribute_exists(id) alone: a full-body write is
 // last-write-wins, but it must not resurrect a row a concurrent Delete just
-// removed. classifySwitchConflict turns the resulting condition failure
-// into a 404 or a 409.
+// removed. id is the sort key, so the condition can only fail when no item
+// exists at (user_id, id) - that's ErrNotFound.
 func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*repository.Switch, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -189,7 +189,7 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
-			return nil, r.classifySwitchConflict(ctx, ownerID, sw.ID)
+			return nil, repository.ErrNotFound
 		}
 		return nil, fmt.Errorf("updating switch %q for owner %q: %w", sw.ID, ownerID, err)
 	}
@@ -200,25 +200,6 @@ func (r *SwitchRepository) Update(ctx context.Context, sw repository.Switch) (*r
 	}
 
 	return &updated, nil
-}
-
-// classifySwitchConflict re-reads after an attribute_exists(id) condition
-// failure: gone -> ErrNotFound (404), still there -> ErrMutationConflict
-// (409). The read must be strongly consistent, or a lagging replica showing
-// a just-deleted row turns a 404 into a 409.
-func (r *SwitchRepository) classifySwitchConflict(ctx context.Context, ownerID, id string) error {
-	out, err := r.client.GetItem(ctx, &dynamodb.GetItemInput{
-		TableName:      &r.tableName,
-		Key:            switchKey(ownerID, id),
-		ConsistentRead: aws.Bool(true),
-	})
-	if err != nil {
-		return fmt.Errorf("classifying switch %q conflict for owner %q: %w", id, ownerID, err)
-	}
-	if len(out.Item) == 0 {
-		return repository.ErrNotFound
-	}
-	return repository.ErrMutationConflict
 }
 
 // Delete implements repository.SwitchRepository. Idempotent: a nonexistent
