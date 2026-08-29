@@ -194,50 +194,6 @@ func (s *ProfileRepositorySuite) TestCreate_DiscoverableWithDiscord_SetsAllGSIKe
 	s.Equal("alice_kb", *p.DiscordUsernameLC)
 }
 
-func (s *ProfileRepositorySuite) TestCreate_BlankDiscordUsername_OmitsDiscordGSIKeysAndAttr() {
-	var captured *dynamodb.TransactWriteItemsInput
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			captured = in
-			return true
-		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
-	blank := ""
-	_, err := s.repo.Create(ctx, repository.Profile{
-		Username: "alice", Discoverable: true, DiscordUsername: &blank,
-	})
-	s.Require().NoError(err)
-
-	item := captured.TransactItems[0].Put.Item
-	s.NotContains(item, "discord_username")
-	s.NotContains(item, "discord_pk")
-	s.NotContains(item, "discord_username_lc")
-}
-
-func (s *ProfileRepositorySuite) TestCreate_WhitespaceDiscordUsername_OmitsDiscordGSIKeysAndAttr() {
-	var captured *dynamodb.TransactWriteItemsInput
-	s.mockClient.EXPECT().
-		TransactWriteItems(mock.Anything, mock.MatchedBy(func(in *dynamodb.TransactWriteItemsInput) bool {
-			captured = in
-			return true
-		})).
-		Return(&dynamodb.TransactWriteItemsOutput{}, nil)
-
-	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
-	whitespace := "   "
-	_, err := s.repo.Create(ctx, repository.Profile{
-		Username: "alice", Discoverable: true, DiscordUsername: &whitespace,
-	})
-	s.Require().NoError(err)
-
-	item := captured.TransactItems[0].Put.Item
-	s.NotContains(item, "discord_username")
-	s.NotContains(item, "discord_pk")
-	s.NotContains(item, "discord_username_lc")
-}
-
 func (s *ProfileRepositorySuite) TestCreate_ProfilePutConditionFails_ReturnsErrAlreadyExists() {
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
@@ -471,33 +427,6 @@ func (s *ProfileRepositorySuite) TestUpdate_FlipDiscoverableFalse_RemovesAllGSIK
 	s.Require().NoError(err)
 
 	s.True(removesAttr(captured, "discoverable_pk"))
-	s.True(removesAttr(captured, "discord_pk"))
-	s.True(removesAttr(captured, "discord_username_lc"))
-}
-
-func (s *ProfileRepositorySuite) TestUpdate_BlankDiscordUsername_RemovesDiscordAttrAndGSIKeys() {
-	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
-		Return(storedProfile(map[string]types.AttributeValue{
-			"discord_pk":          &types.AttributeValueMemberS{Value: "1"},
-			"discord_username_lc": &types.AttributeValueMemberS{Value: "alice_kb"},
-			"discord_username":    &types.AttributeValueMemberS{Value: "Alice_KB"},
-		}), nil)
-
-	var captured *dynamodb.UpdateItemInput
-	s.mockClient.EXPECT().
-		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
-			captured = in
-			return true
-		})).
-		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(nil)}, nil)
-
-	whitespace := "   "
-	_, err := s.repo.Update(s.updateCtx(), repository.Profile{
-		Username: "alice", Discoverable: true, DiscordUsername: &whitespace,
-	})
-	s.Require().NoError(err)
-
-	s.True(removesAttr(captured, "discord_username"))
 	s.True(removesAttr(captured, "discord_pk"))
 	s.True(removesAttr(captured, "discord_username_lc"))
 }

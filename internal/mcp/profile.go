@@ -246,6 +246,7 @@ func handleDeleteProfileImage(
 func validatedProfile(in schema.ProfileInput) (repository.Profile, error) {
 	p := repomcp.ProfileFromMCP(in)
 
+	profilevalidate.Normalize(&p)
 	fieldErrs := profilevalidate.Validate(p)
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))

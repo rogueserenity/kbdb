@@ -115,16 +115,10 @@ func (r *ProfileRepository) Create(ctx context.Context, p repository.Profile) (*
 
 // setProfileDirectoryKeys derives the sparse-GSI discriminators from p's
 // Discoverable / DiscordUsername fields, leaving each nil when the profile
-// shouldn't be in that index. A blank (empty or all-whitespace)
-// DiscordUsername is treated as not provided, so it's coerced to nil here -
-// the single chokepoint both REST and MCP, both Create and Update, flow
-// through - rather than landing in the DiscoverableDiscordIndex under an
-// empty sort key.
+// shouldn't be in that index. Callers are expected to have already run
+// profilevalidate.Normalize on p, so a blank DiscordUsername is nil by the
+// time it gets here.
 func setProfileDirectoryKeys(p *repository.Profile) {
-	if p.DiscordUsername != nil && strings.TrimSpace(*p.DiscordUsername) == "" {
-		p.DiscordUsername = nil
-	}
-
 	p.DiscoverablePK = nil
 	p.DiscordPK = nil
 	p.DiscordUsernameLC = nil
