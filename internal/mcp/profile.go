@@ -180,9 +180,14 @@ func handleSetProfileImage(
 			return nil, schema.SetProfileImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		ownerID, err := resolveOwnerID(ctx, "")
+		if err != nil {
+			return nil, schema.SetProfileImageOutput{}, err
+		}
+
 		key, err := repository.NewProfileImageKey(ctx)
 		if err != nil {
-			log.FromContext(ctx).Error("building profile image key", log.Error, err)
+			log.FromContext(ctx).Error("building profile image key", log.Error, err, log.ProfileID, ownerID)
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
 		}
 
@@ -192,7 +197,7 @@ func handleSetProfileImage(
 
 		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
 		if err != nil {
-			log.FromContext(ctx).Error("presigning profile image upload", log.Error, err)
+			log.FromContext(ctx).Error("presigning profile image upload", log.Error, err, log.ProfileID, ownerID)
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
 		}
 
