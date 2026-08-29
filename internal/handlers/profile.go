@@ -163,6 +163,10 @@ func CreateProfile(repo repository.ProfileRepository, images repository.ProfileI
 		case errors.Is(err, repository.ErrUsernameTaken):
 			problem.UsernameUnavailable(w, fmt.Sprintf("the username %q is already taken", p.Username))
 			return
+		case errors.Is(err, repository.ErrMutationConflict):
+			log.FromContext(r.Context()).Warn("mutation conflict creating profile")
+			problem.Conflict(w, "the resource is being modified concurrently, please retry")
+			return
 		case err != nil:
 			log.FromContext(r.Context()).Error("creating profile", log.Error, err)
 			problem.Internal(w, "failed to create profile")

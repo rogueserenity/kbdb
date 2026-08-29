@@ -243,6 +243,18 @@ func (s *BuildRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists(
 	s.Nil(b)
 }
 
+func (s *BuildRepositorySuite) TestCreate_TransactionConflict_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, txCanceled("TransactionConflict"))
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	b, err := s.repo.Create(ctx, repository.Build{ID: "b1"})
+
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+	s.Nil(b)
+}
+
 func (s *BuildRepositorySuite) TestCreate_TransactWriteItemsError_Propagates() {
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).

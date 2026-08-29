@@ -147,6 +147,18 @@ func (s *HandleCreateBuildSuite) TestAlreadyExists_ReturnsAlreadyExists() {
 	s.Require().ErrorIs(err, errBuildAlreadyExists)
 }
 
+func (s *HandleCreateBuildSuite) TestMutationConflict_ReturnsMutationConflictError() {
+	s.stubOwnedKeyboard()
+	s.mockBuilds.EXPECT().
+		Create(mock.Anything, mock.Anything).
+		Return(nil, repository.ErrMutationConflict)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: validBuildInput()})
+
+	s.Require().ErrorIs(err, errMutationConflict)
+}
+
 func (s *HandleCreateBuildSuite) TestRepositoryError_ReturnsError() {
 	s.stubOwnedKeyboard()
 	s.mockBuilds.EXPECT().

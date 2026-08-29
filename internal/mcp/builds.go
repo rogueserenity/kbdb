@@ -174,6 +174,9 @@ func handleCreateBuild(
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			return nil, schema.CreateBuildOutput{}, errBuildAlreadyExists
 		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			return nil, schema.CreateBuildOutput{}, handleMutationError(ctx, err, log.BuildID, b.ID)
+		}
 		if err != nil {
 			log.FromContext(ctx).Error("creating build", log.BuildID, b.ID, log.Error, err)
 			return nil, schema.CreateBuildOutput{}, errors.New("failed to create build")

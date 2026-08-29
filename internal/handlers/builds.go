@@ -216,6 +216,11 @@ func CreateBuild(
 			problem.Conflict(w, "build already exists")
 			return
 		}
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(r.Context()).Warn("mutation conflict creating build", log.BuildID, b.ID)
+			problem.Conflict(w, "the resource is being modified concurrently, please retry")
+			return
+		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("creating build", log.Error, err, log.BuildID, b.ID)
 			problem.Internal(w, "failed to create build")

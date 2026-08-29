@@ -175,10 +175,14 @@ func (r *BuildRepository) Create(ctx context.Context, b repository.Build) (*repo
 
 	_, err = r.client.TransactWriteItems(ctx, &dynamodb.TransactWriteItemsInput{TransactItems: transactItems})
 	if err != nil {
-		if isConditionalCheckFailed(err) {
+		switch {
+		case isConditionalCheckFailed(err):
 			return nil, repository.ErrAlreadyExists
+		case isTransactionConflict(err):
+			return nil, repository.ErrMutationConflict
+		default:
+			return nil, fmt.Errorf("creating build %q for owner %q: %w", b.ID, b.UserID, err)
 		}
-		return nil, fmt.Errorf("creating build %q for owner %q: %w", b.ID, b.UserID, err)
 	}
 
 	return &b, nil
@@ -190,12 +194,23 @@ func (r *BuildRepository) Create(ctx context.Context, b repository.Build) (*repo
 // reasons, not the ConditionalCheckFailedException a plain PutItem/DeleteItem
 // would return.
 func isConditionalCheckFailed(err error) bool {
+	return hasCancellationReason(err, "ConditionalCheckFailed")
+}
+
+// isTransactionConflict reports whether err is a TransactWriteItems failure
+// caused by transient contention on one of the transaction's items (another
+// in-flight write touched it), rather than a failed ConditionExpression.
+func isTransactionConflict(err error) bool {
+	return hasCancellationReason(err, "TransactionConflict")
+}
+
+func hasCancellationReason(err error, code string) bool {
 	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
 	if !ok {
 		return false
 	}
 	for _, reason := range txErr.CancellationReasons {
-		if reason.Code != nil && *reason.Code == "ConditionalCheckFailed" {
+		if reason.Code != nil && *reason.Code == code {
 			return true
 		}
 	}

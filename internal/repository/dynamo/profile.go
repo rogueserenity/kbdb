@@ -137,8 +137,10 @@ func setProfileDirectoryKeys(p *repository.Profile) {
 // mapProfileCreateConflict maps a Create TransactWriteItems cancellation to
 // a sentinel. Items are [profilePut, claimPut]; ErrAlreadyExists takes
 // priority over ErrUsernameTaken when both conditions fail (you can't
-// create at all, so the username is moot). Returns nil if err isn't a
-// conditional-check cancellation.
+// create at all, so the username is moot). A TransactionConflict on either
+// item is transient contention, not a real conflict, so it maps to
+// ErrMutationConflict (409, retryable) rather than falling through to a raw
+// 500. Returns nil if err isn't a transaction cancellation.
 func mapProfileCreateConflict(err error) error {
 	txErr, ok := errors.AsType[*types.TransactionCanceledException](err)
 	if !ok {
@@ -156,6 +158,8 @@ func mapProfileCreateConflict(err error) error {
 		return repository.ErrAlreadyExists
 	case failed(1):
 		return repository.ErrUsernameTaken
+	case hasCancellationReason(err, "TransactionConflict"):
+		return repository.ErrMutationConflict
 	default:
 		return nil
 	}

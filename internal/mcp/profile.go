@@ -88,6 +88,8 @@ func handleCreateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 			return nil, schema.CreateProfileOutput{}, errProfileAlreadyExists
 		case errors.Is(err, repository.ErrUsernameTaken):
 			return nil, schema.CreateProfileOutput{}, fmt.Errorf("username %q is already taken", p.Username)
+		case errors.Is(err, repository.ErrMutationConflict):
+			return nil, schema.CreateProfileOutput{}, handleMutationError(ctx, err)
 		case err != nil:
 			log.FromContext(ctx).Error("creating profile", log.Error, err)
 			return nil, schema.CreateProfileOutput{}, errors.New("failed to create profile")

@@ -228,6 +228,22 @@ func (s *ProfileRepositorySuite) TestCreate_ClaimPutConditionFails_ReturnsErrUse
 	s.NotErrorIs(err, repository.ErrAlreadyExists)
 }
 
+func (s *ProfileRepositorySuite) TestCreate_TransactionConflict_ReturnsErrMutationConflict() {
+	s.mockClient.EXPECT().
+		TransactWriteItems(mock.Anything, mock.Anything).
+		Return(nil, &types.TransactionCanceledException{
+			CancellationReasons: []types.CancellationReason{
+				{Code: aws.String("TransactionConflict")},
+				{Code: aws.String("None")},
+			},
+		})
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
+	_, err := s.repo.Create(ctx, repository.Profile{Username: "alice"})
+
+	s.Require().ErrorIs(err, repository.ErrMutationConflict)
+}
+
 func (s *ProfileRepositorySuite) TestCreate_TransactWriteItemsError_Propagates() {
 	s.mockClient.EXPECT().
 		TransactWriteItems(mock.Anything, mock.Anything).
