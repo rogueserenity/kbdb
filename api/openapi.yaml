@@ -1298,9 +1298,10 @@ components:
       schema:
         type: string
       description: >
-        Either a profile owner's IdP subject or their username. The username
-        charset (^[a-z0-9_-]{3,20}$, and never starting with "user-") is
-        disjoint from IdP subject values, so the two never collide.
+        Either a profile owner's IdP subject or their username. Resolution
+        tries the IdP subject first and falls back to a username lookup, so
+        a username that happened to match a subject string would be shadowed
+        (in practice the two value spaces do not overlap).
     Limit:
       name: limit
       in: query
@@ -1806,12 +1807,14 @@ components:
       properties:
         username:
           type: string
-          pattern: "^[a-z0-9_-]{3,20}$"
+          pattern: "^[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]$"
           description: >
-            Lowercase letters, digits, hyphen, underscore; 3–20 characters;
-            never starting with "user-". Unique across all profiles,
-            case-sensitively (the charset has no uppercase). Used as
-            /u/{username} in the frontend and as an identifier on
+            Lowercase letters, digits, hyphen, period, underscore; 3–32
+            characters; no leading/trailing period, hyphen, or underscore;
+            no consecutive periods. A Discord-compatible superset, so any
+            Discord @handle (3+ chars) is a valid username. Unique across
+            all profiles, case-sensitively (the charset has no uppercase).
+            Used as /u/{username} in the frontend and as an identifier on
             GET /v1/profile/{identifier}.
         discoverable:
           type: boolean

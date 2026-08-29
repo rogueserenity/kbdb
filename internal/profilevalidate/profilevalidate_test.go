@@ -65,22 +65,42 @@ func (s *ValidateSuite) TestUsernameUppercase_Flagged() {
 	s.Equal([]string{"username"}, names(profilevalidate.Validate(p)))
 }
 
-func (s *ValidateSuite) TestUsernameUserPrefix_Flagged() {
-	p := valid()
-	p.Username = "user-alice"
+func (s *ValidateSuite) TestUsernameDiscordSupersetShapes_OK() {
+	// Every valid Discord handle (3+ chars) plus hyphen must be accepted.
+	for _, v := range []string{
+		"a.b",
+		"my.handle",
+		"keeps-hyphen",
+		"alice_kb",
+		"a1b",
+		"user-alice", // "user-" prefix is allowed; it isn't special anymore
+		strings.Repeat("x", 32),
+	} {
+		p := valid()
+		p.Username = v
 
-	errs := profilevalidate.Validate(p)
-	s.Require().Len(errs, 1)
-	s.Equal("username", errs[0].Name)
-	s.Contains(errs[0].Reason, `"user-"`)
+		s.Empty(profilevalidate.Validate(p), "expected %q to be valid", v)
+	}
 }
 
-func (s *ValidateSuite) TestUsernameUnderscoreOnlyPrefix_NotFlaggedAsUserBan() {
-	// "users" contains "user" but not the "user-" prefix.
-	p := valid()
-	p.Username = "users_r_us"
+func (s *ValidateSuite) TestUsernameInvalidShapes_Flagged() {
+	for _, v := range []string{
+		".lead",                 // leading period
+		"trail_",                // trailing underscore
+		"-lead",                 // leading hyphen
+		"trail-",                // trailing hyphen
+		"a..b",                  // consecutive periods
+		"UPPER",                 // uppercase
+		"ab",                    // too short
+		strings.Repeat("x", 33), // too long
+		"has space",             // space
+		"na@me",                 // disallowed character
+	} {
+		p := valid()
+		p.Username = v
 
-	s.Empty(profilevalidate.Validate(p))
+		s.Equal([]string{"username"}, names(profilevalidate.Validate(p)), "expected %q to be invalid", v)
+	}
 }
 
 func (s *ValidateSuite) TestDiscordUsernameOver32Runes_Flagged() {

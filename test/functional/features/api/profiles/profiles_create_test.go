@@ -110,6 +110,35 @@ var _ = Describe("Creating a profile", func() {
 			})
 		})
 
+		Context("given a username containing a period and a hyphen", func() {
+			var body string
+
+			BeforeEach(func() {
+				username = "my.kb-" + uuid.NewString()[:8]
+				body = fmt.Sprintf(`{"username": %q, "discoverable": true}`, username)
+			})
+
+			When("creating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken, body)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 201 and is then resolvable by that username", func(ctx SpecContext) {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					byName, err := client.Get(ctx, username, "")
+					Expect(err).NotTo(HaveOccurred())
+					Expect(byName.StatusCode).To(Equal(http.StatusOK))
+
+					var got profileBody
+					Expect(json.NewDecoder(byName.Body).Decode(&got)).To(Succeed())
+					Expect(got.Username).To(Equal(username))
+				})
+			})
+		})
+
 		Context("given a blank discord_username", func() {
 			var body string
 
@@ -179,8 +208,14 @@ var _ = Describe("Creating a profile", func() {
 			},
 			Entry("username fails the pattern",
 				`{"username": "AB"}`, "username"),
-			Entry(`username starts with "user-"`,
-				`{"username": "user-alice"}`, "username"),
+			Entry("username has a leading period",
+				`{"username": ".lead"}`, "username"),
+			Entry("username has a trailing underscore",
+				`{"username": "trail_"}`, "username"),
+			Entry("username has consecutive periods",
+				`{"username": "a..b"}`, "username"),
+			Entry("username is over 32 characters",
+				`{"username": "`+strings.Repeat("x", 33)+`"}`, "username"),
 			Entry("a link url is http not https",
 				`{"username": "aaa", "links": [{"name": "s", "url": "http://x.example"}]}`,
 				"links[0].url"),
