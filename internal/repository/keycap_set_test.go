@@ -52,13 +52,13 @@ func (s *AggregateOrderStatusSuite) TestNoKits_ReturnsNil() {
 }
 
 func (s *AggregateOrderStatusSuite) TestNoKitHasStatusSet_ReturnsNil() {
-	kits := []repository.KeycapKit{{}, {}}
+	kits := map[string]repository.KeycapKit{"a": {}, "b": {}}
 
 	s.Nil(repository.AggregateOrderStatus(kits))
 }
 
 func (s *AggregateOrderStatusSuite) TestAllKitsSameStatus_ReturnsThatStatus() {
-	kits := []repository.KeycapKit{kitWithStatus("Shipped"), kitWithStatus("Shipped")}
+	kits := map[string]repository.KeycapKit{"a": kitWithStatus("Shipped"), "b": kitWithStatus("Shipped")}
 
 	got := repository.AggregateOrderStatus(kits)
 
@@ -67,7 +67,7 @@ func (s *AggregateOrderStatusSuite) TestAllKitsSameStatus_ReturnsThatStatus() {
 }
 
 func (s *AggregateOrderStatusSuite) TestMixedStatuses_ReturnsLeastProgressed() {
-	kits := []repository.KeycapKit{kitWithStatus("Delivered"), kitWithStatus("Ordered")}
+	kits := map[string]repository.KeycapKit{"a": kitWithStatus("Delivered"), "b": kitWithStatus("Ordered")}
 
 	got := repository.AggregateOrderStatus(kits)
 
@@ -76,7 +76,7 @@ func (s *AggregateOrderStatusSuite) TestMixedStatuses_ReturnsLeastProgressed() {
 }
 
 func (s *AggregateOrderStatusSuite) TestCancelledKitAmongOthers_IsExcludedFromComparison() {
-	kits := []repository.KeycapKit{kitWithStatus("Delivered"), kitWithStatus("Cancelled")}
+	kits := map[string]repository.KeycapKit{"a": kitWithStatus("Delivered"), "b": kitWithStatus("Cancelled")}
 
 	got := repository.AggregateOrderStatus(kits)
 
@@ -85,7 +85,7 @@ func (s *AggregateOrderStatusSuite) TestCancelledKitAmongOthers_IsExcludedFromCo
 }
 
 func (s *AggregateOrderStatusSuite) TestAllKitsCancelled_ReturnsCancelled() {
-	kits := []repository.KeycapKit{kitWithStatus("Cancelled"), kitWithStatus("Cancelled")}
+	kits := map[string]repository.KeycapKit{"a": kitWithStatus("Cancelled"), "b": kitWithStatus("Cancelled")}
 
 	got := repository.AggregateOrderStatus(kits)
 
@@ -94,7 +94,7 @@ func (s *AggregateOrderStatusSuite) TestAllKitsCancelled_ReturnsCancelled() {
 }
 
 func (s *AggregateOrderStatusSuite) TestUnrecognizedStatus_ReturnsNil() {
-	kits := []repository.KeycapKit{kitWithStatus("SomethingUnexpected")}
+	kits := map[string]repository.KeycapKit{"a": kitWithStatus("SomethingUnexpected")}
 
 	s.Nil(repository.AggregateOrderStatus(kits))
 }

@@ -32,14 +32,14 @@ func (s *KeycapSetToMCPSuite) TestMapsAllFields() {
 		Material:   &material,
 		Notes:      &notes,
 		Visibility: repository.VisibilityPublic,
-		Kits: []repository.KeycapKit{
-			{
+		Kits: map[string]repository.KeycapKit{
+			"kit-1": {
 				KitID:     "kit-1",
 				Name:      "Base",
 				ImagePath: &imagePath,
 				Purchase:  repository.KeycapKitPurchase{Vendor: &vendor},
 			},
-			{KitID: "kit-2", Name: "Novelties"},
+			"kit-2": {KitID: "kit-2", Name: "Novelties"},
 		},
 	}, true)
 
@@ -67,7 +67,7 @@ func (s *KeycapSetToMCPSuite) TestPrimaryKitID_StillExists_IsPreserved() {
 		ID:           "ks-1",
 		Visibility:   repository.VisibilityPrivate,
 		PrimaryKitID: &kitID,
-		Kits:         []repository.KeycapKit{{KitID: "kit-1", Name: "Base"}},
+		Kits:         map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Name: "Base"}},
 	}, true)
 
 	s.Require().NotNil(out.PrimaryKitID)
@@ -81,7 +81,7 @@ func (s *KeycapSetToMCPSuite) TestPrimaryKitID_KitDeleted_IsNil() {
 		ID:           "ks-1",
 		Visibility:   repository.VisibilityPrivate,
 		PrimaryKitID: &dangling,
-		Kits:         []repository.KeycapKit{{KitID: "kit-1", Name: "Base"}},
+		Kits:         map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Name: "Base"}},
 	}, true)
 
 	s.Nil(out.PrimaryKitID)
@@ -94,9 +94,9 @@ func (s *KeycapSetToMCPSuite) TestOrderStatus_SetsAggregateFromKits() {
 	out := KeycapSetToMCP(repository.KeycapSet{
 		ID:         "ks-1",
 		Visibility: repository.VisibilityPrivate,
-		Kits: []repository.KeycapKit{
-			{KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}},
-			{KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
+		Kits: map[string]repository.KeycapKit{
+			"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}},
+			"kit-2": {KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
 		},
 	}, true)
 
@@ -117,8 +117,8 @@ func (s *KeycapSetToMCPSuite) TestIsOwnerFalse_OmitsKitPriceKeepsRestOfPurchase(
 	out := KeycapSetToMCP(repository.KeycapSet{
 		ID:         "ks-1",
 		Visibility: repository.VisibilityPublic,
-		Kits: []repository.KeycapKit{
-			{KitID: "kit-1", Name: "Base", Purchase: repository.KeycapKitPurchase{Vendor: &vendor, Price: &price}},
+		Kits: map[string]repository.KeycapKit{
+			"kit-1": {KitID: "kit-1", Name: "Base", Purchase: repository.KeycapKitPurchase{Vendor: &vendor, Price: &price}},
 		},
 	}, false)
 
@@ -134,8 +134,8 @@ func (s *KeycapSetToMCPSuite) TestIsOwnerTrue_IncludesKitPrice() {
 	out := KeycapSetToMCP(repository.KeycapSet{
 		ID:         "ks-1",
 		Visibility: repository.VisibilityPublic,
-		Kits: []repository.KeycapKit{
-			{KitID: "kit-1", Name: "Base", Purchase: repository.KeycapKitPurchase{Price: &price}},
+		Kits: map[string]repository.KeycapKit{
+			"kit-1": {KitID: "kit-1", Name: "Base", Purchase: repository.KeycapKitPurchase{Price: &price}},
 		},
 	}, true)
 
@@ -168,9 +168,9 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_OrderStatus_SetsAggregat
 
 	out := KeycapSetToMCPSummary(repository.KeycapSet{
 		ID: "ks-1",
-		Kits: []repository.KeycapKit{
-			{KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
-			{KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &cancelled}},
+		Kits: map[string]repository.KeycapKit{
+			"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
+			"kit-2": {KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &cancelled}},
 		},
 	})
 
@@ -184,7 +184,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitWithImage_Repo
 	out := KeycapSetToMCPSummary(repository.KeycapSet{
 		ID:           "ks-1",
 		PrimaryKitID: strPtr("kit-1"),
-		Kits:         []repository.KeycapKit{{KitID: "kit-1", ImagePath: &imagePath}},
+		Kits:         map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &imagePath}},
 	})
 
 	s.Require().NotNil(out.PrimaryKitID)
@@ -196,7 +196,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitDeleted_NilAnd
 	out := KeycapSetToMCPSummary(repository.KeycapSet{
 		ID:           "ks-1",
 		PrimaryKitID: strPtr("no-longer-a-kit"),
-		Kits:         []repository.KeycapKit{{KitID: "kit-1"}},
+		Kits:         map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}},
 	})
 
 	s.Nil(out.PrimaryKitID)

@@ -1,6 +1,8 @@
 package repomcp
 
 import (
+	"slices"
+
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -12,10 +14,11 @@ import (
 // purchase.price from non-owners.
 func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
 	var kits []schema.KeycapKit
-	if ks.Kits != nil {
-		kits = make([]schema.KeycapKit, len(ks.Kits))
-		for i, k := range ks.Kits {
-			kits[i] = KeycapKitToMCP(k, isOwner)
+	if len(ks.Kits) > 0 {
+		ids := sortedKitIDs(ks.Kits)
+		kits = make([]schema.KeycapKit, len(ids))
+		for i, id := range ids {
+			kits[i] = KeycapKitToMCP(ks.Kits[id], isOwner)
 		}
 	}
 
@@ -36,18 +39,24 @@ func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
 // validPrimaryKitID returns primaryKitID unchanged if it names a kit still
 // present in kits, or nil otherwise (never set, or naming a since-deleted
 // kit) - callers must not surface a dangling reference.
-func validPrimaryKitID(primaryKitID *string, kits []repository.KeycapKit) *string {
+func validPrimaryKitID(primaryKitID *string, kits map[string]repository.KeycapKit) *string {
 	if primaryKitID == nil {
 		return nil
 	}
-
-	for _, k := range kits {
-		if k.KitID == *primaryKitID {
-			return primaryKitID
-		}
+	if _, ok := kits[*primaryKitID]; !ok {
+		return nil
 	}
+	return primaryKitID
+}
 
-	return nil
+// sortedKitIDs returns kits' keys sorted, for a deterministic output order.
+func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
+	ids := make([]string, 0, len(kits))
+	for id := range kits {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // KeycapSetToMCPSummary lifts nothing extra out of the set beyond the
@@ -71,18 +80,15 @@ func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
 
 // findKit returns the kit in kits with the given kitID, or nil if kitID
 // is nil or names no kit in kits.
-func findKit(kitID *string, kits []repository.KeycapKit) *repository.KeycapKit {
+func findKit(kitID *string, kits map[string]repository.KeycapKit) *repository.KeycapKit {
 	if kitID == nil {
 		return nil
 	}
-
-	for i, k := range kits {
-		if k.KitID == *kitID {
-			return &kits[i]
-		}
+	kit, ok := kits[*kitID]
+	if !ok {
+		return nil
 	}
-
-	return nil
+	return &kit
 }
 
 // KeycapSetFromMCP maps a create_keycap_set/update_keycap_set tool argument

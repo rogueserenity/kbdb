@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -543,18 +542,18 @@ func DeleteKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images r
 			return
 		}
 
-		idx := slices.IndexFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == kitID })
-		if idx == -1 {
+		kit, ok := ks.Kits[kitID]
+		if !ok {
 			problem.NotFound(w, "resource not found")
 			return
 		}
 
-		if ks.Kits[idx].ImagePath == nil {
+		if kit.ImagePath == nil {
 			w.WriteHeader(http.StatusNoContent)
 			return
 		}
 
-		if err := images.Delete(r.Context(), *ks.Kits[idx].ImagePath); err != nil {
+		if err := images.Delete(r.Context(), *kit.ImagePath); err != nil {
 			log.FromContext(r.Context()).Error("deleting keycap kit image object", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Internal(w, "failed to delete kit image")
 			return

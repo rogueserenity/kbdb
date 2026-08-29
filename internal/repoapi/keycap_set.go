@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
@@ -13,17 +14,18 @@ import (
 // KeycapSetToAPI maps a repository.KeycapSet to its wire representation.
 // Returns an error if a stored kit's Purchase date doesn't match dateLayout,
 // or if a kit has an ImagePath and images.PresignGet fails. Kits are mapped
-// concurrently - each only touches its own slot in mapped, and a set can
-// have an unbounded number of kits, each potentially needing its own S3
-// presign.
+// concurrently, sorted by kit_id for a stable order - each only touches its
+// own slot in mapped, and a set can have an unbounded number of kits, each
+// potentially needing its own S3 presign.
 func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapSet, error) {
 	var kits *[]api.KeycapKit
-	if ks.Kits != nil {
-		mapped := make([]api.KeycapKit, len(ks.Kits))
-		errs := make([]error, len(ks.Kits))
+	if len(ks.Kits) > 0 {
+		ids := sortedKitIDs(ks.Kits)
+		mapped := make([]api.KeycapKit, len(ids))
+		errs := make([]error, len(ids))
 
 		var wg sync.WaitGroup
-		for i, k := range ks.Kits {
+		for i, id := range ids {
 			wg.Add(1)
 			go func(i int, k repository.KeycapKit) {
 				defer wg.Done()
@@ -34,7 +36,7 @@ func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images reposit
 					return
 				}
 				mapped[i] = apiKit
-			}(i, k)
+			}(i, ks.Kits[id])
 		}
 		wg.Wait()
 
@@ -62,18 +64,24 @@ func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images reposit
 // validPrimaryKitID returns primaryKitID unchanged if it names a kit still
 // present in kits, or nil otherwise (never set, or naming a since-deleted
 // kit) - callers must not surface a dangling reference.
-func validPrimaryKitID(primaryKitID *string, kits []repository.KeycapKit) *string {
+func validPrimaryKitID(primaryKitID *string, kits map[string]repository.KeycapKit) *string {
 	if primaryKitID == nil {
 		return nil
 	}
-
-	for _, k := range kits {
-		if k.KitID == *primaryKitID {
-			return primaryKitID
-		}
+	if _, ok := kits[*primaryKitID]; !ok {
+		return nil
 	}
+	return primaryKitID
+}
 
-	return nil
+// sortedKitIDs returns kits' keys sorted, for a deterministic output order.
+func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
+	ids := make([]string, 0, len(kits))
+	for id := range kits {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return ids
 }
 
 // KeycapSetToRepo maps a generated KeycapSetInput (already schema-validated
@@ -119,18 +127,15 @@ func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images 
 
 // findKit returns the kit in kits with the given kitID, or nil if kitID
 // is nil or names no kit in kits.
-func findKit(kitID *string, kits []repository.KeycapKit) *repository.KeycapKit {
+func findKit(kitID *string, kits map[string]repository.KeycapKit) *repository.KeycapKit {
 	if kitID == nil {
 		return nil
 	}
-
-	for i, k := range kits {
-		if k.KitID == *kitID {
-			return &kits[i]
-		}
+	kit, ok := kits[*kitID]
+	if !ok {
+		return nil
 	}
-
-	return nil
+	return &kit
 }
 
 // KeycapKitToAPI maps a repository.KeycapKit to its wire representation.

@@ -41,9 +41,7 @@ func (s *DeleteKeycapKitSuite) TestBlock_NoReferencingBuilds_DeletesKit() {
 		Return(nil, nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1", ImagePath: &imgKey},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", ImagePath: &imgKey}}}, nil)
 	s.mockKitImages.EXPECT().
 		Delete(s.ctx, imgKey).
 		Return(nil)
@@ -67,9 +65,7 @@ func (s *DeleteKeycapKitSuite) TestBlock_ImageDeleteFails_ReturnsErrorWithoutDel
 		Return(nil, nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1", ImagePath: &imgKey},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", ImagePath: &imgKey}}}, nil)
 	s.mockKitImages.EXPECT().
 		Delete(s.ctx, imgKey).
 		Return(errors.New("s3 unavailable"))
@@ -111,9 +107,7 @@ func (s *DeleteKeycapKitSuite) TestDetach_ReferencingBuilds_DeletesKitAnyway() {
 	// doesn't care about references.
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
 		Return(nil)
@@ -133,9 +127,7 @@ func (s *DeleteKeycapKitSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKit() 
 		Return(nil, nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
 		Return(nil)
@@ -172,9 +164,7 @@ func (s *DeleteKeycapKitSuite) TestCascade_ReferencingBuilds_DeletesEachBuildIma
 		Return(nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
 		Return(nil)
@@ -297,9 +287,7 @@ func (s *DeleteKeycapKitSuite) TestBlock_DeleteKitMutationConflict_PropagatesErr
 		Return(nil, nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}}}, nil)
 	s.mockKeycapSets.EXPECT().
 		DeleteKit(s.ctx, "ks1", "kit1").
 		Return(repository.ErrMutationConflict)

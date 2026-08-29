@@ -116,7 +116,7 @@ func (s *ValidateReferencesSuite) TestValidKeycapSetAndKit_Succeeds() {
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1",
-			Kits: []repository.KeycapKit{{KitID: "kit1"}, {KitID: "kit2"}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}, "kit2": {KitID: "kit2"}},
 		}, nil)
 
 	fieldErrs, err := s.validate(repository.Build{
@@ -151,7 +151,7 @@ func (s *ValidateReferencesSuite) TestKeycapSetFoundButKitMissing_ReturnsFieldEr
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1",
-			Kits: []repository.KeycapKit{{KitID: "other-kit"}},
+			Kits: map[string]repository.KeycapKit{"other-kit": {KitID: "other-kit"}},
 		}, nil)
 
 	fieldErrs, err := s.validate(repository.Build{
@@ -186,7 +186,7 @@ func (s *ValidateReferencesSuite) TestRepeatedKeycapSet_FetchedOnce() {
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1",
-			Kits: []repository.KeycapKit{{KitID: "kit1"}, {KitID: "kit2"}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}, "kit2": {KitID: "kit2"}},
 		}, nil).
 		Once()
 

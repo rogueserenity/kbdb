@@ -289,7 +289,7 @@ func (s *CreateBuildSuite) TestCreateBuild_KeycapSetFoundButKitMissing_Returns40
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1",
-			Kits: []repository.KeycapKit{{KitID: "other-kit"}},
+			Kits: map[string]repository.KeycapKit{"other-kit": {KitID: "other-kit"}},
 		}, nil)
 
 	req := s.newRequest(s.ownerCtx(),
@@ -316,7 +316,7 @@ func (s *CreateBuildSuite) TestCreateBuild_ValidReferences_Succeeds() {
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1",
-			Kits: []repository.KeycapKit{{KitID: "kit1"}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}},
 		}, nil)
 	s.mockBuildRepo.EXPECT().
 		Create(mock.Anything, mock.Anything).
@@ -646,7 +646,7 @@ func (s *ListBuildsSuite) TestListBuilds_Owner_IncludesTotalCost() {
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID: "kit1", Name: "Base",
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},

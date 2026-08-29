@@ -97,7 +97,7 @@ func (d buildToAPIDeps) expectFullyResolvable() {
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Profile: strPtr("Cherry"),
-			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}},
 		}, nil)
 }
 
@@ -219,7 +219,7 @@ func (s *BuildToAPISuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFailing() 
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -245,7 +245,7 @@ func (s *BuildToAPISuite) TestSwitchNotFound_KeepsCountOmitsSwitch() {
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").Return(nil, repository.ErrNotFound)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -270,7 +270,7 @@ func (s *BuildToAPISuite) TestMultipleSwitchEntries_ResolvesEachIndependently() 
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -340,7 +340,7 @@ func (s *BuildToAPISuite) TestKitNotFoundInResolvedKeycapSet_KeepsKitIDOmitsRest
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "other-kit", Name: "Base"}}}, nil)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"other-kit": {KitID: "other-kit", Name: "Base"}}}, nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -364,7 +364,7 @@ func (s *BuildToAPISuite) TestKitWithImage_MintsFreshPresignedURL() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
 		}, nil)
 	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/kit1.png", nil)
 
@@ -389,7 +389,7 @@ func (s *BuildToAPISuite) TestKitImagePresignFails_ReturnsError() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
 		}, nil)
 	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
 
@@ -413,7 +413,7 @@ func (s *BuildToAPISuite) TestKeyboardWithImage_MintsFreshPresignedURLForFirstIm
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("https://example.com/kb1-img1.png", nil)
 
 	out, err := d.call(context.Background(), b)
@@ -463,7 +463,7 @@ func (s *BuildToAPISuite) TestSwitchWithImage_MintsFreshPresignedURL() {
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear", ImagePath: &imgPath}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}}}, nil)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/sw1.png", nil)
 
 	out, err := d.call(context.Background(), b)
@@ -523,7 +523,7 @@ func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID: "kit1", Name: "Base",
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
@@ -558,7 +558,7 @@ func (s *BuildToAPISuite) TestTotalCost_SwitchPriceWithoutQuantity_ExcludedFromS
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}},
 		}, nil)
 
 	out, err := d.call(context.Background(), b)
@@ -582,7 +582,7 @@ func (s *BuildToAPISuite) TestTotalCost_UnknownComponentsExcludedNotZeroed() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{KitID: "kit1", Name: "Base"}},
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}},
 		}, nil)
 
 	// Keyboard has no purchase price, keycap kit has no purchase price, and
@@ -624,7 +624,7 @@ func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID: "kit1", Name: "Base",
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
@@ -657,7 +657,7 @@ func (s *BuildToAPISuite) TestIsOwnerTrue_IncludesStabsPriceAndTotalCost() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID: "kit1", Name: "Base",
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
@@ -862,7 +862,7 @@ func (s *BuildToAPISummarySuite) TestIsOwnerTrue_IncludesTotalCost() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID: "kit1", Name: "Base",
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
@@ -895,7 +895,7 @@ func (s *BuildToAPISummarySuite) TestTotalCost_MatchesBuildToAPI() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID: "kit1", Name: "Base",
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
@@ -952,7 +952,7 @@ func (s *BuildToAPISummarySuite) TestDoesNotResolveKitImages() {
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
-			Kits: []repository.KeycapKit{{
+			Kits: map[string]repository.KeycapKit{"kit1": {
 				KitID:     "kit1",
 				Name:      "Base",
 				ImagePath: imageKeyPtr("keycap-sets/alice/ks1/kits/kit1/image"),

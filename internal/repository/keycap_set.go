@@ -19,6 +19,10 @@ type KeycapKitPurchase struct {
 
 // KeycapKit is one purchase within a KeycapSet (e.g. "Base", "Extension").
 // KitID is server-generated and unique within its parent set, not globally.
+// It's kept as a field here (not just the Kits map's key) so callers that
+// already have a KeycapKit value - e.g. AggregateOrderStatus, or a mapping
+// helper that only sees one entry at a time - don't need the parent map to
+// learn it.
 type KeycapKit struct {
 	KitID     string             `dynamodbav:"kit_id" json:"kit_id"`
 	Name      string             `dynamodbav:"name" json:"name"`
@@ -31,24 +35,24 @@ type KeycapKit struct {
 // user ID); ID is the sort key. Only Brand, Name, and Visibility are
 // required, per api/openapi.yaml's KeycapSetInput schema.
 type KeycapSet struct {
-	UserID     string      `dynamodbav:"user_id" json:"-"`
-	ID         string      `dynamodbav:"id" json:"id"`
-	Brand      string      `dynamodbav:"brand" json:"brand"`
-	Name       string      `dynamodbav:"name" json:"name"`
-	Profile    *string     `dynamodbav:"profile,omitempty" json:"profile,omitempty"`
-	Material   *string     `dynamodbav:"material,omitempty" json:"material,omitempty"`
-	Notes      *string     `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
-	Visibility Visibility  `dynamodbav:"visibility" json:"visibility"`
-	Kits       []KeycapKit `dynamodbav:"kits,omitempty" json:"kits,omitempty"`
+	UserID     string     `dynamodbav:"user_id" json:"-"`
+	ID         string     `dynamodbav:"id" json:"id"`
+	Brand      string     `dynamodbav:"brand" json:"brand"`
+	Name       string     `dynamodbav:"name" json:"name"`
+	Profile    *string    `dynamodbav:"profile,omitempty" json:"profile,omitempty"`
+	Material   *string    `dynamodbav:"material,omitempty" json:"material,omitempty"`
+	Notes      *string    `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
+	Visibility Visibility `dynamodbav:"visibility" json:"visibility"`
+	// Kits is stored as a DynamoDB map keyed by KitID (not a list), so a
+	// single kit can be addressed directly (kits.<kit_id>) by an UpdateItem
+	// call instead of requiring a whole-item read-modify-write. No
+	// display-order requirement exists today - if one appears, add a seq
+	// field to KeycapKit rather than switching back to a list.
+	Kits map[string]KeycapKit `dynamodbav:"kits,omitempty" json:"kits,omitempty"`
 	// PrimaryKitID names the kit (by KitID) whose image represents this set
-	// in a list/grid view. No write path sets this yet - reads must still
-	// treat a dangling reference (kit deleted, or never set) as absent
-	// rather than erroring.
+	// in a list/grid view. Reads must still treat a dangling reference (kit
+	// deleted, or never set) as absent rather than erroring.
 	PrimaryKitID *string `dynamodbav:"primary_kit_id,omitempty" json:"primary_kit_id,omitempty"`
-	// Version guards kit sub-mutations against a lost update when two
-	// concurrent calls read-modify-write this item's Kits slice - not
-	// exposed via the API, purely a repository-internal CAS mechanism.
-	Version int `dynamodbav:"version" json:"-"`
 }
 
 // orderStatusProgression ranks every non-Cancelled order_status lookup
@@ -71,7 +75,7 @@ var orderStatusProgression = map[string]int{
 // is empty, or if every kit has no order_status set, or if a kit's
 // order_status isn't a recognized value (unvalidated/legacy data - callers
 // should not guess).
-func AggregateOrderStatus(kits []KeycapKit) *string {
+func AggregateOrderStatus(kits map[string]KeycapKit) *string {
 	var least string
 	haveLeast := false
 	sawCancelled := false
@@ -130,11 +134,11 @@ type KeycapSetRepository interface {
 	// Returns ErrAlreadyExists on an ID collision.
 	Create(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
-	// Update replaces the keycap set with ks.ID (UserID is set from ctx,
-	// ks.ID must already be set to the keycap set being updated), preserving
-	// Kits. Returns ErrNotFound if no keycap set with that ID exists for the
-	// owner, or ErrMutationConflict if concurrent writers exhaust the retry
-	// budget.
+	// Update replaces the keycap set's own fields (Brand, Name, Profile,
+	// Material, Notes, Visibility) with ks's (UserID is set from ctx, ks.ID
+	// must already be set to the keycap set being updated); Kits and
+	// PrimaryKitID are left untouched. Returns ErrNotFound if no keycap set
+	// with that ID exists for the owner.
 	Update(ctx context.Context, ks KeycapSet) (*KeycapSet, error)
 
 	// Delete removes the caller's keycap set with the given id. Callers
@@ -142,42 +146,45 @@ type KeycapSetRepository interface {
 	// before calling Delete. Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// AddKit appends kit to the set's Kits (kit.KitID must already be set)
-	// and returns the stored kit, matching Create's shape for every other
-	// entity. primary controls the set's PrimaryKitID, applied atomically
-	// with the add: nil leaves it untouched, true makes the new kit
-	// primary. Returns ErrNotFound if the parent set doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	// AddKit adds kit to the set's Kits, keyed by kit.KitID (which must
+	// already be set), and returns the stored kit, matching Create's shape
+	// for every other entity. primary controls the set's PrimaryKitID,
+	// applied atomically with the add: nil leaves it untouched, true makes
+	// the new kit primary. Returns ErrNotFound if the parent set doesn't
+	// exist, or an error wrapping a kit-id-collision sentinel if kit.KitID
+	// is already in use (practically unreachable given a fresh UUID).
 	AddKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
-	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
-	// primary controls the set's PrimaryKitID, applied atomically with the
-	// update: nil leaves it untouched, true makes this kit primary
-	// (replacing whichever kit held it before), false clears it but only
-	// if this kit is the current primary.
+	// UpdateKit returns ErrNotFound if setID or the kit doesn't exist.
+	// primary controls the set's PrimaryKitID: nil leaves it untouched,
+	// true makes this kit primary (replacing whichever kit held it
+	// before), false clears it but only if this kit is the current primary
+	// - that clear isn't atomic with the rest of the update (DynamoDB can't
+	// express a value-conditional REMOVE alongside unconditional actions in
+	// one UpdateItem), but is safe even if lost to a race: PrimaryKitID's
+	// read path already tolerates a dangling reference as absent.
 	UpdateKit(ctx context.Context, setID string, kit KeycapKit, primary *bool) (*KeycapKit, error)
 
 	// DeleteKit removes the kit matching kitID from setID's Kits. Callers
 	// clean up any image it had in a KeycapKitImageStore themselves, before
 	// calling DeleteKit. If kitID was the set's PrimaryKitID, that's
-	// cleared to nil too, atomically with the removal - a caller never
-	// observes a set whose PrimaryKitID names a kit that isn't there.
-	// Idempotent: a kitID not present in the set is not an error. Returns
-	// ErrNotFound if setID doesn't exist for the owner, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	// cleared to nil too, on a best-effort basis (not atomic with the
+	// removal itself, for the same reason as UpdateKit's primary=false
+	// case) - a caller may very briefly observe a PrimaryKitID naming a
+	// kit that was just removed, but never persistently: the read path
+	// already tolerates a dangling reference as absent. Idempotent: a
+	// kitID not present in the set is not an error. Returns ErrNotFound if
+	// setID doesn't exist for the owner.
 	DeleteKit(ctx context.Context, setID, kitID string) error
 
 	// SetKitImagePath sets the kit matching kitID's ImagePath. Returns
-	// ErrNotFound if setID or the kit doesn't exist, or ErrMutationConflict
-	// if concurrent writers exhaust the retry budget.
+	// ErrNotFound if setID or the kit doesn't exist.
 	SetKitImagePath(ctx context.Context, setID, kitID string, key KeycapKitImageKey) error
 
 	// ClearKitImagePath clears the kit matching kitID's ImagePath and
 	// returns the key that was cleared, or nil if it was already unset.
 	// Idempotent: a kit with no ImagePath already set is not an error.
-	// Returns ErrNotFound if setID or the kit doesn't exist, or
-	// ErrMutationConflict if concurrent writers exhaust the retry budget.
+	// Returns ErrNotFound if setID or the kit doesn't exist.
 	ClearKitImagePath(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
 }
 

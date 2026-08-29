@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -61,12 +60,12 @@ func DeleteKeycapKit(
 		if err != nil {
 			return KeycapKitResult{}, fmt.Errorf("getting keycap set %q for kit %q image cleanup: %w", setID, kitID, err)
 		}
-		idx := slices.IndexFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == kitID })
-		if idx == -1 {
+		kit, ok := ks.Kits[kitID]
+		if !ok {
 			return KeycapKitResult{}, nil
 		}
-		if ks.Kits[idx].ImagePath != nil {
-			if err := kitImages.Delete(ctx, *ks.Kits[idx].ImagePath); err != nil {
+		if kit.ImagePath != nil {
+			if err := kitImages.Delete(ctx, *kit.ImagePath); err != nil {
 				return KeycapKitResult{}, fmt.Errorf("deleting image for keycap kit %q/%q: %w", setID, kitID, err)
 			}
 		}

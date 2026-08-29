@@ -485,13 +485,12 @@ func buildKeycapKitEntriesResolvedToAPI(
 	return &out, sumKnownCosts(costs...), nil
 }
 
-func findKeycapKit(kits []repository.KeycapKit, kitID string) *repository.KeycapKit {
-	for i := range kits {
-		if kits[i].KitID == kitID {
-			return &kits[i]
-		}
+func findKeycapKit(kits map[string]repository.KeycapKit, kitID string) *repository.KeycapKit {
+	kit, ok := kits[kitID]
+	if !ok {
+		return nil
 	}
-	return nil
+	return &kit
 }
 
 // buildImagesToAPI mints a fresh presigned GET URL per image, per request -
