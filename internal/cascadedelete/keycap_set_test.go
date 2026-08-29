@@ -62,11 +62,9 @@ func (s *DeleteKeycapSetSuite) TestBlock_SetHadKitImages_DeletesEachFromS3Before
 		Return(nil, nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1", ImagePath: &key1},
-			{KitID: "kit2", ImagePath: &key2},
-			{KitID: "kit3"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", ImagePath: &key1},
+			"kit2": {KitID: "kit2", ImagePath: &key2},
+			"kit3": {KitID: "kit3"}}}, nil)
 	s.mockKitImages.EXPECT().
 		Delete(s.ctx, key1).
 		Return(nil)
@@ -92,9 +90,7 @@ func (s *DeleteKeycapSetSuite) TestBlock_KitImageDeleteFails_ReturnsErrorWithout
 		Return(nil, nil)
 	s.mockKeycapSets.EXPECT().
 		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: []repository.KeycapKit{
-			{KitID: "kit1", ImagePath: &key1},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", ImagePath: &key1}}}, nil)
 	s.mockKitImages.EXPECT().
 		Delete(s.ctx, key1).
 		Return(errors.New("s3 unavailable"))

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"strings"
 
 	"github.com/google/uuid"
@@ -384,16 +383,16 @@ func handleDeleteKeycapKitImage(
 			return nil, schema.DeleteKeycapKitImageOutput{}, mutErr
 		}
 
-		idx := slices.IndexFunc(ks.Kits, func(k repository.KeycapKit) bool { return k.KitID == in.KitID })
-		if idx == -1 {
+		kit, ok := ks.Kits[in.KitID]
+		if !ok {
 			return nil, schema.DeleteKeycapKitImageOutput{}, errMutationNotFound
 		}
 
-		if ks.Kits[idx].ImagePath == nil {
+		if kit.ImagePath == nil {
 			return nil, schema.DeleteKeycapKitImageOutput{}, nil
 		}
 
-		if err := images.Delete(ctx, *ks.Kits[idx].ImagePath); err != nil {
+		if err := images.Delete(ctx, *kit.ImagePath); err != nil {
 			log.FromContext(ctx).Error("deleting keycap kit image object", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.DeleteKeycapKitImageOutput{}, errors.New("failed to delete kit image")
 		}

@@ -64,9 +64,9 @@ func (s *KeycapSetToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 
 func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 	ks := fullRepoKeycapSet()
-	ks.Kits = []repository.KeycapKit{
-		{KitID: "kit1", Name: "Base"},
-		{KitID: "kit2", Name: "Extension"},
+	ks.Kits = map[string]repository.KeycapKit{
+		"kit1": {KitID: "kit1", Name: "Base"},
+		"kit2": {KitID: "kit2", Name: "Extension"},
 	}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
@@ -84,9 +84,9 @@ func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 func (s *KeycapSetToAPISuite) TestKitsWithDifferingOrderStatus_SetsAggregateOrderStatus() {
 	ks := fullRepoKeycapSet()
 	delivered, ordered := "Delivered", "Ordered"
-	ks.Kits = []repository.KeycapKit{
-		{KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
-		{KitID: "kit2", Name: "Extension", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
+	ks.Kits = map[string]repository.KeycapKit{
+		"kit1": {KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
+		"kit2": {KitID: "kit2", Name: "Extension", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
 	}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
@@ -99,8 +99,8 @@ func (s *KeycapSetToAPISuite) TestKitsWithDifferingOrderStatus_SetsAggregateOrde
 
 func (s *KeycapSetToAPISuite) TestMalformedStoredKitPurchaseDate_ReturnsError() {
 	ks := fullRepoKeycapSet()
-	ks.Kits = []repository.KeycapKit{
-		{KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderDate: strPtr("not-a-date")}},
+	ks.Kits = map[string]repository.KeycapKit{
+		"kit1": {KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderDate: strPtr("not-a-date")}},
 	}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
@@ -111,10 +111,11 @@ func (s *KeycapSetToAPISuite) TestMalformedStoredKitPurchaseDate_ReturnsError() 
 
 func (s *KeycapSetToAPISuite) TestIsOwnerFalse_OmitsKitPriceKeepsRestOfPurchase() {
 	ks := fullRepoKeycapSet()
-	ks.Kits = []repository.KeycapKit{fullRepoKeycapKit()}
+	repoKit := fullRepoKeycapKit()
+	ks.Kits = map[string]repository.KeycapKit{repoKit.KitID: repoKit}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *ks.Kits[0].ImagePath).Return("https://example.com/presigned-get", nil)
+	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
 
 	out, err := KeycapSetToAPI(context.Background(), ks, images, false)
 	s.Require().NoError(err)
@@ -124,16 +125,17 @@ func (s *KeycapSetToAPISuite) TestIsOwnerFalse_OmitsKitPriceKeepsRestOfPurchase(
 	kit := (*out.Kits)[0]
 	s.Require().NotNil(kit.Purchase)
 	s.Nil(kit.Purchase.Price)
-	s.Equal(ks.Kits[0].Purchase.Vendor, kit.Purchase.Vendor)
-	s.Equal(ks.Kits[0].Purchase.OrderStatus, kit.Purchase.OrderStatus)
+	s.Equal(repoKit.Purchase.Vendor, kit.Purchase.Vendor)
+	s.Equal(repoKit.Purchase.OrderStatus, kit.Purchase.OrderStatus)
 }
 
 func (s *KeycapSetToAPISuite) TestIsOwnerTrue_IncludesKitPrice() {
 	ks := fullRepoKeycapSet()
-	ks.Kits = []repository.KeycapKit{fullRepoKeycapKit()}
+	repoKit := fullRepoKeycapKit()
+	ks.Kits = map[string]repository.KeycapKit{repoKit.KitID: repoKit}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *ks.Kits[0].ImagePath).Return("https://example.com/presigned-get", nil)
+	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
 
 	out, err := KeycapSetToAPI(context.Background(), ks, images, true)
 	s.Require().NoError(err)
@@ -141,7 +143,7 @@ func (s *KeycapSetToAPISuite) TestIsOwnerTrue_IncludesKitPrice() {
 	s.Require().NotNil(out.Kits)
 	s.Require().Len(*out.Kits, 1)
 	s.Require().NotNil((*out.Kits)[0].Purchase)
-	s.Equal(ks.Kits[0].Purchase.Price, (*out.Kits)[0].Purchase.Price)
+	s.Equal(repoKit.Purchase.Price, (*out.Kits)[0].Purchase.Price)
 }
 
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() {
@@ -162,7 +164,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() 
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_SetsAggregateOrderStatus() {
 	ks := fullRepoKeycapSet()
 	shipped := "Shipped"
-	ks.Kits = []repository.KeycapKit{{KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}}}
+	ks.Kits = map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}}}
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 
@@ -176,7 +178,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_SetsAggregateOrderStatus
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_ResolvesImage() {
 	ks := fullRepoKeycapSet()
 	kit := fullRepoKeycapKit()
-	ks.Kits = []repository.KeycapKit{kit}
+	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 	ks.PrimaryKitID = &kit.KitID
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
@@ -193,7 +195,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithNoImage_Ni
 	ks := fullRepoKeycapSet()
 	kit := fullRepoKeycapKit()
 	kit.ImagePath = nil
-	ks.Kits = []repository.KeycapKit{kit}
+	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 	ks.PrimaryKitID = &kit.KitID
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())

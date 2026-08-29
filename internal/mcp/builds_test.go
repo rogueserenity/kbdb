@@ -204,7 +204,7 @@ func (s *HandleCreateBuildSuite) TestKeycapSetFoundButKitMissing_ReturnsError() 
 	s.stubOwnedKeyboard()
 	s.mockKeycaps.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{{KitID: "other-kit"}}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"other-kit": {KitID: "other-kit"}}}, nil)
 
 	in := validBuildInput()
 	in.KeycapKits = []schema.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}}
@@ -222,7 +222,7 @@ func (s *HandleCreateBuildSuite) TestValidReferences_Succeeds() {
 		Return(&repository.Switch{ID: "sw-1"}, nil)
 	s.mockKeycaps.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{{KitID: "kit-1"}}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 	s.mockBuilds.EXPECT().
 		Create(mock.Anything, mock.Anything).
 		RunAndReturn(func(_ context.Context, b repository.Build) (*repository.Build, error) {

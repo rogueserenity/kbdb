@@ -23,18 +23,9 @@ func queryLimit(limit int) *int32 {
 	return aws.Int32(int32(limit))
 }
 
-// errKitMissingAfterAdd means AddKit's just-appended kit isn't present by
-// KitID in the set mutateSet returned - should be unreachable in practice.
-var errKitMissingAfterAdd = errors.New("kit not found in set after AddKit")
-
-// errKitAlreadyAbsent signals DeleteKit's mutateSet closure found no
-// matching kit - DeleteKit treats this as success, not an error.
-var errKitAlreadyAbsent = errors.New("kit already absent from set")
-
-// errKitImageAlreadyAbsent signals ClearKitImagePath's mutateSet closure
-// found the kit with no ImagePath set - ClearKitImagePath treats this as
-// success, not an error.
-var errKitImageAlreadyAbsent = errors.New("kit image already absent")
+// errKitMissingAfterWrite means UpdateKit's own kit isn't present by KitID
+// in the response UpdateItem returned - should be unreachable in practice.
+var errKitMissingAfterWrite = errors.New("kit not found in set after write")
 
 // dynamoAPI is the subset of *dynamodb.Client's methods used by the
 // repository implementations in this package.

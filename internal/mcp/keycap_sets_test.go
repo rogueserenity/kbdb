@@ -149,10 +149,8 @@ func (s *HandleGetKeycapSetSuite) TestKitsMapWithHasImage() {
 		Return(&repository.KeycapSet{
 			ID:         "ks-1",
 			Visibility: repository.VisibilityPrivate,
-			Kits: []repository.KeycapKit{
-				{KitID: "kit-1", Name: "Base", ImagePath: &imagePath},
-				{KitID: "kit-2", Name: "Novelties"},
-			},
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Name: "Base", ImagePath: &imagePath},
+				"kit-2": {KitID: "kit-2", Name: "Novelties"}},
 		}, nil)
 
 	handler := handleGetKeycapSet(s.mockRepo)
@@ -482,10 +480,8 @@ func (s *HandleDeleteKeycapSetSuite) TestKitImagesAreDeletedFromS3BeforeDB() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key1},
-			{KitID: "kit-2", ImagePath: &key2},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key1},
+			"kit-2": {KitID: "kit-2", ImagePath: &key2}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key1).Return(nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key2).Return(nil)
 	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil)
@@ -514,9 +510,7 @@ func (s *HandleDeleteKeycapSetSuite) TestKitImageDeleteFails_ReturnsError_DoesNo
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key1},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key1}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key1).Return(errors.New("s3 unavailable"))
 
 	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -939,9 +933,7 @@ func (s *HandleDeleteKeycapKitSuite) TestSucceeds() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1000,9 +992,7 @@ func (s *HandleDeleteKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(repository.ErrMutationConflict)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1016,9 +1006,7 @@ func (s *HandleDeleteKeycapKitSuite) TestImageIsDeletedFromS3BeforeDB() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil)
 
@@ -1033,9 +1021,7 @@ func (s *HandleDeleteKeycapKitSuite) TestImageDeleteFails_ReturnsError_DoesNotDe
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1050,9 +1036,7 @@ func (s *HandleDeleteKeycapKitSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().FindBuildsReferencingKeycapKit(mock.Anything, mock.Anything, "ks-1", "kit-1").Return(nil, nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(errors.New("delete kit failed"))
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1075,9 +1059,7 @@ func (s *HandleDeleteKeycapKitSuite) TestBlock_Referenced_ReturnsError() {
 func (s *HandleDeleteKeycapKitSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1099,9 +1081,7 @@ func (s *HandleDeleteKeycapKitSuite) TestCascade_Referenced_ReturnsDeletedBuildI
 		Return(nil)
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil)
 
 	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
@@ -1248,9 +1228,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestSucceeds() {
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
 	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(&key, nil)
 
@@ -1277,9 +1255,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestBlankKitID_ReturnsError() {
 func (s *HandleDeleteKeycapKitImageSuite) TestAlreadyCleared_StillSucceeds() {
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1"},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitImageInput{KeycapSetID: "ks-1", KitID: "kit-1"})
@@ -1313,9 +1289,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestMutationConflict_ReturnsConflictEr
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
 	s.mockRepo.EXPECT().ClearKitImagePath(mock.Anything, "ks-1", "kit-1").Return(nil, repository.ErrMutationConflict)
 
@@ -1340,9 +1314,7 @@ func (s *HandleDeleteKeycapKitImageSuite) TestImageDeleteFailure_ReturnsError_Do
 	key := repository.KeycapKitImageKey("keycap-sets/u/ks-1/kits/kit-1/image")
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: []repository.KeycapKit{
-			{KitID: "kit-1", ImagePath: &key},
-		}}, nil)
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &key}}}, nil)
 	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(errors.New("s3 delete failed"))
 
 	handler := handleDeleteKeycapKitImage(s.mockRepo, s.mockImages)

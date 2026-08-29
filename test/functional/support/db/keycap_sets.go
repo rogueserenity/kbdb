@@ -9,10 +9,7 @@ import (
 
 // SeedKeycapSet PutItems a keycap set directly into DynamoDB, bypassing the
 // API - for specs that need keycap set fixture data in place before
-// exercising a different route. version is set to 0, matching what Create
-// would have set it to - kit mutations condition their write on version
-// matching what they read, so a seeded item without one wouldn't satisfy
-// that condition the way attribute_not_exists would.
+// exercising a different route.
 func SeedKeycapSet(ctx context.Context, ownerID, id, visibility string) error {
 	table := NewDynamoTable(ctx, support.KeycapSetTableName())
 	return table.PutItem(ctx, map[string]any{
@@ -20,8 +17,8 @@ func SeedKeycapSet(ctx context.Context, ownerID, id, visibility string) error {
 		"id":         id,
 		"brand":      "GMK",
 		"name":       "Laser",
+		"kits":       map[string]any{},
 		"visibility": visibility,
-		"version":    0,
 	})
 }
 
@@ -42,9 +39,9 @@ func SeedKeycapSetWithKit(ctx context.Context, ownerID, id, kitID, visibility st
 // kitID in its Kits, so whole-set DeleteKeycapSet specs can exercise
 // multiple kits referenced by different builds.
 func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []string, visibility string) error {
-	kits := make([]map[string]any, len(kitIDs))
-	for i, kitID := range kitIDs {
-		kits[i] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
+	kits := make(map[string]any, len(kitIDs))
+	for _, kitID := range kitIDs {
+		kits[kitID] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
 			"vendor": "MechMarket",
 			"price":  85.0,
 		}}
@@ -58,7 +55,6 @@ func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []str
 		"name":       "Laser",
 		"kits":       kits,
 		"visibility": visibility,
-		"version":    0,
 	})
 }
 
@@ -66,9 +62,10 @@ func SeedKeycapSetWithKits(ctx context.Context, ownerID, id string, kitIDs []str
 // per given order status, so specs can exercise the derived
 // order_status bubble-up rule across multiple kits.
 func SeedKeycapSetWithKitOrderStatuses(ctx context.Context, ownerID, id string, orderStatuses []string, visibility string) error {
-	kits := make([]map[string]any, len(orderStatuses))
+	kits := make(map[string]any, len(orderStatuses))
 	for i, status := range orderStatuses {
-		kits[i] = map[string]any{"kit_id": "kit-" + strconv.Itoa(i), "name": "Base", "purchase": map[string]any{
+		kitID := "kit-" + strconv.Itoa(i)
+		kits[kitID] = map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
 			"order_status": status,
 		}}
 	}
@@ -81,7 +78,6 @@ func SeedKeycapSetWithKitOrderStatuses(ctx context.Context, ownerID, id string, 
 		"name":       "Laser",
 		"kits":       kits,
 		"visibility": visibility,
-		"version":    0,
 	})
 }
 
@@ -95,15 +91,14 @@ func SeedKeycapSetWithPrimaryKit(ctx context.Context, ownerID, id, kitID, visibi
 		"id":      id,
 		"brand":   "GMK",
 		"name":    "Laser",
-		"kits": []map[string]any{
-			{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
+		"kits": map[string]any{
+			kitID: map[string]any{"kit_id": kitID, "name": "Base", "purchase": map[string]any{
 				"vendor": "MechMarket",
 				"price":  85.0,
 			}},
 		},
 		"primary_kit_id": kitID,
 		"visibility":     visibility,
-		"version":        0,
 	})
 }
 
@@ -119,6 +114,5 @@ func SeedKeycapSetWithDanglingPrimaryKit(ctx context.Context, ownerID, id, visib
 		"name":           "Laser",
 		"primary_kit_id": "no-longer-a-kit",
 		"visibility":     visibility,
-		"version":        0,
 	})
 }

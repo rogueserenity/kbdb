@@ -21,9 +21,14 @@ type KeycapSetResult struct {
 // deleteKeycapSetImages - see [DeleteKeycapSet]'s doc comment for why this
 // gates the set's own DB delete.
 func deleteKeycapSetImages(ctx context.Context, images repository.KeycapKitImageStore, ks *repository.KeycapSet) error {
-	errs := make([]error, len(ks.Kits))
+	kits := make([]repository.KeycapKit, 0, len(ks.Kits))
+	for _, kit := range ks.Kits {
+		kits = append(kits, kit)
+	}
+
+	errs := make([]error, len(kits))
 	var wg sync.WaitGroup
-	for i, kit := range ks.Kits {
+	for i, kit := range kits {
 		if kit.ImagePath == nil {
 			continue
 		}
