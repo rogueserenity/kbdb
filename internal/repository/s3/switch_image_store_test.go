@@ -13,38 +13,38 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository/s3/mocks"
 )
 
-type BuildImageStoreSuite struct {
+type SwitchImageStoreSuite struct {
 	suite.Suite
 
 	mockClient  *mocks.MockS3API
 	mockPresign *mocks.MockS3PresignAPI
-	store       *BuildImageStore
+	store       *SwitchImageStore
 }
 
-func TestBuildImageStoreSuite(t *testing.T) {
-	suite.Run(t, new(BuildImageStoreSuite))
+func TestSwitchImageStoreSuite(t *testing.T) {
+	suite.Run(t, new(SwitchImageStoreSuite))
 }
 
-func (s *BuildImageStoreSuite) SetupTest() {
+func (s *SwitchImageStoreSuite) SetupTest() {
 	s.mockClient = mocks.NewMockS3API(s.T())
 	s.mockPresign = mocks.NewMockS3PresignAPI(s.T())
-	s.store = &BuildImageStore{client: s.mockClient, presign: s.mockPresign, bucket: "images-bucket"}
+	s.store = &SwitchImageStore{client: s.mockClient, presign: s.mockPresign, bucket: "images-bucket"}
 }
 
-func (s *BuildImageStoreSuite) TestPresignGetBuildImage_Succeeds() {
+func (s *SwitchImageStoreSuite) TestPresignGet_Succeeds() {
 	s.mockPresign.EXPECT().
 		PresignGetObject(mock.Anything, mock.MatchedBy(func(in *s3.GetObjectInput) bool {
-			return *in.Bucket == "images-bucket" && *in.Key == "builds/alice/b1/images/img1"
+			return *in.Bucket == "images-bucket" && *in.Key == "switches/alice/sw1/image"
 		}), mock.Anything).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
 
-	url, err := s.store.PresignGetBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+	url, err := s.store.PresignGet(s.T().Context(), "switches/alice/sw1/image")
 
 	s.Require().NoError(err)
 	s.Equal("https://example.com/presigned-get", url)
 }
 
-func (s *BuildImageStoreSuite) TestPresignGetBuildImage_AppliesConfiguredExpiry() {
+func (s *SwitchImageStoreSuite) TestPresignGet_AppliesConfiguredExpiry() {
 	s.store.getExpiry = 24 * time.Hour
 
 	s.mockPresign.EXPECT().
@@ -58,65 +58,64 @@ func (s *BuildImageStoreSuite) TestPresignGetBuildImage_AppliesConfiguredExpiry(
 		})).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
 
-	_, err := s.store.PresignGetBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+	_, err := s.store.PresignGet(s.T().Context(), "switches/alice/sw1/image")
 
 	s.Require().NoError(err)
 }
 
-func (s *BuildImageStoreSuite) TestPresignGetBuildImage_SDKError_Propagates() {
+func (s *SwitchImageStoreSuite) TestPresignGet_SDKError_Propagates() {
 	s.mockPresign.EXPECT().
 		PresignGetObject(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3: access denied"))
 
-	url, err := s.store.PresignGetBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+	url, err := s.store.PresignGet(s.T().Context(), "switches/alice/sw1/image")
 
 	s.Require().ErrorContains(err, "s3: access denied")
 	s.Empty(url)
 }
 
-func (s *BuildImageStoreSuite) TestPresignPutBuildImage_Succeeds() {
+func (s *SwitchImageStoreSuite) TestPresignPut_Succeeds() {
 	s.mockPresign.EXPECT().
 		PresignPutObject(mock.Anything, mock.MatchedBy(func(in *s3.PutObjectInput) bool {
-			return *in.Bucket == "images-bucket" && *in.Key == "builds/alice/b1/images/img1" && *in.ContentType == "image/png"
+			return *in.Bucket == "images-bucket" && *in.Key == "switches/alice/sw1/image" && *in.ContentType == "image/png"
 		})).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-put"}, nil)
 
-	url, err := s.store.PresignPutBuildImage(s.T().Context(), "builds/alice/b1/images/img1", "image/png")
+	url, err := s.store.PresignPut(s.T().Context(), "switches/alice/sw1/image", "image/png")
 
 	s.Require().NoError(err)
 	s.Equal("https://example.com/presigned-put", url)
 }
 
-func (s *BuildImageStoreSuite) TestPresignPutBuildImage_SDKError_Propagates() {
+func (s *SwitchImageStoreSuite) TestPresignPut_SDKError_Propagates() {
 	s.mockPresign.EXPECT().
 		PresignPutObject(mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3: access denied"))
 
-	url, err := s.store.PresignPutBuildImage(s.T().Context(), "builds/alice/b1/images/img1", "image/png")
+	url, err := s.store.PresignPut(s.T().Context(), "switches/alice/sw1/image", "image/png")
 
 	s.Require().ErrorContains(err, "s3: access denied")
 	s.Empty(url)
 }
 
-func (s *BuildImageStoreSuite) TestDeleteBuildImage_Succeeds() {
+func (s *SwitchImageStoreSuite) TestDelete_Succeeds() {
 	s.mockClient.EXPECT().
 		DeleteObject(mock.Anything, mock.MatchedBy(func(in *s3.DeleteObjectInput) bool {
-			return *in.Bucket == "images-bucket" && *in.Key == "builds/alice/b1/images/img1"
+			return *in.Bucket == "images-bucket" && *in.Key == "switches/alice/sw1/image"
 		})).
 		Return(&s3.DeleteObjectOutput{}, nil)
 
-	err := s.store.DeleteBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+	err := s.store.Delete(s.T().Context(), "switches/alice/sw1/image")
 
 	s.Require().NoError(err)
 }
 
-func (s *BuildImageStoreSuite) TestDeleteBuildImage_SDKError_Propagates() {
+func (s *SwitchImageStoreSuite) TestDelete_SDKError_Propagates() {
 	s.mockClient.EXPECT().
 		DeleteObject(mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3: access denied"))
 
-	err := s.store.DeleteBuildImage(s.T().Context(), "builds/alice/b1/images/img1")
+	err := s.store.Delete(s.T().Context(), "switches/alice/sw1/image")
 
 	s.Require().ErrorContains(err, "s3: access denied")
 }
-

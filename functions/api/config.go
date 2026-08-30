@@ -1,5 +1,7 @@
 package main
 
+import "time"
+
 // Config is populated from environment variables via Kong. There are no CLI
 // flags for this service — it's a Lambda entrypoint, not a CLI tool — but
 // Kong's struct-tag env binding, defaults, and required-field validation are
@@ -20,6 +22,8 @@ type Config struct {
 	BuildTableName           string `env:"BUILD_TABLE_NAME" required:""`
 	ProfileTableName         string `env:"PROFILE_TABLE_NAME" required:""`
 	ProfileUsernameTableName string `env:"PROFILE_USERNAME_TABLE_NAME" required:""`
+
+	ImageGetPresignExpiry time.Duration `env:"IMAGE_GET_PRESIGN_EXPIRY" default:"24h" help:"How long presigned GET image URLs remain valid; presigned PUT URLs keep the AWS SDK's default (15m)."`
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`
