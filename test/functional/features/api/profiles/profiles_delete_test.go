@@ -26,9 +26,7 @@ var _ = Describe("Deleting a profile", func() {
 		username = "u" + uuid.NewString()[:8]
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -63,9 +61,7 @@ var _ = Describe("Deleting a profile", func() {
 				Expect(got.StatusCode).To(Equal(http.StatusNotFound))
 
 				By("letting another user claim the freed username")
-				otherToken, err := api.SecondUserAuthToken(ctx)
-				Expect(err).NotTo(HaveOccurred())
-				otherID, err := api.TokenSubject(otherToken)
+				otherToken, otherID, err := api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
 				created, err := client.Create(ctx, otherID, otherToken,

@@ -27,9 +27,7 @@ var _ = Describe("Deleting a switch's image", func() {
 		switchID = "delete-image-switch-" + uuid.NewString()
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
@@ -78,7 +76,7 @@ var _ = Describe("Deleting a switch's image", func() {
 
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				token, err = api.SecondUserAuthToken(ctx)
+				token, _, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 			})
 
