@@ -110,6 +110,17 @@ func (s *HandleListKeycapSetsSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorContains(err, "failed to list keycap sets")
 }
 
+func (s *HandleListKeycapSetsSuite) TestInvalidCursor_ReturnsError() {
+	s.mockRepo.EXPECT().
+		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	handler := handleListKeycapSets(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{Cursor: "stale"})
+
+	s.Require().Error(err)
+}
+
 type HandleGetKeycapSetSuite struct {
 	suite.Suite
 

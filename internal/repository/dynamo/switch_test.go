@@ -130,11 +130,11 @@ func (s *SwitchRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey() {
 	s.Require().NoError(err)
 }
 
-func (s *SwitchRepositorySuite) TestList_InvalidCursor_ReturnsError() {
+func (s *SwitchRepositorySuite) TestList_InvalidCursor_ReturnsErrInvalidCursor() {
 	switches, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
 
-	s.Require().Error(err)
+	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
 	s.Nil(switches)
 	s.Empty(next)
 }

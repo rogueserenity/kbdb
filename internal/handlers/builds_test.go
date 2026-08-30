@@ -817,6 +817,19 @@ func (s *ListBuildsSuite) TestListBuilds_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *ListBuildsSuite) TestListBuilds_InvalidCursor_Returns400() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	req := s.newRequest(s.T().Context(), "limit=20&cursor=stale")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type GetBuildSuite struct {
 	suite.Suite
 

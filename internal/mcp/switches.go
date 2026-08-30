@@ -67,6 +67,9 @@ func handleListSwitches(repo repository.SwitchRepository) mcp.ToolHandlerFor[sch
 		visibilities := authz.ReadableVisibilities(ctx, ownerID)
 
 		switches, nextCursor, err := repo.List(ctx, ownerID, visibilities, clampListLimit(in.Limit), in.Cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			return nil, schema.ListSwitchesOutput{}, errors.New("invalid cursor; restart from the first page")
+		}
 		if err != nil {
 			log.FromContext(ctx).Error("listing switches", log.Error, err)
 			return nil, schema.ListSwitchesOutput{}, errors.New("failed to list switches")

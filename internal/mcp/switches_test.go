@@ -113,6 +113,17 @@ func (s *HandleListSwitchesSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorContains(err, "failed to list switches")
 }
 
+func (s *HandleListSwitchesSuite) TestInvalidCursor_ReturnsError() {
+	s.mockRepo.EXPECT().
+		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	handler := handleListSwitches(s.mockRepo)
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListSwitchesInput{Cursor: "stale"})
+
+	s.Require().Error(err)
+}
+
 type HandleGetSwitchSuite struct {
 	suite.Suite
 

@@ -37,6 +37,10 @@ func ListKeycapSets(repo repository.KeycapSetRepository, images repository.Keyca
 		visibilities := authz.ReadableVisibilities(r.Context(), ownerID)
 
 		sets, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			problem.BadRequest(w, "invalid pagination cursor; restart from the first page")
+			return
+		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("listing keycap sets", log.Error, err)
 			problem.Internal(w, "failed to list keycap sets")

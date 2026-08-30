@@ -132,11 +132,11 @@ func (s *KeyboardRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey()
 	s.Require().NoError(err)
 }
 
-func (s *KeyboardRepositorySuite) TestList_InvalidCursor_ReturnsError() {
+func (s *KeyboardRepositorySuite) TestList_InvalidCursor_ReturnsErrInvalidCursor() {
 	keyboards, next, err := s.repo.List(s.T().Context(), "alice",
 		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
 
-	s.Require().Error(err)
+	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
 	s.Nil(keyboards)
 	s.Empty(next)
 }
