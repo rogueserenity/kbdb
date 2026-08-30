@@ -349,15 +349,15 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
-		err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
-		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
-			return nil, schema.SetKeycapKitImageOutput{}, mutErr
-		}
-
 		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
+		}
+
+		err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
+		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
+			return nil, schema.SetKeycapKitImageOutput{}, mutErr
 		}
 
 		return nil, schema.SetKeycapKitImageOutput{UploadURL: uploadURL}, nil

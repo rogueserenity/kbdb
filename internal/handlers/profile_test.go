@@ -785,6 +785,8 @@ func (s *SetProfileImageSuite) TestUnapprovedContentType_400() {
 }
 
 func (s *SetProfileImageSuite) TestNoProfile_404() {
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
@@ -795,6 +797,8 @@ func (s *SetProfileImageSuite) TestNoProfile_404() {
 }
 
 func (s *SetProfileImageSuite) TestMutationConflict_409() {
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrMutationConflict)
 
 	rec := httptest.NewRecorder()
@@ -804,7 +808,6 @@ func (s *SetProfileImageSuite) TestMutationConflict_409() {
 }
 
 func (s *SetProfileImageSuite) TestPresignError_500() {
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(nil)
 	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
 
@@ -812,6 +815,8 @@ func (s *SetProfileImageSuite) TestPresignError_500() {
 	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
+	// mockRepo has no .EXPECT() for SetAvatarPath - verifies the DB was
+	// never touched when presigning fails.
 }
 
 type DeleteProfileImageSuite struct {

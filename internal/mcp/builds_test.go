@@ -742,6 +742,9 @@ func (s *HandleAddBuildImageSuite) TestUnapprovedContentType_ReturnsError() {
 }
 
 func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "missing", mock.Anything).
 		Return(repository.ErrNotFound)
@@ -756,6 +759,9 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 }
 
 func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
 		Return(repository.ErrMutationConflict)
@@ -770,9 +776,6 @@ func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
 }
 
 func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
-	s.mockBuilds.EXPECT().
-		AddImage(mock.Anything, "build-1", mock.Anything).
-		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -784,9 +787,14 @@ func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 	})
 
 	s.Require().ErrorContains(err, "failed to add build image")
+	// mockBuilds has no .EXPECT() for AddImage - verifies the DB was
+	// never touched when presigning fails.
 }
 
 func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
 		Return(errors.New("put item failed"))

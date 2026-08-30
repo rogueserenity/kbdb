@@ -1111,6 +1111,9 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_UnapprovedContentType_Retur
 }
 
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_NotFound_Returns404() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
 		Return(repository.ErrNotFound)
@@ -1124,9 +1127,6 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_NotFound_Returns404() {
 }
 
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_PresignError_Returns500() {
-	s.mockKeyboardRepo.EXPECT().
-		AddImage(mock.Anything, "kb1", mock.Anything).
-		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1137,9 +1137,14 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_PresignError_Returns500() {
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockKeyboardRepo has no .EXPECT() for AddImage - verifies the DB was
+	// never touched when presigning fails.
 }
 
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_RepositoryError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
 		Return(errors.New("put item failed"))
@@ -1153,6 +1158,9 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_RepositoryError_Returns500(
 }
 
 func (s *AddKeyboardImageSuite) TestAddKeyboardImage_MutationConflict_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockKeyboardRepo.EXPECT().
 		AddImage(mock.Anything, "kb1", mock.Anything).
 		Return(repository.ErrMutationConflict)
