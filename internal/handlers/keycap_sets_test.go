@@ -1617,6 +1617,9 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Ret
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(repository.ErrNotFound)
@@ -1630,9 +1633,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
-	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1643,9 +1643,14 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500()
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockRepo has no .EXPECT() for SetKitImagePath - verifies the DB was
+	// never touched when presigning fails.
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(errors.New("put item failed"))
@@ -1659,6 +1664,9 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
 		Return(repository.ErrMutationConflict)

@@ -689,6 +689,9 @@ func (s *HandleAddKeyboardImageSuite) TestUnapprovedContentType_ReturnsError() {
 }
 
 func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockKeyboards.EXPECT().
 		AddImage(mock.Anything, "kb-1", mock.Anything).
 		Return(repository.ErrNotFound)
@@ -703,6 +706,9 @@ func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 }
 
 func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockKeyboards.EXPECT().
 		AddImage(mock.Anything, "kb-1", mock.Anything).
 		Return(repository.ErrMutationConflict)
@@ -714,6 +720,22 @@ func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
 	})
 
 	s.Require().ErrorIs(err, errMutationConflict)
+}
+
+func (s *HandleAddKeyboardImageSuite) TestPresignError_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().Error(err)
+	// mockKeyboards has no .EXPECT() for AddImage - verifies the DB was
+	// never touched when presigning fails.
 }
 
 type HandleDeleteKeyboardImageSuite struct {

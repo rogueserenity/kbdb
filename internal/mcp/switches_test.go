@@ -649,6 +649,9 @@ func (s *HandleSetSwitchImageSuite) TestUnapprovedContentType_ReturnsError() {
 }
 
 func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockSwitches.EXPECT().
 		SetImagePath(mock.Anything, "sw-1", mock.Anything).
 		Return(repository.ErrNotFound)
@@ -663,6 +666,9 @@ func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 }
 
 func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockSwitches.EXPECT().
 		SetImagePath(mock.Anything, "sw-1", mock.Anything).
 		Return(repository.ErrMutationConflict)
@@ -674,6 +680,22 @@ func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
 	})
 
 	s.Require().ErrorIs(err, errMutationConflict)
+}
+
+func (s *HandleSetSwitchImageSuite) TestPresignError_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("", errors.New("s3: access denied"))
+
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    "sw-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().Error(err)
+	// mockSwitches has no .EXPECT() for SetImagePath - verifies the DB
+	// was never touched when presigning fails.
 }
 
 type HandleDeleteSwitchImageSuite struct {

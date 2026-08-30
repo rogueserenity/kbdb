@@ -312,9 +312,9 @@ func DeleteKeyboard(
 // requires an authenticated caller. userId must be the caller's own
 // subject; adding an image to another user's keyboard, or one that
 // doesn't exist, both return 404. Doesn't upload the image itself - the
-// response is a presigned S3 PUT URL the client uploads directly to. The
-// repository mutation (which checks existence/ownership) runs before
-// presigning, so a 404 doesn't pay for a wasted S3 round trip.
+// response is a presigned S3 PUT URL the client uploads directly to.
+// Presigning runs before the repository mutation, so a presign failure
+// never leaves the DB pointing at an object that was never uploaded.
 func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -347,15 +347,15 @@ func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images reposit
 			return
 		}
 
-		err = keyboardRepo.AddImage(r.Context(), keyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
-		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
-			return
-		}
-
 		uploadURL, err := images.PresignPutKeyboardImage(r.Context(), key, in.ContentType)
 		if err != nil {
 			log.FromContext(r.Context()).Error("presigning keyboard image upload", log.Error, err, log.KeyboardID, keyboardID)
 			problem.Internal(w, "failed to add keyboard image")
+			return
+		}
+
+		err = keyboardRepo.AddImage(r.Context(), keyboardID, repository.KeyboardImage{ImageID: imageID, Path: key})
+		if handleMutationError(w, r, err, log.KeyboardID, keyboardID) {
 			return
 		}
 

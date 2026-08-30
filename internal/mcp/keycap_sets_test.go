@@ -1172,6 +1172,9 @@ func (s *HandleSetKeycapKitImageSuite) TestUnapprovedContentType_ReturnsError() 
 }
 
 func (s *HandleSetKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks-1", "missing-kit", mock.Anything).
 		Return(repository.ErrNotFound)
@@ -1187,6 +1190,9 @@ func (s *HandleSetKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
 }
 
 func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
 		Return(repository.ErrMutationConflict)
@@ -1202,9 +1208,6 @@ func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError
 }
 
 func (s *HandleSetKeycapKitImageSuite) TestPresignError_ReturnsError() {
-	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
-		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
 		Return("", errors.New("presign failed"))
@@ -1217,6 +1220,8 @@ func (s *HandleSetKeycapKitImageSuite) TestPresignError_ReturnsError() {
 	})
 
 	s.Require().ErrorContains(err, "failed to set kit image")
+	// mockRepo has no .EXPECT() for SetKitImagePath - verifies the DB was
+	// never touched when presigning fails.
 }
 
 type HandleDeleteKeycapKitImageSuite struct {

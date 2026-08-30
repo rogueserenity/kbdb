@@ -350,15 +350,15 @@ func handleAddBuildImage(
 			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
 		}
 
-		err = buildRepo.AddImage(ctx, in.BuildID, repository.BuildImage{ImageID: imageID, Path: key})
-		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
-			return nil, schema.AddBuildImageOutput{}, mutErr
-		}
-
 		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning build image upload", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
+		}
+
+		err = buildRepo.AddImage(ctx, in.BuildID, repository.BuildImage{ImageID: imageID, Path: key})
+		if mutErr := handleMutationError(ctx, err, log.BuildID, in.BuildID); mutErr != nil {
+			return nil, schema.AddBuildImageOutput{}, mutErr
 		}
 
 		return nil, schema.AddBuildImageOutput{ImageID: imageID, UploadURL: uploadURL}, nil

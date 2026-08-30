@@ -309,9 +309,9 @@ func UpdateBuild(
 // an authenticated caller. userId must be the caller's own subject; adding
 // an image to another user's build, or one that doesn't exist, both return
 // 404. Doesn't upload the image itself - the response is a presigned S3 PUT
-// URL the client uploads directly to. The repository mutation (which
-// checks existence/ownership) runs before presigning, so a 404 doesn't
-// pay for a wasted S3 round trip.
+// URL the client uploads directly to. Presigning runs before the
+// repository mutation, so a presign failure never leaves the DB pointing
+// at an object that was never uploaded.
 func AddBuildImage(buildRepo repository.BuildRepository, images repository.BuildImageStore) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -344,15 +344,15 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 			return
 		}
 
-		err = buildRepo.AddImage(r.Context(), buildID, repository.BuildImage{ImageID: imageID, Path: key})
-		if handleMutationError(w, r, err, log.BuildID, buildID) {
-			return
-		}
-
 		uploadURL, err := images.PresignPutBuildImage(r.Context(), key, in.ContentType)
 		if err != nil {
 			log.FromContext(r.Context()).Error("presigning build image upload", log.Error, err, log.BuildID, buildID)
 			problem.Internal(w, "failed to add build image")
+			return
+		}
+
+		err = buildRepo.AddImage(r.Context(), buildID, repository.BuildImage{ImageID: imageID, Path: key})
+		if handleMutationError(w, r, err, log.BuildID, buildID) {
 			return
 		}
 

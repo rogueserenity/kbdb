@@ -193,14 +193,14 @@ func handleSetProfileImage(
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
 		}
 
-		if mutErr := handleMutationError(ctx, repo.SetAvatarPath(ctx, key)); mutErr != nil {
-			return nil, schema.SetProfileImageOutput{}, mutErr
-		}
-
 		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning profile image upload", log.Error, err, log.ProfileID, ownerID)
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
+		}
+
+		if mutErr := handleMutationError(ctx, repo.SetAvatarPath(ctx, key)); mutErr != nil {
+			return nil, schema.SetProfileImageOutput{}, mutErr
 		}
 
 		return nil, schema.SetProfileImageOutput{UploadURL: uploadURL}, nil

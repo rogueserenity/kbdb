@@ -991,6 +991,9 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_UnapprovedContentType_Returns40
 }
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
 		Return(repository.ErrNotFound)
@@ -1004,9 +1007,6 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
 }
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
-	s.mockRepo.EXPECT().
-		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -1017,9 +1017,14 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+	// mockRepo has no .EXPECT() for SetImagePath - verifies the DB was
+	// never touched when presigning fails.
 }
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
 		Return(errors.New("put item failed"))
@@ -1033,6 +1038,9 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
 }
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_MutationConflict_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
 		Return(repository.ErrMutationConflict)
