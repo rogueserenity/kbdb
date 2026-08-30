@@ -26,9 +26,8 @@ var _ = Describe("Sending a malformed bearer token to an anonymous-capable route
 		resp = nil
 		client = api.NewSwitchesClient()
 
-		ownerToken, err := api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		var err error
+		_, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	})
 

@@ -35,9 +35,7 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 		buildGone = false
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		keyboardID = "cascade-fixture-keyboard-" + uuid.NewString()
@@ -222,9 +220,7 @@ var _ = Describe("Deleting a keycap set with multiple kits referenced by differe
 		build2Gone = false
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		keyboardID = "cascade-multi-fixture-keyboard-" + uuid.NewString()

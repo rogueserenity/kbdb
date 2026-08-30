@@ -33,9 +33,7 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build", func
 		buildGone = false
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		keyboardID = "cascade-keyboard-" + uuid.NewString()

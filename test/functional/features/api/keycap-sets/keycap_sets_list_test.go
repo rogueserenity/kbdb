@@ -31,9 +31,7 @@ var _ = Describe("Listing keycap sets", func() {
 		// to seed fixture data below must match whatever subject this
 		// environment's token actually carries.
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -116,7 +114,7 @@ var _ = Describe("Listing keycap sets", func() {
 
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				token, err = api.SecondUserAuthToken(ctx)
+				token, _, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 			})
 

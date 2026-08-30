@@ -45,9 +45,7 @@ var _ = Describe("Getting a profile", func() {
 		username = "u" + uuid.NewString()[:8]
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -151,7 +149,7 @@ var _ = Describe("Getting a profile", func() {
 
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				otherToken, err = api.SecondUserAuthToken(ctx)
+				otherToken, _, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 			})
 

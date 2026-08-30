@@ -35,9 +35,7 @@ var _ = Describe("Deleting a keycap kit that is still referenced by a build", fu
 		buildGone = false
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		ownerToken, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		keyboardID = "cascade-fixture-keyboard-" + uuid.NewString()

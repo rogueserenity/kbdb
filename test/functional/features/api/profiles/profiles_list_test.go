@@ -34,10 +34,9 @@ type listPage struct {
 
 var _ = Describe("Listing profiles", func() {
 	var (
-		resp       *http.Response
-		client     *api.ProfilesClient
-		ownerID    string
-		ownerToken string
+		resp    *http.Response
+		client  *api.ProfilesClient
+		ownerID string
 	)
 
 	BeforeEach(func(ctx SpecContext) {
@@ -45,9 +44,7 @@ var _ = Describe("Listing profiles", func() {
 		client = api.NewProfilesClient()
 
 		var err error
-		ownerToken, err = api.AuthToken(ctx)
-		Expect(err).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(ownerToken)
+		_, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 	})
 
@@ -83,9 +80,7 @@ var _ = Describe("Listing profiles", func() {
 				Links:           []map[string]string{{"name": "Site", "url": "https://example.com"}},
 			})).To(Succeed())
 
-			secondToken, err := api.SecondUserAuthToken(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			secondID, err := api.TokenSubject(secondToken)
+			_, secondID, err := api.NewAuthIdentity(ctx)
 			Expect(err).NotTo(HaveOccurred())
 			Expect(db.SeedProfile(ctx, secondID, db.SeedProfileOptions{
 				Username:     hiddenName,
@@ -200,9 +195,7 @@ var _ = Describe("Listing profiles", func() {
 			prefix = "page" + strings.ToLower(uuid.NewString()[:10])
 			names = []string{prefix + "a", prefix + "b", prefix + "c"}
 
-			secondToken, err := api.SecondUserAuthToken(ctx)
-			Expect(err).NotTo(HaveOccurred())
-			secondID, err := api.TokenSubject(secondToken)
+			_, secondID, err := api.NewAuthIdentity(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
 			// One profile per user and only two real identities, so the
