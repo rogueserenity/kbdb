@@ -1,130 +1,102 @@
 package api
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"strings"
+	"sync"
+
+	"github.com/rogueserenity/oidc-testkit/pkg/oidctest"
 
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
 
-// postJSON POSTs body as application/json and decodes the response into
-// out (if non-nil), returning an error (including the response body)
-// unless the response status is exactly wantStatus.
-func postJSON(ctx context.Context, url string, headers map[string]string, body []byte, wantStatus int, out any) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("building request to %s: %w", url, err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	for k, v := range headers {
-		req.Header.Set(k, v)
-	}
+var (
+	signerOnce sync.Once
+	signer     *oidctest.Signer
+	signerErr  error
+)
 
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("calling %s: %w", url, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("reading response from %s: %w", url, err)
-	}
-	if resp.StatusCode != wantStatus {
-		return fmt.Errorf("%s returned %d: %s", url, resp.StatusCode, respBody)
-	}
-	if out != nil {
-		if err := json.Unmarshal(respBody, out); err != nil {
-			return fmt.Errorf("decoding response from %s: %w", url, err)
+func sharedSigner() (*oidctest.Signer, error) {
+	signerOnce.Do(func() {
+		path := support.OidcSigningKeyPath()
+		if path == "" {
+			signerErr = fmt.Errorf("KBDB_OIDC_SIGNING_KEY_PATH is not set - run scripts/func-setup.sh first")
+			return
 		}
-	}
-	return nil
-}
-
-// ensureEmulatorUser creates email/password as a WorkOS emulator user if it
-// doesn't already exist. A 409 (already exists) is not an error - specs may
-// call this repeatedly across a suite run, and the fixture users are also
-// pre-seeded via scripts/workos-emulate-seed.yaml, so this call is expected
-// to hit the "already exists" case on every fresh emulator startup.
-func ensureEmulatorUser(ctx context.Context, email, password string) error {
-	body, err := json.Marshal(map[string]any{
-		"email":          email,
-		"password":       password,
-		"email_verified": true,
+		pemBytes, err := os.ReadFile(path) //nolint:gosec // path is a deploy-controlled env var
+		if err != nil {
+			signerErr = fmt.Errorf("reading signing key %s: %w", path, err)
+			return
+		}
+		key, err := oidctest.LoadKey(pemBytes)
+		if err != nil {
+			signerErr = fmt.Errorf("parsing signing key %s: %w", path, err)
+			return
+		}
+		signer = oidctest.NewSigner(key, support.OidcIssuer(), support.OidcAudience())
 	})
-	if err != nil {
-		return fmt.Errorf("encoding create-user request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
-		support.EmulatorBaseURL()+"/user_management/users", bytes.NewReader(body))
-	if err != nil {
-		return fmt.Errorf("building create-user request: %w", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+support.EmulatorClientSecret)
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("calling create-user: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusConflict {
-		respBody, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("create-user returned %d: %s", resp.StatusCode, respBody)
-	}
-	return nil
+	return signer, signerErr
 }
 
-// mintEmulatorToken drives the WorkOS emulator's password grant and returns
-// a real, signed access token for email/password.
-func mintEmulatorToken(ctx context.Context, email, password string) (string, error) {
-	if err := ensureEmulatorUser(ctx, email, password); err != nil {
-		return "", err
+// NewAuthIdentity mints a token for a fresh random subject and returns both,
+// so a spec can seed and assert data owned by that subject.
+func NewAuthIdentity(_ context.Context) (token, subject string, err error) {
+	s, err := sharedSigner()
+	if err != nil {
+		return "", "", err
 	}
+	return s.Sign()
+}
 
-	body, err := json.Marshal(map[string]any{
-		"client_id":     support.EmulatorClientID,
-		"client_secret": support.EmulatorClientSecret,
-		"grant_type":    "password",
-		"email":         email,
-		"password":      password,
+// fixtureIdentity is one (token, subject) pair minted once and reused, so
+// repeated AuthToken/SecondUserAuthToken calls in a spec return the same
+// identity - as the old fixed IdP fixture users did.
+type fixtureIdentity struct {
+	once    sync.Once
+	token   string
+	subject string
+	err     error
+}
+
+func (f *fixtureIdentity) get() (string, error) {
+	f.once.Do(func() {
+		s, err := sharedSigner()
+		if err != nil {
+			f.err = err
+			return
+		}
+		f.token, f.subject, f.err = s.Sign()
 	})
-	if err != nil {
-		return "", fmt.Errorf("encoding authenticate request: %w", err)
-	}
-
-	var tokens struct {
-		AccessToken string `json:"access_token"`
-	}
-	err = postJSON(ctx, support.EmulatorBaseURL()+"/user_management/authenticate", nil, body, http.StatusOK, &tokens)
-	if err != nil {
-		return "", err
-	}
-	if tokens.AccessToken == "" {
-		return "", fmt.Errorf("authenticate response missing access_token")
-	}
-	return tokens.AccessToken, nil
+	return f.token, f.err
 }
 
-// TokenSubject returns the "sub" claim of an access token, decoded without
-// signature verification. Fine for functional tests: the caller already
-// obtained this token from a trusted issuer (the WorkOS emulator, or a real
-// deployed stack's real IdP) via AuthToken/SecondUserAuthToken - this just
-// reads its subject back out. Needed because the emulator/real-IdP token
-// path mints a real, IdP-generated subject, not a fixed constant - specs
-// that need to know "my own subject" (e.g. to seed owned fixture data)
-// can't assume a fixed value.
-func TokenSubject(idToken string) (string, error) {
-	parts := strings.Split(idToken, ".")
+var (
+	firstFixtureIdentity  fixtureIdentity
+	secondFixtureIdentity fixtureIdentity
+)
+
+// AuthToken returns a token for the primary test identity.
+//
+// Migration shim for specs not yet on NewAuthIdentity; removed with
+// SecondUserAuthToken and TokenSubject once they are.
+func AuthToken(_ context.Context) (string, error) {
+	return firstFixtureIdentity.get()
+}
+
+// SecondUserAuthToken returns a token for a second test identity, distinct
+// from AuthToken's. Migration shim - see AuthToken.
+func SecondUserAuthToken(_ context.Context) (string, error) {
+	return secondFixtureIdentity.get()
+}
+
+// TokenSubject returns a token's "sub" claim, unverified. Migration shim -
+// NewAuthIdentity returns the subject directly.
+func TokenSubject(token string) (string, error) {
+	parts := strings.Split(token, ".")
 	if len(parts) != 3 {
 		return "", fmt.Errorf("malformed token: expected 3 dot-separated parts, got %d", len(parts))
 	}
@@ -145,32 +117,4 @@ func TokenSubject(idToken string) (string, error) {
 	}
 
 	return claims.Subject, nil
-}
-
-// authToken mints a token for the given fixture identity via the WorkOS
-// emulator, unless envOverride is set (a real IdP-minted token, when
-// support.BaseURL() points at a real deployed stack instead) - a local
-// emulator and a real deployed stack's real IdP aren't interchangeable
-// token issuers, so this can't be derived from support.BaseURL() alone.
-func authToken(ctx context.Context, envOverride, email, password string) (string, error) {
-	if v := os.Getenv(envOverride); v != "" {
-		return v, nil
-	}
-	return mintEmulatorToken(ctx, email, password)
-}
-
-// AuthToken returns a valid bearer token for the plain (non-admin) test
-// user. See authToken for the KBDB_AUTH_TOKEN override behavior.
-func AuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_AUTH_TOKEN",
-		"kbdb-local-test-user@rogueserenity.dev", "kbdb-local-test-password-1")
-}
-
-// SecondUserAuthToken returns a valid bearer token for a second, unrelated
-// plain (non-admin) test user - distinct from AuthToken's identity, for
-// exercising ownership/visibility-scoped reads of another user's items. See
-// authToken for the KBDB_SECOND_USER_AUTH_TOKEN override behavior.
-func SecondUserAuthToken(ctx context.Context) (string, error) {
-	return authToken(ctx, "KBDB_SECOND_USER_AUTH_TOKEN",
-		"kbdb-local-second-user@rogueserenity.dev", "kbdb-local-test-password-2")
 }

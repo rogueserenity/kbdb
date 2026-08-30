@@ -88,42 +88,32 @@ jobs:
       - name: sam build
         run: sam build --config-env ci
 
-      # JWKS_BUCKET_NAME is set as a GitHub Actions repo variable. The
-      # generic https://<bucket>.s3.amazonaws.com host 307-redirects to the
-      # region-specific one for any bucket outside us-east-1 (confirmed live
-      # against the real kbdb-jwks bucket) - API Gateway's JWT authorizer
-      # won't follow that redirect when fetching JWKS, so the
-      # region-specific host is passed explicitly, not the generic one.
-      - name: Publish emulator JWKS to S3
-        id: emulator-jwks
+      # The JWKS/discovery JSON go to the public kbdb-jwks bucket for the
+      # deployed authorizer to fetch; the signing key stays on the runner. The
+      # region-specific S3 host is the issuer - API Gateway's authorizer won't
+      # follow the generic host's 307 redirect - and the S3 keys mirror it 1:1.
+      - name: Generate OIDC signing material
+        id: oidc
         run: |
-          JWKS_PREFIX="jwks/kbdb-pr-${{ github.event.pull_request.number }}"
-          ISSUER_BASE_URL="https://${{ vars.JWKS_BUCKET_NAME }}.s3.us-east-2.amazonaws.com/${JWKS_PREFIX}"
-          # From emulator v0.10.0 the minted AuthKit token's iss is
-          # "<base>/user_management/<client_id>". ISSUER_URL (suffixed) is what
-          # go-oidc exact-matches and what OidcIssuerBaseUrl must be;
-          # ISSUER_BASE_URL (bare) is what WORKOS_EMULATE_ISSUER stays, since
-          # the emulator appends the suffix itself.
-          read -r ISSUER_URL KEY_PATH KID < <(scripts/ci-publish-emulator-jwks.sh \
-            "${{ vars.JWKS_BUCKET_NAME }}" "$JWKS_PREFIX" us-east-2 "$ISSUER_BASE_URL" client_local_kbdb)
+          PR="${{ github.event.pull_request.number }}"
+          BUCKET="${{ vars.JWKS_BUCKET_NAME }}"
+          PREFIX="jwks/kbdb-pr-${PR}"
+          ISSUER="https://${BUCKET}.s3.us-east-2.amazonaws.com/${PREFIX}"
+          OIDC_DIR="${RUNNER_TEMP}/oidc"
+          KEY_PATH="${OIDC_DIR}/signing-key.pem"
+          go run github.com/rogueserenity/oidc-testkit/cmd/oidc-testkit-gen@v1.0.0 \
+            --issuer "$ISSUER" --out-dir "$OIDC_DIR" --key-out "$KEY_PATH" >/dev/null
+          aws s3 cp "$OIDC_DIR/openid-configuration" \
+            "s3://${BUCKET}/${PREFIX}/.well-known/openid-configuration" \
+            --content-type application/json
+          aws s3 cp "$OIDC_DIR/jwks.json" \
+            "s3://${BUCKET}/${PREFIX}/jwks.json" \
+            --content-type application/json
           {
-            echo "issuer-url=$ISSUER_URL"
-            echo "issuer-base-url=$ISSUER_BASE_URL"
+            echo "issuer=$ISSUER"
+            echo "audience=client_local_kbdb"
             echo "key-path=$KEY_PATH"
-            echo "kid=$KID"
           } >> "$GITHUB_OUTPUT"
-
-      - name: Start WorkOS emulator
-        run: |
-          docker run --rm -d -p 4100:4100 --name workos-emulate \
-            -e WORKOS_EMULATE_ISSUER="${{ steps.emulator-jwks.outputs.issuer-base-url }}" \
-            -e WORKOS_EMULATE_KID="${{ steps.emulator-jwks.outputs.kid }}" \
-            -v "${{ steps.emulator-jwks.outputs.key-path }}:/keys/signing-key.pem:ro" \
-            ghcr.io/workos/emulate:0.11.0@sha256:e16d171e5daefb18436abf8582597cfaa7f83d9515dc10f11562b8d591982eb6 --host 0.0.0.0 --signing-key /keys/signing-key.pem
-          for _ in $(seq 1 20); do
-            curl -sf http://localhost:4100/health && break
-            sleep 0.5
-          done
 
       - name: sam deploy
         run: |
@@ -132,8 +122,8 @@ jobs:
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --image-repositories "ApiFunction=${ECR_REPOSITORY_URI}" \
             --parameter-overrides "SkipApiRepository=true" \
-              "OidcIssuerBaseUrl=${{ steps.emulator-jwks.outputs.issuer-url }}" \
-              "OidcAudience=client_local_kbdb" \
+              "OidcIssuerBaseUrl=${{ steps.oidc.outputs.issuer }}" \
+              "OidcAudience=${{ steps.oidc.outputs.audience }}" \
               "IdpConsentPublicToken=public-token-test-local-kbdb" \
               "CorsAllowOrigins=http://localhost:5173" \
               "LogoutReturnOrigins=http://localhost:5173" \
@@ -182,39 +172,12 @@ jobs:
             echo "profile-username-table-name=$PROFILE_USERNAME_TABLE_NAME"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Create test users and mint emulator tokens
-        id: auth-token
-        run: |
-          PASSWORD="$(openssl rand -base64 24)Aa1!"
-
-          create_and_mint() {
-            local email="$1"
-            curl -sf -X POST http://localhost:4100/user_management/users \
-              -H "Content-Type: application/json" \
-              -H "Authorization: Bearer sk_test_default" \
-              -d "{\"email\":\"$email\",\"password\":\"$PASSWORD\",\"email_verified\":true}" >/dev/null
-
-            curl -sf -X POST http://localhost:4100/user_management/authenticate \
-              -H "Content-Type: application/json" \
-              -d "{\"client_id\":\"client_local_kbdb\",\"client_secret\":\"sk_test_default\",\"grant_type\":\"password\",\"email\":\"$email\",\"password\":\"$PASSWORD\"}" \
-              | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"
-          }
-
-          TOKEN=$(create_and_mint "ci-test-user@rogueserenity.dev")
-          SECOND_USER_TOKEN=$(create_and_mint "ci-test-user-2@rogueserenity.dev")
-
-          echo "::add-mask::$TOKEN"
-          echo "::add-mask::$SECOND_USER_TOKEN"
-          {
-            echo "token=$TOKEN"
-            echo "second-user-token=$SECOND_USER_TOKEN"
-          } >> "$GITHUB_OUTPUT"
-
       - name: Run functional tests
         env:
           KBDB_API_BASE_URL: ${{ steps.stack-outputs.outputs.api-url }}
-          KBDB_AUTH_TOKEN: ${{ steps.auth-token.outputs.token }}
-          KBDB_SECOND_USER_AUTH_TOKEN: ${{ steps.auth-token.outputs.second-user-token }}
+          KBDB_OIDC_ISSUER: ${{ steps.oidc.outputs.issuer }}
+          KBDB_OIDC_AUDIENCE: ${{ steps.oidc.outputs.audience }}
+          KBDB_OIDC_SIGNING_KEY_PATH: ${{ steps.oidc.outputs.key-path }}
           KBDB_SWITCH_TABLE_NAME: ${{ steps.stack-outputs.outputs.switch-table-name }}
           KBDB_KEYBOARD_TABLE_NAME: ${{ steps.stack-outputs.outputs.keyboard-table-name }}
           KBDB_KEYCAP_SET_TABLE_NAME: ${{ steps.stack-outputs.outputs.keycap-set-table-name }}
