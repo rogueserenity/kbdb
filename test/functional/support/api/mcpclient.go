@@ -6,6 +6,11 @@ import (
 	"net/http"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
+
+	. "github.com/onsi/ginkgo/v2" //nolint:staticcheck,revive // Ginkgo's dot-import convention, matching every spec file
+	. "github.com/onsi/gomega"    //nolint:staticcheck,revive // ditto
+
+	"github.com/rogueserenity/kbdb/test/functional/support"
 )
 
 // MCPClient speaks MCP over the streamable-HTTP transport, unlike Client's
@@ -48,6 +53,26 @@ func (c *MCPClient) CallTool(ctx context.Context, name string, arguments map[str
 		return nil, fmt.Errorf("calling %s: %w", name, err)
 	}
 	return result, nil
+}
+
+// NewAuthenticatedMCPClient mints a fresh identity and returns an MCPClient
+// authenticated as it, plus its subject - the setup every MCP spec needs for
+// its primary caller.
+func NewAuthenticatedMCPClient(ctx context.Context) (client *MCPClient, ownerID string) {
+	GinkgoHelper()
+	token, ownerID, err := NewAuthIdentity(ctx)
+	Expect(err).NotTo(HaveOccurred())
+	return NewMCPClient(support.BaseURL()+"/mcp", token), ownerID
+}
+
+// NewOtherUserID mints a fresh identity and returns just its subject, for
+// specs that only need a second, unrelated owner to attribute fixture data
+// to - not to act as that user.
+func NewOtherUserID(ctx context.Context) string {
+	GinkgoHelper()
+	_, otherID, err := NewAuthIdentity(ctx)
+	Expect(err).NotTo(HaveOccurred())
+	return otherID
 }
 
 // bearerTokenTransport adds an Authorization header to every request, or

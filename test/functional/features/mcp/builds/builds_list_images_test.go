@@ -33,11 +33,7 @@ var _ = Describe("Listing a build's images over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			var token string
-			token, ownerID, err = api.NewAuthIdentity(ctx)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 			keyboardID = "build-fixture-keyboard-" + uuid.NewString()
 			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
@@ -110,8 +106,7 @@ var _ = Describe("Listing a build's images over MCP", func() {
 			var otherID string
 
 			BeforeEach(func(ctx SpecContext) {
-				_, otherID, err = api.NewAuthIdentity(ctx)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				Expect(db.SeedBuild(ctx, otherID, buildID, keyboardID, "public")).To(Succeed())
 			})

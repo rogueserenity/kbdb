@@ -60,11 +60,7 @@ var _ = Describe("Listing switches over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			var token string
-			token, ownerID, err = api.NewAuthIdentity(ctx)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 		})
 
 		Context("given the caller owns a private switch", func() {
@@ -112,8 +108,7 @@ var _ = Describe("Listing switches over MCP", func() {
 			)
 
 			BeforeEach(func(ctx SpecContext) {
-				_, otherID, err = api.NewAuthIdentity(ctx)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				otherSwitchID = "functional-test-switch-" + uuid.NewString()
 				Expect(db.SeedSwitch(ctx, otherID, otherSwitchID, "private")).To(Succeed())
@@ -143,8 +138,7 @@ var _ = Describe("Listing switches over MCP", func() {
 			)
 
 			BeforeEach(func(ctx SpecContext) {
-				_, otherID, err = api.NewAuthIdentity(ctx)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				otherSwitchID = "functional-test-switch-" + uuid.NewString()
 				Expect(db.SeedSwitch(ctx, otherID, otherSwitchID, "public")).To(Succeed())

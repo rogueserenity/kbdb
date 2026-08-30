@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
@@ -29,14 +28,7 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build, over 
 		keyboardID = "mcp-cascade-keyboard-" + uuid.NewString()
 		buildID = "mcp-cascade-build-" + uuid.NewString()
 
-		var (
-			token string
-			err   error
-		)
-		token, ownerID, err = api.NewAuthIdentity(ctx)
-		Expect(err).NotTo(HaveOccurred())
-
-		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
 		Expect(db.SeedBuild(ctx, ownerID, buildID, keyboardID, "private")).To(Succeed())

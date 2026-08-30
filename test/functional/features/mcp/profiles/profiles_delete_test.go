@@ -26,11 +26,7 @@ var _ = Describe("Deleting a profile over MCP", func() {
 		err = nil
 		username = "u" + uuid.NewString()[:8]
 
-		var token string
-		token, ownerID, err = api.NewAuthIdentity(ctx)
-		Expect(err).NotTo(HaveOccurred())
-
-		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 	})
 
 	Context("given the caller has a profile", func() {

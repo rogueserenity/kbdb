@@ -44,11 +44,7 @@ var _ = Describe("Creating a switch over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			var token string
-			token, ownerID, err = api.NewAuthIdentity(ctx)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 		})
 
 		Context("given valid arguments", func() {
