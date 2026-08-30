@@ -43,6 +43,10 @@ func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImag
 		visibilities := authz.ReadableVisibilities(r.Context(), ownerID)
 
 		switches, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			problem.BadRequest(w, "invalid pagination cursor; restart from the first page")
+			return
+		}
 		if err != nil {
 			log.FromContext(r.Context()).Error("listing switches", log.Error, err)
 			problem.Internal(w, "failed to list switches")

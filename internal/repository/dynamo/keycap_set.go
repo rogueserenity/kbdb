@@ -52,7 +52,7 @@ func (r *KeycapSetRepository) List(
 
 	startKey, _, _, err := decodeCursor(cursor)
 	if err != nil {
-		return nil, "", fmt.Errorf("decoding cursor: %w", err)
+		return nil, "", fmt.Errorf("%w: %w", repository.ErrInvalidCursor, err)
 	}
 
 	visValues := make([]expression.OperandBuilder, len(visibilities))

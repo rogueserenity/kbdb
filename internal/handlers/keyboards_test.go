@@ -128,6 +128,18 @@ func (s *ListKeyboardsSuite) TestListKeyboards_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *ListKeyboardsSuite) TestListKeyboards_InvalidCursor_Returns400() {
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.T().Context(), "limit=20&cursor=stale"))
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type GetKeyboardSuite struct {
 	suite.Suite
 

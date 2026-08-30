@@ -73,6 +73,9 @@ func handleListKeyboards(repo repository.KeyboardRepository) mcp.ToolHandlerFor[
 		visibilities := authz.ReadableVisibilities(ctx, ownerID)
 
 		keyboards, nextCursor, err := repo.List(ctx, ownerID, visibilities, clampListLimit(in.Limit), in.Cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			return nil, schema.ListKeyboardsOutput{}, errors.New("invalid cursor; restart from the first page")
+		}
 		if err != nil {
 			log.FromContext(ctx).Error("listing keyboards", log.Error, err)
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")

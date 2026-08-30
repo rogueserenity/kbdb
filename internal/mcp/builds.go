@@ -84,6 +84,9 @@ func handleListBuilds(
 		visibilities := authz.ReadableVisibilities(ctx, ownerID)
 
 		builds, nextCursor, err := buildRepo.List(ctx, ownerID, visibilities, clampListLimit(in.Limit), in.Cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			return nil, schema.ListBuildsOutput{}, errors.New("invalid cursor; restart from the first page")
+		}
 		if err != nil {
 			log.FromContext(ctx).Error("listing builds", log.Error, err)
 			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")

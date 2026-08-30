@@ -506,6 +506,17 @@ func (s *HandleListBuildsSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorContains(err, "failed to list builds")
 }
 
+func (s *HandleListBuildsSuite) TestInvalidCursor_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, 20, "stale").
+		Return(nil, "", repository.ErrInvalidCursor)
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{Cursor: "stale"})
+
+	s.Require().Error(err)
+}
+
 type HandleGetBuildSuite struct {
 	suite.Suite
 

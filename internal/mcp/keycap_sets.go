@@ -82,6 +82,9 @@ func handleListKeycapSets(repo repository.KeycapSetRepository) mcp.ToolHandlerFo
 		visibilities := authz.ReadableVisibilities(ctx, ownerID)
 
 		sets, nextCursor, err := repo.List(ctx, ownerID, visibilities, clampListLimit(in.Limit), in.Cursor)
+		if errors.Is(err, repository.ErrInvalidCursor) {
+			return nil, schema.ListKeycapSetsOutput{}, errors.New("invalid cursor; restart from the first page")
+		}
 		if err != nil {
 			log.FromContext(ctx).Error("listing keycap sets", log.Error, err)
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
