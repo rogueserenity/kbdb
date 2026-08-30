@@ -28,13 +28,7 @@ var _ = Describe("Listing builds over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 			keyboardID = "build-fixture-keyboard-" + uuid.NewString()
 			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
@@ -108,11 +102,7 @@ var _ = Describe("Listing builds over MCP", func() {
 			)
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				publicID = "public-build-" + uuid.NewString()
 				authenticatedID = "authenticated-build-" + uuid.NewString()

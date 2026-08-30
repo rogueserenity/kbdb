@@ -32,13 +32,7 @@ var _ = Describe("Deleting a build over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 			keyboardID = "build-fixture-keyboard-" + uuid.NewString()
 			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
@@ -93,13 +87,10 @@ var _ = Describe("Deleting a build over MCP", func() {
 		})
 
 		Context("given another user owns the build", func() {
-			var otherID string
+			var otherID, otherToken string
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
+				otherToken, otherID, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(db.SeedBuild(ctx, otherID, buildID, keyboardID, "public")).To(Succeed())
@@ -118,8 +109,6 @@ var _ = Describe("Deleting a build over MCP", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
-					otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-					Expect(tokenErr).NotTo(HaveOccurred())
 					otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
 
 					check, checkErr := otherClient.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})

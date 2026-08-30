@@ -41,13 +41,7 @@ var _ = Describe("Creating a keyboard over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 		})
 
 		Context("given valid arguments", func() {

@@ -26,7 +26,7 @@ var _ = Describe("Listing lookup categories", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
+			token, _, tokenErr := api.NewAuthIdentity(ctx)
 			Expect(tokenErr).NotTo(HaveOccurred())
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
 		})

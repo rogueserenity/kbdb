@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
@@ -26,12 +25,7 @@ var _ = Describe("Listing profiles over MCP", func() {
 		result = nil
 		err = nil
 
-		token, tokenErr := api.AuthToken(ctx)
-		Expect(tokenErr).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(token)
-		Expect(err).NotTo(HaveOccurred())
-
-		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 	})
 
 	Context("given a discoverable and a non-discoverable profile exist", func() {
@@ -54,10 +48,7 @@ var _ = Describe("Listing profiles over MCP", func() {
 				Expect(db.DeleteProfile(cleanupCtx, ownerID, discoverableName)).To(Succeed())
 			})
 
-			otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-			otherID, subjErr := api.TokenSubject(otherToken)
-			Expect(subjErr).NotTo(HaveOccurred())
+			otherID := api.NewOtherUserID(ctx)
 			Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
 				Username:     hiddenName,
 				Discoverable: false,
@@ -163,10 +154,7 @@ var _ = Describe("Listing profiles over MCP", func() {
 			prefix = "mpage" + strings.ToLower(uuid.NewString()[:10])
 			names = []string{prefix + "a", prefix + "b", prefix + "c"}
 
-			otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-			otherID, subjErr := api.TokenSubject(otherToken)
-			Expect(subjErr).NotTo(HaveOccurred())
+			otherID := api.NewOtherUserID(ctx)
 
 			owners := []string{ownerID, otherID, "user-mpage-" + uuid.NewString()}
 			for i, name := range names {

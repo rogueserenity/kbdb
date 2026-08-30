@@ -29,13 +29,7 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 		})
 
 		Context("given the caller owns the keycap set", func() {
@@ -163,11 +157,7 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 			var otherID string
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				Expect(db.SeedKeycapSet(ctx, otherID, keycapSetID, "private")).To(Succeed())
 			})
@@ -195,11 +185,7 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 			var otherID string
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				Expect(db.SeedKeycapSet(ctx, otherID, keycapSetID, "public")).To(Succeed())
 			})
@@ -231,11 +217,7 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 			)
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				kitID = "kit-" + uuid.NewString()
 				Expect(db.SeedKeycapSetWithKit(ctx, otherID, keycapSetID, kitID, "public")).To(Succeed())

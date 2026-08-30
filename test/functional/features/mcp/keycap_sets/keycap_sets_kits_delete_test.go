@@ -33,13 +33,7 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 		})
 
 		Context("given the caller owns a keycap set with an existing kit", func() {
@@ -207,13 +201,10 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 		})
 
 		Context("given another user owns the keycap set", func() {
-			var otherID string
+			var otherID, otherToken string
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
+				otherToken, otherID, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
 				keycapSetID = "delete-kit-set-" + uuid.NewString()
@@ -245,8 +236,6 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeTrue())
 
-					otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-					Expect(tokenErr).NotTo(HaveOccurred())
 					otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
 
 					check, checkErr := otherClient.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})

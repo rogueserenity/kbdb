@@ -30,13 +30,7 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
-			Expect(err).NotTo(HaveOccurred())
-
-			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+			client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 		})
 
 		Context("given the owner has keycap sets at every visibility tier", func() {
@@ -186,11 +180,7 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 			)
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				publicID = "public-keycap-set-" + uuid.NewString()
 				authenticatedID = "authenticated-keycap-set-" + uuid.NewString()

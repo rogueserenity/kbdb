@@ -8,7 +8,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
@@ -31,14 +30,7 @@ var _ = Describe("Deleting a keycap kit that is still referenced by a build, ove
 		kitID = "mcp-cascade-kit-" + uuid.NewString()
 		buildID = "mcp-cascade-build-" + uuid.NewString()
 
-		token, tokenErr := api.AuthToken(ctx)
-		Expect(tokenErr).NotTo(HaveOccurred())
-
-		var err error
-		ownerID, err = api.TokenSubject(token)
-		Expect(err).NotTo(HaveOccurred())
-
-		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 		Expect(db.SeedKeycapSetWithKit(ctx, ownerID, setID, kitID, "private")).To(Succeed())
 		Expect(db.SeedBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID, "private")).To(Succeed())

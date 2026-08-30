@@ -9,7 +9,6 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
-	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
@@ -28,12 +27,7 @@ var _ = Describe("Creating a profile over MCP", func() {
 		err = nil
 		username = "u" + uuid.NewString()[:8]
 
-		token, tokenErr := api.AuthToken(ctx)
-		Expect(tokenErr).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(token)
-		Expect(err).NotTo(HaveOccurred())
-
-		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
+		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 	})
 
 	Context("given the caller has no profile", func() {
@@ -111,10 +105,7 @@ var _ = Describe("Creating a profile over MCP", func() {
 			var otherID string
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-				otherID, err = api.TokenSubject(otherToken)
-				Expect(err).NotTo(HaveOccurred())
+				otherID = api.NewOtherUserID(ctx)
 
 				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
 					Username: username, Discoverable: true,
