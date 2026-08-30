@@ -26,9 +26,8 @@ var _ = Describe("Listing profiles over MCP", func() {
 		result = nil
 		err = nil
 
-		token, tokenErr := api.AuthToken(ctx)
-		Expect(tokenErr).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(token)
+		var token string
+		token, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
@@ -54,9 +53,7 @@ var _ = Describe("Listing profiles over MCP", func() {
 				Expect(db.DeleteProfile(cleanupCtx, ownerID, discoverableName)).To(Succeed())
 			})
 
-			otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-			otherID, subjErr := api.TokenSubject(otherToken)
+			_, otherID, subjErr := api.NewAuthIdentity(ctx)
 			Expect(subjErr).NotTo(HaveOccurred())
 			Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
 				Username:     hiddenName,
@@ -163,9 +160,7 @@ var _ = Describe("Listing profiles over MCP", func() {
 			prefix = "mpage" + strings.ToLower(uuid.NewString()[:10])
 			names = []string{prefix + "a", prefix + "b", prefix + "c"}
 
-			otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-			otherID, subjErr := api.TokenSubject(otherToken)
+			_, otherID, subjErr := api.NewAuthIdentity(ctx)
 			Expect(subjErr).NotTo(HaveOccurred())
 
 			owners := []string{ownerID, otherID, "user-mpage-" + uuid.NewString()}

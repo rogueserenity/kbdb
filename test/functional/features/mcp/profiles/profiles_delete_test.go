@@ -26,9 +26,8 @@ var _ = Describe("Deleting a profile over MCP", func() {
 		err = nil
 		username = "u" + uuid.NewString()[:8]
 
-		token, tokenErr := api.AuthToken(ctx)
-		Expect(tokenErr).NotTo(HaveOccurred())
-		ownerID, err = api.TokenSubject(token)
+		var token string
+		token, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
@@ -61,9 +60,7 @@ var _ = Describe("Deleting a profile over MCP", func() {
 				Expect(got.IsError).To(BeTrue())
 
 				By("letting another user claim the freed username")
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-				otherID, subErr := api.TokenSubject(otherToken)
+				otherToken, otherID, subErr := api.NewAuthIdentity(ctx)
 				Expect(subErr).NotTo(HaveOccurred())
 				otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
 

@@ -30,10 +30,8 @@ var _ = Describe("Updating a build over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
+			var token string
+			token, ownerID, err = api.NewAuthIdentity(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
@@ -93,7 +91,7 @@ var _ = Describe("Updating a build over MCP", func() {
 						Expect(err).NotTo(HaveOccurred())
 						Expect(result.IsError).To(BeFalse())
 
-						otherToken, tokenErr := api.SecondUserAuthToken(ctx)
+						otherToken, _, tokenErr := api.NewAuthIdentity(ctx)
 						Expect(tokenErr).NotTo(HaveOccurred())
 						otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
 
@@ -184,11 +182,10 @@ var _ = Describe("Updating a build over MCP", func() {
 				otherKeyboardID string
 			)
 
-			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
+			var otherToken string
 
-				otherID, err = api.TokenSubject(otherToken)
+			BeforeEach(func(ctx SpecContext) {
+				otherToken, otherID, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
 				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
@@ -214,8 +211,6 @@ var _ = Describe("Updating a build over MCP", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeTrue())
 
-					otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-					Expect(tokenErr).NotTo(HaveOccurred())
 					otherClient := api.NewMCPClient(support.BaseURL()+"/mcp", otherToken)
 
 					check, checkErr := otherClient.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})

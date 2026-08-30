@@ -46,10 +46,8 @@ var _ = Describe("Creating a build over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
+			var token string
+			token, ownerID, err = api.NewAuthIdentity(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
@@ -235,9 +233,7 @@ var _ = Describe("Creating a build over MCP", func() {
 		BeforeEach(func(ctx SpecContext) {
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", "")
 
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-			ownerID, err = api.TokenSubject(token)
+			_, ownerID, err = api.NewAuthIdentity(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
 			keyboardID = "build-fixture-keyboard-" + uuid.NewString()

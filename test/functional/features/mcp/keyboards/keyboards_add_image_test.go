@@ -32,10 +32,8 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 
 	Context("given a valid bearer token", func() {
 		BeforeEach(func(ctx SpecContext) {
-			token, tokenErr := api.AuthToken(ctx)
-			Expect(tokenErr).NotTo(HaveOccurred())
-
-			ownerID, err = api.TokenSubject(token)
+			var token string
+			token, ownerID, err = api.NewAuthIdentity(ctx)
 			Expect(err).NotTo(HaveOccurred())
 
 			client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
@@ -127,10 +125,7 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 			var otherID string
 
 			BeforeEach(func(ctx SpecContext) {
-				otherToken, tokenErr := api.SecondUserAuthToken(ctx)
-				Expect(tokenErr).NotTo(HaveOccurred())
-
-				otherID, err = api.TokenSubject(otherToken)
+				_, otherID, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
 				Expect(db.SeedKeyboard(ctx, otherID, keyboardID, "public")).To(Succeed())

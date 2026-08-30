@@ -2,11 +2,8 @@ package api
 
 import (
 	"context"
-	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"sync"
 
 	"github.com/rogueserenity/oidc-testkit/pkg/oidctest"
@@ -50,71 +47,4 @@ func NewAuthIdentity(_ context.Context) (token, subject string, err error) {
 		return "", "", err
 	}
 	return s.Sign()
-}
-
-// fixtureIdentity is one (token, subject) pair minted once and reused, so
-// repeated AuthToken/SecondUserAuthToken calls in a spec return the same
-// identity - as the old fixed IdP fixture users did.
-type fixtureIdentity struct {
-	once    sync.Once
-	token   string
-	subject string
-	err     error
-}
-
-func (f *fixtureIdentity) get() (string, error) {
-	f.once.Do(func() {
-		s, err := sharedSigner()
-		if err != nil {
-			f.err = err
-			return
-		}
-		f.token, f.subject, f.err = s.Sign()
-	})
-	return f.token, f.err
-}
-
-var (
-	firstFixtureIdentity  fixtureIdentity
-	secondFixtureIdentity fixtureIdentity
-)
-
-// AuthToken returns a token for the primary test identity.
-//
-// Migration shim for specs not yet on NewAuthIdentity; removed with
-// SecondUserAuthToken and TokenSubject once they are.
-func AuthToken(_ context.Context) (string, error) {
-	return firstFixtureIdentity.get()
-}
-
-// SecondUserAuthToken returns a token for a second test identity, distinct
-// from AuthToken's. Migration shim - see AuthToken.
-func SecondUserAuthToken(_ context.Context) (string, error) {
-	return secondFixtureIdentity.get()
-}
-
-// TokenSubject returns a token's "sub" claim, unverified. Migration shim -
-// NewAuthIdentity returns the subject directly.
-func TokenSubject(token string) (string, error) {
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return "", fmt.Errorf("malformed token: expected 3 dot-separated parts, got %d", len(parts))
-	}
-
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("decoding token payload: %w", err)
-	}
-
-	var claims struct {
-		Subject string `json:"sub"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return "", fmt.Errorf("decoding token claims: %w", err)
-	}
-	if claims.Subject == "" {
-		return "", fmt.Errorf("token missing sub claim")
-	}
-
-	return claims.Subject, nil
 }

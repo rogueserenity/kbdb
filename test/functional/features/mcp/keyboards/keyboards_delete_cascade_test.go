@@ -29,11 +29,11 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build, over 
 		keyboardID = "mcp-cascade-keyboard-" + uuid.NewString()
 		buildID = "mcp-cascade-build-" + uuid.NewString()
 
-		token, tokenErr := api.AuthToken(ctx)
-		Expect(tokenErr).NotTo(HaveOccurred())
-
-		var err error
-		ownerID, err = api.TokenSubject(token)
+		var (
+			token string
+			err   error
+		)
+		token, ownerID, err = api.NewAuthIdentity(ctx)
 		Expect(err).NotTo(HaveOccurred())
 
 		client = api.NewMCPClient(support.BaseURL()+"/mcp", token)
