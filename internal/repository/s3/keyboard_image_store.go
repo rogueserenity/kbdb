@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -12,19 +13,21 @@ import (
 
 // KeyboardImageStore is the S3-backed repository.KeyboardImageStore.
 type KeyboardImageStore struct {
-	client  s3API
-	presign s3PresignAPI
-	bucket  string
+	client    s3API
+	presign   s3PresignAPI
+	bucket    string
+	getExpiry time.Duration
 }
 
 var _ repository.KeyboardImageStore = (*KeyboardImageStore)(nil)
 
 // NewKeyboardImageStore returns a KeyboardImageStore backed by client.
-func NewKeyboardImageStore(client *s3.Client, presign *s3.PresignClient, bucket string) *KeyboardImageStore {
+func NewKeyboardImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, getExpiry time.Duration) *KeyboardImageStore {
 	return &KeyboardImageStore{
-		client:  client,
-		presign: presign,
-		bucket:  bucket,
+		client:    client,
+		presign:   presign,
+		bucket:    bucket,
+		getExpiry: getExpiry,
 	}
 }
 
@@ -33,6 +36,11 @@ func (s *KeyboardImageStore) PresignGetKeyboardImage(ctx context.Context, key re
 	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(string(key)),
+	}, func(o *s3.PresignOptions) {
+		// Zero getExpiry falls through to the SDK's own default (15m).
+		if s.getExpiry > 0 {
+			o.Expires = s.getExpiry
+		}
 	})
 	if err != nil {
 		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)

@@ -3,6 +3,7 @@ package s3
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
@@ -12,19 +13,21 @@ import (
 
 // BuildImageStore is the S3-backed repository.BuildImageStore.
 type BuildImageStore struct {
-	client  s3API
-	presign s3PresignAPI
-	bucket  string
+	client    s3API
+	presign   s3PresignAPI
+	bucket    string
+	getExpiry time.Duration
 }
 
 var _ repository.BuildImageStore = (*BuildImageStore)(nil)
 
 // NewBuildImageStore returns a BuildImageStore backed by client.
-func NewBuildImageStore(client *s3.Client, presign *s3.PresignClient, bucket string) *BuildImageStore {
+func NewBuildImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, getExpiry time.Duration) *BuildImageStore {
 	return &BuildImageStore{
-		client:  client,
-		presign: presign,
-		bucket:  bucket,
+		client:    client,
+		presign:   presign,
+		bucket:    bucket,
+		getExpiry: getExpiry,
 	}
 }
 
@@ -33,6 +36,11 @@ func (s *BuildImageStore) PresignGetBuildImage(ctx context.Context, key reposito
 	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(string(key)),
+	}, func(o *s3.PresignOptions) {
+		// Zero getExpiry falls through to the SDK's own default (15m).
+		if s.getExpiry > 0 {
+			o.Expires = s.getExpiry
+		}
 	})
 	if err != nil {
 		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)
