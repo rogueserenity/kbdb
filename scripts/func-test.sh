@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 set -euo pipefail
-# Table names/API URL/auth tokens are real, stack-derived values from a
-# floci or CI deploy (not fixed local names) - func-setup.sh writes them to
-# .env.floci, which we source below; ci.yml sets them itself for its real
-# deployed stack, so only source .env.floci when it exists.
+# Table names/API URL/OIDC issuer+audience+signing-key path are real,
+# stack-derived (or run-generated) values from a floci or CI deploy, not fixed
+# local names - func-setup.sh writes them to .env.floci, which we source below;
+# ci.yml sets them itself for its real deployed stack, so only source
+# .env.floci when it exists.
 ENV_FILE="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.env.floci"
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -17,6 +18,9 @@ fi
 : "${KBDB_PROFILE_TABLE_NAME:?run scripts/func-setup.sh first}"
 : "${KBDB_PROFILE_USERNAME_TABLE_NAME:?run scripts/func-setup.sh first}"
 : "${KBDB_API_BASE_URL:?run scripts/func-setup.sh first}"
+: "${KBDB_OIDC_ISSUER:?run scripts/func-setup.sh first}"
+: "${KBDB_OIDC_AUDIENCE:?run scripts/func-setup.sh first}"
+: "${KBDB_OIDC_SIGNING_KEY_PATH:?run scripts/func-setup.sh first}"
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID:-test}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY:-test}"
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-2}"

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Deploys the real template.yaml to floci (a local AWS emulator) and starts
-# the WorkOS emulator against it, so the functional suite runs against a
-# real CloudFormation deploy - including a real API Gateway JWT authorizer,
-# which sam local start-api never emulated (write routes rely on it
-# entirely now - see internal/middleware.RequireAuthorizerIdentity).
+# Deploys the real template.yaml to floci via a genuine sam deploy, so the
+# functional suite runs against a real API Gateway JWT authorizer (sam local
+# start-api never emulated it - see internal/middleware.RequireAuthorizerIdentity).
+# oidc-testkit-gen produces the signing key the suite mints tokens with, plus
+# the discovery doc + JWKS published to floci S3 for the deployed authorizer.
 set -euo pipefail
 
 export AWS_ACCESS_KEY_ID=test
@@ -16,26 +16,17 @@ export AWS_ENDPOINT_URL="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
 STACK="${KBDB_FLOCI_STACK:-kbdb-floci}"
 ENDPOINT="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
 OIDC_BUCKET="kbdb-floci-oidc"
-CLIENT_ID="client_local_kbdb"
-# The base must match docker-compose.floci.yml's WORKOS_EMULATE_ISSUER
-# exactly. From emulator v0.10.0 the minted AuthKit access token's iss is
-# "<base>/user_management/<client_id>" (as in production WorkOS), and go-oidc
-# does an exact-string iss match against the discovery doc's "issuer" - so
-# the discovery doc's "issuer", the URL go-oidc fetches, and OidcIssuerBaseUrl
-# all carry the /user_management/<client_id> suffix, while WORKOS_EMULATE_ISSUER
-# stays bare (the emulator appends the suffix itself).
-ISSUER_BASE_URL="$ENDPOINT/$OIDC_BUCKET"
-ISSUER_URL="$ISSUER_BASE_URL/user_management/$CLIENT_ID"
+# The issuer is just where the discovery doc + JWKS are published; the same
+# string is threaded to --issuer, OidcIssuerBaseUrl, and KBDB_OIDC_ISSUER.
+ISSUER="$ENDPOINT/$OIDC_BUCKET"
+AUDIENCE="client_local_kbdb"
+OIDC_TESTKIT_VERSION="v1.0.0"
 
-docker compose -f docker-compose.floci.yml up -d floci workos-emulate
+docker compose -f docker-compose.floci.yml up -d floci
 
 for _ in $(seq 1 30); do
   curl -sf -o /dev/null "$ENDPOINT/_floci/health" && break
   sleep 1
-done
-for _ in $(seq 1 20); do
-  curl -sf -o /dev/null "http://localhost:4100/health" && break
-  sleep 0.5
 done
 
 sam build
@@ -50,29 +41,21 @@ aws ecr create-repository --repository-name "$ECR_REPO" >/dev/null 2>&1 || true
 REPO_URI=$(aws ecr describe-repositories \
   --repository-names "$ECR_REPO" --query 'repositories[0].repositoryUri' --output text)
 
-# The emulator does serve its own per-client discovery doc from v0.10.0, but
-# its jwks_uri points at localhost:4100, which the deployed Lambda can't
-# reach - so host a static doc here instead whose jwks_uri points at the
-# emulator's real, live, sibling-reachable JWKS endpoint. The doc is just a
-# pointer, never a JWKS snapshot, so it can't go stale and there's no signing
-# key to generate or pin (the emulator mints its own at startup). It's served
-# under the /user_management/<client_id> suffix so go-oidc finds it at
-# "$ISSUER_URL/.well-known/openid-configuration".
+OIDC_DIR="$(mktemp -d)"
+KEY_PATH="$OIDC_DIR/signing-key.pem"
+go run "github.com/rogueserenity/oidc-testkit/cmd/oidc-testkit-gen@${OIDC_TESTKIT_VERSION}" \
+  --issuer "$ISSUER" --out-dir "$OIDC_DIR" --key-out "$KEY_PATH" >/dev/null
+
 aws s3api create-bucket --bucket "$OIDC_BUCKET" \
   --region "$AWS_DEFAULT_REGION" \
   --create-bucket-configuration LocationConstraint="$AWS_DEFAULT_REGION" \
   >/dev/null 2>&1 || true
-
-cat <<EOF | aws s3 cp - "s3://$OIDC_BUCKET/user_management/$CLIENT_ID/.well-known/openid-configuration" \
+aws s3 cp "$OIDC_DIR/openid-configuration" \
+  "s3://$OIDC_BUCKET/.well-known/openid-configuration" \
   --content-type application/json >/dev/null
-{
-  "issuer": "$ISSUER_URL",
-  "jwks_uri": "http://workos-emulate:4100/oauth2/jwks",
-  "response_types_supported": ["code", "id_token"],
-  "subject_types_supported": ["public"],
-  "id_token_signing_alg_values_supported": ["RS256"]
-}
-EOF
+aws s3 cp "$OIDC_DIR/jwks.json" \
+  "s3://$OIDC_BUCKET/jwks.json" \
+  --content-type application/json >/dev/null
 
 sam deploy \
   --stack-name "$STACK" \
@@ -82,8 +65,8 @@ sam deploy \
   --capabilities CAPABILITY_IAM \
   --parameter-overrides \
     SkipApiRepository=true \
-    "OidcIssuerBaseUrl=$ISSUER_URL" \
-    "OidcAudience=client_local_kbdb" \
+    "OidcIssuerBaseUrl=$ISSUER" \
+    "OidcAudience=$AUDIENCE" \
     "IdpConsentPublicToken=public-token-test-local-kbdb" \
     "LogoutReturnOrigins=http://localhost:5173"
 
@@ -91,44 +74,6 @@ out() {
   aws cloudformation describe-stacks --stack-name "$STACK" \
     --query "Stacks[0].Outputs[?OutputKey=='$1'].OutputValue" --output text
 }
-
-# emulator v0.10.0 refuses password auth until email_verified, which the
-# seed file can't set. Create the user verified, or PUT the flag onto the
-# seed-created record.
-ensure_verified() {
-  local email="$1" password="$2" status
-
-  status=$(curl -s -o /dev/null -w '%{http_code}' -X POST http://localhost:4100/user_management/users \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer sk_test_default" \
-    -d "{\"email\":\"$email\",\"password\":\"$password\",\"email_verified\":true}")
-  case "$status" in
-    201) return ;;
-    409|422) ;;
-    *) echo "creating emulator user $email failed (HTTP $status)" >&2; exit 1 ;;
-  esac
-
-  local user_id
-  user_id=$(curl -sf "http://localhost:4100/user_management/users?email=$email" \
-    -H "Authorization: Bearer sk_test_default" \
-    | python3 -c "import sys,json; d=json.load(sys.stdin)['data']; print(d[0]['id']) if d else exit('emulator user $email not found')")
-  curl -sf -X PUT "http://localhost:4100/user_management/users/$user_id" \
-    -H "Content-Type: application/json" \
-    -H "Authorization: Bearer sk_test_default" \
-    -d '{"email_verified":true}' >/dev/null
-}
-
-create_and_mint() {
-  local email="$1" password="$2"
-  ensure_verified "$email" "$password"
-  curl -sf -X POST http://localhost:4100/user_management/authenticate \
-    -H "Content-Type: application/json" \
-    -d "{\"client_id\":\"client_local_kbdb\",\"client_secret\":\"sk_test_default\",\"grant_type\":\"password\",\"email\":\"$email\",\"password\":\"$password\"}" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])"
-}
-
-KBDB_AUTH_TOKEN=$(create_and_mint "kbdb-local-test-user@rogueserenity.dev" "kbdb-local-test-password-1")
-KBDB_SECOND_USER_AUTH_TOKEN=$(create_and_mint "kbdb-local-second-user@rogueserenity.dev" "kbdb-local-test-password-2")
 
 API_ID=$(aws apigatewayv2 get-apis --query 'Items[0].ApiId' --output text)
 
@@ -144,8 +89,10 @@ export KBDB_KEYCAP_SET_TABLE_NAME=$(out KeycapSetTableName)
 export KBDB_BUILD_TABLE_NAME=$(out BuildTableName)
 export KBDB_PROFILE_TABLE_NAME=$(out ProfileTableName)
 export KBDB_PROFILE_USERNAME_TABLE_NAME=$(out ProfileUsernameTableName)
-export KBDB_AUTH_TOKEN=$KBDB_AUTH_TOKEN
-export KBDB_SECOND_USER_AUTH_TOKEN=$KBDB_SECOND_USER_AUTH_TOKEN
+export KBDB_OIDC_ISSUER='$ISSUER'
+export KBDB_OIDC_AUDIENCE='$AUDIENCE'
+export KBDB_OIDC_SIGNING_KEY_PATH='$KEY_PATH'
+export KBDB_OIDC_GEN_DIR='$OIDC_DIR'
 ENVEOF
 
 echo "Deployed. Wrote $ENV_FILE - mise run func-test sources it automatically."
