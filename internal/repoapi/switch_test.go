@@ -191,6 +191,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
 	s.Equal(&sw.Brand, summary.Brand)
 	s.Equal(&sw.Name, summary.Name)
 	s.Equal(&sw.Type, summary.Type)
+	s.Equal(sw.Purchase.OrderStatus, summary.OrderStatus)
 	s.Nil(summary.Image, "no image on the switch must map to a nil Image")
 }
 

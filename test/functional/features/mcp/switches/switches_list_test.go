@@ -14,14 +14,17 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
+type listSwitch struct {
+	ID          string  `json:"id"`
+	Brand       string  `json:"brand"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"`
+	OrderStatus *string `json:"order_status"`
+}
+
 type listOutput struct {
-	Switches []struct {
-		ID    string `json:"id"`
-		Brand string `json:"brand"`
-		Name  string `json:"name"`
-		Type  string `json:"type"`
-	} `json:"switches"`
-	NextCursor string `json:"next_cursor"`
+	Switches   []listSwitch `json:"switches"`
+	NextCursor string       `json:"next_cursor"`
 }
 
 func decodeListOutput(result *sdkmcp.CallToolResult) listOutput {
@@ -43,6 +46,16 @@ func idsOf(out listOutput) []string {
 	}
 
 	return ids
+}
+
+func seededBy(out listOutput, id string) *listSwitch {
+	for i := range out.Switches {
+		if out.Switches[i].ID == id {
+			return &out.Switches[i]
+		}
+	}
+
+	return nil
 }
 
 var _ = Describe("Listing switches over MCP", func() {
@@ -83,7 +96,15 @@ var _ = Describe("Listing switches over MCP", func() {
 				It("defaults to the caller's own collection and includes the private switch", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(idsOf(decodeListOutput(result))).To(ContainElement(switchID))
+
+					out := decodeListOutput(result)
+					Expect(idsOf(out)).To(ContainElement(switchID))
+
+					By("carrying order_status, which the summary lifts out of purchase")
+					seeded := seededBy(out, switchID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.OrderStatus).NotTo(BeNil())
+					Expect(*seeded.OrderStatus).To(Equal("Delivered"))
 				})
 			})
 

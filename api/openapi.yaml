@@ -1746,6 +1746,8 @@ components:
         type:
           type: string
           description: Open vocabulary — validated against the "switch_type" lookup at request time.
+        order_status:
+          type: string
         image:
           $ref: "#/components/schemas/SwitchImage"
           description: A freshly-minted presigned URL to the switch's image, if it has one set.

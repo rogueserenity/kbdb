@@ -25,8 +25,9 @@ func SeedSwitch(ctx context.Context, ownerID, id, visibility string) error {
 		"visibility": visibility,
 		"version":    0,
 		"purchase": map[string]any{
-			"vendor": "NovelKeys",
-			"price":  0.35,
+			"vendor":       "NovelKeys",
+			"price":        0.35,
+			"order_status": "Delivered",
 		},
 	})
 }

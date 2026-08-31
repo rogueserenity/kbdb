@@ -16,11 +16,12 @@ type ListSwitchesOutput struct {
 // SwitchSummary is the abbreviated switch shape returned by list_switches.
 // Call get_switch for the remaining fields.
 type SwitchSummary struct {
-	ID       string `json:"id" jsonschema:"the switch's unique id"`
-	Brand    string `json:"brand" jsonschema:"the switch's brand"`
-	Name     string `json:"name" jsonschema:"the switch's name"`
-	Type     string `json:"type" jsonschema:"the switch type, e.g. linear or tactile"`
-	HasImage bool   `json:"has_image" jsonschema:"whether this switch has an image on file"`
+	ID          string  `json:"id" jsonschema:"the switch's unique id"`
+	Brand       string  `json:"brand" jsonschema:"the switch's brand"`
+	Name        string  `json:"name" jsonschema:"the switch's name"`
+	Type        string  `json:"type" jsonschema:"the switch type, e.g. linear or tactile"`
+	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+	HasImage    bool    `json:"has_image" jsonschema:"whether this switch has an image on file"`
 }
 
 // GetSwitchInput is the get_switch tool arguments.
@@ -145,7 +146,7 @@ type SwitchPurchase struct {
 	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
 	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
-	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	Quantity     *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
 }
 
