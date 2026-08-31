@@ -52,7 +52,7 @@ file = "scripts/dev-teardown.sh"
 
 [tasks.func-setup]
 alias = "fs"
-description = "Deploy template.yaml to floci + start the WorkOS emulator for functional testing"
+description = "Deploy template.yaml to floci + generate local OIDC signing material for functional testing"
 file = "scripts/func-setup.sh"
 
 [tasks.func-teardown]
