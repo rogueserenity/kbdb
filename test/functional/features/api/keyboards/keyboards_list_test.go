@@ -25,7 +25,7 @@ var _ = Describe("Listing keyboards", func() {
 		client = api.NewKeyboardsClient()
 
 		// Derived from a freshly minted token, not a fixed fixture subject:
-		// in CI, AuthToken mints a real subject from the WorkOS emulator
+		// AuthToken mints a real subject from the oidc-testkit-signed token
 		// rather than a fixed fixture subject string, so the owner used
 		// to seed fixture data below must match whatever subject this
 		// environment's token actually carries.

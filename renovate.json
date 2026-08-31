@@ -10,25 +10,5 @@
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
-  },
-  "customManagers": [
-    {
-      "description": "ghcr.io/workos/emulate is pinned inside a run: script in ci.yml, so the github-actions manager can't see it",
-      "customType": "regex",
-      "managerFilePatterns": ["/^\\.github/workflows/ci\\.yml$/"],
-      "matchStrings": [
-        "ghcr\\.io/workos/emulate:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
-      ],
-      "depNameTemplate": "ghcr.io/workos/emulate",
-      "datasourceTemplate": "docker"
-    }
-  ],
-  "packageRules": [
-    {
-      "description": "A workos/emulate bump can be a breaking iss-claim change (see issue #295) - must be reviewed, never automerged. groupName forces the ci.yml (customManagers) and docker-compose.floci.yml (built-in docker-compose manager) updates onto one branch/PR so the pins can't drift apart.",
-      "matchDepNames": ["ghcr.io/workos/emulate"],
-      "groupName": "workos-emulate",
-      "automerge": false
-    }
-  ]
+  }
 }
