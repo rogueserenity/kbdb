@@ -13,6 +13,21 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
+type listItem struct {
+	ID          string  `json:"id"`
+	OrderStatus *string `json:"order_status"`
+}
+
+func itemByID(items []listItem, id string) *listItem {
+	for i := range items {
+		if items[i].ID == id {
+			return &items[i]
+		}
+	}
+
+	return nil
+}
+
 var _ = Describe("Listing switches", func() {
 	var (
 		resp       *http.Response
@@ -37,9 +52,7 @@ var _ = Describe("Listing switches", func() {
 
 	itemIDs := func(r *http.Response) []string {
 		var page struct {
-			Items []struct {
-				ID string `json:"id"`
-			} `json:"items"`
+			Items []listItem `json:"items"`
 		}
 		Expect(json.NewDecoder(r.Body).Decode(&page)).To(Succeed())
 		ids := make([]string, len(page.Items))
@@ -89,9 +102,7 @@ var _ = Describe("Listing switches", func() {
 					Expect(err).NotTo(HaveOccurred())
 
 					var page struct {
-						Items []struct {
-							ID string `json:"id"`
-						} `json:"items"`
+						Items []listItem `json:"items"`
 					}
 					Expect(json.Unmarshal(body, &page)).To(Succeed())
 					ids := make([]string, len(page.Items))
@@ -101,6 +112,12 @@ var _ = Describe("Listing switches", func() {
 
 					By("including all three seeded switches")
 					Expect(ids).To(ContainElements(publicID, authenticatedID, privateID))
+
+					By("carrying order_status, which the summary lifts out of purchase")
+					publicItem := itemByID(page.Items, publicID)
+					Expect(publicItem).NotTo(BeNil())
+					Expect(publicItem.OrderStatus).NotTo(BeNil())
+					Expect(*publicItem.OrderStatus).To(Equal("Delivered"))
 
 					By("omitting the image key on image-less switches rather than emitting it as null")
 					var raw struct {

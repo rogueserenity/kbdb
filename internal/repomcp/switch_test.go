@@ -195,19 +195,22 @@ func TestSwitchToMCPSummarySuite(t *testing.T) {
 
 func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 	notes := "should not appear"
+	orderStatus := "Delivered"
 
 	out := SwitchToMCPSummary(repository.Switch{
-		ID:    "sw-1",
-		Brand: "Gateron",
-		Name:  "Oil King",
-		Type:  "linear",
-		Notes: &notes,
+		ID:       "sw-1",
+		Brand:    "Gateron",
+		Name:     "Oil King",
+		Type:     "linear",
+		Notes:    &notes,
+		Purchase: repository.SwitchPurchase{OrderStatus: &orderStatus},
 	})
 
 	s.Equal("sw-1", out.ID)
 	s.Equal("Gateron", out.Brand)
 	s.Equal("Oil King", out.Name)
 	s.Equal("linear", out.Type)
+	s.Equal(&orderStatus, out.OrderStatus)
 	s.False(out.HasImage)
 }
 

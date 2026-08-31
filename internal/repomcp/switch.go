@@ -32,14 +32,16 @@ func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 }
 
 // SwitchToMCPSummary maps a repository.Switch to the abbreviated shape
-// list_switches returns.
+// list_switches returns. Lifts order_status out of purchase, so a switch
+// still on order is visible while browsing a list.
 func SwitchToMCPSummary(sw repository.Switch) schema.SwitchSummary {
 	return schema.SwitchSummary{
-		ID:       sw.ID,
-		Brand:    sw.Brand,
-		Name:     sw.Name,
-		Type:     sw.Type,
-		HasImage: sw.ImagePath != nil,
+		ID:          sw.ID,
+		Brand:       sw.Brand,
+		Name:        sw.Name,
+		Type:        sw.Type,
+		OrderStatus: sw.Purchase.OrderStatus,
+		HasImage:    sw.ImagePath != nil,
 	}
 }
 

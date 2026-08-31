@@ -70,7 +70,7 @@ type KeycapKitPurchase struct {
 	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
 	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
-	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 }
 
 // KeycapSetInput is the writable half of a keycap set, shared by

@@ -20,7 +20,7 @@ type KeyboardSummary struct {
 	Name        string  `json:"name" jsonschema:"the keyboard's name"`
 	Size        *string `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
 	Layout      *string `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
-	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, for a keyboard not yet delivered"`
+	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImages   bool    `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
 }
 
@@ -137,7 +137,7 @@ type KeyboardPurchase struct {
 	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
 	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
-	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, for one not yet delivered"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 }
 
 // ListKeyboardImagesInput is the list_keyboard_images tool's input.
