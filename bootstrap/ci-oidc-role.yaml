@@ -252,11 +252,17 @@ Resources:
                 Resource:
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/kbdb-api-kbdb-pr-*
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/kbdb-api-kbdb-pr-*
-              # logs:DescribeLogGroups only supports Resource: "*".
-              - Sid: LogsDescribe
+              - Sid: LogsDelivery
                 Effect: Allow
                 Action:
                   - logs:DescribeLogGroups
+                  - logs:DescribeResourcePolicies
+                  - logs:GetLogDelivery
+                  - logs:ListLogDeliveries
+                  - logs:CreateLogDelivery
+                  - logs:UpdateLogDelivery
+                  - logs:DeleteLogDelivery
+                  - logs:PutResourcePolicy
                 Resource: '*'
               - Sid: EcrRepoAccess
                 Effect: Allow
