@@ -334,11 +334,8 @@ Resources:
       LogGroupName: !Sub /aws/lambda/kbdb-api-${AWS::StackName}
       RetentionInDays: 14
 
-  # Access logs for HttpApi, including the JWT authorizer's own error
-  # reason (authorizer.error) - added after a per-PR CI stack's functional
-  # suite saw unexplained 401s (kbdb#371) with no logs left to diagnose
-  # once the stack tore down. Short retention since per-PR CI stacks are
-  # short-lived; a real deployment can raise this if needed.
+  # Added after kbdb#371's unexplained 401s left nothing to diagnose once
+  # the per-PR stack tore down.
   HttpApiAccessLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
@@ -875,9 +872,6 @@ Resources:
         DefaultAuthorizer: OidcAuthorizer
       AccessLogSettings:
         DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
-        # authorizer.error surfaces the JWT authorizer's rejection reason
-        # (e.g. token expired, JWKS fetch failure) that a bare status code
-        # can't - the reason kbdb#371's unexplained 401s went undiagnosed.
         Format: >-
           {"requestId":"$context.requestId","ip":"$context.identity.sourceIp","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","routeKey":"$context.routeKey","status":"$context.status","authorizerError":"$context.authorizer.error","integrationErrorMessage":"$context.integrationErrorMessage","responseLatency":"$context.responseLatency"}
       # API Gateway auto-generates OPTIONS routes for CORS preflight and

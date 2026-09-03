@@ -242,7 +242,6 @@ Resources:
                   - dynamodb:PutItem
                   - dynamodb:DeleteItem
                 Resource: !Sub arn:aws:dynamodb:${AWS::Region}:${AWS::AccountId}:table/kbdb-pr-*
-              # template.yaml's ApiFunctionLogGroup and HttpApiAccessLogGroup.
               - Sid: LogsScoped
                 Effect: Allow
                 Action:
@@ -253,6 +252,12 @@ Resources:
                 Resource:
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/kbdb-api-kbdb-pr-*
                   - !Sub arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/apigateway/kbdb-api-kbdb-pr-*
+              # logs:DescribeLogGroups only supports Resource: "*".
+              - Sid: LogsDescribe
+                Effect: Allow
+                Action:
+                  - logs:DescribeLogGroups
+                Resource: '*'
               - Sid: EcrRepoAccess
                 Effect: Allow
                 Action:
