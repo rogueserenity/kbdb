@@ -334,6 +334,14 @@ Resources:
       LogGroupName: !Sub /aws/lambda/kbdb-api-${AWS::StackName}
       RetentionInDays: 14
 
+  # Added after kbdb#371's unexplained 401s left nothing to diagnose once
+  # the per-PR stack tore down.
+  HttpApiAccessLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/apigateway/kbdb-api-${AWS::StackName}
+      RetentionInDays: 14
+
   # Single Lambda function for all routes (REST entities + MCP), not split
   # by protocol or by entity - see plan rationale. Packaged as a container
   # image (aws-lambda-web-adapter sidecar) rather than a zip - see
@@ -862,6 +870,10 @@ Resources:
                 - !Ref OidcAudience
             IdentitySource: $request.header.Authorization
         DefaultAuthorizer: OidcAuthorizer
+      AccessLogSettings:
+        DestinationArn: !GetAtt HttpApiAccessLogGroup.Arn
+        Format: >-
+          {"requestId":"$context.requestId","ip":"$context.identity.sourceIp","requestTime":"$context.requestTime","httpMethod":"$context.httpMethod","routeKey":"$context.routeKey","status":"$context.status","authorizerError":"$context.authorizer.error","integrationErrorMessage":"$context.integrationErrorMessage","responseLatency":"$context.responseLatency"}
       # API Gateway auto-generates OPTIONS routes for CORS preflight and
       # exempts them from DefaultAuthorizer above - without this, browser
       # preflight requests 404 (no OPTIONS route exists) before the
