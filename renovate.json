@@ -7,6 +7,13 @@
   ],
   "automerge": true,
   "postUpdateOptions": ["gomodTidy"],
+  "packageRules": [
+    {
+      "groupName": "go toolchain version",
+      "matchManagers": ["mise", "dockerfile"],
+      "matchPackageNames": ["golang/go", "golang"]
+    }
+  ],
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true
