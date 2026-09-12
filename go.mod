@@ -10,7 +10,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue v1.21.4
 	github.com/aws/aws-sdk-go-v2/feature/dynamodb/expression v1.9.4
 	github.com/aws/aws-sdk-go-v2/service/dynamodb v1.68.0
-	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.0
+	github.com/aws/aws-sdk-go-v2/service/s3 v1.113.1
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/getkin/kin-openapi v0.149.0
 	github.com/google/uuid v1.6.0
