@@ -69,10 +69,11 @@ func decodeGetOutput(result *sdkmcp.CallToolResult) getOutput {
 }
 
 type listKeyboard struct {
-	ID          string  `json:"id"`
-	Brand       string  `json:"brand"`
-	Name        string  `json:"name"`
-	OrderStatus *string `json:"order_status"`
+	ID          string   `json:"id"`
+	Brand       string   `json:"brand"`
+	Name        string   `json:"name"`
+	OrderStatus *string  `json:"order_status"`
+	Price       *float64 `json:"price"`
 }
 
 type listOutput struct {

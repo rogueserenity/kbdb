@@ -15,13 +15,14 @@ type ListKeyboardsOutput struct {
 
 // KeyboardSummary is the reduced keyboard shape list_keyboards returns.
 type KeyboardSummary struct {
-	ID          string  `json:"id" jsonschema:"the keyboard's unique id"`
-	Brand       string  `json:"brand" jsonschema:"the keyboard's brand"`
-	Name        string  `json:"name" jsonschema:"the keyboard's name"`
-	Size        *string `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
-	Layout      *string `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
-	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
-	HasImages   bool    `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
+	ID          string   `json:"id" jsonschema:"the keyboard's unique id"`
+	Brand       string   `json:"brand" jsonschema:"the keyboard's brand"`
+	Name        string   `json:"name" jsonschema:"the keyboard's name"`
+	Size        *string  `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
+	Layout      *string  `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
+	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+	HasImages   bool     `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
+	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; omitted if the caller doesn't own this keyboard"`
 }
 
 // GetKeyboardInput is the get_keyboard tool input.

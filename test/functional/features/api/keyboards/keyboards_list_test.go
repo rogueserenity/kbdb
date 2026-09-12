@@ -48,6 +48,19 @@ var _ = Describe("Listing keyboards", func() {
 		return ids
 	}
 
+	itemByID := func(r *http.Response, id string) map[string]any {
+		var page struct {
+			Items []map[string]any `json:"items"`
+		}
+		Expect(json.NewDecoder(r.Body).Decode(&page)).To(Succeed())
+		for _, item := range page.Items {
+			if item["id"] == id {
+				return item
+			}
+		}
+		return nil
+	}
+
 	Context("given the owner has keyboards at every visibility tier", func() {
 		var publicID, authenticatedID, privateID string
 
@@ -129,6 +142,61 @@ var _ = Describe("Listing keyboards", func() {
 					ids := itemIDs(resp)
 					Expect(ids).To(ContainElements(publicID, authenticatedID))
 					Expect(ids).NotTo(ContainElement(privateID))
+				})
+			})
+		})
+	})
+
+	Context("given the owner has a keyboard with a purchase price", func() {
+		var keyboardID string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = "priced-keyboard-" + uuid.NewString()
+			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("listing keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("includes the price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemByID(resp, keyboardID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).To(HaveKeyWithValue("price", BeNumerically("==", 329.99)))
+				})
+			})
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("listing keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, token, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("omits the price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemByID(resp, keyboardID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).NotTo(HaveKey("price"))
 				})
 			})
 		})

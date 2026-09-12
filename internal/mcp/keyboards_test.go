@@ -55,6 +55,35 @@ func (s *HandleListKeyboardsSuite) TestOwnCollection_ReadsAllVisibilityTiers() {
 	s.Require().NoError(err)
 }
 
+func (s *HandleListKeyboardsSuite) TestOwnCollection_IncludesPrice() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.Keyboard{{ID: "kb-1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+
+	handler := handleListKeyboards(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Keyboards, 1)
+	s.Require().NotNil(out.Keyboards[0].Price)
+	s.InDelta(price, *out.Keyboards[0].Price, 0.0001)
+}
+
+func (s *HandleListKeyboardsSuite) TestOtherUsersCollection_OmitsPrice() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		List(mock.Anything, otherID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.Keyboard{{ID: "kb-1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+
+	handler := handleListKeyboards(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Keyboards, 1)
+	s.Nil(out.Keyboards[0].Price)
+}
+
 func (s *HandleListKeyboardsSuite) TestOtherUsersCollection_ExcludesPrivate() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, otherID, []repository.Visibility{

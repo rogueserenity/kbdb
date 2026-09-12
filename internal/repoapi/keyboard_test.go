@@ -240,7 +240,7 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_MapsOnlySummaryFields() {
 	kb := fullRepoKeyboard()
 	images := mocks.NewMockKeyboardImageStore(s.T())
 
-	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images)
+	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images, true)
 	s.Require().NoError(err)
 
 	s.Equal(&kb.ID, summary.Id)
@@ -250,6 +250,26 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_MapsOnlySummaryFields() {
 	s.Equal(kb.Layout, summary.Layout)
 	s.Equal(kb.Purchase.OrderStatus, summary.OrderStatus)
 	s.Nil(summary.Image, "no images on the keyboard must map to a nil Image")
+}
+
+func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_IsOwner_IncludesPrice() {
+	kb := fullRepoKeyboard()
+	images := mocks.NewMockKeyboardImageStore(s.T())
+
+	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images, true)
+	s.Require().NoError(err)
+
+	s.Equal(kb.Purchase.Price, summary.Price)
+}
+
+func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NotOwner_OmitsPrice() {
+	kb := fullRepoKeyboard()
+	images := mocks.NewMockKeyboardImageStore(s.T())
+
+	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images, false)
+	s.Require().NoError(err)
+
+	s.Nil(summary.Price)
 }
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirstImagePresigned() {
@@ -262,7 +282,7 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirst
 	images := mocks.NewMockKeyboardImageStore(s.T())
 	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img1).Return("https://example.com/img1", nil)
 
-	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images)
+	summary, err := KeyboardToAPISummary(s.T().Context(), kb, images, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.Image)
@@ -277,7 +297,7 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_PresignError_Propagates() 
 	images := mocks.NewMockKeyboardImageStore(s.T())
 	images.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
 
-	_, err := KeyboardToAPISummary(s.T().Context(), kb, images)
+	_, err := KeyboardToAPISummary(s.T().Context(), kb, images, true)
 
 	s.Require().Error(err)
 }

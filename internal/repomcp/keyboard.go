@@ -26,9 +26,10 @@ func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
 }
 
 // KeyboardToMCPSummary lifts order_status out of purchase, so a keyboard
-// still on order is visible while browsing a list.
-func KeyboardToMCPSummary(kb repository.Keyboard) schema.KeyboardSummary {
-	return schema.KeyboardSummary{
+// still on order is visible while browsing a list. isOwner hides Price
+// from non-owners, same as [KeyboardToMCP].
+func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool) schema.KeyboardSummary {
+	summary := schema.KeyboardSummary{
 		ID:          kb.ID,
 		Brand:       kb.Brand,
 		Name:        kb.Name,
@@ -37,6 +38,11 @@ func KeyboardToMCPSummary(kb repository.Keyboard) schema.KeyboardSummary {
 		OrderStatus: kb.Purchase.OrderStatus,
 		HasImages:   len(kb.Images) > 0,
 	}
+	if isOwner {
+		summary.Price = kb.Purchase.Price
+	}
+
+	return summary
 }
 
 func keyboardDesignToMCP(d repository.KeyboardDesign) *schema.KeyboardDesign {

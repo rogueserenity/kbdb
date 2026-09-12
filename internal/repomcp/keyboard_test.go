@@ -169,7 +169,7 @@ func (s *KeyboardToMCPSummarySuite) TestIncludesOrderStatusFromPurchase() {
 		Name:     "Sixty",
 		Size:     &size,
 		Purchase: repository.KeyboardPurchase{OrderStatus: &status},
-	})
+	}, true)
 
 	s.Equal("kb-1", out.ID)
 	s.Equal("TKL", *out.Size)
@@ -178,9 +178,32 @@ func (s *KeyboardToMCPSummarySuite) TestIncludesOrderStatusFromPurchase() {
 }
 
 func (s *KeyboardToMCPSummarySuite) TestNoPurchase_LeavesOrderStatusNil() {
-	out := KeyboardToMCPSummary(repository.Keyboard{ID: "kb-1"})
+	out := KeyboardToMCPSummary(repository.Keyboard{ID: "kb-1"}, true)
 
 	s.Nil(out.OrderStatus)
+}
+
+func (s *KeyboardToMCPSummarySuite) TestIsOwner_IncludesPrice() {
+	price := 199.99
+
+	out := KeyboardToMCPSummary(repository.Keyboard{
+		ID:       "kb-1",
+		Purchase: repository.KeyboardPurchase{Price: &price},
+	}, true)
+
+	s.Require().NotNil(out.Price)
+	s.InDelta(price, *out.Price, 0.0001)
+}
+
+func (s *KeyboardToMCPSummarySuite) TestNotOwner_OmitsPrice() {
+	price := 199.99
+
+	out := KeyboardToMCPSummary(repository.Keyboard{
+		ID:       "kb-1",
+		Purchase: repository.KeyboardPurchase{Price: &price},
+	}, false)
+
+	s.Nil(out.Price)
 }
 
 type KeyboardFromMCPSuite struct {

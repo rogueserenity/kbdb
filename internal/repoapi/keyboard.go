@@ -98,8 +98,9 @@ func KeyboardToRepo(in api.KeyboardInput) repository.Keyboard {
 // KeyboardToAPISummary maps a repository.Keyboard to the KeyboardSummary
 // schema returned by the list endpoint. Image is the first entry of
 // Images, presigned, if any - mirrors [BuildToAPISummary]'s handling of a
-// build's images.
-func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore) (api.KeyboardSummary, error) {
+// build's images. isOwner hides Price from non-owners, same as
+// [KeyboardToAPI].
+func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool) (api.KeyboardSummary, error) {
 	var image *api.KeyboardImage
 	if first := repository.SortedKeyboardImages(kb.Images); len(first) > 0 {
 		url, err := images.PresignGetKeyboardImage(ctx, first[0].Path)
@@ -109,7 +110,7 @@ func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images re
 		image = &api.KeyboardImage{ImageId: first[0].ImageID, Url: url}
 	}
 
-	return api.KeyboardSummary{
+	summary := api.KeyboardSummary{
 		Id:          &kb.ID,
 		Brand:       &kb.Brand,
 		Name:        &kb.Name,
@@ -117,7 +118,12 @@ func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images re
 		Layout:      kb.Layout,
 		OrderStatus: kb.Purchase.OrderStatus,
 		Image:       image,
-	}, nil
+	}
+	if isOwner {
+		summary.Price = kb.Purchase.Price
+	}
+
+	return summary, nil
 }
 
 func keyboardMaterialColorToAPI(m repository.KeyboardMaterialColor) *api.MaterialColor {
