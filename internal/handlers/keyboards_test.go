@@ -91,6 +91,43 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OtherUser_RequestsPublicAndAuthen
 	s.Equal(http.StatusOK, rec.Code)
 }
 
+func (s *ListKeyboardsSuite) TestListKeyboards_Owner_IncludesPrice() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	price := 199.99
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.KeyboardListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Require().NotNil((*got.Items)[0].Price)
+	s.InDelta(price, *(*got.Items)[0].Price, 0.0001)
+}
+
+func (s *ListKeyboardsSuite) TestListKeyboards_OtherUser_OmitsPrice() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	price := 199.99
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.KeyboardListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Nil((*got.Items)[0].Price)
+}
+
 func (s *ListKeyboardsSuite) TestListKeyboards_PassesLimitAndCursor() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 5, "abc").

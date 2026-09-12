@@ -47,13 +47,14 @@ func ListKeyboards(repo repository.KeyboardRepository, images repository.Keyboar
 		errs := make([]error, len(keyboards))
 
 		ctx := r.Context()
+		isOwner := authz.IsOwner(ctx, ownerID)
 		var wg sync.WaitGroup
 		for i, kb := range keyboards {
 			wg.Add(1)
 			go func(i int, kb repository.Keyboard) {
 				defer wg.Done()
 
-				summary, err := repoapi.KeyboardToAPISummary(ctx, kb, images)
+				summary, err := repoapi.KeyboardToAPISummary(ctx, kb, images, isOwner)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping keyboard %q to API summary: %w", kb.ID, err)
 					return

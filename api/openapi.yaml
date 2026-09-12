@@ -1586,6 +1586,11 @@ components:
         image:
           $ref: "#/components/schemas/KeyboardImage"
           description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Keyboard resource).
+        price:
+          $ref: "#/components/schemas/Money"
+          description: >
+            Same as Keyboard.purchase.price - omitted for a keyboard the
+            caller doesn't own.
 
     KeyboardListPage:
       type: object

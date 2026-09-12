@@ -81,9 +81,10 @@ func handleListKeyboards(repo repository.KeyboardRepository) mcp.ToolHandlerFor[
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
 		}
 
+		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.KeyboardSummary, len(keyboards))
 		for i, kb := range keyboards {
-			items[i] = repomcp.KeyboardToMCPSummary(kb)
+			items[i] = repomcp.KeyboardToMCPSummary(kb, isOwner)
 		}
 
 		return nil, schema.ListKeyboardsOutput{Keyboards: items, NextCursor: nextCursor}, nil

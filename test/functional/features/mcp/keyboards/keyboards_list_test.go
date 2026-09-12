@@ -59,6 +59,10 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					Expect(seeded).NotTo(BeNil())
 					Expect(seeded.OrderStatus).NotTo(BeNil())
 					Expect(*seeded.OrderStatus).To(Equal("Delivered"))
+
+					By("including the price, since the caller owns this keyboard")
+					Expect(seeded.Price).NotTo(BeNil())
+					Expect(*seeded.Price).To(BeNumerically("==", 329.99))
 				})
 			})
 
@@ -128,10 +132,17 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					result, err = client.CallTool(ctx, "list_keyboards", map[string]any{"user_id": otherID})
 				})
 
-				It("includes the other user's public keyboard", func() {
+				It("includes the other user's public keyboard, without its price", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(idsOf(decodeListOutput(result))).To(ContainElement(otherKeyboardID))
+
+					out := decodeListOutput(result)
+					Expect(idsOf(out)).To(ContainElement(otherKeyboardID))
+
+					By("omitting the price, since the caller doesn't own this keyboard")
+					seeded := seededBy(out, otherKeyboardID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.Price).To(BeNil())
 				})
 			})
 		})
