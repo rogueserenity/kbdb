@@ -75,9 +75,10 @@ func handleListSwitches(repo repository.SwitchRepository) mcp.ToolHandlerFor[sch
 			return nil, schema.ListSwitchesOutput{}, errors.New("failed to list switches")
 		}
 
+		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.SwitchSummary, len(switches))
 		for i, sw := range switches {
-			items[i] = repomcp.SwitchToMCPSummary(sw)
+			items[i] = repomcp.SwitchToMCPSummary(sw, isOwner)
 		}
 
 		return nil, schema.ListSwitchesOutput{Switches: items, NextCursor: nextCursor}, nil

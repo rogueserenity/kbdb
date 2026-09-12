@@ -58,6 +58,35 @@ func (s *HandleListSwitchesSuite) TestOwnCollection_ReadsAllVisibilityTiers() {
 	s.Require().NoError(err)
 }
 
+func (s *HandleListSwitchesSuite) TestOwnCollection_IncludesPrice() {
+	price := 8.50
+	s.mockRepo.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.Switch{{ID: "sw-1", Purchase: repository.SwitchPurchase{Price: &price}}}, "", nil)
+
+	handler := handleListSwitches(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListSwitchesInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Switches, 1)
+	s.Require().NotNil(out.Switches[0].Price)
+	s.InDelta(price, *out.Switches[0].Price, 0.0001)
+}
+
+func (s *HandleListSwitchesSuite) TestOtherUsersCollection_OmitsPrice() {
+	price := 8.50
+	s.mockRepo.EXPECT().
+		List(mock.Anything, otherID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.Switch{{ID: "sw-1", Purchase: repository.SwitchPurchase{Price: &price}}}, "", nil)
+
+	handler := handleListSwitches(s.mockRepo)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListSwitchesInput{UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Switches, 1)
+	s.Nil(out.Switches[0].Price)
+}
+
 func (s *HandleListSwitchesSuite) TestOtherUsersCollection_ExcludesPrivate() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, otherID, []repository.Visibility{
