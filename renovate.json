@@ -12,15 +12,6 @@
       "groupName": "go toolchain version",
       "matchManagers": ["mise", "dockerfile"],
       "matchPackageNames": ["golang/go", "golang"]
-    },
-    {
-      "matchManagers": ["mise"],
-      "matchPackageNames": ["vektra/mockery"],
-      "postUpgradeTasks": {
-        "commands": ["mise run gen"],
-        "executionMode": "branch",
-        "fileFilters": ["**/mocks/*.go"]
-      }
     }
   ],
   "lockFileMaintenance": {
