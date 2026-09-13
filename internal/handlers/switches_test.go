@@ -91,6 +91,43 @@ func (s *ListSwitchesSuite) TestListSwitches_OtherUser_RequestsPublicAndAuthenti
 	s.Equal(http.StatusOK, rec.Code)
 }
 
+func (s *ListSwitchesSuite) TestListSwitches_Owner_IncludesPrice() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	price := 8.50
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Switch{{ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price}}}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.SwitchListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Require().NotNil((*got.Items)[0].Price)
+	s.InDelta(price, *(*got.Items)[0].Price, 0.0001)
+}
+
+func (s *ListSwitchesSuite) TestListSwitches_OtherUser_OmitsPrice() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	price := 8.50
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Switch{{ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price}}}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.SwitchListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Nil((*got.Items)[0].Price)
+}
+
 func (s *ListSwitchesSuite) TestListSwitches_PassesLimitAndCursor() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 5, "abc").

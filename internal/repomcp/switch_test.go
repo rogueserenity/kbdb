@@ -204,7 +204,7 @@ func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 		Type:     "linear",
 		Notes:    &notes,
 		Purchase: repository.SwitchPurchase{OrderStatus: &orderStatus},
-	})
+	}, true)
 
 	s.Equal("sw-1", out.ID)
 	s.Equal("Gateron", out.Brand)
@@ -217,9 +217,32 @@ func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 func (s *SwitchToMCPSummarySuite) TestImagePathSet_HasImageTrue() {
 	key := repository.SwitchImageKey("switches/u/sw-1/image")
 
-	out := SwitchToMCPSummary(repository.Switch{ImagePath: &key})
+	out := SwitchToMCPSummary(repository.Switch{ImagePath: &key}, true)
 
 	s.True(out.HasImage)
+}
+
+func (s *SwitchToMCPSummarySuite) TestIsOwner_IncludesPrice() {
+	price := 8.50
+
+	out := SwitchToMCPSummary(repository.Switch{
+		ID:       "sw-1",
+		Purchase: repository.SwitchPurchase{Price: &price},
+	}, true)
+
+	s.Require().NotNil(out.Price)
+	s.InDelta(price, *out.Price, 0.0001)
+}
+
+func (s *SwitchToMCPSummarySuite) TestNotOwner_OmitsPrice() {
+	price := 8.50
+
+	out := SwitchToMCPSummary(repository.Switch{
+		ID:       "sw-1",
+		Purchase: repository.SwitchPurchase{Price: &price},
+	}, false)
+
+	s.Nil(out.Price)
 }
 
 type SwitchFromMCPSuite struct {

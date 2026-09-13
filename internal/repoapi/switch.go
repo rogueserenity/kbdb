@@ -67,13 +67,17 @@ func SwitchToRepo(in api.SwitchInput) repository.Switch {
 
 // SwitchToAPISummary maps a repository.Switch to the SwitchSummary schema
 // returned by the list endpoint, presigning its image if it has one.
-func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore) (api.SwitchSummary, error) {
+// isOwner hides Price from non-owners, same as [SwitchToAPI].
+func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool) (api.SwitchSummary, error) {
 	summary := api.SwitchSummary{
 		Id:          &sw.ID,
 		Brand:       &sw.Brand,
 		Name:        &sw.Name,
 		Type:        &sw.Type,
 		OrderStatus: sw.Purchase.OrderStatus,
+	}
+	if isOwner {
+		summary.Price = sw.Purchase.Price
 	}
 
 	if sw.ImagePath != nil {

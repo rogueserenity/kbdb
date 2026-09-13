@@ -15,11 +15,12 @@ import (
 )
 
 type listSwitch struct {
-	ID          string  `json:"id"`
-	Brand       string  `json:"brand"`
-	Name        string  `json:"name"`
-	Type        string  `json:"type"`
-	OrderStatus *string `json:"order_status"`
+	ID          string   `json:"id"`
+	Brand       string   `json:"brand"`
+	Name        string   `json:"name"`
+	Type        string   `json:"type"`
+	OrderStatus *string  `json:"order_status"`
+	Price       *float64 `json:"price"`
 }
 
 type listOutput struct {
@@ -105,6 +106,10 @@ var _ = Describe("Listing switches over MCP", func() {
 					Expect(seeded).NotTo(BeNil())
 					Expect(seeded.OrderStatus).NotTo(BeNil())
 					Expect(*seeded.OrderStatus).To(Equal("Delivered"))
+
+					By("including the price, since the caller owns this switch")
+					Expect(seeded.Price).NotTo(BeNil())
+					Expect(*seeded.Price).To(BeNumerically("==", 0.35))
 				})
 			})
 
@@ -174,10 +179,17 @@ var _ = Describe("Listing switches over MCP", func() {
 					result, err = client.CallTool(ctx, "list_switches", map[string]any{"user_id": otherID})
 				})
 
-				It("includes the other user's public switch", func() {
+				It("includes the other user's public switch, without its price", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
-					Expect(idsOf(decodeListOutput(result))).To(ContainElement(otherSwitchID))
+
+					out := decodeListOutput(result)
+					Expect(idsOf(out)).To(ContainElement(otherSwitchID))
+
+					By("omitting the price, since the caller doesn't own this switch")
+					seeded := seededBy(out, otherSwitchID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.Price).To(BeNil())
 				})
 			})
 		})

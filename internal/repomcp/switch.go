@@ -33,9 +33,10 @@ func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 
 // SwitchToMCPSummary maps a repository.Switch to the abbreviated shape
 // list_switches returns. Lifts order_status out of purchase, so a switch
-// still on order is visible while browsing a list.
-func SwitchToMCPSummary(sw repository.Switch) schema.SwitchSummary {
-	return schema.SwitchSummary{
+// still on order is visible while browsing a list. isOwner hides Price
+// from non-owners, same as [SwitchToMCP].
+func SwitchToMCPSummary(sw repository.Switch, isOwner bool) schema.SwitchSummary {
+	summary := schema.SwitchSummary{
 		ID:          sw.ID,
 		Brand:       sw.Brand,
 		Name:        sw.Name,
@@ -43,6 +44,11 @@ func SwitchToMCPSummary(sw repository.Switch) schema.SwitchSummary {
 		OrderStatus: sw.Purchase.OrderStatus,
 		HasImage:    sw.ImagePath != nil,
 	}
+	if isOwner {
+		summary.Price = sw.Purchase.Price
+	}
+
+	return summary
 }
 
 func switchMaterialToMCP(m repository.SwitchMaterial) *schema.SwitchMaterial {

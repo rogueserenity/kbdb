@@ -57,13 +57,14 @@ func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImag
 		errs := make([]error, len(switches))
 
 		ctx := r.Context()
+		isOwner := authz.IsOwner(ctx, ownerID)
 		var wg sync.WaitGroup
 		for i, sw := range switches {
 			wg.Add(1)
 			go func(i int, sw repository.Switch) {
 				defer wg.Done()
 
-				summary, err := repoapi.SwitchToAPISummary(ctx, sw, images)
+				summary, err := repoapi.SwitchToAPISummary(ctx, sw, images, isOwner)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping switch %q to API summary: %w", sw.ID, err)
 					return

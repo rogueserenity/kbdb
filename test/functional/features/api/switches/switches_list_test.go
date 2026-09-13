@@ -14,8 +14,9 @@ import (
 )
 
 type listItem struct {
-	ID          string  `json:"id"`
-	OrderStatus *string `json:"order_status"`
+	ID          string   `json:"id"`
+	OrderStatus *string  `json:"order_status"`
+	Price       *float64 `json:"price"`
 }
 
 func itemByID(items []listItem, id string) *listItem {
@@ -127,6 +128,10 @@ var _ = Describe("Listing switches", func() {
 					for _, item := range raw.Items {
 						Expect(item).NotTo(HaveKey("image"))
 					}
+
+					By("including the price, since the caller owns these switches")
+					Expect(publicItem.Price).NotTo(BeNil())
+					Expect(*publicItem.Price).To(BeNumerically("==", 0.35))
 				})
 			})
 		})
@@ -167,9 +172,22 @@ var _ = Describe("Listing switches", func() {
 
 				It("returns the public and authenticated switches, but not the private one", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
-					ids := itemIDs(resp)
+
+					var page struct {
+						Items []listItem `json:"items"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&page)).To(Succeed())
+					ids := make([]string, len(page.Items))
+					for i, item := range page.Items {
+						ids[i] = item.ID
+					}
 					Expect(ids).To(ContainElements(publicID, authenticatedID))
 					Expect(ids).NotTo(ContainElement(privateID))
+
+					By("omitting the price, since the caller doesn't own these switches")
+					item := itemByID(page.Items, publicID)
+					Expect(item).NotTo(BeNil())
+					Expect(item.Price).To(BeNil())
 				})
 			})
 		})

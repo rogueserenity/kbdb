@@ -184,7 +184,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
 	sw := fullRepoSwitch()
 	images := mocks.NewMockSwitchImageStore(s.T())
 
-	summary, err := SwitchToAPISummary(s.T().Context(), sw, images)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
 	s.Require().NoError(err)
 
 	s.Equal(&sw.ID, summary.Id)
@@ -195,6 +195,26 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
 	s.Nil(summary.Image, "no image on the switch must map to a nil Image")
 }
 
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_IsOwner_IncludesPrice() {
+	sw := fullRepoSwitch()
+	images := mocks.NewMockSwitchImageStore(s.T())
+
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
+	s.Require().NoError(err)
+
+	s.Equal(sw.Purchase.Price, summary.Price)
+}
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_NotOwner_OmitsPrice() {
+	sw := fullRepoSwitch()
+	images := mocks.NewMockSwitchImageStore(s.T())
+
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, false)
+	s.Require().NoError(err)
+
+	s.Nil(summary.Price)
+}
+
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedURL() {
 	sw := fullRepoSwitch()
 	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
@@ -202,7 +222,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedU
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
 
-	summary, err := SwitchToAPISummary(s.T().Context(), sw, images)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.Image)
@@ -216,7 +236,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_PresignError_Propagates() {
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
 
-	_, err := SwitchToAPISummary(s.T().Context(), sw, images)
+	_, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
 
 	s.Require().Error(err)
 }

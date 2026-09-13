@@ -16,12 +16,13 @@ type ListSwitchesOutput struct {
 // SwitchSummary is the abbreviated switch shape returned by list_switches.
 // Call get_switch for the remaining fields.
 type SwitchSummary struct {
-	ID          string  `json:"id" jsonschema:"the switch's unique id"`
-	Brand       string  `json:"brand" jsonschema:"the switch's brand"`
-	Name        string  `json:"name" jsonschema:"the switch's name"`
-	Type        string  `json:"type" jsonschema:"the switch type, e.g. linear or tactile"`
-	OrderStatus *string `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
-	HasImage    bool    `json:"has_image" jsonschema:"whether this switch has an image on file"`
+	ID          string   `json:"id" jsonschema:"the switch's unique id"`
+	Brand       string   `json:"brand" jsonschema:"the switch's brand"`
+	Name        string   `json:"name" jsonschema:"the switch's name"`
+	Type        string   `json:"type" jsonschema:"the switch type, e.g. linear or tactile"`
+	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+	HasImage    bool     `json:"has_image" jsonschema:"whether this switch has an image on file"`
+	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; omitted if the caller doesn't own this switch"`
 }
 
 // GetSwitchInput is the get_switch tool arguments.
