@@ -151,7 +151,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() 
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 
 	s.Equal(&ks.ID, summary.Id)
@@ -168,7 +168,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_SetsAggregateOrderStatus
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.OrderStatus)
@@ -184,7 +184,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_Reso
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *kit.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.PrimaryKitImage)
@@ -200,7 +200,7 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithNoImage_Ni
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 	s.Nil(summary.PrimaryKitImage)
 }
@@ -212,9 +212,76 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitDeleted_NilIma
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images)
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
 	s.Require().NoError(err)
 	s.Nil(summary.PrimaryKitImage)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_IsOwner_SumsKnownKitPrices() {
+	ks := fullRepoKeycapSet()
+	kit1 := fullRepoKeycapKit()
+	kit1.ImagePath = nil
+	kit2 := fullRepoKeycapKit()
+	kit2.KitID = "kit2"
+	kit2.ImagePath = nil
+	kit2.Purchase.Price = floatPtr(35.00)
+	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.TotalCost)
+	s.InDelta(155.00, *summary.TotalCost, 0.0001)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_IsOwner_ExcludesUnpricedKits() {
+	ks := fullRepoKeycapSet()
+	kit1 := fullRepoKeycapKit()
+	kit1.ImagePath = nil
+	kit2 := fullRepoKeycapKit()
+	kit2.KitID = "kit2"
+	kit2.ImagePath = nil
+	kit2.Purchase.Price = nil
+	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.TotalCost)
+	s.InDelta(*kit1.Purchase.Price, *summary.TotalCost, 0.0001)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NoPricedKits_NilTotalCost() {
+	ks := fullRepoKeycapSet()
+	kit := fullRepoKeycapKit()
+	kit.ImagePath = nil
+	kit.Purchase.Price = nil
+	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true)
+	s.Require().NoError(err)
+
+	s.Nil(summary.TotalCost)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NotOwner_OmitsTotalCost() {
+	ks := fullRepoKeycapSet()
+	kit := fullRepoKeycapKit()
+	kit.ImagePath = nil
+	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
+
+	images := mocks.NewMockKeycapKitImageStore(s.T())
+
+	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, false)
+	s.Require().NoError(err)
+
+	s.Nil(summary.TotalCost)
 }
 
 func fullAPIKeycapSetInput() api.KeycapSetInput {

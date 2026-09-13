@@ -51,13 +51,14 @@ func ListKeycapSets(repo repository.KeycapSetRepository, images repository.Keyca
 		errs := make([]error, len(sets))
 
 		ctx := r.Context()
+		isOwner := authz.IsOwner(ctx, ownerID)
 		var wg sync.WaitGroup
 		for i, ks := range sets {
 			wg.Add(1)
 			go func(i int, ks repository.KeycapSet) {
 				defer wg.Done()
 
-				summary, err := repoapi.KeycapSetToAPISummary(ctx, ks, images)
+				summary, err := repoapi.KeycapSetToAPISummary(ctx, ks, images, isOwner)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping keycap set %q to API summary: %w", ks.ID, err)
 					return

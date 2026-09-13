@@ -2040,6 +2040,13 @@ components:
             The primary kit's image, if the set has one designated and it
             has an image set. Omitted otherwise — including when the
             designated primary kit no longer exists.
+        total_cost:
+          $ref: "#/components/schemas/Money"
+          description: >
+            Total cost of the set's kits with a known purchase price.
+            Kits with no known price are excluded rather than treated as
+            zero, so this may undercount. Omitted for a keycap set the
+            caller doesn't own, same as each kit's purchase.price.
 
     KeycapSetListPage:
       type: object

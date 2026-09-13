@@ -104,13 +104,22 @@ func KeycapSetToRepo(in api.KeycapSetInput) repository.KeycapSet {
 // is nil unless PrimaryKitID names a kit still present in Kits and that
 // kit has an ImagePath set, in which case it's a freshly minted presigned
 // GET URL - never persisted, never cached, mirroring KeycapKitToAPI.
-func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore) (api.KeycapSetSummary, error) {
+// isOwner hides TotalCost from non-owners, same as [KeycapSetToAPI] hides
+// each kit's Purchase.Price.
+func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapSetSummary, error) {
 	summary := api.KeycapSetSummary{
 		Id:          &ks.ID,
 		Brand:       &ks.Brand,
 		Name:        &ks.Name,
 		Profile:     ks.Profile,
 		OrderStatus: repository.AggregateOrderStatus(ks.Kits),
+	}
+	if isOwner {
+		prices := make([]*float64, 0, len(ks.Kits))
+		for _, k := range ks.Kits {
+			prices = append(prices, k.Purchase.Price)
+		}
+		summary.TotalCost = sumKnownCosts(prices...)
 	}
 
 	primaryKit := findKit(validPrimaryKitID(ks.PrimaryKitID, ks.Kits), ks.Kits)

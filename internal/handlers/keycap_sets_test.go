@@ -91,6 +91,49 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OtherUser_RequestsPublicAndAuth
 	s.Equal(http.StatusOK, rec.Code)
 }
 
+func (s *ListKeycapSetsSuite) TestListKeycapSets_Owner_IncludesTotalCost() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	price := 120.00
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.KeycapSet{{
+			ID:   "ks1",
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.KeycapSetListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Require().NotNil((*got.Items)[0].TotalCost)
+	s.InDelta(price, *(*got.Items)[0].TotalCost, 0.0001)
+}
+
+func (s *ListKeycapSetsSuite) TestListKeycapSets_OtherUser_OmitsTotalCost() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	price := 120.00
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.KeycapSet{{
+			ID:   "ks1",
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}}, "", nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.KeycapSetListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Nil((*got.Items)[0].TotalCost)
+}
+
 func (s *ListKeycapSetsSuite) TestListKeycapSets_PassesLimitAndCursor() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 5, "abc").

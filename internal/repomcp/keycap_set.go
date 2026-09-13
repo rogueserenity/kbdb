@@ -63,11 +63,13 @@ func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
 // summary fields themselves and PrimaryKitHasImage, which - like
 // KeycapKitToMCP's HasImage - reports presence only, never a presigned
 // URL a list result would then be stuck carrying a short-lived value in.
-func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
+// isOwner hides TotalCost from non-owners, same as [KeycapSetToMCP] hides
+// each kit's Purchase.Price.
+func KeycapSetToMCPSummary(ks repository.KeycapSet, isOwner bool) schema.KeycapSetSummary {
 	primaryKitID := validPrimaryKitID(ks.PrimaryKitID, ks.Kits)
 	primaryKit := findKit(primaryKitID, ks.Kits)
 
-	return schema.KeycapSetSummary{
+	summary := schema.KeycapSetSummary{
 		ID:                 ks.ID,
 		Brand:              ks.Brand,
 		Name:               ks.Name,
@@ -76,6 +78,36 @@ func KeycapSetToMCPSummary(ks repository.KeycapSet) schema.KeycapSetSummary {
 		PrimaryKitHasImage: primaryKit != nil && primaryKit.ImagePath != nil,
 		OrderStatus:        repository.AggregateOrderStatus(ks.Kits),
 	}
+	if isOwner {
+		prices := make([]*float64, 0, len(ks.Kits))
+		for _, k := range ks.Kits {
+			prices = append(prices, k.Purchase.Price)
+		}
+		summary.TotalCost = sumKnownCosts(prices...)
+	}
+
+	return summary
+}
+
+// sumKnownCosts mirrors repoapi's helper of the same name: sums the
+// non-nil components, treating an all-nil input as "no known cost"
+// rather than zero.
+func sumKnownCosts(components ...*float64) *float64 {
+	var total float64
+	var haveAny bool
+	for _, c := range components {
+		if c == nil {
+			continue
+		}
+		total += *c
+		haveAny = true
+	}
+
+	if !haveAny {
+		return nil //nolint:nilnil // no known-priced components is a valid, expected result
+	}
+
+	return &total
 }
 
 // findKit returns the kit in kits with the given kitID, or nil if kitID

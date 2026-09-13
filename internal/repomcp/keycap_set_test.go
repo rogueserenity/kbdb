@@ -152,7 +152,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary() {
 		Brand:   "GMK",
 		Name:    "Olivia",
 		Profile: &profile,
-	})
+	}, true)
 
 	s.Equal("ks-1", out.ID)
 	s.Equal("GMK", out.Brand)
@@ -172,7 +172,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_OrderStatus_SetsAggregat
 			"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{OrderStatus: &delivered}},
 			"kit-2": {KitID: "kit-2", Purchase: repository.KeycapKitPurchase{OrderStatus: &cancelled}},
 		},
-	})
+	}, true)
 
 	s.Require().NotNil(out.OrderStatus)
 	s.Equal("Delivered", *out.OrderStatus)
@@ -185,7 +185,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitWithImage_Repo
 		ID:           "ks-1",
 		PrimaryKitID: strPtr("kit-1"),
 		Kits:         map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", ImagePath: &imagePath}},
-	})
+	}, true)
 
 	s.Require().NotNil(out.PrimaryKitID)
 	s.Equal("kit-1", *out.PrimaryKitID)
@@ -197,10 +197,46 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_PrimaryKitDeleted_NilAnd
 		ID:           "ks-1",
 		PrimaryKitID: strPtr("no-longer-a-kit"),
 		Kits:         map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}},
-	})
+	}, true)
 
 	s.Nil(out.PrimaryKitID)
 	s.False(out.PrimaryKitHasImage)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_IsOwner_SumsKnownKitPrices() {
+	price1 := 120.00
+	price2 := 35.00
+
+	out := KeycapSetToMCPSummary(repository.KeycapSet{
+		ID: "ks-1",
+		Kits: map[string]repository.KeycapKit{
+			"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price1}},
+			"kit-2": {KitID: "kit-2", Purchase: repository.KeycapKitPurchase{Price: &price2}},
+		},
+	}, true)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(155.00, *out.TotalCost, 0.0001)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NoPricedKits_NilTotalCost() {
+	out := KeycapSetToMCPSummary(repository.KeycapSet{
+		ID:   "ks-1",
+		Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}},
+	}, true)
+
+	s.Nil(out.TotalCost)
+}
+
+func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NotOwner_OmitsTotalCost() {
+	price := 120.00
+
+	out := KeycapSetToMCPSummary(repository.KeycapSet{
+		ID:   "ks-1",
+		Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+	}, false)
+
+	s.Nil(out.TotalCost)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NoPurchaseFields_OmitsPurchase() {

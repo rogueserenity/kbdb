@@ -298,6 +298,78 @@ var _ = Describe("Listing keycap sets", func() {
 		})
 	})
 
+	Context("given the owner has a keycap set with a priced kit", func() {
+		var (
+			keycapSetID string
+			kitID       string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "priced-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+		})
+
+		itemTotalCost := func(r *http.Response, id string) map[string]any {
+			var page struct {
+				Items []map[string]any `json:"items"`
+			}
+			Expect(json.NewDecoder(r.Body).Decode(&page)).To(Succeed())
+			for _, item := range page.Items {
+				if item["id"] == id {
+					return item
+				}
+			}
+			return nil
+		}
+
+		Context("given the caller is the owner", func() {
+			When("listing keycap sets", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("includes the total_cost", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemTotalCost(resp, keycapSetID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).To(HaveKeyWithValue("total_cost", BeNumerically("==", 85.0)))
+				})
+			})
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("listing keycap sets", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, token, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("omits the total_cost", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemTotalCost(resp, keycapSetID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).NotTo(HaveKey("total_cost"))
+				})
+			})
+		})
+	})
+
 	DescribeTable("given an invalid limit",
 		func(ctx SpecContext, limit int) {
 			var err error
