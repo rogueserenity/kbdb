@@ -85,12 +85,13 @@ func decodeKeycapKitOutput(result *sdkmcp.CallToolResult) kitOutput {
 }
 
 type listedKeycapSet struct {
-	ID                 string  `json:"id"`
-	Brand              string  `json:"brand"`
-	Name               string  `json:"name"`
-	Profile            *string `json:"profile"`
-	PrimaryKitID       *string `json:"primary_kit_id"`
-	PrimaryKitHasImage bool    `json:"primary_kit_has_image"`
+	ID                 string   `json:"id"`
+	Brand              string   `json:"brand"`
+	Name               string   `json:"name"`
+	Profile            *string  `json:"profile"`
+	PrimaryKitID       *string  `json:"primary_kit_id"`
+	PrimaryKitHasImage bool     `json:"primary_kit_has_image"`
+	TotalCost          *float64 `json:"total_cost"`
 }
 
 type listOutput struct {
@@ -130,4 +131,14 @@ func idsOf(out listOutput) []string {
 	}
 
 	return ids
+}
+
+func seededBy(out listOutput, id string) *listedKeycapSet {
+	for i := range out.KeycapSets {
+		if out.KeycapSets[i].ID == id {
+			return &out.KeycapSets[i]
+		}
+	}
+
+	return nil
 }

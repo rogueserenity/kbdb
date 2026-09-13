@@ -171,6 +171,40 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 			})
 		})
 
+		Context("given the owner has a keycap set with a priced kit", func() {
+			var (
+				keycapSetID string
+				kitID       string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "priced-keycap-set-" + uuid.NewString()
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			})
+
+			When("the list_keycap_sets tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{})
+				})
+
+				It("includes the total_cost, since the caller owns this set", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					seeded := seededBy(out, keycapSetID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.TotalCost).NotTo(BeNil())
+					Expect(*seeded.TotalCost).To(BeNumerically("==", 85.0))
+				})
+			})
+		})
+
 		Context("given another user owns keycap sets at every visibility tier", func() {
 			var (
 				otherID         string
@@ -209,6 +243,42 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 					ids := idsOf(decodeListOutput(result))
 					Expect(ids).To(ContainElements(publicID, authenticatedID))
 					Expect(ids).NotTo(ContainElement(privateID))
+				})
+			})
+		})
+
+		Context("given another user owns a keycap set with a priced kit", func() {
+			var (
+				otherID     string
+				keycapSetID string
+				kitID       string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+
+				keycapSetID = "priced-keycap-set-" + uuid.NewString()
+				kitID = "kit-" + uuid.NewString()
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, otherID, keycapSetID, kitID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, otherID, keycapSetID)).To(Succeed())
+			})
+
+			When("the list_keycap_sets tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{"user_id": otherID})
+				})
+
+				It("omits the total_cost, since the caller doesn't own this set", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					seeded := seededBy(out, keycapSetID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.TotalCost).To(BeNil())
 				})
 			})
 		})

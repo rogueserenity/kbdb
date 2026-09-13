@@ -90,9 +90,10 @@ func handleListKeycapSets(repo repository.KeycapSetRepository) mcp.ToolHandlerFo
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
 		}
 
+		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.KeycapSetSummary, len(sets))
 		for i, ks := range sets {
-			items[i] = repomcp.KeycapSetToMCPSummary(ks)
+			items[i] = repomcp.KeycapSetToMCPSummary(ks, isOwner)
 		}
 
 		return nil, schema.ListKeycapSetsOutput{KeycapSets: items, NextCursor: nextCursor}, nil

@@ -15,13 +15,14 @@ type ListKeycapSetsOutput struct {
 
 // KeycapSetSummary is the reduced keycap set shape list_keycap_sets returns.
 type KeycapSetSummary struct {
-	ID                 string  `json:"id" jsonschema:"the keycap set's unique id"`
-	Brand              string  `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
-	Name               string  `json:"name" jsonschema:"the keycap set's name"`
-	Profile            *string `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
-	PrimaryKitID       *string `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit whose image represents this set, if one is designated and it still exists"`
-	PrimaryKitHasImage bool    `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file"`
-	OrderStatus        *string `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
+	ID                 string   `json:"id" jsonschema:"the keycap set's unique id"`
+	Brand              string   `json:"brand" jsonschema:"the keycap set's brand/designer, not where it was bought - see purchase.vendor on each kit for that"`
+	Name               string   `json:"name" jsonschema:"the keycap set's name"`
+	Profile            *string  `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
+	PrimaryKitID       *string  `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit whose image represents this set, if one is designated and it still exists"`
+	PrimaryKitHasImage bool     `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file"`
+	OrderStatus        *string  `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
+	TotalCost          *float64 `json:"total_cost,omitempty" jsonschema:"total cost of the set's kits with a known purchase price; kits with no known price are excluded rather than treated as zero, so this may undercount; omitted if the caller doesn't own this set"`
 }
 
 // GetKeycapSetInput is the get_keycap_set tool input.
