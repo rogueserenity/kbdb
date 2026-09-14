@@ -12,12 +12,15 @@ import (
 )
 
 // KeycapSetToAPI maps a repository.KeycapSet to its wire representation.
-// Returns an error if a stored kit's Purchase date doesn't match dateLayout,
-// or if a kit has an ImagePath and images.PresignGet fails. Kits are mapped
-// concurrently, sorted by kit_id for a stable order - each only touches its
-// own slot in mapped, and a set can have an unbounded number of kits, each
-// potentially needing its own S3 presign.
-func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapSet, error) {
+// The owner always sees each kit's own Purchase.Price; a non-owner sees it
+// only if ownerPrefs.ShowPriceToOthers. Returns an error if a stored kit's
+// Purchase date doesn't match dateLayout, or if a kit has an ImagePath and
+// images.PresignGet fails. Kits are mapped concurrently, sorted by kit_id
+// for a stable order - each only touches its own slot in mapped, and a set
+// can have an unbounded number of kits, each potentially needing its own S3
+// presign.
+func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapSet, error) {
+	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
 	var kits *[]api.KeycapKit
 	if len(ks.Kits) > 0 {
 		ids := sortedKitIDs(ks.Kits)
@@ -30,7 +33,7 @@ func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images reposit
 			go func(i int, k repository.KeycapKit) {
 				defer wg.Done()
 
-				apiKit, err := KeycapKitToAPI(ctx, k, images, isOwner)
+				apiKit, err := KeycapKitToAPI(ctx, k, images, showPrice)
 				if err != nil {
 					errs[i] = err
 					return
@@ -104,9 +107,10 @@ func KeycapSetToRepo(in api.KeycapSetInput) repository.KeycapSet {
 // is nil unless PrimaryKitID names a kit still present in Kits and that
 // kit has an ImagePath set, in which case it's a freshly minted presigned
 // GET URL - never persisted, never cached, mirroring KeycapKitToAPI.
-// isOwner hides TotalCost from non-owners, same as [KeycapSetToAPI] hides
-// each kit's Purchase.Price.
-func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapSetSummary, error) {
+// TotalCost is shown per ownerPrefs.ShowPriceToMe (owner) or
+// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [KeycapSetToAPI], the
+// owner isn't unconditionally shown price here.
+func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapSetSummary, error) {
 	summary := api.KeycapSetSummary{
 		Id:          &ks.ID,
 		Brand:       &ks.Brand,
@@ -114,7 +118,11 @@ func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images 
 		Profile:     ks.Profile,
 		OrderStatus: repository.AggregateOrderStatus(ks.Kits),
 	}
+	showPrice := ownerPrefs.ShowPriceToOthers
 	if isOwner {
+		showPrice = ownerPrefs.ShowPriceToMe
+	}
+	if showPrice {
 		prices := make([]*float64, 0, len(ks.Kits))
 		for _, k := range ks.Kits {
 			prices = append(prices, k.Purchase.Price)
@@ -149,9 +157,13 @@ func findKit(kitID *string, kits map[string]repository.KeycapKit) *repository.Ke
 
 // KeycapKitToAPI maps a repository.KeycapKit to its wire representation.
 // Image is nil unless k.ImagePath is set, in which case it's a freshly
-// minted presigned GET URL - never persisted, never cached.
-func KeycapKitToAPI(ctx context.Context, k repository.KeycapKit, images repository.KeycapKitImageStore, isOwner bool) (api.KeycapKit, error) {
-	purchase, err := keycapKitPurchaseToAPI(k.Purchase, isOwner)
+// minted presigned GET URL - never persisted, never cached. showPrice
+// gates Purchase.Price - callers resolve it from isOwner/ownerPrefs
+// themselves, since the right rule differs between the full-set GET
+// (KeycapSetToAPI, owner unconditional) and standalone kit create/update
+// (always the caller's own kit, so always true).
+func KeycapKitToAPI(ctx context.Context, k repository.KeycapKit, images repository.KeycapKitImageStore, showPrice bool) (api.KeycapKit, error) {
+	purchase, err := keycapKitPurchaseToAPI(k.Purchase, showPrice)
 	if err != nil {
 		return api.KeycapKit{}, err
 	}
@@ -184,7 +196,7 @@ func KeycapKitToRepo(in api.KeycapKitInput) repository.KeycapKit {
 	}
 }
 
-func keycapKitPurchaseToAPI(p repository.KeycapKitPurchase, isOwner bool) (*api.Purchase, error) {
+func keycapKitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice bool) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
@@ -193,7 +205,7 @@ func keycapKitPurchaseToAPI(p repository.KeycapKitPurchase, isOwner bool) (*api.
 		Vendor:      p.Vendor,
 		OrderStatus: p.OrderStatus,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = p.Price
 	}
 	if p.OrderDate != nil {

@@ -88,6 +88,47 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns the keycap set with a kit and has show_price_to_me false", func() {
+			var (
+				kitID           string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				kitID = "kit-" + uuid.NewString()
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+				Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+			})
+
+			When("the get_keycap_set tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keycap_set", map[string]any{"keycap_set_id": keycapSetID})
+				})
+
+				It("still returns the kit's purchase.price - single-item get always shows the owner their own price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeKeycapSetOutput(result)
+					Expect(out.KeycapSet.Kits).To(HaveLen(1))
+					Expect(out.KeycapSet.Kits[0].Purchase).NotTo(BeNil())
+					Expect(out.KeycapSet.Kits[0].Purchase.Price).NotTo(BeNil())
+					Expect(*out.KeycapSet.Kits[0].Purchase.Price).To(Equal(85.0))
+				})
+			})
+		})
+
 		Context("given the caller owns the keycap set and it has a primary kit", func() {
 			var kitID string
 
@@ -248,6 +289,53 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 
 					By("omitting price")
 					Expect(out.KeycapSet.Kits[0].Purchase.Price).To(BeNil())
+				})
+			})
+		})
+
+		Context("given another user owns a public keycap set with a kit and has show_price_to_others true", func() {
+			var (
+				otherID         string
+				kitID           string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+
+				kitID = "kit-" + uuid.NewString()
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedKeycapSetWithKit(ctx, otherID, keycapSetID, kitID, "public")).To(Succeed())
+				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, otherID, keycapSetID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, otherID, profileUsername)).To(Succeed())
+			})
+
+			When("the get_keycap_set tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keycap_set", map[string]any{
+						"keycap_set_id": keycapSetID,
+						"user_id":       otherID,
+					})
+				})
+
+				It("returns the kit with purchase.price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeKeycapSetOutput(result)
+					Expect(out.KeycapSet.Kits).To(HaveLen(1))
+					Expect(out.KeycapSet.Kits[0].Purchase).NotTo(BeNil())
+					Expect(out.KeycapSet.Kits[0].Purchase.Price).NotTo(BeNil())
+					Expect(*out.KeycapSet.Kits[0].Purchase.Price).To(Equal(85.0))
 				})
 			})
 		})

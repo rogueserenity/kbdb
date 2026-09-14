@@ -16,7 +16,8 @@ import (
 type HandleListKeycapSetsSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
+	mockRepo  *mocks.MockKeycapSetRepository
+	mockPrefs *mocks.MockPreferencesReader
 }
 
 func TestHandleListKeycapSetsSuite(t *testing.T) {
@@ -25,14 +26,16 @@ func TestHandleListKeycapSetsSuite(t *testing.T) {
 
 func (s *HandleListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
 }
 
 func (s *HandleListKeycapSetsSuite) TestBlankUserID_DefaultsToCaller() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, callerID, mock.Anything, defaultListLimit, "").
 		Return([]repository.KeycapSet{{ID: "ks-1", Brand: "GMK", Name: "Olivia"}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{})
 
 	s.Require().NoError(err)
@@ -48,14 +51,15 @@ func (s *HandleListKeycapSetsSuite) TestOwnCollection_ReadsAllVisibilityTiers() 
 			repository.VisibilityPrivate,
 		}, mock.Anything, mock.Anything).
 		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{})
 
 	s.Require().NoError(err)
 }
 
-func (s *HandleListKeycapSetsSuite) TestOwnCollection_IncludesTotalCost() {
+func (s *HandleListKeycapSetsSuite) TestOwnCollectionShowPriceToMeTrue_IncludesTotalCost() {
 	price := 120.00
 	s.mockRepo.EXPECT().
 		List(mock.Anything, callerID, mock.Anything, mock.Anything, mock.Anything).
@@ -63,8 +67,9 @@ func (s *HandleListKeycapSetsSuite) TestOwnCollection_IncludesTotalCost() {
 			ID:   "ks-1",
 			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{ShowPriceToMe: true}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{})
 
 	s.Require().NoError(err)
@@ -73,7 +78,25 @@ func (s *HandleListKeycapSetsSuite) TestOwnCollection_IncludesTotalCost() {
 	s.InDelta(price, *out.KeycapSets[0].TotalCost, 0.0001)
 }
 
-func (s *HandleListKeycapSetsSuite) TestOtherUsersCollection_OmitsTotalCost() {
+func (s *HandleListKeycapSetsSuite) TestOwnCollectionShowPriceToMeFalse_OmitsTotalCost() {
+	price := 120.00
+	s.mockRepo.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.KeycapSet{{
+			ID:   "ks-1",
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{ShowPriceToMe: false}, nil)
+
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.KeycapSets, 1)
+	s.Nil(out.KeycapSets[0].TotalCost)
+}
+
+func (s *HandleListKeycapSetsSuite) TestOtherUsersCollectionShowPriceToOthersFalse_OmitsTotalCost() {
 	price := 120.00
 	s.mockRepo.EXPECT().
 		List(mock.Anything, otherID, mock.Anything, mock.Anything, mock.Anything).
@@ -81,13 +104,33 @@ func (s *HandleListKeycapSetsSuite) TestOtherUsersCollection_OmitsTotalCost() {
 			ID:   "ks-1",
 			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{UserID: otherID})
 
 	s.Require().NoError(err)
 	s.Require().Len(out.KeycapSets, 1)
 	s.Nil(out.KeycapSets[0].TotalCost)
+}
+
+func (s *HandleListKeycapSetsSuite) TestOtherUsersCollectionShowPriceToOthersTrue_IncludesTotalCost() {
+	price := 120.00
+	s.mockRepo.EXPECT().
+		List(mock.Anything, otherID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.KeycapSet{{
+			ID:   "ks-1",
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.KeycapSets, 1)
+	s.Require().NotNil(out.KeycapSets[0].TotalCost)
+	s.InDelta(price, *out.KeycapSets[0].TotalCost, 0.0001)
 }
 
 func (s *HandleListKeycapSetsSuite) TestOtherUsersCollection_ExcludesPrivate() {
@@ -97,8 +140,9 @@ func (s *HandleListKeycapSetsSuite) TestOtherUsersCollection_ExcludesPrivate() {
 			repository.VisibilityAuthenticated,
 		}, mock.Anything, mock.Anything).
 		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{UserID: otherID})
 
 	s.Require().NoError(err)
@@ -108,8 +152,9 @@ func (s *HandleListKeycapSetsSuite) TestLimitAboveMax_IsClamped() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, mock.Anything, mock.Anything, maxListLimit, mock.Anything).
 		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, mock.Anything).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{Limit: 5000})
 
 	s.Require().NoError(err)
@@ -119,8 +164,9 @@ func (s *HandleListKeycapSetsSuite) TestCursorIsPropagated() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, "page-2").
 		Return(nil, "page-3", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, mock.Anything).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{Cursor: "page-2"})
 
 	s.Require().NoError(err)
@@ -128,7 +174,7 @@ func (s *HandleListKeycapSetsSuite) TestCursorIsPropagated() {
 }
 
 func (s *HandleListKeycapSetsSuite) TestNoCallerIdentity_ReturnsError() {
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(s.T().Context(), nil, schema.ListKeycapSetsInput{})
 
 	s.Require().ErrorIs(err, errNoCallerIdentity)
@@ -139,7 +185,7 @@ func (s *HandleListKeycapSetsSuite) TestRepositoryError_ReturnsError() {
 		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, "", errors.New("query failed"))
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{})
 
 	s.Require().ErrorContains(err, "failed to list keycap sets")
@@ -150,16 +196,29 @@ func (s *HandleListKeycapSetsSuite) TestInvalidCursor_ReturnsError() {
 		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, "stale").
 		Return(nil, "", repository.ErrInvalidCursor)
 
-	handler := handleListKeycapSets(s.mockRepo)
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{Cursor: "stale"})
 
 	s.Require().Error(err)
 }
 
+func (s *HandleListKeycapSetsSuite) TestPreferencesError_ReturnsError() {
+	s.mockRepo.EXPECT().
+		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, mock.Anything).Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
+
+	handler := handleListKeycapSets(s.mockRepo, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeycapSetsInput{})
+
+	s.Require().ErrorContains(err, "failed to list keycap sets")
+}
+
 type HandleGetKeycapSetSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
+	mockRepo  *mocks.MockKeycapSetRepository
+	mockPrefs *mocks.MockPreferencesReader
 }
 
 func TestHandleGetKeycapSetSuite(t *testing.T) {
@@ -168,6 +227,7 @@ func TestHandleGetKeycapSetSuite(t *testing.T) {
 
 func (s *HandleGetKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
 }
 
 func (s *HandleGetKeycapSetSuite) TestSucceeds() {
@@ -179,8 +239,9 @@ func (s *HandleGetKeycapSetSuite) TestSucceeds() {
 			Name:       "Olivia",
 			Visibility: repository.VisibilityPrivate,
 		}, nil)
+	// Owner path: no GetPreferences call expected.
 
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().NoError(err)
@@ -199,7 +260,7 @@ func (s *HandleGetKeycapSetSuite) TestKitsMapWithHasImage() {
 				"kit-2": {KitID: "kit-2", Name: "Novelties"}},
 		}, nil)
 
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().NoError(err)
@@ -209,7 +270,7 @@ func (s *HandleGetKeycapSetSuite) TestKitsMapWithHasImage() {
 }
 
 func (s *HandleGetKeycapSetSuite) TestBlankKeycapSetID_ReturnsError() {
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "  "})
 
 	s.Require().ErrorContains(err, "keycap_set_id must not be blank")
@@ -220,7 +281,7 @@ func (s *HandleGetKeycapSetSuite) TestNotFound_ReturnsNotFound() {
 		Get(mock.Anything, mock.Anything, "missing").
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "missing"})
 
 	s.Require().ErrorIs(err, errKeycapSetNotFound)
@@ -231,7 +292,7 @@ func (s *HandleGetKeycapSetSuite) TestOtherUsersPrivateKeycapSet_ReturnsNotFound
 		Get(mock.Anything, otherID, "ks-1").
 		Return(&repository.KeycapSet{ID: "ks-1", Visibility: repository.VisibilityPrivate}, nil)
 
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1", UserID: otherID})
 
 	s.Require().ErrorIs(err, errKeycapSetNotFound)
@@ -245,12 +306,72 @@ func (s *HandleGetKeycapSetSuite) TestOtherUsersPublicKeycapSet_Succeeds() {
 			Brand:      "GMK",
 			Visibility: repository.VisibilityPublic,
 		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1", UserID: otherID})
 
 	s.Require().NoError(err)
 	s.Equal("ks-1", out.KeycapSet.ID)
+}
+
+func (s *HandleGetKeycapSetSuite) TestOtherUsersPublicKeycapSetShowPriceToOthersTrue_IncludesKitPrice() {
+	price := 120.00
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, otherID, "ks-1").
+		Return(&repository.KeycapSet{
+			ID: "ks-1", Visibility: repository.VisibilityPublic,
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.KeycapSet.Kits, 1)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase.Price)
+	s.InDelta(price, *out.KeycapSet.Kits[0].Purchase.Price, 0.0001)
+}
+
+func (s *HandleGetKeycapSetSuite) TestOtherUsersPublicKeycapSetShowPriceToOthersFalse_OmitsKitPrice() {
+	price := 120.00
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, otherID, "ks-1").
+		Return(&repository.KeycapSet{
+			ID: "ks-1", Visibility: repository.VisibilityPublic,
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.KeycapSet.Kits, 1)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase)
+	s.Nil(out.KeycapSet.Kits[0].Purchase.Price)
+}
+
+func (s *HandleGetKeycapSetSuite) TestOwner_AlwaysIncludesKitPriceNoPreferencesLookup() {
+	price := 120.00
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "ks-1").
+		Return(&repository.KeycapSet{
+			ID: "ks-1", Visibility: repository.VisibilityPrivate,
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
+		}, nil)
+	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1"})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.KeycapSet.Kits, 1)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase.Price)
+	s.InDelta(price, *out.KeycapSet.Kits[0].Purchase.Price, 0.0001)
 }
 
 func (s *HandleGetKeycapSetSuite) TestRepositoryError_ReturnsError() {
@@ -258,7 +379,7 @@ func (s *HandleGetKeycapSetSuite) TestRepositoryError_ReturnsError() {
 		Get(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("get failed"))
 
-	handler := handleGetKeycapSet(s.mockRepo)
+	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1"})
 
 	s.Require().ErrorContains(err, "failed to get keycap set")

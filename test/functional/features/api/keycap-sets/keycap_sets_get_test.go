@@ -144,6 +144,114 @@ var _ = Describe("Getting a keycap set", func() {
 		})
 	})
 
+	Context("given a public keycap set with a priced kit and the owner has show_price_to_others true", func() {
+		var (
+			keycapSetID, kitID, profileUsername string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "public-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("getting the keycap set", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keycapSetID, token)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the kit with purchase.price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Kits []struct {
+							Purchase struct {
+								Price *float64 `json:"price"`
+							} `json:"purchase"`
+						} `json:"kits"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Kits).To(HaveLen(1))
+					Expect(got.Kits[0].Purchase.Price).NotTo(BeNil())
+					Expect(*got.Kits[0].Purchase.Price).To(Equal(85.0))
+				})
+			})
+		})
+	})
+
+	Context("given a private keycap set with a priced kit and the owner has show_price_to_me false", func() {
+		var (
+			keycapSetID, kitID, profileUsername string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			keycapSetID = "private-keycap-set-" + uuid.NewString()
+			kitID = "kit-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, kitID, "private")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("getting the keycap set", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keycapSetID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("still returns the kit with purchase.price - single-item GET always shows the owner their own price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Kits []struct {
+							Purchase struct {
+								Price *float64 `json:"price"`
+							} `json:"purchase"`
+						} `json:"kits"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Kits).To(HaveLen(1))
+					Expect(got.Kits[0].Purchase.Price).NotTo(BeNil())
+					Expect(*got.Kits[0].Purchase.Price).To(Equal(85.0))
+				})
+			})
+		})
+	})
+
 	Context("given a public keycap set whose kits have differing order statuses", func() {
 		var keycapSetID string
 
