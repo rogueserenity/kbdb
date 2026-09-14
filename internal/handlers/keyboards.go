@@ -22,8 +22,10 @@ import (
 
 // ListKeyboards reads the {userId} path value and lists that owner's
 // keyboards. Anonymous callers are allowed; visibility is scoped to what
-// the caller (if any) may read, per [authz.ReadableVisibilities].
-func ListKeyboards(repo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
+// the caller (if any) may read, per [authz.ReadableVisibilities]. Price
+// visibility is gated by the owner's Profile preferences - see
+// [repoapi.KeyboardToAPISummary].
+func ListKeyboards(repo repository.KeyboardRepository, images repository.KeyboardImageStore, prefs repository.PreferencesReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -43,6 +45,13 @@ func ListKeyboards(repo repository.KeyboardRepository, images repository.Keyboar
 			return
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(r.Context(), ownerID)
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to list keyboards")
+			return
+		}
+
 		items := make([]api.KeyboardSummary, len(keyboards))
 		errs := make([]error, len(keyboards))
 
@@ -54,7 +63,7 @@ func ListKeyboards(repo repository.KeyboardRepository, images repository.Keyboar
 			go func(i int, kb repository.Keyboard) {
 				defer wg.Done()
 
-				summary, err := repoapi.KeyboardToAPISummary(ctx, kb, images, isOwner)
+				summary, err := repoapi.KeyboardToAPISummary(ctx, kb, images, isOwner, ownerPrefs)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping keyboard %q to API summary: %w", kb.ID, err)
 					return
@@ -83,8 +92,10 @@ func ListKeyboards(repo repository.KeyboardRepository, images repository.Keyboar
 
 // GetKeyboard reads the {userId} and {keyboardId} path values. Anonymous callers
 // are allowed; a keyboard that exists but isn't readable by the caller
-// returns 404, not 403, to avoid revealing it exists.
-func GetKeyboard(repo repository.KeyboardRepository, images repository.KeyboardImageStore) http.HandlerFunc {
+// returns 404, not 403, to avoid revealing it exists. The owner always
+// sees their own price; a non-owner's visibility is gated by the owner's
+// Profile preferences - see [repoapi.KeyboardToAPI].
+func GetKeyboard(repo repository.KeyboardRepository, images repository.KeyboardImageStore, prefs repository.PreferencesReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keyboardId")
@@ -106,7 +117,18 @@ func GetKeyboard(repo repository.KeyboardRepository, images repository.KeyboardI
 			return
 		}
 
-		out, err := repoapi.KeyboardToAPI(r.Context(), *kb, images, authz.IsOwner(r.Context(), ownerID))
+		isOwner := authz.IsOwner(r.Context(), ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(r.Context(), ownerID)
+			if err != nil {
+				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeyboardID, id)
+				problem.Internal(w, "failed to get keyboard")
+				return
+			}
+		}
+
+		out, err := repoapi.KeyboardToAPI(r.Context(), *kb, images, isOwner, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, id)
 			problem.Internal(w, "failed to get keyboard")
@@ -201,8 +223,9 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, images repositor
 			return
 		}
 
-		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.KeyboardToAPI(r.Context(), *created, images, true)
+		// isOwner: true (already gated above); the owner is unconditionally
+		// shown price, so no preferences lookup is needed here.
+		out, err := repoapi.KeyboardToAPI(r.Context(), *created, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, created.ID)
 			problem.Internal(w, "failed to create keyboard")
@@ -245,8 +268,9 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, images repositor
 			return
 		}
 
-		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.KeyboardToAPI(r.Context(), *updated, images, true)
+		// isOwner: true (already gated above); the owner is unconditionally
+		// shown price, so no preferences lookup is needed here.
+		out, err := repoapi.KeyboardToAPI(r.Context(), *updated, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, updated.ID)
 			problem.Internal(w, "failed to update keyboard")

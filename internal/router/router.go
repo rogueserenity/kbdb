@@ -83,9 +83,9 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, keyboardImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, keyboardImageStore, profileRepo))))
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo, keyboardImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo, keyboardImageStore, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo, keyboardImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",

@@ -42,7 +42,7 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status},
 		Notes:      &notes,
 		Visibility: repository.VisibilityPublic,
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Equal("kb-1", out.ID)
 	s.Require().NotNil(out.Size)
@@ -59,7 +59,7 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 }
 
 func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {
-	out := KeyboardToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, true)
+	out := KeyboardToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
 
 	s.Nil(out.Design)
 	s.Nil(out.PCB)
@@ -75,7 +75,7 @@ func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {
 func (s *KeyboardToMCPSuite) TestDesignWithOnlyPlates_IsRetained() {
 	out := KeyboardToMCP(repository.Keyboard{
 		Design: repository.KeyboardDesign{Plates: []string{"Brass"}},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Require().NotNil(out.Design)
 	s.Nil(out.Design.TopCase)
@@ -89,7 +89,7 @@ func (s *KeyboardToMCPSuite) TestDesignWithOnlyOnePart_IsRetained() {
 		Design: repository.KeyboardDesign{
 			Weight: repository.KeyboardMaterialColor{Material: &material},
 		},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Require().NotNil(out.Design)
 	s.Require().NotNil(out.Design.Weight)
@@ -108,7 +108,7 @@ func (s *KeyboardToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	out := KeyboardToMCP(repository.Keyboard{
 		PCB:      repository.KeyboardPCB{Thickness: &thickness},
 		Purchase: repository.KeyboardPurchase{Price: &price},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Require().NotNil(out.PCB)
 	s.Require().NotNil(out.PCB.Thickness)
@@ -118,7 +118,7 @@ func (s *KeyboardToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	s.Zero(*out.Purchase.Price)
 }
 
-func (s *KeyboardToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRestOfPurchase() {
 	vendor := "Divinikey"
 	status := "Delivered"
 	price := 199.99
@@ -127,7 +127,7 @@ func (s *KeyboardToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status, Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, false)
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
 	s.Require().NotNil(out.Purchase)
 	s.Nil(out.Purchase.Price)
@@ -135,14 +135,28 @@ func (s *KeyboardToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 	s.Equal(&status, out.Purchase.OrderStatus)
 }
 
-func (s *KeyboardToMCPSuite) TestIsOwnerTrue_IncludesPrice() {
+func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	price := 199.99
 
 	out := KeyboardToMCP(repository.Keyboard{
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, true)
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Require().NotNil(out.Purchase)
+	s.Require().NotNil(out.Purchase.Price)
+	s.InDelta(price, *out.Purchase.Price, 0.0001)
+}
+
+func (s *KeyboardToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
+	price := 199.99
+
+	out := KeyboardToMCP(repository.Keyboard{
+		ID:         "kb-1",
+		Purchase:   repository.KeyboardPurchase{Price: &price},
+		Visibility: repository.VisibilityPublic,
+	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
@@ -169,7 +183,7 @@ func (s *KeyboardToMCPSummarySuite) TestIncludesOrderStatusFromPurchase() {
 		Name:     "Sixty",
 		Size:     &size,
 		Purchase: repository.KeyboardPurchase{OrderStatus: &status},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Equal("kb-1", out.ID)
 	s.Equal("TKL", *out.Size)
@@ -178,32 +192,55 @@ func (s *KeyboardToMCPSummarySuite) TestIncludesOrderStatusFromPurchase() {
 }
 
 func (s *KeyboardToMCPSummarySuite) TestNoPurchase_LeavesOrderStatusNil() {
-	out := KeyboardToMCPSummary(repository.Keyboard{ID: "kb-1"}, true)
+	out := KeyboardToMCPSummary(repository.Keyboard{ID: "kb-1"}, true, repository.ProfilePreferences{})
 
 	s.Nil(out.OrderStatus)
 }
 
-func (s *KeyboardToMCPSummarySuite) TestIsOwner_IncludesPrice() {
+func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 	price := 199.99
 
 	out := KeyboardToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
-	}, true)
+	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
 
 	s.Require().NotNil(out.Price)
 	s.InDelta(price, *out.Price, 0.0001)
 }
 
-func (s *KeyboardToMCPSummarySuite) TestNotOwner_OmitsPrice() {
+func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 	price := 199.99
 
 	out := KeyboardToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
-	}, false)
+	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Nil(out.Price)
+}
+
+func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice() {
+	price := 199.99
+
+	out := KeyboardToMCPSummary(repository.Keyboard{
+		ID:       "kb-1",
+		Purchase: repository.KeyboardPurchase{Price: &price},
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
+
+	s.Nil(out.Price)
+}
+
+func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
+	price := 199.99
+
+	out := KeyboardToMCPSummary(repository.Keyboard{
+		ID:       "kb-1",
+		Purchase: repository.KeyboardPurchase{Price: &price},
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Require().NotNil(out.Price)
+	s.InDelta(price, *out.Price, 0.0001)
 }
 
 type KeyboardFromMCPSuite struct {

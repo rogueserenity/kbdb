@@ -63,7 +63,10 @@ var deleteKeyboardImageTool = &mcp.Tool{
 	Description: "Removes an image from a keyboard. Idempotent: deleting an image that isn't there succeeds.",
 }
 
-func handleListKeyboards(repo repository.KeyboardRepository) mcp.ToolHandlerFor[schema.ListKeyboardsInput, schema.ListKeyboardsOutput] {
+func handleListKeyboards(
+	repo repository.KeyboardRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.ListKeyboardsInput, schema.ListKeyboardsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeyboardsInput) (*mcp.CallToolResult, schema.ListKeyboardsOutput, error) {
 		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
@@ -81,17 +84,26 @@ func handleListKeyboards(repo repository.KeyboardRepository) mcp.ToolHandlerFor[
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
+		}
+
 		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.KeyboardSummary, len(keyboards))
 		for i, kb := range keyboards {
-			items[i] = repomcp.KeyboardToMCPSummary(kb, isOwner)
+			items[i] = repomcp.KeyboardToMCPSummary(kb, isOwner, ownerPrefs)
 		}
 
 		return nil, schema.ListKeyboardsOutput{Keyboards: items, NextCursor: nextCursor}, nil
 	}
 }
 
-func handleGetKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[schema.GetKeyboardInput, schema.GetKeyboardOutput] {
+func handleGetKeyboard(
+	repo repository.KeyboardRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.GetKeyboardInput, schema.GetKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetKeyboardInput) (*mcp.CallToolResult, schema.GetKeyboardOutput, error) {
 		if strings.TrimSpace(in.KeyboardID) == "" {
 			return nil, schema.GetKeyboardOutput{}, errors.New("keyboard_id must not be blank")
@@ -108,7 +120,17 @@ func handleGetKeyboard(repo repository.KeyboardRepository) mcp.ToolHandlerFor[sc
 			return nil, schema.GetKeyboardOutput{}, err
 		}
 
-		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*kb, authz.IsOwner(ctx, ownerID))}, nil
+		isOwner := authz.IsOwner(ctx, ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			if err != nil {
+				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, in.KeyboardID)
+				return nil, schema.GetKeyboardOutput{}, errors.New("failed to get keyboard")
+			}
+		}
+
+		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*kb, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -132,8 +154,10 @@ func handleCreateKeyboard(
 			return nil, schema.CreateKeyboardOutput{}, errors.New("failed to create keyboard")
 		}
 
-		// isOwner: true - create always targets the caller's own collection.
-		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*created, true)}, nil
+		// isOwner: true (create always targets the caller's own collection);
+		// the owner is unconditionally shown price, so no preferences lookup
+		// is needed here.
+		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -157,8 +181,10 @@ func handleUpdateKeyboard(
 			return nil, schema.UpdateKeyboardOutput{}, mutErr
 		}
 
-		// isOwner: true - update always targets the caller's own collection.
-		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*updated, true)}, nil
+		// isOwner: true (update always targets the caller's own collection);
+		// the owner is unconditionally shown price, so no preferences lookup
+		// is needed here.
+		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 

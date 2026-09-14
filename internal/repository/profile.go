@@ -71,6 +71,14 @@ type Profile struct {
 	DiscordPK      *string `dynamodbav:"discord_pk,omitempty" json:"-"`
 }
 
+// PreferencesReader is the narrow slice of ProfileRepository that
+// price-gating code in other entities' handlers depends on, so they don't
+// need the full ProfileRepository surface (Create/Update/Delete/... are
+// irrelevant there). ProfileRepository satisfies it structurally.
+type PreferencesReader interface {
+	GetPreferences(ctx context.Context, ownerID string) (ProfilePreferences, error)
+}
+
 // ProfileRepository provides access to profiles. Reads take an explicit
 // ownerID (a profile is readable by anyone, subject to the caller's
 // discoverable check); writes read the caller from ctx, since a user can

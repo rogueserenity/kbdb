@@ -73,6 +73,42 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns the keyboard and has show_price_to_me false", func() {
+			var profileUsername string
+
+			BeforeEach(func(ctx SpecContext) {
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
+				Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+			})
+
+			When("the get_keyboard tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keyboard", map[string]any{"keyboard_id": keyboardID})
+				})
+
+				It("still returns purchase.price - single-item get always shows the owner their own price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeGetOutput(result)
+					Expect(out.Keyboard.Purchase).NotTo(BeNil())
+					Expect(out.Keyboard.Purchase.Price).NotTo(BeNil())
+					Expect(*out.Keyboard.Purchase.Price).To(Equal(329.99))
+				})
+			})
+		})
+
 		Context("given the keyboard never existed", func() {
 			When("the get_keyboard tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {
@@ -148,6 +184,50 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 
 					By("omitting price")
 					Expect(out.Keyboard.Purchase.Price).To(BeNil())
+				})
+			})
+		})
+
+		Context("given another user owns a public keyboard and has show_price_to_others true", func() {
+			var (
+				otherID         string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+				profileUsername = "u" + uuid.NewString()[:8]
+
+				Expect(db.SeedKeyboard(ctx, otherID, keyboardID, "public")).To(Succeed())
+				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeyboard(ctx, otherID, keyboardID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, otherID, profileUsername)).To(Succeed())
+			})
+
+			When("the get_keyboard tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_keyboard", map[string]any{
+						"keyboard_id": keyboardID,
+						"user_id":     otherID,
+					})
+				})
+
+				It("returns the keyboard with purchase.price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeGetOutput(result)
+					Expect(out.Keyboard.Purchase).NotTo(BeNil())
+					Expect(out.Keyboard.Purchase.Price).NotTo(BeNil())
+					Expect(*out.Keyboard.Purchase.Price).To(Equal(329.99))
 				})
 			})
 		})

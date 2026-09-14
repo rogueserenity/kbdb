@@ -13,12 +13,14 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// KeyboardToAPI maps a repository.Keyboard to its wire representation.
-// isOwner hides purchase.price from non-owners; the rest of purchase is
-// unaffected. Returns an error if a stored Purchase date doesn't match
-// dateLayout, or an image fails to presign.
-func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool) (api.Keyboard, error) {
-	purchase, err := keyboardPurchaseToAPI(kb.Purchase, isOwner)
+// KeyboardToAPI maps a repository.Keyboard to its wire representation. The
+// owner always sees their own purchase.price; a non-owner sees it only if
+// ownerPrefs.ShowPriceToOthers. The rest of purchase is unaffected. Returns
+// an error if a stored Purchase date doesn't match dateLayout, or an image
+// fails to presign.
+func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Keyboard, error) {
+	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
+	purchase, err := keyboardPurchaseToAPI(kb.Purchase, showPrice)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -98,9 +100,10 @@ func KeyboardToRepo(in api.KeyboardInput) repository.Keyboard {
 // KeyboardToAPISummary maps a repository.Keyboard to the KeyboardSummary
 // schema returned by the list endpoint. Image is the first entry of
 // Images, presigned, if any - mirrors [BuildToAPISummary]'s handling of a
-// build's images. isOwner hides Price from non-owners, same as
-// [KeyboardToAPI].
-func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool) (api.KeyboardSummary, error) {
+// build's images. Price is shown per ownerPrefs.ShowPriceToMe (owner) or
+// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [KeyboardToAPI], the
+// owner isn't unconditionally shown price here.
+func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardSummary, error) {
 	var image *api.KeyboardImage
 	if first := repository.SortedKeyboardImages(kb.Images); len(first) > 0 {
 		url, err := images.PresignGetKeyboardImage(ctx, first[0].Path)
@@ -119,7 +122,11 @@ func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images re
 		OrderStatus: kb.Purchase.OrderStatus,
 		Image:       image,
 	}
+	showPrice := ownerPrefs.ShowPriceToOthers
 	if isOwner {
+		showPrice = ownerPrefs.ShowPriceToMe
+	}
+	if showPrice {
 		summary.Price = kb.Purchase.Price
 	}
 
@@ -215,7 +222,7 @@ func keyboardPCBToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
 // dateLayout matches how openapi_types.Date marshals/unmarshals.
 const dateLayout = "2006-01-02"
 
-func keyboardPurchaseToAPI(p repository.KeyboardPurchase, isOwner bool) (*api.Purchase, error) {
+func keyboardPurchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
@@ -224,7 +231,7 @@ func keyboardPurchaseToAPI(p repository.KeyboardPurchase, isOwner bool) (*api.Pu
 		Vendor:      p.Vendor,
 		OrderStatus: p.OrderStatus,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = p.Price
 	}
 	if p.OrderDate != nil {
