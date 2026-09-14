@@ -10,15 +10,17 @@ import (
 // KeycapSetToMCP maps a repository.KeycapSet to its MCP tool shape. Unlike
 // repoapi.KeycapSetToAPI, this never presigns a GET URL for a kit's image -
 // KeycapKitToMCP reports only HasImage, so mapping a set can't fail the way
-// the REST mapping can on a presign error. isOwner hides each kit's
-// purchase.price from non-owners.
-func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool) schema.KeycapSet {
+// the REST mapping can on a presign error. The owner always sees each
+// kit's own purchase.price; a non-owner sees it only if
+// ownerPrefs.ShowPriceToOthers.
+func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeycapSet {
+	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
 	var kits []schema.KeycapKit
 	if len(ks.Kits) > 0 {
 		ids := sortedKitIDs(ks.Kits)
 		kits = make([]schema.KeycapKit, len(ids))
 		for i, id := range ids {
-			kits[i] = KeycapKitToMCP(ks.Kits[id], isOwner)
+			kits[i] = KeycapKitToMCP(ks.Kits[id], showPrice)
 		}
 	}
 
@@ -63,9 +65,10 @@ func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
 // summary fields themselves and PrimaryKitHasImage, which - like
 // KeycapKitToMCP's HasImage - reports presence only, never a presigned
 // URL a list result would then be stuck carrying a short-lived value in.
-// isOwner hides TotalCost from non-owners, same as [KeycapSetToMCP] hides
-// each kit's Purchase.Price.
-func KeycapSetToMCPSummary(ks repository.KeycapSet, isOwner bool) schema.KeycapSetSummary {
+// TotalCost is shown per ownerPrefs.ShowPriceToMe (owner) or
+// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [KeycapSetToMCP], the
+// owner isn't unconditionally shown price here.
+func KeycapSetToMCPSummary(ks repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeycapSetSummary {
 	primaryKitID := validPrimaryKitID(ks.PrimaryKitID, ks.Kits)
 	primaryKit := findKit(primaryKitID, ks.Kits)
 
@@ -78,7 +81,11 @@ func KeycapSetToMCPSummary(ks repository.KeycapSet, isOwner bool) schema.KeycapS
 		PrimaryKitHasImage: primaryKit != nil && primaryKit.ImagePath != nil,
 		OrderStatus:        repository.AggregateOrderStatus(ks.Kits),
 	}
+	showPrice := ownerPrefs.ShowPriceToOthers
 	if isOwner {
+		showPrice = ownerPrefs.ShowPriceToMe
+	}
+	if showPrice {
 		prices := make([]*float64, 0, len(ks.Kits))
 		for _, k := range ks.Kits {
 			prices = append(prices, k.Purchase.Price)
@@ -141,13 +148,17 @@ func KeycapSetFromMCP(in schema.KeycapSetInput) repository.KeycapSet {
 
 // KeycapKitToMCP maps a repository.KeycapKit to its MCP tool shape.
 // ImagePath collapses to the HasImage bool, never a URL - see
-// schema.KeycapKit for why. isOwner hides purchase.price from non-owners.
-func KeycapKitToMCP(k repository.KeycapKit, isOwner bool) schema.KeycapKit {
+// schema.KeycapKit for why. showPrice gates purchase.price - callers
+// resolve it from isOwner/ownerPrefs themselves, since the right rule
+// differs between the full-set GET (KeycapSetToMCP, owner unconditional)
+// and standalone kit create/update (always the caller's own kit, so
+// always true).
+func KeycapKitToMCP(k repository.KeycapKit, showPrice bool) schema.KeycapKit {
 	return schema.KeycapKit{
 		KitID:    k.KitID,
 		Name:     k.Name,
 		HasImage: k.ImagePath != nil,
-		Purchase: keycapKitPurchaseToMCP(k.Purchase, isOwner),
+		Purchase: keycapKitPurchaseToMCP(k.Purchase, showPrice),
 	}
 }
 
@@ -178,7 +189,7 @@ func keycapKitPurchaseFromMCP(p *schema.KeycapKitPurchase) repository.KeycapKitP
 
 // Dates pass through as strings, unlike repoapi's mapping, so this can't
 // fail on a malformed one. Mirrors [keyboardPurchaseToMCP].
-func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase, isOwner bool) *schema.KeycapKitPurchase {
+func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase, showPrice bool) *schema.KeycapKitPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil
@@ -190,7 +201,7 @@ func keycapKitPurchaseToMCP(p repository.KeycapKitPurchase, isOwner bool) *schem
 		DeliveryDate: p.DeliveryDate,
 		OrderStatus:  p.OrderStatus,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = p.Price
 	}
 

@@ -205,6 +205,48 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 			})
 		})
 
+		Context("given the owner has a priced kit and show_price_to_me is false", func() {
+			var (
+				keycapSetID     string
+				kitID           string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				keycapSetID = "priced-keycap-set-" + uuid.NewString()
+				kitID = "kit-" + uuid.NewString()
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
+				Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, ownerID, keycapSetID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+			})
+
+			When("the list_keycap_sets tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{})
+				})
+
+				It("omits the total_cost", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					seeded := seededBy(out, keycapSetID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.TotalCost).To(BeNil())
+				})
+			})
+		})
+
 		Context("given another user owns keycap sets at every visibility tier", func() {
 			var (
 				otherID         string
@@ -279,6 +321,52 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 					seeded := seededBy(out, keycapSetID)
 					Expect(seeded).NotTo(BeNil())
 					Expect(seeded.TotalCost).To(BeNil())
+				})
+			})
+		})
+
+		Context("given another user owns a keycap set with a priced kit and has show_price_to_others true", func() {
+			var (
+				otherID         string
+				keycapSetID     string
+				kitID           string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+
+				keycapSetID = "priced-keycap-set-" + uuid.NewString()
+				kitID = "kit-" + uuid.NewString()
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedKeycapSetWithPrimaryKit(ctx, otherID, keycapSetID, kitID, "public")).To(Succeed())
+				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeycapSet(ctx, otherID, keycapSetID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, otherID, profileUsername)).To(Succeed())
+			})
+
+			When("the list_keycap_sets tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_keycap_sets", map[string]any{"user_id": otherID})
+				})
+
+				It("includes the total_cost", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					seeded := seededBy(out, keycapSetID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.TotalCost).NotTo(BeNil())
+					Expect(*seeded.TotalCost).To(BeNumerically("==", 85.0))
 				})
 			})
 		})

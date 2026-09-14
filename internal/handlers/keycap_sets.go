@@ -26,8 +26,10 @@ import (
 // mapped to their summary concurrently - each only touches its own slot in
 // items, and a page can have up to 100 sets, each potentially needing its
 // own S3 presign for its primary kit's image - mirrors
-// [repoapi.KeycapSetToAPI]'s per-kit fan-out.
-func ListKeycapSets(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+// [repoapi.KeycapSetToAPI]'s per-kit fan-out. total_cost visibility is
+// gated by the owner's Profile preferences - see
+// [repoapi.KeycapSetToAPISummary].
+func ListKeycapSets(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore, prefs repository.PreferencesReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -47,6 +49,13 @@ func ListKeycapSets(repo repository.KeycapSetRepository, images repository.Keyca
 			return
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(r.Context(), ownerID)
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to list keycap sets")
+			return
+		}
+
 		items := make([]api.KeycapSetSummary, len(sets))
 		errs := make([]error, len(sets))
 
@@ -58,7 +67,7 @@ func ListKeycapSets(repo repository.KeycapSetRepository, images repository.Keyca
 			go func(i int, ks repository.KeycapSet) {
 				defer wg.Done()
 
-				summary, err := repoapi.KeycapSetToAPISummary(ctx, ks, images, isOwner)
+				summary, err := repoapi.KeycapSetToAPISummary(ctx, ks, images, isOwner, ownerPrefs)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping keycap set %q to API summary: %w", ks.ID, err)
 					return
@@ -87,8 +96,10 @@ func ListKeycapSets(repo repository.KeycapSetRepository, images repository.Keyca
 
 // GetKeycapSet reads the {userId} and {keycapSetId} path values. Anonymous callers
 // are allowed; a keycap set that exists but isn't readable by the caller
-// returns 404, not 403, to avoid revealing it exists.
-func GetKeycapSet(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore) http.HandlerFunc {
+// returns 404, not 403, to avoid revealing it exists. The owner always
+// sees each kit's price; a non-owner's visibility is gated by the owner's
+// Profile preferences - see [repoapi.KeycapSetToAPI].
+func GetKeycapSet(repo repository.KeycapSetRepository, images repository.KeycapKitImageStore, prefs repository.PreferencesReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keycapSetId")
@@ -110,7 +121,18 @@ func GetKeycapSet(repo repository.KeycapSetRepository, images repository.KeycapK
 			return
 		}
 
-		out, err := repoapi.KeycapSetToAPI(r.Context(), *ks, images, authz.IsOwner(r.Context(), ownerID))
+		isOwner := authz.IsOwner(r.Context(), ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(r.Context(), ownerID)
+			if err != nil {
+				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeycapSetID, id)
+				problem.Internal(w, "failed to get keycap set")
+				return
+			}
+		}
+
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *ks, images, isOwner, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, id)
 			problem.Internal(w, "failed to get keycap set")
@@ -209,8 +231,8 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.KeycapSetToAPI(r.Context(), *created, images, true)
+		// isOwner: true, already gated above - owner sees price unconditionally.
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *created, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, created.ID)
 			problem.Internal(w, "failed to create keycap set")
@@ -253,8 +275,8 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, images reposi
 			return
 		}
 
-		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.KeycapSetToAPI(r.Context(), *updated, images, true)
+		// isOwner: true, already gated above - owner sees price unconditionally.
+		out, err := repoapi.KeycapSetToAPI(r.Context(), *updated, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, updated.ID)
 			problem.Internal(w, "failed to update keycap set")

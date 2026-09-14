@@ -72,7 +72,10 @@ var deleteKeycapKitImageTool = &mcp.Tool{
 	Description: "Removes a kit's image. Idempotent: deleting a kit's image when it doesn't have one succeeds.",
 }
 
-func handleListKeycapSets(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.ListKeycapSetsInput, schema.ListKeycapSetsOutput] {
+func handleListKeycapSets(
+	repo repository.KeycapSetRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.ListKeycapSetsInput, schema.ListKeycapSetsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeycapSetsInput) (*mcp.CallToolResult, schema.ListKeycapSetsOutput, error) {
 		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
@@ -90,17 +93,26 @@ func handleListKeycapSets(repo repository.KeycapSetRepository) mcp.ToolHandlerFo
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
+		}
+
 		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.KeycapSetSummary, len(sets))
 		for i, ks := range sets {
-			items[i] = repomcp.KeycapSetToMCPSummary(ks, isOwner)
+			items[i] = repomcp.KeycapSetToMCPSummary(ks, isOwner, ownerPrefs)
 		}
 
 		return nil, schema.ListKeycapSetsOutput{KeycapSets: items, NextCursor: nextCursor}, nil
 	}
 }
 
-func handleGetKeycapSet(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[schema.GetKeycapSetInput, schema.GetKeycapSetOutput] {
+func handleGetKeycapSet(
+	repo repository.KeycapSetRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.GetKeycapSetInput, schema.GetKeycapSetOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetKeycapSetInput) (*mcp.CallToolResult, schema.GetKeycapSetOutput, error) {
 		if strings.TrimSpace(in.KeycapSetID) == "" {
 			return nil, schema.GetKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
@@ -117,7 +129,17 @@ func handleGetKeycapSet(repo repository.KeycapSetRepository) mcp.ToolHandlerFor[
 			return nil, schema.GetKeycapSetOutput{}, err
 		}
 
-		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*ks, authz.IsOwner(ctx, ownerID))}, nil
+		isOwner := authz.IsOwner(ctx, ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			if err != nil {
+				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID)
+				return nil, schema.GetKeycapSetOutput{}, errors.New("failed to get keycap set")
+			}
+		}
+
+		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*ks, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -141,8 +163,8 @@ func handleCreateKeycapSet(
 			return nil, schema.CreateKeycapSetOutput{}, errors.New("failed to create keycap set")
 		}
 
-		// isOwner: true - create always targets the caller's own collection.
-		return nil, schema.CreateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*created, true)}, nil
+		// isOwner: true, this always targets the caller's own collection.
+		return nil, schema.CreateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -166,8 +188,8 @@ func handleUpdateKeycapSet(
 			return nil, schema.UpdateKeycapSetOutput{}, mutErr
 		}
 
-		// isOwner: true - update always targets the caller's own collection.
-		return nil, schema.UpdateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*updated, true)}, nil
+		// isOwner: true, this always targets the caller's own collection.
+		return nil, schema.UpdateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 

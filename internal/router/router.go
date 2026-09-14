@@ -100,9 +100,9 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, imageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, imageStore, profileRepo))))
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
