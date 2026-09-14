@@ -170,9 +170,10 @@ func BuildToAPISummary(
 	}
 
 	summary := api.BuildSummary{
-		Id:        &b.ID,
-		BuildDate: buildDate,
-		Image:     image,
+		Id:         &b.ID,
+		KeyboardId: &b.Keyboard,
+		BuildDate:  buildDate,
+		Image:      image,
 	}
 
 	kb, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo, nil, false)

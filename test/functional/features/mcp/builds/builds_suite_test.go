@@ -61,8 +61,9 @@ type listedBuildKeyboard struct {
 }
 
 type listedBuild struct {
-	ID       string               `json:"id"`
-	Keyboard *listedBuildKeyboard `json:"keyboard"`
+	ID         string               `json:"id"`
+	KeyboardID string               `json:"keyboard_id"`
+	Keyboard   *listedBuildKeyboard `json:"keyboard"`
 }
 
 type listBuildsOutput struct {

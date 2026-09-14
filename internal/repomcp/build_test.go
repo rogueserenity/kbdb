@@ -214,6 +214,7 @@ func (s *BuildToMCPSummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName
 	s.Require().NoError(err)
 
 	s.Equal("build-1", out.ID)
+	s.Equal("kb-1", out.KeyboardID)
 	s.Equal(&buildDate, out.BuildDate)
 	s.False(out.HasImage)
 	s.Require().NotNil(out.Keyboard)
@@ -233,6 +234,7 @@ func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFai
 	s.Require().NoError(err)
 
 	s.Nil(out.Keyboard)
+	s.Equal("kb-1", out.KeyboardID)
 }
 
 func (s *BuildToMCPSummarySuite) TestKeyboardRepositoryError_ReturnsError() {
