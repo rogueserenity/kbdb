@@ -7,9 +7,10 @@ import (
 
 // KeyboardToMCP maps a repository.Keyboard to its MCP tool shape. Pointers
 // pass through undereferenced so a recorded zero survives, as
-// repoapi.KeyboardToAPI does. isOwner hides purchase.price from
-// non-owners.
-func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
+// repoapi.KeyboardToAPI does. The owner always sees their own
+// purchase.price; a non-owner sees it only if ownerPrefs.ShowPriceToOthers.
+func KeyboardToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Keyboard {
+	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
 	return schema.Keyboard{
 		ID:         kb.ID,
 		Brand:      kb.Brand,
@@ -18,7 +19,7 @@ func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
 		Layout:     kb.Layout,
 		Design:     keyboardDesignToMCP(kb.Design),
 		PCB:        keyboardPCBToMCP(kb.PCB),
-		Purchase:   keyboardPurchaseToMCP(kb.Purchase, isOwner),
+		Purchase:   keyboardPurchaseToMCP(kb.Purchase, showPrice),
 		Notes:      kb.Notes,
 		Visibility: string(kb.Visibility),
 		HasImages:  len(kb.Images) > 0,
@@ -26,9 +27,11 @@ func KeyboardToMCP(kb repository.Keyboard, isOwner bool) schema.Keyboard {
 }
 
 // KeyboardToMCPSummary lifts order_status out of purchase, so a keyboard
-// still on order is visible while browsing a list. isOwner hides Price
-// from non-owners, same as [KeyboardToMCP].
-func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool) schema.KeyboardSummary {
+// still on order is visible while browsing a list. Price is shown per
+// ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
+// (non-owner) - unlike [KeyboardToMCP], the owner isn't unconditionally
+// shown price here.
+func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeyboardSummary {
 	summary := schema.KeyboardSummary{
 		ID:          kb.ID,
 		Brand:       kb.Brand,
@@ -38,7 +41,11 @@ func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool) schema.KeyboardS
 		OrderStatus: kb.Purchase.OrderStatus,
 		HasImages:   len(kb.Images) > 0,
 	}
+	showPrice := ownerPrefs.ShowPriceToOthers
 	if isOwner {
+		showPrice = ownerPrefs.ShowPriceToMe
+	}
+	if showPrice {
 		summary.Price = kb.Purchase.Price
 	}
 
@@ -88,7 +95,7 @@ func keyboardPCBToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
 
 // Dates pass through as strings, unlike repoapi.KeyboardToAPI, so this can't
 // fail on a malformed one.
-func keyboardPurchaseToMCP(p repository.KeyboardPurchase, isOwner bool) *schema.KeyboardPurchase {
+func keyboardPurchaseToMCP(p repository.KeyboardPurchase, showPrice bool) *schema.KeyboardPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil
@@ -100,7 +107,7 @@ func keyboardPurchaseToMCP(p repository.KeyboardPurchase, isOwner bool) *schema.
 		DeliveryDate: p.DeliveryDate,
 		OrderStatus:  p.OrderStatus,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = p.Price
 	}
 

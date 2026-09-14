@@ -16,7 +16,8 @@ import (
 type HandleListKeyboardsSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeyboardRepository
+	mockRepo  *mocks.MockKeyboardRepository
+	mockPrefs *mocks.MockPreferencesReader
 }
 
 func TestHandleListKeyboardsSuite(t *testing.T) {
@@ -25,14 +26,16 @@ func TestHandleListKeyboardsSuite(t *testing.T) {
 
 func (s *HandleListKeyboardsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
 }
 
 func (s *HandleListKeyboardsSuite) TestBlankUserID_DefaultsToCaller() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, callerID, mock.Anything, defaultListLimit, "").
 		Return([]repository.Keyboard{{ID: "kb-1", Brand: "Mode", Name: "Sixty"}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
 
 	s.Require().NoError(err)
@@ -48,20 +51,22 @@ func (s *HandleListKeyboardsSuite) TestOwnCollection_ReadsAllVisibilityTiers() {
 			repository.VisibilityPrivate,
 		}, mock.Anything, mock.Anything).
 		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
 
 	s.Require().NoError(err)
 }
 
-func (s *HandleListKeyboardsSuite) TestOwnCollection_IncludesPrice() {
+func (s *HandleListKeyboardsSuite) TestOwnCollectionShowPriceToMeTrue_IncludesPrice() {
 	price := 199.99
 	s.mockRepo.EXPECT().
 		List(mock.Anything, callerID, mock.Anything, mock.Anything, mock.Anything).
 		Return([]repository.Keyboard{{ID: "kb-1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{ShowPriceToMe: true}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
 
 	s.Require().NoError(err)
@@ -70,18 +75,50 @@ func (s *HandleListKeyboardsSuite) TestOwnCollection_IncludesPrice() {
 	s.InDelta(price, *out.Keyboards[0].Price, 0.0001)
 }
 
-func (s *HandleListKeyboardsSuite) TestOtherUsersCollection_OmitsPrice() {
+func (s *HandleListKeyboardsSuite) TestOwnCollectionShowPriceToMeFalse_OmitsPrice() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.Keyboard{{ID: "kb-1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{ShowPriceToMe: false}, nil)
+
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Keyboards, 1)
+	s.Nil(out.Keyboards[0].Price)
+}
+
+func (s *HandleListKeyboardsSuite) TestOtherUsersCollectionShowPriceToOthersFalse_OmitsPrice() {
 	price := 199.99
 	s.mockRepo.EXPECT().
 		List(mock.Anything, otherID, mock.Anything, mock.Anything, mock.Anything).
 		Return([]repository.Keyboard{{ID: "kb-1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{UserID: otherID})
 
 	s.Require().NoError(err)
 	s.Require().Len(out.Keyboards, 1)
 	s.Nil(out.Keyboards[0].Price)
+}
+
+func (s *HandleListKeyboardsSuite) TestOtherUsersCollectionShowPriceToOthersTrue_IncludesPrice() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		List(mock.Anything, otherID, mock.Anything, mock.Anything, mock.Anything).
+		Return([]repository.Keyboard{{ID: "kb-1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Keyboards, 1)
+	s.Require().NotNil(out.Keyboards[0].Price)
+	s.InDelta(price, *out.Keyboards[0].Price, 0.0001)
 }
 
 func (s *HandleListKeyboardsSuite) TestOtherUsersCollection_ExcludesPrivate() {
@@ -91,8 +128,9 @@ func (s *HandleListKeyboardsSuite) TestOtherUsersCollection_ExcludesPrivate() {
 			repository.VisibilityAuthenticated,
 		}, mock.Anything, mock.Anything).
 		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{UserID: otherID})
 
 	s.Require().NoError(err)
@@ -102,8 +140,9 @@ func (s *HandleListKeyboardsSuite) TestLimitAboveMax_IsClamped() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, mock.Anything, mock.Anything, maxListLimit, mock.Anything).
 		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, mock.Anything).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{Limit: 5000})
 
 	s.Require().NoError(err)
@@ -113,8 +152,9 @@ func (s *HandleListKeyboardsSuite) TestCursorIsPropagated() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, "page-2").
 		Return(nil, "page-3", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, mock.Anything).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{Cursor: "page-2"})
 
 	s.Require().NoError(err)
@@ -122,7 +162,7 @@ func (s *HandleListKeyboardsSuite) TestCursorIsPropagated() {
 }
 
 func (s *HandleListKeyboardsSuite) TestNoCallerIdentity_ReturnsError() {
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(s.T().Context(), nil, schema.ListKeyboardsInput{})
 
 	s.Require().ErrorIs(err, errNoCallerIdentity)
@@ -133,7 +173,7 @@ func (s *HandleListKeyboardsSuite) TestRepositoryError_ReturnsError() {
 		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, "", errors.New("query failed"))
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
 
 	s.Require().ErrorContains(err, "failed to list keyboards")
@@ -144,16 +184,29 @@ func (s *HandleListKeyboardsSuite) TestInvalidCursor_ReturnsError() {
 		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, "stale").
 		Return(nil, "", repository.ErrInvalidCursor)
 
-	handler := handleListKeyboards(s.mockRepo)
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{Cursor: "stale"})
 
 	s.Require().Error(err)
 }
 
+func (s *HandleListKeyboardsSuite) TestPreferencesError_ReturnsError() {
+	s.mockRepo.EXPECT().
+		List(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(nil, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, mock.Anything).Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
+
+	handler := handleListKeyboards(s.mockRepo, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.ListKeyboardsInput{})
+
+	s.Require().ErrorContains(err, "failed to list keyboards")
+}
+
 type HandleGetKeyboardSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeyboardRepository
+	mockRepo  *mocks.MockKeyboardRepository
+	mockPrefs *mocks.MockPreferencesReader
 }
 
 func TestHandleGetKeyboardSuite(t *testing.T) {
@@ -162,6 +215,7 @@ func TestHandleGetKeyboardSuite(t *testing.T) {
 
 func (s *HandleGetKeyboardSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
 }
 
 func (s *HandleGetKeyboardSuite) TestSucceeds() {
@@ -173,8 +227,9 @@ func (s *HandleGetKeyboardSuite) TestSucceeds() {
 			Name:       "Sixty",
 			Visibility: repository.VisibilityPrivate,
 		}, nil)
+	// Owner path: no GetPreferences call expected.
 
-	handler := handleGetKeyboard(s.mockRepo)
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1"})
 
 	s.Require().NoError(err)
@@ -183,7 +238,7 @@ func (s *HandleGetKeyboardSuite) TestSucceeds() {
 }
 
 func (s *HandleGetKeyboardSuite) TestBlankKeyboardID_ReturnsError() {
-	handler := handleGetKeyboard(s.mockRepo)
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "  "})
 
 	s.Require().ErrorContains(err, "keyboard_id must not be blank")
@@ -194,7 +249,7 @@ func (s *HandleGetKeyboardSuite) TestNotFound_ReturnsNotFound() {
 		Get(mock.Anything, mock.Anything, "missing").
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleGetKeyboard(s.mockRepo)
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "missing"})
 
 	s.Require().ErrorIs(err, errKeyboardNotFound)
@@ -205,7 +260,7 @@ func (s *HandleGetKeyboardSuite) TestOtherUsersPrivateKeyboard_ReturnsNotFound()
 		Get(mock.Anything, otherID, "kb-1").
 		Return(&repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, nil)
 
-	handler := handleGetKeyboard(s.mockRepo)
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1", UserID: otherID})
 
 	s.Require().ErrorIs(err, errKeyboardNotFound)
@@ -219,12 +274,69 @@ func (s *HandleGetKeyboardSuite) TestOtherUsersPublicKeyboard_Succeeds() {
 			Brand:      "Mode",
 			Visibility: repository.VisibilityPublic,
 		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleGetKeyboard(s.mockRepo)
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1", UserID: otherID})
 
 	s.Require().NoError(err)
 	s.Equal("kb-1", out.Keyboard.ID)
+}
+
+func (s *HandleGetKeyboardSuite) TestOtherUsersPublicKeyboardShowPriceToOthersTrue_IncludesPrice() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, otherID, "kb-1").
+		Return(&repository.Keyboard{
+			ID: "kb-1", Visibility: repository.VisibilityPublic,
+			Purchase: repository.KeyboardPurchase{Price: &price},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Keyboard.Purchase)
+	s.Require().NotNil(out.Keyboard.Purchase.Price)
+	s.InDelta(price, *out.Keyboard.Purchase.Price, 0.0001)
+}
+
+func (s *HandleGetKeyboardSuite) TestOtherUsersPublicKeyboardShowPriceToOthersFalse_OmitsPrice() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, otherID, "kb-1").
+		Return(&repository.Keyboard{
+			ID: "kb-1", Visibility: repository.VisibilityPublic,
+			Purchase: repository.KeyboardPurchase{Price: &price},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Keyboard.Purchase)
+	s.Nil(out.Keyboard.Purchase.Price)
+}
+
+func (s *HandleGetKeyboardSuite) TestOwner_AlwaysIncludesPriceNoPreferencesLookup() {
+	price := 199.99
+	s.mockRepo.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(&repository.Keyboard{
+			ID: "kb-1", Visibility: repository.VisibilityPrivate,
+			Purchase: repository.KeyboardPurchase{Price: &price},
+		}, nil)
+	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1"})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Keyboard.Purchase)
+	s.Require().NotNil(out.Keyboard.Purchase.Price)
+	s.InDelta(price, *out.Keyboard.Purchase.Price, 0.0001)
 }
 
 func (s *HandleGetKeyboardSuite) TestRepositoryError_ReturnsError() {
@@ -232,7 +344,7 @@ func (s *HandleGetKeyboardSuite) TestRepositoryError_ReturnsError() {
 		Get(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("get failed"))
 
-	handler := handleGetKeyboard(s.mockRepo)
+	handler := handleGetKeyboard(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetKeyboardInput{KeyboardID: "kb-1"})
 
 	s.Require().ErrorContains(err, "failed to get keyboard")

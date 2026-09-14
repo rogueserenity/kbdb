@@ -41,6 +41,9 @@ packages:
       ProfileRepository:
         config:
           structname: 'MockProfileRepository'
+      PreferencesReader:
+        config:
+          structname: 'MockPreferencesReader'
       ProfileImageStore:
         config:
           structname: 'MockProfileImageStore'

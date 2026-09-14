@@ -202,6 +202,90 @@ var _ = Describe("Listing keyboards", func() {
 		})
 	})
 
+	Context("given the owner has a keyboard with a purchase price and show_price_to_me is false", func() {
+		var keyboardID, profileUsername string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = "priced-keyboard-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "public")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("listing keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("omits the price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemByID(resp, keyboardID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).NotTo(HaveKey("price"))
+				})
+			})
+		})
+	})
+
+	Context("given the owner has a keyboard with a purchase price and show_price_to_others is true", func() {
+		var keyboardID, profileUsername string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = "priced-keyboard-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "public")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("listing keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, token, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("includes the price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemByID(resp, keyboardID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).To(HaveKeyWithValue("price", BeNumerically("==", 329.99)))
+				})
+			})
+		})
+	})
+
 	DescribeTable("given an invalid limit",
 		func(ctx SpecContext, limit int) {
 			var err error

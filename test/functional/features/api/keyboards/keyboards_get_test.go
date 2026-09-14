@@ -102,6 +102,102 @@ var _ = Describe("Getting a keyboard", func() {
 		})
 	})
 
+	Context("given a public keyboard and the owner has show_price_to_others true", func() {
+		var keyboardID, profileUsername string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = seedKeyboard(ctx, "public")
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("getting the keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keyboardID, token)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the keyboard with purchase.price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Purchase struct {
+							Price *float64 `json:"price"`
+						} `json:"purchase"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+
+					Expect(got.Purchase.Price).NotTo(BeNil())
+					Expect(*got.Purchase.Price).To(Equal(329.99))
+				})
+			})
+		})
+	})
+
+	Context("given a private keyboard and the owner has show_price_to_me false", func() {
+		var keyboardID, profileUsername string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = seedKeyboard(ctx, "private")
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("getting the keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, keyboardID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("still returns the keyboard with purchase.price - single-item GET always shows the owner their own price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Purchase struct {
+							Price *float64 `json:"price"`
+						} `json:"purchase"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+
+					Expect(got.Purchase.Price).NotTo(BeNil())
+					Expect(*got.Purchase.Price).To(Equal(329.99))
+				})
+			})
+		})
+	})
+
 	Context("given an authenticated-only keyboard", func() {
 		var keyboardID string
 
