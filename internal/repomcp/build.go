@@ -55,9 +55,10 @@ func BuildFromMCP(in schema.BuildInput) repository.Build {
 // presigned URL.
 func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
 	summary := schema.BuildSummary{
-		ID:        b.ID,
-		BuildDate: b.BuildDate,
-		HasImage:  len(b.Images) > 0,
+		ID:         b.ID,
+		KeyboardID: b.Keyboard,
+		BuildDate:  b.BuildDate,
+		HasImage:   len(b.Images) > 0,
 	}
 
 	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)

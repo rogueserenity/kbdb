@@ -2390,6 +2390,12 @@ components:
       properties:
         id:
           type: string
+        keyboard_id:
+          type: string
+          description: >
+            The id of the referenced Keyboard resource - always present,
+            even if that keyboard no longer exists (in which case `keyboard`
+            below is omitted). Useful for grouping builds by keyboard.
         build_date:
           type: string
           format: date

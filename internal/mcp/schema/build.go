@@ -114,10 +114,11 @@ type ListBuildsOutput struct {
 
 // BuildSummary is the reduced build shape list_builds returns.
 type BuildSummary struct {
-	ID        string                `json:"id" jsonschema:"the build's unique id"`
-	BuildDate *string               `json:"build_date,omitempty" jsonschema:"when the build was assembled (YYYY-MM-DD)"`
-	HasImage  bool                  `json:"has_image" jsonschema:"whether this build has any images on file"`
-	Keyboard  *BuildSummaryKeyboard `json:"keyboard,omitempty" jsonschema:"the build's keyboard, denormalized for display; omitted if the referenced keyboard no longer exists"`
+	ID         string                `json:"id" jsonschema:"the build's unique id"`
+	KeyboardID string                `json:"keyboard_id" jsonschema:"the id of the referenced Keyboard resource - always present, even if that keyboard no longer exists (in which case keyboard is omitted); useful for grouping builds by keyboard"`
+	BuildDate  *string               `json:"build_date,omitempty" jsonschema:"when the build was assembled (YYYY-MM-DD)"`
+	HasImage   bool                  `json:"has_image" jsonschema:"whether this build has any images on file"`
+	Keyboard   *BuildSummaryKeyboard `json:"keyboard,omitempty" jsonschema:"the build's keyboard, denormalized for display; omitted if the referenced keyboard no longer exists"`
 }
 
 // BuildSummaryKeyboard is BuildSummary's denormalized keyboard reference.

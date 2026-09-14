@@ -70,6 +70,7 @@ var _ = Describe("Listing builds over MCP", func() {
 					Expect(buildIDsOf(out)).To(ContainElements(publicID, authenticatedID, privateID))
 
 					for _, b := range out.Builds {
+						Expect(b.KeyboardID).To(Equal(keyboardID))
 						Expect(b.Keyboard).NotTo(BeNil())
 						Expect(b.Keyboard.Brand).To(Equal("Keychron"))
 						Expect(b.Keyboard.Name).To(Equal("Q1"))

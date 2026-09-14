@@ -808,6 +808,8 @@ func (s *BuildToAPISummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName
 	s.Require().NoError(err)
 
 	s.Equal(&b.ID, out.Id)
+	s.Require().NotNil(out.KeyboardId)
+	s.Equal(b.Keyboard, *out.KeyboardId)
 	s.Require().NotNil(out.Keyboard)
 	s.Require().NotNil(out.Keyboard.Brand)
 	s.Equal("Keychron", *out.Keyboard.Brand)
@@ -827,6 +829,8 @@ func (s *BuildToAPISummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFai
 	s.Require().NoError(err)
 
 	s.Nil(out.Keyboard)
+	s.Require().NotNil(out.KeyboardId)
+	s.Equal(b.Keyboard, *out.KeyboardId)
 }
 
 func (s *BuildToAPISummarySuite) TestKeyboardRepositoryError_ReturnsError() {
