@@ -66,9 +66,9 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public switches (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/switches",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, switchImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, switchImageStore, profileRepo))))
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo, switchImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo, switchImageStore, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo, switchImageStore))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",

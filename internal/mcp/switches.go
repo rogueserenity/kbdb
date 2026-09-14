@@ -57,7 +57,10 @@ var deleteSwitchImageTool = &mcp.Tool{
 	Description: "Removes a switch's image. Idempotent: deleting a switch's image when it doesn't have one succeeds.",
 }
 
-func handleListSwitches(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema.ListSwitchesInput, schema.ListSwitchesOutput] {
+func handleListSwitches(
+	repo repository.SwitchRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.ListSwitchesInput, schema.ListSwitchesOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListSwitchesInput) (*mcp.CallToolResult, schema.ListSwitchesOutput, error) {
 		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
@@ -75,17 +78,26 @@ func handleListSwitches(repo repository.SwitchRepository) mcp.ToolHandlerFor[sch
 			return nil, schema.ListSwitchesOutput{}, errors.New("failed to list switches")
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.ListSwitchesOutput{}, errors.New("failed to list switches")
+		}
+
 		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.SwitchSummary, len(switches))
 		for i, sw := range switches {
-			items[i] = repomcp.SwitchToMCPSummary(sw, isOwner)
+			items[i] = repomcp.SwitchToMCPSummary(sw, isOwner, ownerPrefs)
 		}
 
 		return nil, schema.ListSwitchesOutput{Switches: items, NextCursor: nextCursor}, nil
 	}
 }
 
-func handleGetSwitch(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema.GetSwitchInput, schema.GetSwitchOutput] {
+func handleGetSwitch(
+	repo repository.SwitchRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.GetSwitchInput, schema.GetSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetSwitchInput) (*mcp.CallToolResult, schema.GetSwitchOutput, error) {
 		if strings.TrimSpace(in.SwitchID) == "" {
 			return nil, schema.GetSwitchOutput{}, errors.New("switch_id must not be blank")
@@ -102,7 +114,17 @@ func handleGetSwitch(repo repository.SwitchRepository) mcp.ToolHandlerFor[schema
 			return nil, schema.GetSwitchOutput{}, err
 		}
 
-		return nil, schema.GetSwitchOutput{Switch: repomcp.SwitchToMCP(*sw, authz.IsOwner(ctx, ownerID))}, nil
+		isOwner := authz.IsOwner(ctx, ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			if err != nil {
+				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.SwitchID, in.SwitchID)
+				return nil, schema.GetSwitchOutput{}, errors.New("failed to get switch")
+			}
+		}
+
+		return nil, schema.GetSwitchOutput{Switch: repomcp.SwitchToMCP(*sw, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -130,8 +152,8 @@ func handleCreateSwitch(
 			return nil, schema.CreateSwitchOutput{}, errors.New("failed to create switch")
 		}
 
-		// isOwner: true - create always targets the caller's own collection.
-		return nil, schema.CreateSwitchOutput{Switch: repomcp.SwitchToMCP(*created, true)}, nil
+		// isOwner: true, this always targets the caller's own collection.
+		return nil, schema.CreateSwitchOutput{Switch: repomcp.SwitchToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -155,8 +177,8 @@ func handleUpdateSwitch(
 			return nil, schema.UpdateSwitchOutput{}, mutErr
 		}
 
-		// isOwner: true - update always targets the caller's own collection.
-		return nil, schema.UpdateSwitchOutput{Switch: repomcp.SwitchToMCP(*updated, true)}, nil
+		// isOwner: true, this always targets the caller's own collection.
+		return nil, schema.UpdateSwitchOutput{Switch: repomcp.SwitchToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 

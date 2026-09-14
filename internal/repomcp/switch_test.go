@@ -53,7 +53,7 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 		Visibility: repository.VisibilityPublic,
 	}
 
-	out := SwitchToMCP(sw, true)
+	out := SwitchToMCP(sw, true, repository.ProfilePreferences{})
 
 	s.Equal("sw-1", out.ID)
 	s.Require().NotNil(out.Manufacturer)
@@ -84,7 +84,7 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 // An all-unset group collapses to nil so it's omitted from the tool result
 // entirely, rather than appearing as an object of zero values.
 func (s *SwitchToMCPSuite) TestEmptyGroups_CollapseToNil() {
-	out := SwitchToMCP(repository.Switch{ID: "sw-1", Visibility: repository.VisibilityPrivate}, true)
+	out := SwitchToMCP(repository.Switch{ID: "sw-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
 
 	s.Nil(out.Material)
 	s.Nil(out.Force)
@@ -103,7 +103,7 @@ func (s *SwitchToMCPSuite) TestPartiallySetGroup_IsRetained() {
 
 	out := SwitchToMCP(repository.Switch{
 		Force: repository.SwitchForce{BottomOut: &bottomOut},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Require().NotNil(out.Force)
 	s.Require().NotNil(out.Force.BottomOut)
@@ -122,7 +122,7 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	out := SwitchToMCP(repository.Switch{
 		Pins:     &pins,
 		Purchase: repository.SwitchPurchase{Price: &price, Quantity: &quantity},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Require().NotNil(out.Pins)
 	s.Zero(*out.Pins)
@@ -141,7 +141,7 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 }
 
 func (s *SwitchToMCPSuite) TestNoImagePath_HasImageFalse() {
-	out := SwitchToMCP(repository.Switch{}, true)
+	out := SwitchToMCP(repository.Switch{}, true, repository.ProfilePreferences{})
 
 	s.False(out.HasImage)
 }
@@ -149,12 +149,12 @@ func (s *SwitchToMCPSuite) TestNoImagePath_HasImageFalse() {
 func (s *SwitchToMCPSuite) TestImagePathSet_HasImageTrue() {
 	key := repository.SwitchImageKey("switches/u/sw-1/image")
 
-	out := SwitchToMCP(repository.Switch{ImagePath: &key}, true)
+	out := SwitchToMCP(repository.Switch{ImagePath: &key}, true, repository.ProfilePreferences{})
 
 	s.True(out.HasImage)
 }
 
-func (s *SwitchToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+func (s *SwitchToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRestOfPurchase() {
 	vendor := "Divinikey"
 	status := "Delivered"
 	price := 65.0
@@ -163,7 +163,7 @@ func (s *SwitchToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 		ID:         "sw-1",
 		Purchase:   repository.SwitchPurchase{Vendor: &vendor, OrderStatus: &status, Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, false)
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
 	s.Require().NotNil(out.Purchase)
 	s.Nil(out.Purchase.Price)
@@ -171,14 +171,28 @@ func (s *SwitchToMCPSuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 	s.Equal(&status, out.Purchase.OrderStatus)
 }
 
-func (s *SwitchToMCPSuite) TestIsOwnerTrue_IncludesPrice() {
+func (s *SwitchToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	price := 65.0
 
 	out := SwitchToMCP(repository.Switch{
 		ID:         "sw-1",
 		Purchase:   repository.SwitchPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, true)
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Require().NotNil(out.Purchase)
+	s.Require().NotNil(out.Purchase.Price)
+	s.InDelta(price, *out.Purchase.Price, 0.0001)
+}
+
+func (s *SwitchToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
+	price := 65.0
+
+	out := SwitchToMCP(repository.Switch{
+		ID:         "sw-1",
+		Purchase:   repository.SwitchPurchase{Price: &price},
+		Visibility: repository.VisibilityPublic,
+	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
@@ -204,7 +218,7 @@ func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 		Type:     "linear",
 		Notes:    &notes,
 		Purchase: repository.SwitchPurchase{OrderStatus: &orderStatus},
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Equal("sw-1", out.ID)
 	s.Equal("Gateron", out.Brand)
@@ -217,32 +231,55 @@ func (s *SwitchToMCPSummarySuite) TestMapsSummaryFields() {
 func (s *SwitchToMCPSummarySuite) TestImagePathSet_HasImageTrue() {
 	key := repository.SwitchImageKey("switches/u/sw-1/image")
 
-	out := SwitchToMCPSummary(repository.Switch{ImagePath: &key}, true)
+	out := SwitchToMCPSummary(repository.Switch{ImagePath: &key}, true, repository.ProfilePreferences{})
 
 	s.True(out.HasImage)
 }
 
-func (s *SwitchToMCPSummarySuite) TestIsOwner_IncludesPrice() {
+func (s *SwitchToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 	price := 8.50
 
 	out := SwitchToMCPSummary(repository.Switch{
 		ID:       "sw-1",
 		Purchase: repository.SwitchPurchase{Price: &price},
-	}, true)
+	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
 
 	s.Require().NotNil(out.Price)
 	s.InDelta(price, *out.Price, 0.0001)
 }
 
-func (s *SwitchToMCPSummarySuite) TestNotOwner_OmitsPrice() {
+func (s *SwitchToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 	price := 8.50
 
 	out := SwitchToMCPSummary(repository.Switch{
 		ID:       "sw-1",
 		Purchase: repository.SwitchPurchase{Price: &price},
-	}, false)
+	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Nil(out.Price)
+}
+
+func (s *SwitchToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice() {
+	price := 8.50
+
+	out := SwitchToMCPSummary(repository.Switch{
+		ID:       "sw-1",
+		Purchase: repository.SwitchPurchase{Price: &price},
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
+
+	s.Nil(out.Price)
+}
+
+func (s *SwitchToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
+	price := 8.50
+
+	out := SwitchToMCPSummary(repository.Switch{
+		ID:       "sw-1",
+		Purchase: repository.SwitchPurchase{Price: &price},
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Require().NotNil(out.Price)
+	s.InDelta(price, *out.Price, 0.0001)
 }
 
 type SwitchFromMCPSuite struct {

@@ -8,11 +8,13 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// SwitchToAPI maps a repository.Switch to its wire representation. Returns
-// an error if a stored Purchase date doesn't match dateLayout, or an image
-// fails to presign.
-func SwitchToAPI(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool) (api.Switch, error) {
-	purchase, err := switchPurchaseToAPI(sw.Purchase, isOwner)
+// SwitchToAPI maps a repository.Switch to its wire representation. The
+// owner always sees their own purchase.price; a non-owner sees it only if
+// ownerPrefs.ShowPriceToOthers. Returns an error if a stored Purchase date
+// doesn't match dateLayout, or an image fails to presign.
+func SwitchToAPI(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Switch, error) {
+	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
+	purchase, err := switchPurchaseToAPI(sw.Purchase, showPrice)
 	if err != nil {
 		return api.Switch{}, err
 	}
@@ -66,9 +68,11 @@ func SwitchToRepo(in api.SwitchInput) repository.Switch {
 }
 
 // SwitchToAPISummary maps a repository.Switch to the SwitchSummary schema
-// returned by the list endpoint, presigning its image if it has one.
-// isOwner hides Price from non-owners, same as [SwitchToAPI].
-func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool) (api.SwitchSummary, error) {
+// returned by the list endpoint, presigning its image if it has one. Price
+// is shown per ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
+// (non-owner) - unlike [SwitchToAPI], the owner isn't unconditionally shown
+// price here.
+func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.SwitchSummary, error) {
 	summary := api.SwitchSummary{
 		Id:          &sw.ID,
 		Brand:       &sw.Brand,
@@ -76,7 +80,11 @@ func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images reposi
 		Type:        &sw.Type,
 		OrderStatus: sw.Purchase.OrderStatus,
 	}
+	showPrice := ownerPrefs.ShowPriceToOthers
 	if isOwner {
+		showPrice = ownerPrefs.ShowPriceToMe
+	}
+	if showPrice {
 		summary.Price = sw.Purchase.Price
 	}
 
@@ -161,7 +169,7 @@ func switchSpringToRepo(s *api.SwitchSpring) repository.SwitchSpring {
 	}
 }
 
-func switchPurchaseToAPI(p repository.SwitchPurchase, isOwner bool) (*api.SwitchPurchase, error) {
+func switchPurchaseToAPI(p repository.SwitchPurchase, showPrice bool) (*api.SwitchPurchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil &&
 		p.OrderStatus == nil && p.Quantity == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
@@ -172,7 +180,7 @@ func switchPurchaseToAPI(p repository.SwitchPurchase, isOwner bool) (*api.Switch
 		OrderStatus: p.OrderStatus,
 		Quantity:    p.Quantity,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = p.Price
 	}
 	if p.OrderDate != nil {

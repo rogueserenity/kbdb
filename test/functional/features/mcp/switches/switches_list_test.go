@@ -127,6 +127,46 @@ var _ = Describe("Listing switches over MCP", func() {
 			)
 		})
 
+		Context("given the caller owns a private switch and has show_price_to_me false", func() {
+			var (
+				switchID        string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				switchID = "functional-test-switch-" + uuid.NewString()
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
+				Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+			})
+
+			When("the list_switches tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_switches", map[string]any{})
+				})
+
+				It("omits the price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					seeded := seededBy(out, switchID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.Price).To(BeNil())
+				})
+			})
+		})
+
 		Context("given another user owns a private switch", func() {
 			var (
 				otherID       string
@@ -190,6 +230,50 @@ var _ = Describe("Listing switches over MCP", func() {
 					seeded := seededBy(out, otherSwitchID)
 					Expect(seeded).NotTo(BeNil())
 					Expect(seeded.Price).To(BeNil())
+				})
+			})
+		})
+
+		Context("given another user owns a public switch and has show_price_to_others true", func() {
+			var (
+				otherID         string
+				otherSwitchID   string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+
+				otherSwitchID = "functional-test-switch-" + uuid.NewString()
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedSwitch(ctx, otherID, otherSwitchID, "public")).To(Succeed())
+				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, otherID, otherSwitchID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, otherID, profileUsername)).To(Succeed())
+			})
+
+			When("the list_switches tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_switches", map[string]any{"user_id": otherID})
+				})
+
+				It("includes the other user's public switch with its price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeListOutput(result)
+					seeded := seededBy(out, otherSwitchID)
+					Expect(seeded).NotTo(BeNil())
+					Expect(seeded.Price).NotTo(BeNil())
+					Expect(*seeded.Price).To(BeNumerically("==", 0.35))
 				})
 			})
 		})

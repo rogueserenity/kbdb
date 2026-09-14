@@ -71,7 +71,7 @@ func TestSwitchToAPISuite(t *testing.T) {
 
 func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	sw := fullRepoSwitch()
-	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Equal(sw.ID, out.Id)
@@ -113,7 +113,7 @@ func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *SwitchToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	sw := repository.Switch{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate}
 
-	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Nil(out.Manufacturer)
@@ -132,7 +132,7 @@ func (s *SwitchToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 		Material: repository.SwitchMaterial{Stem: strPtr("POM")},
 	}
 
-	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	if s.NotNil(out.Material) {
@@ -148,15 +148,15 @@ func (s *SwitchToAPISuite) TestMalformedStoredDate_ReturnsError() {
 		Purchase: repository.SwitchPurchase{OrderDate: strPtr("not-a-date")},
 	}
 
-	_, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	_, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true, repository.ProfilePreferences{})
 
 	s.Require().Error(err)
 }
 
-func (s *SwitchToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
+func (s *SwitchToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRestOfPurchase() {
 	sw := fullRepoSwitch()
 
-	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), false)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), false, repository.ProfilePreferences{ShowPriceToOthers: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -170,10 +170,20 @@ func (s *SwitchToAPISuite) TestIsOwnerFalse_OmitsPriceKeepsRestOfPurchase() {
 	s.Equal(*sw.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
 }
 
-func (s *SwitchToAPISuite) TestIsOwnerTrue_IncludesPrice() {
+func (s *SwitchToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	sw := fullRepoSwitch()
 
-	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Purchase)
+	s.Equal(sw.Purchase.Price, out.Purchase.Price)
+}
+
+func (s *SwitchToAPISuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
+	sw := fullRepoSwitch()
+
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -184,7 +194,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
 	sw := fullRepoSwitch()
 	images := mocks.NewMockSwitchImageStore(s.T())
 
-	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Equal(&sw.ID, summary.Id)
@@ -195,24 +205,44 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
 	s.Nil(summary.Image, "no image on the switch must map to a nil Image")
 }
 
-func (s *SwitchToAPISuite) TestSwitchToAPISummary_IsOwner_IncludesPrice() {
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_OwnerShowPriceToMeTrue_IncludesPrice() {
 	sw := fullRepoSwitch()
 	images := mocks.NewMockSwitchImageStore(s.T())
 
-	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Equal(sw.Purchase.Price, summary.Price)
 }
 
-func (s *SwitchToAPISuite) TestSwitchToAPISummary_NotOwner_OmitsPrice() {
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_OwnerShowPriceToMeFalse_OmitsPrice() {
 	sw := fullRepoSwitch()
 	images := mocks.NewMockSwitchImageStore(s.T())
 
-	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, false)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Nil(summary.Price)
+}
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwnerShowPriceToOthersFalse_OmitsPrice() {
+	sw := fullRepoSwitch()
+	images := mocks.NewMockSwitchImageStore(s.T())
+
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, false, repository.ProfilePreferences{ShowPriceToOthers: false})
+	s.Require().NoError(err)
+
+	s.Nil(summary.Price)
+}
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
+	sw := fullRepoSwitch()
+	images := mocks.NewMockSwitchImageStore(s.T())
+
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Equal(sw.Purchase.Price, summary.Price)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedURL() {
@@ -222,7 +252,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedU
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
 
-	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
+	summary, err := SwitchToAPISummary(s.T().Context(), sw, images, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.Image)
@@ -236,7 +266,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_PresignError_Propagates() {
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
 
-	_, err := SwitchToAPISummary(s.T().Context(), sw, images, true)
+	_, err := SwitchToAPISummary(s.T().Context(), sw, images, true, repository.ProfilePreferences{})
 
 	s.Require().Error(err)
 }
@@ -248,7 +278,7 @@ func (s *SwitchToAPISuite) TestImagePresent_ReturnsPresignedURL() {
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
 
-	out, err := SwitchToAPI(s.T().Context(), sw, images, true)
+	out, err := SwitchToAPI(s.T().Context(), sw, images, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Image)
@@ -258,7 +288,7 @@ func (s *SwitchToAPISuite) TestImagePresent_ReturnsPresignedURL() {
 func (s *SwitchToAPISuite) TestNoImage_ImageFieldNil() {
 	sw := fullRepoSwitch()
 
-	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true)
+	out, err := SwitchToAPI(s.T().Context(), sw, mocks.NewMockSwitchImageStore(s.T()), true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Nil(out.Image)
@@ -271,7 +301,7 @@ func (s *SwitchToAPISuite) TestImagePresignError_Propagates() {
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
 
-	_, err := SwitchToAPI(s.T().Context(), sw, images, true)
+	_, err := SwitchToAPI(s.T().Context(), sw, images, true, repository.ProfilePreferences{})
 
 	s.Require().Error(err)
 }
