@@ -25,9 +25,12 @@ type profileBody struct {
 	Avatar *struct {
 		URL string `json:"url"`
 	} `json:"avatar"`
-	// The IdP subject, returned so a caller can address the {userId}-keyed
-	// collection routes.
-	UserID string `json:"user_id"`
+	UserID      string `json:"user_id"`
+	Preferences *struct {
+		Currency          string `json:"currency"`
+		ShowPriceToMe     bool   `json:"show_price_to_me"`
+		ShowPriceToOthers bool   `json:"show_price_to_others"`
+	} `json:"preferences"`
 }
 
 var _ = Describe("Getting a profile", func() {
@@ -114,6 +117,38 @@ var _ = Describe("Getting a profile", func() {
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.Username).To(Equal(username))
 				})
+			})
+		})
+	})
+
+	Context("given a profile exists with no stored preferences (predates this field)", func() {
+		BeforeEach(func(ctx SpecContext) {
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username:     username,
+				Discoverable: true,
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteProfile(ctx, ownerID, username)).To(Succeed())
+		})
+
+		When("getting the profile", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.Get(ctx, ownerID, "")
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns default preferences rather than empty/false values", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+				var got profileBody
+				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+				Expect(got.Preferences).NotTo(BeNil())
+				Expect(got.Preferences.Currency).To(Equal("USD"))
+				Expect(got.Preferences.ShowPriceToMe).To(BeTrue())
+				Expect(got.Preferences.ShowPriceToOthers).To(BeFalse())
 			})
 		})
 	})

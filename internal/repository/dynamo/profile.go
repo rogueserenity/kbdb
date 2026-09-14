@@ -60,8 +60,26 @@ func (r *ProfileRepository) Get(ctx context.Context, ownerID string) (*repositor
 	if err := attributevalue.UnmarshalMap(out.Item, &p); err != nil {
 		return nil, fmt.Errorf("unmarshalling profile for user %q: %w", ownerID, err)
 	}
+	if _, ok := out.Item["preferences"]; !ok {
+		p.Preferences = repository.DefaultProfilePreferences()
+	}
 
 	return &p, nil
+}
+
+// GetPreferences implements repository.ProfileRepository. A caller with no
+// profile yet gets repository.DefaultProfilePreferences() rather than
+// ErrNotFound.
+func (r *ProfileRepository) GetPreferences(ctx context.Context, ownerID string) (repository.ProfilePreferences, error) {
+	p, err := r.Get(ctx, ownerID)
+	if errors.Is(err, repository.ErrNotFound) {
+		return repository.DefaultProfilePreferences(), nil
+	}
+	if err != nil {
+		return repository.ProfilePreferences{}, err
+	}
+
+	return p.Preferences, nil
 }
 
 // Create implements repository.ProfileRepository. The profile item and the
@@ -381,7 +399,8 @@ func classifyProfileRenameConflict(err error) renameConflict {
 func profileUpdateExpression(p *repository.Profile) expression.UpdateBuilder {
 	update := expression.
 		Set(expression.Name("username"), expression.Value(p.Username)).
-		Set(expression.Name("discoverable"), expression.Value(p.Discoverable))
+		Set(expression.Name("discoverable"), expression.Value(p.Discoverable)).
+		Set(expression.Name("preferences"), expression.Value(p.Preferences))
 	update = setOrRemovePtr(update, "discord_username", p.DiscordUsername)
 	update = setOrRemovePtr(update, "bio", p.Bio)
 	if len(p.Links) > 0 {

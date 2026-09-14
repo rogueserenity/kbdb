@@ -83,6 +83,49 @@ var _ = Describe("Creating a profile over MCP", func() {
 			})
 		})
 
+		Context("given preferences are omitted", func() {
+			When("create_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_profile", map[string]any{
+						"username": username, "discoverable": true,
+					})
+				})
+
+				It("creates the profile with default preferences", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					prefs := decodeGetProfileOutput(result).Profile.Preferences
+					Expect(prefs.Currency).To(Equal("USD"))
+					Expect(prefs.ShowPriceToMe).To(BeTrue())
+					Expect(prefs.ShowPriceToOthers).To(BeFalse())
+				})
+			})
+		})
+
+		Context("given explicit preferences", func() {
+			When("create_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_profile", map[string]any{
+						"username": username, "discoverable": true,
+						"preferences": map[string]any{
+							"currency": "EUR", "show_price_to_me": false, "show_price_to_others": true,
+						},
+					})
+				})
+
+				It("creates the profile with the given preferences", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					prefs := decodeGetProfileOutput(result).Profile.Preferences
+					Expect(prefs.Currency).To(Equal("EUR"))
+					Expect(prefs.ShowPriceToMe).To(BeFalse())
+					Expect(prefs.ShowPriceToOthers).To(BeTrue())
+				})
+			})
+		})
+
 		Context("given a blank discord_username", func() {
 			When("create_profile is called", func() {
 				BeforeEach(func(ctx SpecContext) {
@@ -151,6 +194,9 @@ var _ = Describe("Creating a profile over MCP", func() {
 			}),
 			Entry("bio over 500", map[string]any{
 				"username": "aaa", "bio": strings.Repeat("x", 501),
+			}),
+			Entry("currency is not 3 letters", map[string]any{
+				"username": "aaa", "preferences": map[string]any{"currency": "US"},
 			}),
 		)
 	})

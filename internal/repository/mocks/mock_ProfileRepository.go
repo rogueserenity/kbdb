@@ -296,6 +296,72 @@ func (_c *MockProfileRepository_Get_Call) RunAndReturn(run func(ctx context.Cont
 	return _c
 }
 
+// GetPreferences provides a mock function for the type MockProfileRepository
+func (_mock *MockProfileRepository) GetPreferences(ctx context.Context, ownerID string) (repository.ProfilePreferences, error) {
+	ret := _mock.Called(ctx, ownerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPreferences")
+	}
+
+	var r0 repository.ProfilePreferences
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) (repository.ProfilePreferences, error)); ok {
+		return returnFunc(ctx, ownerID)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string) repository.ProfilePreferences); ok {
+		r0 = returnFunc(ctx, ownerID)
+	} else {
+		r0 = ret.Get(0).(repository.ProfilePreferences)
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string) error); ok {
+		r1 = returnFunc(ctx, ownerID)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockProfileRepository_GetPreferences_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetPreferences'
+type MockProfileRepository_GetPreferences_Call struct {
+	*mock.Call
+}
+
+// GetPreferences is a helper method to define mock.On call
+//   - ctx context.Context
+//   - ownerID string
+func (_e *MockProfileRepository_Expecter) GetPreferences(ctx any, ownerID any) *MockProfileRepository_GetPreferences_Call {
+	return &MockProfileRepository_GetPreferences_Call{Call: _e.mock.On("GetPreferences", ctx, ownerID)}
+}
+
+func (_c *MockProfileRepository_GetPreferences_Call) Run(run func(ctx context.Context, ownerID string)) *MockProfileRepository_GetPreferences_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
+	})
+	return _c
+}
+
+func (_c *MockProfileRepository_GetPreferences_Call) Return(profilePreferences repository.ProfilePreferences, err error) *MockProfileRepository_GetPreferences_Call {
+	_c.Call.Return(profilePreferences, err)
+	return _c
+}
+
+func (_c *MockProfileRepository_GetPreferences_Call) RunAndReturn(run func(ctx context.Context, ownerID string) (repository.ProfilePreferences, error)) *MockProfileRepository_GetPreferences_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ListPublic provides a mock function for the type MockProfileRepository
 func (_mock *MockProfileRepository) ListPublic(ctx context.Context, usernamePrefix string, discordPrefix string, limit int, cursor string) ([]repository.Profile, string, error) {
 	ret := _mock.Called(ctx, usernamePrefix, discordPrefix, limit, cursor)

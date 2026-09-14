@@ -122,6 +122,51 @@ var _ = Describe("Updating a profile over MCP", func() {
 			})
 		})
 
+		Context("given a full replace that changes preferences", func() {
+			When("update_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "update_profile", map[string]any{
+						"username":     username,
+						"discoverable": true,
+						"preferences": map[string]any{
+							"currency": "GBP", "show_price_to_me": false, "show_price_to_others": true,
+						},
+					})
+				})
+
+				It("changes the preferences", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					prefs := decodeGetProfileOutput(result).Profile.Preferences
+					Expect(prefs.Currency).To(Equal("GBP"))
+					Expect(prefs.ShowPriceToMe).To(BeFalse())
+					Expect(prefs.ShowPriceToOthers).To(BeTrue())
+				})
+			})
+		})
+
+		Context("given a full replace that omits preferences", func() {
+			When("update_profile is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "update_profile", map[string]any{
+						"username":     username,
+						"discoverable": true,
+					})
+				})
+
+				It("resets preferences to defaults", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					prefs := decodeGetProfileOutput(result).Profile.Preferences
+					Expect(prefs.Currency).To(Equal("USD"))
+					Expect(prefs.ShowPriceToMe).To(BeTrue())
+					Expect(prefs.ShowPriceToOthers).To(BeFalse())
+				})
+			})
+		})
+
 		Context("given a blank discord_username", func() {
 			When("update_profile is called", func() {
 				BeforeEach(func(ctx SpecContext) {

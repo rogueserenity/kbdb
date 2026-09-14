@@ -177,7 +177,11 @@ func (s *CreateProfileSuite) post(caller string, body any) *httptest.ResponseRec
 }
 
 func validInput() api.ProfileInput {
-	return api.ProfileInput{Username: "alice"}
+	return api.ProfileInput{Username: "alice", Preferences: validPreferences()}
+}
+
+func validPreferences() *api.ProfilePreferences {
+	return &api.ProfilePreferences{Currency: "USD", ShowPriceToMe: true, ShowPriceToOthers: false}
 }
 
 func (s *CreateProfileSuite) TestValidInput_201() {
@@ -213,7 +217,9 @@ func (s *CreateProfileSuite) TestMalformedBody_400() {
 }
 
 func (s *CreateProfileSuite) TestInvalidUsername_400_InvalidParams() {
-	rec := s.post("user-alice", api.ProfileInput{Username: "AB"})
+	in := validInput()
+	in.Username = "AB"
+	rec := s.post("user-alice", in)
 
 	s.Equal(http.StatusBadRequest, rec.Code)
 	var body struct {
@@ -345,7 +351,7 @@ func (s *UpdateProfileSuite) TestValidInput_200() {
 		return p.Username == "alice"
 	})).Return(&repository.Profile{OwnerID: "user-alice", Username: "alice"}, nil)
 
-	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice", Preferences: validPreferences()})
 
 	s.Equal(http.StatusOK, rec.Code)
 	var body api.Profile
@@ -384,7 +390,7 @@ func (s *UpdateProfileSuite) TestNoProfile_404() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice", Preferences: validPreferences()})
 
 	s.Equal(http.StatusNotFound, rec.Code)
 }
@@ -393,7 +399,7 @@ func (s *UpdateProfileSuite) TestUsernameTaken_409_UsernameUnavailableType() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrUsernameTaken)
 
-	rec := s.put("user-alice", api.ProfileInput{Username: "taken"})
+	rec := s.put("user-alice", api.ProfileInput{Username: "taken", Preferences: validPreferences()})
 
 	s.Equal(http.StatusConflict, rec.Code)
 	var body struct {
@@ -409,7 +415,7 @@ func (s *UpdateProfileSuite) TestRepoError_500() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamo down"))
 
-	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice", Preferences: validPreferences()})
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 }
@@ -418,7 +424,7 @@ func (s *UpdateProfileSuite) TestMutationConflict_409() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
-	rec := s.put("user-alice", api.ProfileInput{Username: "alice"})
+	rec := s.put("user-alice", api.ProfileInput{Username: "alice", Preferences: validPreferences()})
 
 	s.Equal(http.StatusConflict, rec.Code)
 }
