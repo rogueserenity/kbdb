@@ -10,9 +10,11 @@ import (
 // recorded zero survives the round trip instead of being indistinguishable
 // from unset - the same reason repoapi.SwitchToAPI keeps them. The nested
 // material/force/spring/purchase groups still collapse to nil when every
-// field in them is unset, so an all-empty group is omitted entirely.
-// isOwner hides purchase.price from non-owners.
-func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
+// field in them is unset, so an all-empty group is omitted entirely. The
+// owner always sees their own purchase.price; a non-owner sees it only if
+// ownerPrefs.ShowPriceToOthers.
+func SwitchToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Switch {
+	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
 	return schema.Switch{
 		ID:           sw.ID,
 		Brand:        sw.Brand,
@@ -24,7 +26,7 @@ func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 		Material:     switchMaterialToMCP(sw.Material),
 		Force:        switchForceToMCP(sw.Force),
 		Spring:       switchSpringToMCP(sw.Spring),
-		Purchase:     switchPurchaseToMCP(sw.Purchase, isOwner),
+		Purchase:     switchPurchaseToMCP(sw.Purchase, showPrice),
 		Notes:        sw.Notes,
 		Visibility:   string(sw.Visibility),
 		HasImage:     sw.ImagePath != nil,
@@ -33,9 +35,11 @@ func SwitchToMCP(sw repository.Switch, isOwner bool) schema.Switch {
 
 // SwitchToMCPSummary maps a repository.Switch to the abbreviated shape
 // list_switches returns. Lifts order_status out of purchase, so a switch
-// still on order is visible while browsing a list. isOwner hides Price
-// from non-owners, same as [SwitchToMCP].
-func SwitchToMCPSummary(sw repository.Switch, isOwner bool) schema.SwitchSummary {
+// still on order is visible while browsing a list. Price is shown per
+// ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
+// (non-owner) - unlike [SwitchToMCP], the owner isn't unconditionally
+// shown price here.
+func SwitchToMCPSummary(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.SwitchSummary {
 	summary := schema.SwitchSummary{
 		ID:          sw.ID,
 		Brand:       sw.Brand,
@@ -44,7 +48,11 @@ func SwitchToMCPSummary(sw repository.Switch, isOwner bool) schema.SwitchSummary
 		OrderStatus: sw.Purchase.OrderStatus,
 		HasImage:    sw.ImagePath != nil,
 	}
+	showPrice := ownerPrefs.ShowPriceToOthers
 	if isOwner {
+		showPrice = ownerPrefs.ShowPriceToMe
+	}
+	if showPrice {
 		summary.Price = sw.Purchase.Price
 	}
 
@@ -88,7 +96,7 @@ func switchSpringToMCP(s repository.SwitchSpring) *schema.SwitchSpring {
 
 // Dates pass through as strings, unlike repoapi.SwitchToAPI, so this can't
 // fail on a malformed one.
-func switchPurchaseToMCP(p repository.SwitchPurchase, isOwner bool) *schema.SwitchPurchase {
+func switchPurchaseToMCP(p repository.SwitchPurchase, showPrice bool) *schema.SwitchPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil && p.Quantity == nil {
 		return nil
@@ -101,7 +109,7 @@ func switchPurchaseToMCP(p repository.SwitchPurchase, isOwner bool) *schema.Swit
 		OrderStatus:  p.OrderStatus,
 		Quantity:     p.Quantity,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = p.Price
 	}
 

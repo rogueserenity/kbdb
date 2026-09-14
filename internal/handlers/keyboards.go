@@ -223,8 +223,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, images repositor
 			return
 		}
 
-		// isOwner: true (already gated above); the owner is unconditionally
-		// shown price, so no preferences lookup is needed here.
+		// isOwner: true, already gated above - owner sees price unconditionally.
 		out, err := repoapi.KeyboardToAPI(r.Context(), *created, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, created.ID)
@@ -268,8 +267,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, images repositor
 			return
 		}
 
-		// isOwner: true (already gated above); the owner is unconditionally
-		// shown price, so no preferences lookup is needed here.
+		// isOwner: true, already gated above - owner sees price unconditionally.
 		out, err := repoapi.KeyboardToAPI(r.Context(), *updated, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, updated.ID)

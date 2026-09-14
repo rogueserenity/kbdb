@@ -154,9 +154,7 @@ func handleCreateKeyboard(
 			return nil, schema.CreateKeyboardOutput{}, errors.New("failed to create keyboard")
 		}
 
-		// isOwner: true (create always targets the caller's own collection);
-		// the owner is unconditionally shown price, so no preferences lookup
-		// is needed here.
+		// isOwner: true, this always targets the caller's own collection.
 		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
@@ -181,9 +179,7 @@ func handleUpdateKeyboard(
 			return nil, schema.UpdateKeyboardOutput{}, mutErr
 		}
 
-		// isOwner: true (update always targets the caller's own collection);
-		// the owner is unconditionally shown price, so no preferences lookup
-		// is needed here.
+		// isOwner: true, this always targets the caller's own collection.
 		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }

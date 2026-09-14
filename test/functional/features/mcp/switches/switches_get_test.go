@@ -63,6 +63,42 @@ var _ = Describe("Getting a switch over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns the switch and has show_price_to_me false", func() {
+			var profileUsername string
+
+			BeforeEach(func(ctx SpecContext) {
+				profileUsername = "u" + uuid.NewString()[:8]
+				Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
+				Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+			})
+
+			When("the get_switch tool is called with no user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_switch", map[string]any{"switch_id": switchID})
+				})
+
+				It("still returns purchase.price - single-item get always shows the owner their own price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeGetOutput(result)
+					Expect(out.Switch.Purchase).NotTo(BeNil())
+					Expect(out.Switch.Purchase.Price).NotTo(BeNil())
+					Expect(*out.Switch.Purchase.Price).To(Equal(0.35))
+				})
+			})
+		})
+
 		Context("given the switch never existed", func() {
 			When("the get_switch tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {
@@ -138,6 +174,50 @@ var _ = Describe("Getting a switch over MCP", func() {
 
 					By("omitting price")
 					Expect(out.Switch.Purchase.Price).To(BeNil())
+				})
+			})
+		})
+
+		Context("given another user owns a public switch and has show_price_to_others true", func() {
+			var (
+				otherID         string
+				profileUsername string
+			)
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+				profileUsername = "u" + uuid.NewString()[:8]
+
+				Expect(db.SeedSwitch(ctx, otherID, switchID, "public")).To(Succeed())
+				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
+					Username: profileUsername,
+					Preferences: map[string]any{
+						"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					},
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteSwitch(ctx, otherID, switchID)).To(Succeed())
+				Expect(db.DeleteProfile(ctx, otherID, profileUsername)).To(Succeed())
+			})
+
+			When("the get_switch tool is called with that user_id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_switch", map[string]any{
+						"switch_id": switchID,
+						"user_id":   otherID,
+					})
+				})
+
+				It("returns the switch with purchase.price", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeGetOutput(result)
+					Expect(out.Switch.Purchase).NotTo(BeNil())
+					Expect(out.Switch.Purchase.Price).NotTo(BeNil())
+					Expect(*out.Switch.Purchase.Price).To(Equal(0.35))
 				})
 			})
 		})

@@ -32,8 +32,10 @@ func parseListLimit(r *http.Request) int {
 
 // ListSwitches reads the {userId} path value and lists that owner's
 // switches. Anonymous callers are allowed; visibility is scoped to what the
-// caller (if any) may read, per [authz.ReadableVisibilities].
-func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
+// caller (if any) may read, per [authz.ReadableVisibilities]. Price
+// visibility is gated by the owner's Profile preferences - see
+// [repoapi.SwitchToAPISummary].
+func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImageStore, prefs repository.PreferencesReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -53,6 +55,13 @@ func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImag
 			return
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(r.Context(), ownerID)
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to list switches")
+			return
+		}
+
 		items := make([]api.SwitchSummary, len(switches))
 		errs := make([]error, len(switches))
 
@@ -64,7 +73,7 @@ func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImag
 			go func(i int, sw repository.Switch) {
 				defer wg.Done()
 
-				summary, err := repoapi.SwitchToAPISummary(ctx, sw, images, isOwner)
+				summary, err := repoapi.SwitchToAPISummary(ctx, sw, images, isOwner, ownerPrefs)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping switch %q to API summary: %w", sw.ID, err)
 					return
@@ -93,8 +102,10 @@ func ListSwitches(repo repository.SwitchRepository, images repository.SwitchImag
 
 // GetSwitch reads the {userId} and {switchId} path values. Anonymous callers are
 // allowed; a switch that exists but isn't readable by the caller returns
-// 404, not 403, to avoid revealing it exists.
-func GetSwitch(repo repository.SwitchRepository, images repository.SwitchImageStore) http.HandlerFunc {
+// 404, not 403, to avoid revealing it exists. The owner always sees their
+// own price; a non-owner's visibility is gated by the owner's Profile
+// preferences - see [repoapi.SwitchToAPI].
+func GetSwitch(repo repository.SwitchRepository, images repository.SwitchImageStore, prefs repository.PreferencesReader) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("switchId")
@@ -116,7 +127,18 @@ func GetSwitch(repo repository.SwitchRepository, images repository.SwitchImageSt
 			return
 		}
 
-		out, err := repoapi.SwitchToAPI(r.Context(), *sw, images, authz.IsOwner(r.Context(), ownerID))
+		isOwner := authz.IsOwner(r.Context(), ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(r.Context(), ownerID)
+			if err != nil {
+				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.SwitchID, id)
+				problem.Internal(w, "failed to get switch")
+				return
+			}
+		}
+
+		out, err := repoapi.SwitchToAPI(r.Context(), *sw, images, isOwner, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to get switch")
@@ -197,8 +219,8 @@ func CreateSwitch(switchRepo repository.SwitchRepository, images repository.Swit
 			return
 		}
 
-		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.SwitchToAPI(r.Context(), *created, images, true)
+		// isOwner: true, already gated above - owner sees price unconditionally.
+		out, err := repoapi.SwitchToAPI(r.Context(), *created, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, created.ID)
 			problem.Internal(w, "failed to create switch")
@@ -241,8 +263,8 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, images repository.Swit
 			return
 		}
 
-		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := repoapi.SwitchToAPI(r.Context(), *updated, images, true)
+		// isOwner: true, already gated above - owner sees price unconditionally.
+		out, err := repoapi.SwitchToAPI(r.Context(), *updated, images, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, updated.ID)
 			problem.Internal(w, "failed to update switch")
