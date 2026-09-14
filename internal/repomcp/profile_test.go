@@ -91,3 +91,29 @@ func (s *ProfileMapperSuite) TestProfileFromMCP_ServerOwnedFieldsUnset() {
 	s.Nil(p.DiscoverablePK)
 	s.Nil(p.Links)
 }
+
+func (s *ProfileMapperSuite) TestProfileFromMCP_MapsPreferences() {
+	p := ProfileFromMCP(schema.ProfileInput{
+		Username:    "alice",
+		Preferences: &schema.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
+	})
+
+	s.Equal(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, p.Preferences)
+}
+
+func (s *ProfileMapperSuite) TestProfileFromMCP_PreferencesOmitted_DefaultsApplied() {
+	p := ProfileFromMCP(schema.ProfileInput{Username: "alice"})
+
+	s.Equal(repository.DefaultProfilePreferences(), p.Preferences)
+}
+
+func (s *ProfileMapperSuite) TestProfileToMCP_MapsPreferences() {
+	p := repository.Profile{
+		Username:    "alice",
+		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
+	}
+
+	out := ProfileToMCP(p)
+
+	s.Equal(schema.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, out.Preferences)
+}

@@ -19,7 +19,7 @@ func TestValidateSuite(t *testing.T) {
 }
 
 func valid() repository.Profile {
-	return repository.Profile{Username: "alice_kb"}
+	return repository.Profile{Username: "alice_kb", Preferences: repository.DefaultProfilePreferences()}
 }
 
 func names(errs []profilevalidate.FieldError) []string {
@@ -46,6 +46,7 @@ func (s *ValidateSuite) TestValidFull_NoErrors() {
 			{Name: "Twitch", URL: "https://twitch.tv/alice"},
 			{Name: "site", URL: "https://example.com/path?q=1"},
 		},
+		Preferences: repository.DefaultProfilePreferences(),
 	}
 
 	s.Empty(profilevalidate.Validate(p))
@@ -236,6 +237,42 @@ func (s *ValidateSuite) TestNormalize_NilDiscordUsername_Unchanged() {
 	profilevalidate.Normalize(&p)
 
 	s.Nil(p.DiscordUsername)
+}
+
+func (s *ValidateSuite) TestCurrencyValidShapes_OK() {
+	for _, v := range []string{"USD", "EUR", "JPY"} {
+		p := valid()
+		p.Preferences.Currency = v
+
+		s.Empty(profilevalidate.Validate(p), "expected %q to be valid", v)
+	}
+}
+
+func (s *ValidateSuite) TestCurrencyInvalidShapes_Flagged() {
+	for _, v := range []string{"", "usd", "US", "USDD", "12A"} {
+		p := valid()
+		p.Preferences.Currency = v
+
+		s.Equal([]string{"preferences.currency"}, names(profilevalidate.Validate(p)), "expected %q to be invalid", v)
+	}
+}
+
+func (s *ValidateSuite) TestNormalize_LowercaseCurrency_Uppercased() {
+	p := valid()
+	p.Preferences.Currency = "usd"
+
+	profilevalidate.Normalize(&p)
+
+	s.Equal("USD", p.Preferences.Currency)
+}
+
+func (s *ValidateSuite) TestNormalize_WhitespaceCurrency_Trimmed() {
+	p := valid()
+	p.Preferences.Currency = "  usd  "
+
+	profilevalidate.Normalize(&p)
+
+	s.Equal("USD", p.Preferences.Currency)
 }
 
 func (s *ValidateSuite) TestSecondLinkIndexInFieldName() {

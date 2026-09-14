@@ -8,6 +8,7 @@ import (
 // ProfileToMCP maps a repository.Profile to its MCP tool shape: avatar as a
 // bool.
 func ProfileToMCP(p repository.Profile) schema.Profile {
+	prefs := profilePreferencesToMCP(p.Preferences)
 	return schema.Profile{
 		Username:        p.Username,
 		UserID:          p.OwnerID,
@@ -16,6 +17,7 @@ func ProfileToMCP(p repository.Profile) schema.Profile {
 		Bio:             p.Bio,
 		Links:           profileLinksToMCP(p.Links),
 		HasAvatar:       p.AvatarPath != nil,
+		Preferences:     prefs,
 	}
 }
 
@@ -34,12 +36,34 @@ func ProfileToMCPSummary(p repository.Profile) schema.ProfileSummary {
 // repository.Profile. OwnerID, AvatarPath, and the GSI discriminators
 // are set downstream, not here.
 func ProfileFromMCP(in schema.ProfileInput) repository.Profile {
+	prefs := repository.DefaultProfilePreferences()
+	if in.Preferences != nil {
+		prefs = profilePreferencesFromMCP(*in.Preferences)
+	}
+
 	return repository.Profile{
 		Username:        in.Username,
 		Discoverable:    in.Discoverable,
 		DiscordUsername: in.DiscordUsername,
 		Bio:             in.Bio,
 		Links:           profileLinksFromMCP(in.Links),
+		Preferences:     prefs,
+	}
+}
+
+func profilePreferencesToMCP(p repository.ProfilePreferences) schema.ProfilePreferences {
+	return schema.ProfilePreferences{
+		Currency:          p.Currency,
+		ShowPriceToMe:     p.ShowPriceToMe,
+		ShowPriceToOthers: p.ShowPriceToOthers,
+	}
+}
+
+func profilePreferencesFromMCP(in schema.ProfilePreferences) repository.ProfilePreferences {
+	return repository.ProfilePreferences{
+		Currency:          in.Currency,
+		ShowPriceToMe:     in.ShowPriceToMe,
+		ShowPriceToOthers: in.ShowPriceToOthers,
 	}
 }
 

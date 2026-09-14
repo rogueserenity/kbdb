@@ -42,15 +42,24 @@ func validDiscordUsername(s string) bool {
 	return discordUsernamePattern.MatchString(s) && !strings.Contains(s, "..")
 }
 
+// currencyPattern checks shape only (3 uppercase letters) - kbdb doesn't
+// maintain or validate against the actual ISO 4217 code list.
+var currencyPattern = regexp.MustCompile(`^[A-Z]{3}$`)
+
+func validCurrency(s string) bool {
+	return currencyPattern.MatchString(s)
+}
+
 // Normalize coerces a blank (empty or all-whitespace) DiscordUsername to nil
-// in place, treating it as not provided rather than a validation failure.
-// Callers must run this before Validate and before passing p to a
-// repository.ProfileRepository, so a blank handle never reaches the
-// DynamoDB directory GSIs.
+// in place, treating it as not provided rather than a validation failure,
+// and uppercases Preferences.Currency. Callers must run this before
+// Validate and before passing p to a repository.ProfileRepository, so a
+// blank handle never reaches the DynamoDB directory GSIs.
 func Normalize(p *repository.Profile) {
 	if p.DiscordUsername != nil && strings.TrimSpace(*p.DiscordUsername) == "" {
 		p.DiscordUsername = nil
 	}
+	p.Preferences.Currency = strings.ToUpper(strings.TrimSpace(p.Preferences.Currency))
 }
 
 // Validate returns every field-level violation in p's writable body, or nil
@@ -86,6 +95,13 @@ func Validate(p repository.Profile) []FieldError {
 		})
 	}
 	errs = append(errs, validateLinks(p.Links)...)
+
+	if !validCurrency(p.Preferences.Currency) {
+		errs = append(errs, FieldError{
+			Name:   "preferences.currency",
+			Reason: "must be a 3-letter uppercase ISO 4217 currency code",
+		})
+	}
 
 	return errs
 }

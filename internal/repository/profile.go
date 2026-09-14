@@ -14,6 +14,28 @@ type ProfileLink struct {
 	URL  string `dynamodbav:"url"  json:"url"`
 }
 
+// ProfilePreferences holds a user's display/visibility preferences.
+// Currency is display-only - kbdb stores no per-item currency and does no
+// conversion. ShowPriceToMe gates list-summary responses only; an owner's
+// single-item GET always shows their own price, since editing requires
+// knowing the current value. ShowPriceToOthers gates both.
+type ProfilePreferences struct {
+	Currency          string `dynamodbav:"currency"             json:"currency"`
+	ShowPriceToMe     bool   `dynamodbav:"show_price_to_me"     json:"show_price_to_me"`
+	ShowPriceToOthers bool   `dynamodbav:"show_price_to_others" json:"show_price_to_others"`
+}
+
+// DefaultProfilePreferences mirrors ProfilePreferences' OpenAPI schema
+// defaults - the Go zero value isn't usable directly, since ShowPriceToMe
+// defaults true but its zero value is false.
+func DefaultProfilePreferences() ProfilePreferences {
+	return ProfilePreferences{
+		Currency:          "USD",
+		ShowPriceToMe:     true,
+		ShowPriceToOthers: false,
+	}
+}
+
 // Profile is a user's public identity - one per user, partitioned by the
 // IdP subject (OwnerID), no sort key.
 //
@@ -29,6 +51,8 @@ type Profile struct {
 	Username string `dynamodbav:"username" json:"username"`
 
 	Discoverable bool `dynamodbav:"discoverable" json:"discoverable"`
+
+	Preferences ProfilePreferences `dynamodbav:"preferences" json:"preferences"`
 
 	DiscordUsername *string       `dynamodbav:"discord_username,omitempty" json:"discord_username,omitempty"`
 	Bio             *string       `dynamodbav:"bio,omitempty" json:"bio,omitempty"`
@@ -55,6 +79,12 @@ type ProfileRepository interface {
 	// Get returns the profile keyed by ownerID, or ErrNotFound. Applies
 	// no visibility check - the caller does that against Discoverable.
 	Get(ctx context.Context, ownerID string) (*Profile, error)
+
+	// GetPreferences returns ownerID's preferences, or
+	// DefaultProfilePreferences() (not ErrNotFound) if they have no
+	// profile yet, so gating logic elsewhere always has a preference to
+	// consult.
+	GetPreferences(ctx context.Context, ownerID string) (ProfilePreferences, error)
 
 	// ResolveUsername returns the IdP subject that owns username, or
 	// ErrNotFound.

@@ -142,6 +142,53 @@ var _ = Describe("Updating a profile", func() {
 			})
 		})
 
+		Context("given a PUT that changes preferences", func() {
+			When("updating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, ownerToken, fmt.Sprintf(`{
+						"username": %q,
+						"discoverable": true,
+						"preferences": {"currency": "GBP", "show_price_to_me": false, "show_price_to_others": true}
+					}`, username))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 200 with the changed preferences", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Preferences).NotTo(BeNil())
+					Expect(got.Preferences.Currency).To(Equal("GBP"))
+					Expect(got.Preferences.ShowPriceToMe).To(BeFalse())
+					Expect(got.Preferences.ShowPriceToOthers).To(BeTrue())
+				})
+			})
+		})
+
+		Context("given a PUT that omits preferences", func() {
+			When("updating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, ownerToken, fmt.Sprintf(
+						`{"username": %q, "discoverable": true}`, username))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 200 and resets preferences to defaults", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Preferences).NotTo(BeNil())
+					Expect(got.Preferences.Currency).To(Equal("USD"))
+					Expect(got.Preferences.ShowPriceToMe).To(BeTrue())
+					Expect(got.Preferences.ShowPriceToOthers).To(BeFalse())
+				})
+			})
+		})
+
 		Context("given a PUT with a blank discord_username", func() {
 			When("updating the profile", func() {
 				BeforeEach(func(ctx SpecContext) {

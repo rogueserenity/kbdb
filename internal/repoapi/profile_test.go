@@ -136,3 +136,35 @@ func (s *ProfileMapperSuite) TestProfileToRepo_DiscoverableOmitted_DefaultsFalse
 
 	s.False(p.Discoverable)
 }
+
+func (s *ProfileMapperSuite) TestProfileToRepo_MapsPreferences() {
+	in := api.ProfileInput{
+		Username: "alice",
+		Preferences: &api.ProfilePreferences{
+			Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true,
+		},
+	}
+
+	p := ProfileToRepo(in)
+
+	s.Equal(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, p.Preferences)
+}
+
+func (s *ProfileMapperSuite) TestProfileToRepo_PreferencesOmitted_DefaultsApplied() {
+	p := ProfileToRepo(api.ProfileInput{Username: "alice"})
+
+	s.Equal(repository.DefaultProfilePreferences(), p.Preferences)
+}
+
+func (s *ProfileMapperSuite) TestProfileToAPI_MapsPreferences() {
+	p := repository.Profile{
+		Username:    "alice",
+		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
+	}
+
+	out, err := ProfileToAPI(s.T().Context(), p, mocks.NewMockProfileImageStore(s.T()))
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Preferences)
+	s.Equal(api.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, *out.Preferences)
+}

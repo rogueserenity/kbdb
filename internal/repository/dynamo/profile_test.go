@@ -64,6 +64,43 @@ func (s *ProfileRepositorySuite) TestGet_Succeeds() {
 	s.Equal("keebs enjoyer", *p.Bio)
 }
 
+func (s *ProfileRepositorySuite) TestGet_NoStoredPreferences_DefaultsApplied() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"user_id":  &types.AttributeValueMemberS{Value: "user-alice"},
+				"username": &types.AttributeValueMemberS{Value: "alice"},
+			},
+		}, nil)
+
+	p, err := s.repo.Get(s.T().Context(), "user-alice")
+
+	s.Require().NoError(err)
+	s.Equal(repository.DefaultProfilePreferences(), p.Preferences)
+}
+
+func (s *ProfileRepositorySuite) TestGet_StoredPreferences_NotOverwritten() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"user_id":  &types.AttributeValueMemberS{Value: "user-alice"},
+				"username": &types.AttributeValueMemberS{Value: "alice"},
+				"preferences": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+					"currency":             &types.AttributeValueMemberS{Value: "EUR"},
+					"show_price_to_me":     &types.AttributeValueMemberBOOL{Value: false},
+					"show_price_to_others": &types.AttributeValueMemberBOOL{Value: true},
+				}},
+			},
+		}, nil)
+
+	p, err := s.repo.Get(s.T().Context(), "user-alice")
+
+	s.Require().NoError(err)
+	s.Equal(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, p.Preferences)
+}
+
 func (s *ProfileRepositorySuite) TestGet_NotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
 		GetItem(mock.Anything, mock.Anything).
@@ -80,6 +117,49 @@ func (s *ProfileRepositorySuite) TestGet_GetItemError_Propagates() {
 		Return(nil, errors.New("boom"))
 
 	_, err := s.repo.Get(s.T().Context(), "user-alice")
+
+	s.Require().Error(err)
+	s.NotErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *ProfileRepositorySuite) TestGetPreferences_ProfileExists_ReturnsStoredPreferences() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{
+			Item: map[string]types.AttributeValue{
+				"user_id":  &types.AttributeValueMemberS{Value: "user-alice"},
+				"username": &types.AttributeValueMemberS{Value: "alice"},
+				"preferences": &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{
+					"currency":             &types.AttributeValueMemberS{Value: "EUR"},
+					"show_price_to_me":     &types.AttributeValueMemberBOOL{Value: false},
+					"show_price_to_others": &types.AttributeValueMemberBOOL{Value: true},
+				}},
+			},
+		}, nil)
+
+	prefs, err := s.repo.GetPreferences(s.T().Context(), "user-alice")
+
+	s.Require().NoError(err)
+	s.Equal(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, prefs)
+}
+
+func (s *ProfileRepositorySuite) TestGetPreferences_NoProfile_ReturnsDefaults() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
+
+	prefs, err := s.repo.GetPreferences(s.T().Context(), "user-nobody")
+
+	s.Require().NoError(err)
+	s.Equal(repository.DefaultProfilePreferences(), prefs)
+}
+
+func (s *ProfileRepositorySuite) TestGetPreferences_GetItemError_Propagates() {
+	s.mockClient.EXPECT().
+		GetItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("boom"))
+
+	_, err := s.repo.GetPreferences(s.T().Context(), "user-alice")
 
 	s.Require().Error(err)
 	s.NotErrorIs(err, repository.ErrNotFound)
@@ -316,6 +396,33 @@ func (s *ProfileRepositorySuite) TestUpdate_SameUsername_OneUpdateItem_NoTransac
 	s.Contains(*captured.ConditionExpression, "attribute_exists")
 	s.Require().NotNil(got.Bio)
 	s.Equal("updated", *got.Bio)
+}
+
+func (s *ProfileRepositorySuite) TestUpdate_SetsPreferences() {
+	s.mockClient.EXPECT().GetItem(mock.Anything, mock.Anything).
+		Return(storedProfile(nil), nil)
+
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{Attributes: updatedProfileAttrs(nil)}, nil)
+
+	_, err := s.repo.Update(s.updateCtx(), repository.Profile{
+		Username:    "alice",
+		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
+	})
+	s.Require().NoError(err)
+
+	found := false
+	for _, name := range captured.ExpressionAttributeNames {
+		if name == "preferences" {
+			found = true
+		}
+	}
+	s.True(found, "preferences should be named in the update expression")
 }
 
 func (s *ProfileRepositorySuite) TestUpdate_OmittingBioAndLinks_RemovesThem() {

@@ -137,6 +137,88 @@ var _ = Describe("Creating a profile", func() {
 			})
 		})
 
+		Context("given preferences are omitted", func() {
+			var body string
+
+			BeforeEach(func() {
+				body = fmt.Sprintf(`{"username": %q}`, username)
+			})
+
+			When("creating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken, body)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 201 with default preferences", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Preferences).NotTo(BeNil())
+					Expect(got.Preferences.Currency).To(Equal("USD"))
+					Expect(got.Preferences.ShowPriceToMe).To(BeTrue())
+					Expect(got.Preferences.ShowPriceToOthers).To(BeFalse())
+				})
+			})
+		})
+
+		Context("given explicit preferences", func() {
+			var body string
+
+			BeforeEach(func() {
+				body = fmt.Sprintf(`{
+					"username": %q,
+					"preferences": {"currency": "EUR", "show_price_to_me": false, "show_price_to_others": true}
+				}`, username)
+			})
+
+			When("creating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken, body)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 201 with the given preferences", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Preferences).NotTo(BeNil())
+					Expect(got.Preferences.Currency).To(Equal("EUR"))
+					Expect(got.Preferences.ShowPriceToMe).To(BeFalse())
+					Expect(got.Preferences.ShowPriceToOthers).To(BeTrue())
+				})
+			})
+		})
+
+		Context("given a lowercase currency", func() {
+			var body string
+
+			BeforeEach(func() {
+				body = fmt.Sprintf(`{"username": %q, "preferences": {"currency": "eur"}}`, username)
+			})
+
+			When("creating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken, body)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 201 with currency uppercased", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Preferences).NotTo(BeNil())
+					Expect(got.Preferences.Currency).To(Equal("EUR"))
+				})
+			})
+		})
+
 		Context("given a blank discord_username", func() {
 			var body string
 
@@ -228,6 +310,9 @@ var _ = Describe("Creating a profile", func() {
 			Entry("bio over 500",
 				`{"username": "aaa", "bio": "`+strings.Repeat("x", 501)+`"}`,
 				"bio"),
+			Entry("currency is not 3 letters",
+				`{"username": "aaa", "preferences": {"currency": "US"}}`,
+				"preferences.currency"),
 		)
 	})
 

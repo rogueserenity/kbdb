@@ -1813,10 +1813,46 @@ components:
             Presigned S3 PUT URL for the avatar. Short-lived — upload
             promptly.
 
+    ProfilePreferences:
+      type: object
+      required: [currency, show_price_to_me, show_price_to_others]
+      properties:
+        currency:
+          type: string
+          default: USD
+          description: >
+            An ISO 4217 currency code (case-insensitive on write, always
+            returned uppercase). Display-only: a hint for which currency a
+            client should label or convert prices in. kbdb does not store
+            a currency alongside any item's price and performs no
+            conversion itself.
+        show_price_to_me:
+          type: boolean
+          default: true
+          description: >
+            Whether the owner is shown price fields on their own items in
+            list responses (GET /v1/{resource}/{userId} and the
+            equivalent MCP list tools). Does not affect single-item GET —
+            an owner always sees their own item's price there, since
+            editing requires knowing the current value.
+        show_price_to_others:
+          type: boolean
+          default: false
+          description: >
+            Whether other callers (subject to the item's own visibility
+            rules) are shown this owner's item prices, on both single-item
+            GET and list responses.
+
     ProfileInput:
       type: object
       required: [username]
       properties:
+        preferences:
+          $ref: "#/components/schemas/ProfilePreferences"
+          description: >
+            Omitted (not partially specified - a write is a full replace,
+            same as every other field here) means every preference reverts
+            to its default.
         username:
           type: string
           pattern: "^[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]$"

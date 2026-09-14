@@ -107,6 +107,10 @@ func (s *HandleGetProfileSuite) TestStoreError_GenericError() {
 
 func sp(v string) *string { return &v }
 
+func validPreferences() *schema.ProfilePreferences {
+	return &schema.ProfilePreferences{Currency: "USD", ShowPriceToMe: true, ShowPriceToOthers: false}
+}
+
 type HandleCreateProfileSuite struct {
 	suite.Suite
 
@@ -131,7 +135,7 @@ func (s *HandleCreateProfileSuite) TestValid_Created() {
 		return p.Username == "alice"
 	})).Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 
-	out, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	out, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Profile.Username)
@@ -158,7 +162,7 @@ func (s *HandleCreateProfileSuite) TestAlreadyExists_Error() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrAlreadyExists)
 
-	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().ErrorIs(err, errProfileAlreadyExists)
 }
@@ -167,7 +171,7 @@ func (s *HandleCreateProfileSuite) TestUsernameTaken_Error() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrUsernameTaken)
 
-	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().Error(err)
 	s.Equal(`username "alice" is already taken`, err.Error())
@@ -177,7 +181,7 @@ func (s *HandleCreateProfileSuite) TestMutationConflict_Error() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
-	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().ErrorIs(err, errMutationConflict)
 }
@@ -186,7 +190,7 @@ func (s *HandleCreateProfileSuite) TestRepoError_GenericError() {
 	s.mockRepo.EXPECT().Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamo down"))
 
-	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.CreateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().Error(err)
 	s.NotErrorIs(err, errProfileAlreadyExists)
@@ -216,7 +220,7 @@ func (s *HandleUpdateProfileSuite) TestValid_Updated() {
 		return p.Username == "alice"
 	})).Return(&repository.Profile{OwnerID: callerID, Username: "alice"}, nil)
 
-	out, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	out, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Profile.Username)
@@ -233,7 +237,7 @@ func (s *HandleUpdateProfileSuite) TestNoProfile_NotFoundError() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
 }
@@ -242,7 +246,7 @@ func (s *HandleUpdateProfileSuite) TestUsernameTaken_Error() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrUsernameTaken)
 
-	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "taken"}})
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "taken", Preferences: validPreferences()}})
 
 	s.Require().Error(err)
 	s.Equal(`username "taken" is already taken`, err.Error())
@@ -252,7 +256,7 @@ func (s *HandleUpdateProfileSuite) TestMutationConflict_RetryableError() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
-	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().ErrorIs(err, errMutationConflict)
 }
@@ -261,7 +265,7 @@ func (s *HandleUpdateProfileSuite) TestRepoError_GenericError() {
 	s.mockRepo.EXPECT().Update(mock.Anything, mock.Anything).
 		Return(nil, errors.New("dynamo down"))
 
-	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice"}})
+	_, err := s.call(schema.UpdateProfileInput{ProfileInput: schema.ProfileInput{Username: "alice", Preferences: validPreferences()}})
 
 	s.Require().ErrorIs(err, errMutationFailed)
 }

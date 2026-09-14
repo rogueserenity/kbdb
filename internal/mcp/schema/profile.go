@@ -11,15 +11,23 @@ type GetProfileInput struct {
 	Identifier string `json:"identifier" jsonschema:"a profile owner's user id or their username"`
 }
 
+// ProfilePreferences holds a user's display/visibility preferences.
+type ProfilePreferences struct {
+	Currency          string `json:"currency" jsonschema:"an ISO 4217 currency code; display-only hint for which currency a client should label or convert prices in - kbdb stores no per-item currency and does no conversion"`
+	ShowPriceToMe     bool   `json:"show_price_to_me" jsonschema:"whether the owner is shown price fields on their own items in list_* tool results; does not affect get_* tools, which always show the owner their own item's price"`
+	ShowPriceToOthers bool   `json:"show_price_to_others" jsonschema:"whether other callers (subject to the item's own visibility rules) are shown this owner's item prices, in both get_* and list_* tool results"`
+}
+
 // ProfileInput is the writable half of a profile, shared by create_profile
 // and update_profile. A write is a full replace, so an omitted optional
 // field clears it. No user_id: a write always targets the caller's profile.
 type ProfileInput struct {
-	Username        string        `json:"username" jsonschema:"3-32 chars of lowercase letters, digits, hyphen, period, or underscore; no leading/trailing period, hyphen, or underscore; no consecutive periods; a Discord-compatible superset; unique across all profiles"`
-	Discoverable    bool          `json:"discoverable" jsonschema:"whether the profile is listed in the public directory and readable by anyone; when false only you can read it"`
-	DiscordUsername *string       `json:"discord_username,omitempty" jsonschema:"2-32 chars, lowercase letters, digits, period, or underscore, no leading/trailing period or underscore, no consecutive periods; not verified against Discord"`
-	Bio             *string       `json:"bio,omitempty" jsonschema:"free-form bio; at most 500 characters"`
-	Links           []ProfileLink `json:"links,omitempty" jsonschema:"at most 5 name/url pairs; each url must be an https URL"`
+	Username        string              `json:"username" jsonschema:"3-32 chars of lowercase letters, digits, hyphen, period, or underscore; no leading/trailing period, hyphen, or underscore; no consecutive periods; a Discord-compatible superset; unique across all profiles"`
+	Discoverable    bool                `json:"discoverable" jsonschema:"whether the profile is listed in the public directory and readable by anyone; when false only you can read it"`
+	DiscordUsername *string             `json:"discord_username,omitempty" jsonschema:"2-32 chars, lowercase letters, digits, period, or underscore, no leading/trailing period or underscore, no consecutive periods; not verified against Discord"`
+	Bio             *string             `json:"bio,omitempty" jsonschema:"free-form bio; at most 500 characters"`
+	Links           []ProfileLink       `json:"links,omitempty" jsonschema:"at most 5 name/url pairs; each url must be an https URL"`
+	Preferences     *ProfilePreferences `json:"preferences,omitempty" jsonschema:"display/visibility preferences; omitted means every preference reverts to its default"`
 }
 
 // CreateProfileInput is the create_profile tool arguments.
@@ -103,11 +111,12 @@ type DeleteProfileImageOutput struct{}
 // Profile is a user's public identity. HasAvatar reports whether an avatar
 // is on file; MCP never serves the image itself.
 type Profile struct {
-	Username        string        `json:"username" jsonschema:"the profile's unique username"`
-	UserID          string        `json:"user_id" jsonschema:"the profile owner's user id; pass it as the user_id argument to list_keyboards, list_builds, and the other collection tools"`
-	Discoverable    bool          `json:"discoverable" jsonschema:"whether the profile is listed in the public directory"`
-	DiscordUsername *string       `json:"discord_username,omitempty" jsonschema:"the owner's Discord username, if given"`
-	Bio             *string       `json:"bio,omitempty" jsonschema:"free-form bio, if given"`
-	Links           []ProfileLink `json:"links,omitempty" jsonschema:"the profile's links (name/url pairs)"`
-	HasAvatar       bool          `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
+	Username        string             `json:"username" jsonschema:"the profile's unique username"`
+	UserID          string             `json:"user_id" jsonschema:"the profile owner's user id; pass it as the user_id argument to list_keyboards, list_builds, and the other collection tools"`
+	Discoverable    bool               `json:"discoverable" jsonschema:"whether the profile is listed in the public directory"`
+	DiscordUsername *string            `json:"discord_username,omitempty" jsonschema:"the owner's Discord username, if given"`
+	Bio             *string            `json:"bio,omitempty" jsonschema:"free-form bio, if given"`
+	Links           []ProfileLink      `json:"links,omitempty" jsonschema:"the profile's links (name/url pairs)"`
+	HasAvatar       bool               `json:"has_avatar" jsonschema:"whether this profile has an avatar on file"`
+	Preferences     ProfilePreferences `json:"preferences" jsonschema:"display/visibility preferences"`
 }

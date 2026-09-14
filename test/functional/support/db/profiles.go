@@ -16,6 +16,7 @@ type SeedProfileOptions struct {
 	Bio             string
 	Links           []map[string]string
 	AvatarPath      string
+	Preferences     map[string]any
 }
 
 // SeedProfile writes a profile item and its { username -> user_id } claim
@@ -42,6 +43,9 @@ func SeedProfile(ctx context.Context, ownerID string, opts SeedProfileOptions) e
 	}
 	if opts.AvatarPath != "" {
 		item["avatar_path"] = opts.AvatarPath
+	}
+	if opts.Preferences != nil {
+		item["preferences"] = opts.Preferences
 	}
 	if opts.Discoverable {
 		item["discoverable_pk"] = "1"
