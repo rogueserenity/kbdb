@@ -415,7 +415,7 @@ func (s *HandleListBuildsSuite) handler() mcp.ToolHandlerFor[schema.ListBuildsIn
 
 func (s *HandleListBuildsSuite) TestEmpty_ReturnsEmptyList() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 20, "").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
 
 	handler := s.handler()
@@ -427,7 +427,7 @@ func (s *HandleListBuildsSuite) TestEmpty_ReturnsEmptyList() {
 
 func (s *HandleListBuildsSuite) TestSingleBuild_ResolvableKeyboard_DenormalizesBrandAndName() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 20, "").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}}, "", nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, callerID, "kb-1").
@@ -445,7 +445,7 @@ func (s *HandleListBuildsSuite) TestSingleBuild_ResolvableKeyboard_DenormalizesB
 
 func (s *HandleListBuildsSuite) TestBuildWithKeyboardNotFound_OmitsKeyboard() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 20, "").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPrivate}}, "", nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, callerID, "deleted-kb").
@@ -461,7 +461,7 @@ func (s *HandleListBuildsSuite) TestBuildWithKeyboardNotFound_OmitsKeyboard() {
 
 func (s *HandleListBuildsSuite) TestKeyboardRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 20, "").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}}, "", nil)
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, callerID, "kb-1").
@@ -475,7 +475,7 @@ func (s *HandleListBuildsSuite) TestKeyboardRepositoryError_ReturnsError() {
 
 func (s *HandleListBuildsSuite) TestPassesLimitAndCursor() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 5, "abc").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 5, "abc").
 		Return([]repository.Build{}, "", nil)
 
 	handler := s.handler()
@@ -486,7 +486,7 @@ func (s *HandleListBuildsSuite) TestPassesLimitAndCursor() {
 
 func (s *HandleListBuildsSuite) TestOtherUserID_ListsThatUsersCollection() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, otherID, mock.Anything, 20, "").
+		List(mock.Anything, otherID, mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
 
 	handler := s.handler()
@@ -497,7 +497,7 @@ func (s *HandleListBuildsSuite) TestOtherUserID_ListsThatUsersCollection() {
 
 func (s *HandleListBuildsSuite) TestRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 20, "").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
 		Return(nil, "", errors.New("query failed"))
 
 	handler := s.handler()
@@ -508,7 +508,7 @@ func (s *HandleListBuildsSuite) TestRepositoryError_ReturnsError() {
 
 func (s *HandleListBuildsSuite) TestInvalidCursor_ReturnsError() {
 	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, 20, "stale").
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "stale").
 		Return(nil, "", repository.ErrInvalidCursor)
 
 	handler := s.handler()

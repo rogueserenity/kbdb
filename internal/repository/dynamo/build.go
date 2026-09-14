@@ -46,6 +46,7 @@ func (r *BuildRepository) List(
 	ctx context.Context,
 	ownerID string,
 	visibilities []repository.Visibility,
+	keyboardID string,
 	limit int,
 	cursor string,
 ) ([]repository.Build, string, error) {
@@ -73,10 +74,15 @@ func (r *BuildRepository) List(
 	// Limit-bounded page can straddle the build/marker boundary once a
 	// user's builds are exhausted, and a marker item has no visibility
 	// attribute to match anyway.
+	filter := expression.Name("visibility").In(visValues[0], visValues[1:]...).
+		And(expression.AttributeNotExists(expression.Name("item_type")))
+	if keyboardID != "" {
+		filter = filter.And(expression.Name("keyboard").Equal(expression.Value(keyboardID)))
+	}
+
 	builder := expression.NewBuilder().
 		WithKeyCondition(expression.Key("user_id").Equal(expression.Value(ownerID))).
-		WithFilter(expression.Name("visibility").In(visValues[0], visValues[1:]...).
-			And(expression.AttributeNotExists(expression.Name("item_type"))))
+		WithFilter(filter)
 
 	expr, err := builder.Build()
 	if err != nil {

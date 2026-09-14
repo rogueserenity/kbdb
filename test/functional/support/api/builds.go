@@ -42,9 +42,22 @@ func (c *BuildsClient) Delete(ctx context.Context, ownerID, id, token string) (*
 // List sends limit as the query parameter when >= 0; a negative limit
 // omits it, letting the server apply its default.
 func (c *BuildsClient) List(ctx context.Context, ownerID, token string, limit int) (*http.Response, error) {
+	return c.ListFiltered(ctx, ownerID, token, "", limit)
+}
+
+// ListFiltered is List plus an optional keywordID filter (keyboard_id query
+// param); an empty keyboardID omits it.
+func (c *BuildsClient) ListFiltered(ctx context.Context, ownerID, token, keyboardID string, limit int) (*http.Response, error) {
 	path := "/v1/users/" + ownerID + "/builds"
+
+	query := url.Values{}
 	if limit >= 0 {
-		query := url.Values{"limit": []string{strconv.Itoa(limit)}}
+		query.Set("limit", strconv.Itoa(limit))
+	}
+	if keyboardID != "" {
+		query.Set("keyboard_id", keyboardID)
+	}
+	if len(query) > 0 {
 		path += "?" + query.Encode()
 	}
 

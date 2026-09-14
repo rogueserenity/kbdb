@@ -348,6 +348,56 @@ var _ = Describe("Listing builds", func() {
 		})
 	})
 
+	Context("given the owner has builds referencing two different keyboards", func() {
+		var otherKeyboardID, matchingBuildID, otherBuildID string
+
+		BeforeEach(func(ctx SpecContext) {
+			otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+			matchingBuildID = "matching-build-" + uuid.NewString()
+			otherBuildID = "other-build-" + uuid.NewString()
+
+			Expect(db.SeedKeyboard(ctx, ownerID, otherKeyboardID, "private")).To(Succeed())
+			Expect(db.SeedBuild(ctx, ownerID, matchingBuildID, keyboardID, "public")).To(Succeed())
+			Expect(db.SeedBuild(ctx, ownerID, otherBuildID, otherKeyboardID, "public")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, matchingBuildID, keyboardID)).To(Succeed())
+			Expect(db.DeleteBuild(ctx, ownerID, otherBuildID, otherKeyboardID)).To(Succeed())
+			Expect(db.DeleteKeyboard(ctx, ownerID, otherKeyboardID)).To(Succeed())
+		})
+
+		When("listing builds filtered to one of the keyboards", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.ListFiltered(ctx, ownerID, ownerToken, keyboardID, -1)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns only the build referencing that keyboard", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+				ids := itemIDs(decodeItems(resp))
+				Expect(ids).To(ContainElement(matchingBuildID))
+				Expect(ids).NotTo(ContainElement(otherBuildID))
+			})
+		})
+	})
+
+	Context("given the owner has no builds referencing a given keyboard", func() {
+		When("listing builds filtered to that keyboard", func() {
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				resp, err = client.ListFiltered(ctx, ownerID, ownerToken, keyboardID, -1)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			It("returns an empty page", func() {
+				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+				Expect(decodeItems(resp)).To(BeEmpty())
+			})
+		})
+	})
+
 	DescribeTable("given an invalid limit",
 		func(ctx SpecContext, limit int) {
 			var err error
