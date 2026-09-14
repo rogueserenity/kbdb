@@ -33,3 +33,31 @@ func (s *NewProfileImageKeySuite) TestNoUserIDInContext_ReturnsError() {
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
 	s.Empty(key)
 }
+
+type ProfilePreferencesSuite struct {
+	suite.Suite
+}
+
+func TestProfilePreferencesSuite(t *testing.T) {
+	suite.Run(t, new(ProfilePreferencesSuite))
+}
+
+func (s *ProfilePreferencesSuite) TestShowPriceSingle_Owner_AlwaysTrue() {
+	s.True(repository.ProfilePreferences{ShowPriceToOthers: false}.ShowPriceSingle(true))
+	s.True(repository.ProfilePreferences{ShowPriceToOthers: true}.ShowPriceSingle(true))
+}
+
+func (s *ProfilePreferencesSuite) TestShowPriceSingle_NonOwner_FollowsShowPriceToOthers() {
+	s.False(repository.ProfilePreferences{ShowPriceToOthers: false}.ShowPriceSingle(false))
+	s.True(repository.ProfilePreferences{ShowPriceToOthers: true}.ShowPriceSingle(false))
+}
+
+func (s *ProfilePreferencesSuite) TestShowPriceSummary_Owner_FollowsShowPriceToMe() {
+	s.True(repository.ProfilePreferences{ShowPriceToMe: true}.ShowPriceSummary(true))
+	s.False(repository.ProfilePreferences{ShowPriceToMe: false}.ShowPriceSummary(true))
+}
+
+func (s *ProfilePreferencesSuite) TestShowPriceSummary_NonOwner_FollowsShowPriceToOthers() {
+	s.True(repository.ProfilePreferences{ShowPriceToOthers: true}.ShowPriceSummary(false))
+	s.False(repository.ProfilePreferences{ShowPriceToOthers: false}.ShowPriceSummary(false))
+}

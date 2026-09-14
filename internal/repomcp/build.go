@@ -11,15 +11,16 @@ import (
 
 // BuildToMCP never presigns an image URL, unlike
 // [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPI] - it reports
-// only HasImages, so this can't fail on a presign error. isOwner hides
-// Stabs.Price from non-owners.
-func BuildToMCP(b repository.Build, isOwner bool) schema.Build {
+// only HasImages, so this can't fail on a presign error. The owner always
+// sees their own Stabs.Price; a non-owner sees it only if
+// ownerPrefs.ShowPriceToOthers.
+func BuildToMCP(b repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Build {
 	return schema.Build{
 		ID:            b.ID,
 		Keyboard:      b.Keyboard,
 		Plate:         b.Plate,
 		CaseMountType: buildCaseMountTypeToMCP(b.CaseMountType),
-		Stabs:         buildStabsToMCP(b.Stabs, isOwner),
+		Stabs:         buildStabsToMCP(b.Stabs, ownerPrefs.ShowPriceSingle(isOwner)),
 		Foam:          b.Foam,
 		Switches:      buildSwitchEntriesToMCP(b.Switches),
 		KeycapKits:    buildKeycapKitEntriesToMCP(b.KeycapKits),
@@ -94,7 +95,7 @@ func buildCaseMountTypeFromMCP(cmt *schema.BuildCaseMountType) *repository.Build
 	}
 }
 
-func buildStabsToMCP(s *repository.BuildStabs, isOwner bool) *schema.BuildStabs {
+func buildStabsToMCP(s *repository.BuildStabs, showPrice bool) *schema.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -103,7 +104,7 @@ func buildStabsToMCP(s *repository.BuildStabs, isOwner bool) *schema.BuildStabs 
 		Name:      s.Name,
 		MountType: s.MountType,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = s.Price
 	}
 

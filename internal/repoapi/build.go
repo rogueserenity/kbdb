@@ -22,7 +22,11 @@ import (
 // repository error, or b.BuildDate not matching dateLayout, or an image
 // failing to presign, still fails it.
 //
-// isOwner hides Stabs.Price and TotalCost from non-owners.
+// The owner always sees their own Stabs.Price and TotalCost; a non-owner
+// sees them only if ownerPrefs.ShowPriceToOthers. A build's Keyboard,
+// Switches, and KeycapKits all belong to the same owner as the build
+// itself, so ownerPrefs (looked up once for the build's owner) governs
+// price visibility across the whole composite.
 func BuildToAPI(
 	ctx context.Context, b repository.Build,
 	images repository.BuildImageStore,
@@ -33,7 +37,9 @@ func BuildToAPI(
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
 	isOwner bool,
+	ownerPrefs repository.ProfilePreferences,
 ) (api.Build, error) {
+	showPrice := ownerPrefs.ShowPriceSingle(isOwner)
 	buildDate, err := buildDateToAPI(b.BuildDate)
 	if err != nil {
 		return api.Build{}, err
@@ -64,7 +70,7 @@ func BuildToAPI(
 		Keyboard:      keyboardRef,
 		Plate:         b.Plate,
 		CaseMountType: buildCaseMountTypeToAPI(b.CaseMountType),
-		Stabs:         buildStabsToAPI(b.Stabs, isOwner),
+		Stabs:         buildStabsToAPI(b.Stabs, showPrice),
 		Foam:          b.Foam,
 		Switches:      switches,
 		KeycapKits:    keycapKits,
@@ -74,7 +80,7 @@ func BuildToAPI(
 		Images:        imgs,
 	}
 
-	if isOwner {
+	if showPrice {
 		var stabsPrice *float64
 		if b.Stabs != nil {
 			stabsPrice = b.Stabs.Price
@@ -134,9 +140,11 @@ func BuildToRepo(in api.BuildInput) repository.Build {
 // https://github.com/rogueserenity/kbdb/issues/172), Keyboard is left nil
 // rather than failing the whole request; any other error still fails it.
 //
-// TotalCost mirrors [BuildToAPI]'s calculation and isOwner gating; unlike
-// keyboardPrice, switches/keycap kits are only resolved when isOwner,
-// since cost is the only thing this uses them for.
+// TotalCost mirrors [BuildToAPI]'s calculation, gated by
+// ownerPrefs.ShowPriceSummary(isOwner) instead of ShowPriceSingle - unlike
+// [BuildToAPI], the owner isn't unconditionally shown price here. Unlike
+// keyboardPrice, switches/keycap kits are only resolved when price will be
+// shown, since cost is the only thing this uses them for.
 func BuildToAPISummary(
 	ctx context.Context, b repository.Build,
 	keyboardRepo repository.KeyboardRepository,
@@ -144,7 +152,9 @@ func BuildToAPISummary(
 	keycapSetRepo repository.KeycapSetRepository,
 	images repository.BuildImageStore,
 	isOwner bool,
+	ownerPrefs repository.ProfilePreferences,
 ) (api.BuildSummary, error) {
+	showPrice := ownerPrefs.ShowPriceSummary(isOwner)
 	buildDate, err := buildDateToAPI(b.BuildDate)
 	if err != nil {
 		return api.BuildSummary{}, err
@@ -173,7 +183,7 @@ func BuildToAPISummary(
 		summary.Keyboard = &api.BuildSummaryKeyboard{Brand: &kb.Brand, Name: &kb.Name}
 	}
 
-	if isOwner {
+	if showPrice {
 		_, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo, nil, false)
 		if err != nil {
 			return api.BuildSummary{}, err
@@ -238,7 +248,7 @@ func buildCaseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.BuildCase
 	}
 }
 
-func buildStabsToAPI(s *repository.BuildStabs, isOwner bool) *api.BuildStabs {
+func buildStabsToAPI(s *repository.BuildStabs, showPrice bool) *api.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -247,7 +257,7 @@ func buildStabsToAPI(s *repository.BuildStabs, isOwner bool) *api.BuildStabs {
 		Name:      s.Name,
 		MountType: s.MountType,
 	}
-	if isOwner {
+	if showPrice {
 		out.Price = s.Price
 	}
 

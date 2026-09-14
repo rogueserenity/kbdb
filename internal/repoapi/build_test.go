@@ -77,11 +77,19 @@ func newBuildToAPIDeps(t interface {
 }
 
 func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build, error) {
-	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
+	return d.callWithPrefs(ctx, b, true, repository.ProfilePreferences{})
 }
 
-func (d buildToAPIDeps) callSummary(ctx context.Context, b repository.Build, isOwner bool) (api.BuildSummary, error) {
-	return BuildToAPISummary(ctx, b, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, d.images, isOwner)
+func (d buildToAPIDeps) callWithPrefs(ctx context.Context, b repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Build, error) {
+	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, isOwner, ownerPrefs)
+}
+
+func (d buildToAPIDeps) callSummary(ctx context.Context, b repository.Build) (api.BuildSummary, error) {
+	return d.callSummaryWithPrefs(ctx, b, false, repository.ProfilePreferences{})
+}
+
+func (d buildToAPIDeps) callSummaryWithPrefs(ctx context.Context, b repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.BuildSummary, error) {
+	return BuildToAPISummary(ctx, b, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, d.images, isOwner, ownerPrefs)
 }
 
 // expectFullyResolvable sets up every dependency in fullRepoBuild() (kb1,
@@ -608,7 +616,7 @@ func (s *BuildToAPISuite) TestTotalCost_NoPricedComponents_OmitsField() {
 	s.Nil(out.TotalCost)
 }
 
-func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
+func (s *BuildToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPriceAndTotalCost() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
@@ -631,7 +639,7 @@ func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
 			}},
 		}, nil)
 
-	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, false)
+	out, err := d.callWithPrefs(context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Stabs)
@@ -641,7 +649,7 @@ func (s *BuildToAPISuite) TestIsOwnerFalse_OmitsStabsPriceAndTotalCost() {
 	s.Nil(out.TotalCost)
 }
 
-func (s *BuildToAPISuite) TestIsOwnerTrue_IncludesStabsPriceAndTotalCost() {
+func (s *BuildToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPriceAndTotalCost() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
@@ -664,7 +672,39 @@ func (s *BuildToAPISuite) TestIsOwnerTrue_IncludesStabsPriceAndTotalCost() {
 			}},
 		}, nil)
 
-	out, err := BuildToAPI(context.Background(), b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, true)
+	out, err := d.callWithPrefs(context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Stabs)
+	s.Equal(b.Stabs.Price, out.Stabs.Price)
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+}
+
+func (s *BuildToAPISuite) TestOwner_AlwaysIncludesStabsPriceAndTotalCostRegardlessOfShowPriceToMe() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: map[string]repository.KeycapKit{"kit1": {
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+
+	out, err := d.callWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Stabs)
@@ -764,7 +804,7 @@ func (s *BuildToAPISummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
 
-	out, err := d.callSummary(context.Background(), b, false)
+	out, err := d.callSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Equal(&b.ID, out.Id)
@@ -783,7 +823,7 @@ func (s *BuildToAPISummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFai
 		Get(mock.Anything, "alice", "kb1").
 		Return(nil, repository.ErrNotFound)
 
-	out, err := d.callSummary(context.Background(), b, false)
+	out, err := d.callSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Nil(out.Keyboard)
@@ -797,7 +837,7 @@ func (s *BuildToAPISummarySuite) TestKeyboardRepositoryError_ReturnsError() {
 		Get(mock.Anything, "alice", "kb1").
 		Return(nil, errors.New("dynamo unavailable"))
 
-	_, err := d.callSummary(context.Background(), b, false)
+	_, err := d.callSummary(context.Background(), b)
 	s.Require().Error(err)
 }
 
@@ -809,7 +849,7 @@ func (s *BuildToAPISummarySuite) TestNoImages_ImageNil() {
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
 
-	out, err := d.callSummary(context.Background(), b, false)
+	out, err := d.callSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Nil(out.Image)
@@ -829,7 +869,7 @@ func (s *BuildToAPISummarySuite) TestImagesPresent_UsesFirstImageOnly() {
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
 	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", nil)
 
-	out, err := d.callSummary(context.Background(), b, false)
+	out, err := d.callSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Image)
@@ -843,11 +883,11 @@ func (s *BuildToAPISummarySuite) TestMalformedBuildDate_ReturnsError() {
 
 	d := newBuildToAPIDeps(s.T())
 
-	_, err := d.callSummary(context.Background(), b, false)
+	_, err := d.callSummary(context.Background(), b)
 	s.Require().Error(err)
 }
 
-func (s *BuildToAPISummarySuite) TestIsOwnerTrue_IncludesTotalCost() {
+func (s *BuildToAPISummarySuite) TestOwnerShowPriceToMeTrue_IncludesTotalCost() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
@@ -870,7 +910,53 @@ func (s *BuildToAPISummarySuite) TestIsOwnerTrue_IncludesTotalCost() {
 			}},
 		}, nil)
 
-	out, err := d.callSummary(context.Background(), b, true)
+	out, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+}
+
+func (s *BuildToAPISummarySuite) TestOwnerShowPriceToMeFalse_OmitsTotalCost() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+
+	out, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
+}
+
+func (s *BuildToAPISummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: map[string]repository.KeycapKit{"kit1": {
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+
+	out, err := d.callSummaryWithPrefs(context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
@@ -903,10 +989,10 @@ func (s *BuildToAPISummarySuite) TestTotalCost_MatchesBuildToAPI() {
 			}},
 		}, nil)
 
-	full, err := d.call(context.Background(), b)
+	full, err := d.callWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
-	summary, err := d.callSummary(context.Background(), b, true)
+	summary, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(full.TotalCost)
@@ -914,7 +1000,7 @@ func (s *BuildToAPISummarySuite) TestTotalCost_MatchesBuildToAPI() {
 	s.InDelta(*full.TotalCost, *summary.TotalCost, 0.0001)
 }
 
-func (s *BuildToAPISummarySuite) TestIsOwnerFalse_OmitsTotalCost() {
+func (s *BuildToAPISummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
@@ -924,7 +1010,7 @@ func (s *BuildToAPISummarySuite) TestIsOwnerFalse_OmitsTotalCost() {
 			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
 		}, nil)
 
-	out, err := d.callSummary(context.Background(), b, false)
+	out, err := d.callSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
@@ -937,7 +1023,7 @@ func (s *BuildToAPISummarySuite) TestNoPricedComponents_OmitsTotalCost() {
 	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
 
-	out, err := d.callSummary(context.Background(), b, true)
+	out, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
@@ -961,6 +1047,6 @@ func (s *BuildToAPISummarySuite) TestDoesNotResolveKitImages() {
 			}},
 		}, nil)
 
-	_, err := BuildToAPISummary(context.Background(), b, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, d.images, true)
+	_, err := BuildToAPISummary(context.Background(), b, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, d.images, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 }

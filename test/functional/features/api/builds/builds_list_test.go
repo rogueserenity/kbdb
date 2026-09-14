@@ -227,6 +227,95 @@ var _ = Describe("Listing builds", func() {
 		})
 	})
 
+	Context("given the owner has a priced build and show_price_to_me is false", func() {
+		var buildID, profileUsername string
+
+		BeforeEach(func(ctx SpecContext) {
+			buildID = "priced-build-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedBuildWithStabs(ctx, ownerID, buildID, keyboardID, "public")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("listing builds", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("omits total_cost", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					items := decodeItems(resp)
+					idx := slices.IndexFunc(items, func(i listItem) bool { return i.ID == buildID })
+					Expect(idx).To(BeNumerically(">=", 0))
+					Expect(items[idx].TotalCost).To(BeNil())
+				})
+			})
+		})
+	})
+
+	Context("given the owner has a priced build and show_price_to_others is true", func() {
+		var buildID, profileUsername string
+
+		BeforeEach(func(ctx SpecContext) {
+			buildID = "priced-build-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedBuildWithStabs(ctx, ownerID, buildID, keyboardID, "public")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("listing builds", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, token, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("includes total_cost", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					items := decodeItems(resp)
+					idx := slices.IndexFunc(items, func(i listItem) bool { return i.ID == buildID })
+					Expect(idx).To(BeNumerically(">=", 0))
+					Expect(items[idx].TotalCost).NotTo(BeNil())
+					Expect(*items[idx].TotalCost).To(Equal(329.99 + 12.5))
+				})
+			})
+		})
+	})
+
 	Context("given the owner has more builds than fit under a small limit, each referencing the keyboard", func() {
 		var buildIDs []string
 

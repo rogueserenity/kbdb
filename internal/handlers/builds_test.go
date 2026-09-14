@@ -570,6 +570,7 @@ type ListBuildsSuite struct {
 	mockSwitchRepo    *mocks.MockSwitchRepository
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
 	mockImages        *mocks.MockBuildImageStore
+	mockPrefs         *mocks.MockPreferencesReader
 	handler           http.HandlerFunc
 }
 
@@ -583,7 +584,8 @@ func (s *ListBuildsSuite) SetupTest() {
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
-	s.handler = ListBuilds(s.mockBuildRepo, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo, s.mockImages)
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.handler = ListBuilds(s.mockBuildRepo, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo, s.mockImages, s.mockPrefs)
 }
 
 func (s *ListBuildsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -596,6 +598,7 @@ func (s *ListBuildsSuite) TestListBuilds_Empty_ReturnsEmptyItems() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "alice"), "limit=20")
 	rec := httptest.NewRecorder()
@@ -616,6 +619,7 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "limit=20")
 	rec := httptest.NewRecorder()
@@ -635,7 +639,7 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 	s.Equal("Q1", *item.Keyboard.Name)
 }
 
-func (s *ListBuildsSuite) TestListBuilds_Owner_IncludesTotalCost() {
+func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeTrue_IncludesTotalCost() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Build{{
@@ -665,6 +669,7 @@ func (s *ListBuildsSuite) TestListBuilds_Owner_IncludesTotalCost() {
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
 		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToMe: true}, nil)
 
 	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "alice"), "limit=20")
 	rec := httptest.NewRecorder()
@@ -681,7 +686,35 @@ func (s *ListBuildsSuite) TestListBuilds_Owner_IncludesTotalCost() {
 	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
 }
 
-func (s *ListBuildsSuite) TestListBuilds_NonOwner_OmitsTotalCost() {
+func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeFalse_OmitsTotalCost() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{
+			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate,
+			Stabs: &repository.BuildStabs{Price: floatPtr(12.5)},
+		}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToMe: false}, nil)
+
+	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "alice"), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Nil((*got.Items)[0].TotalCost)
+}
+
+func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Build{{
@@ -696,6 +729,7 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwner_OmitsTotalCost() {
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
 			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
 		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
 
 	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "bob"), "limit=20")
 	rec := httptest.NewRecorder()
@@ -710,6 +744,53 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwner_OmitsTotalCost() {
 	s.Nil((*got.Items)[0].TotalCost)
 }
 
+func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{{
+			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic,
+			Switches:   []repository.BuildSwitchEntry{{Switch: "sw1", Count: 70}},
+			KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks1", Kit: "kit1"}},
+			Stabs:      &repository.BuildStabs{Price: floatPtr(12.5)},
+		}}, "", nil)
+	s.mockKeyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+		}, nil)
+	s.mockSwitchRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
+		}, nil)
+	s.mockKeycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: map[string]repository.KeycapKit{"kit1": {
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "bob"), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.BuildListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	item := (*got.Items)[0]
+	s.Require().NotNil(item.TotalCost)
+	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
+}
+
 func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
@@ -717,6 +798,7 @@ func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyb
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "deleted-kb").
 		Return(nil, repository.ErrNotFound)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "limit=20")
 	rec := httptest.NewRecorder()
@@ -738,6 +820,7 @@ func (s *ListBuildsSuite) TestListBuilds_KeyboardRepositoryError_Returns500() {
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(nil, errors.New("dynamo unavailable"))
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "limit=20")
 	rec := httptest.NewRecorder()
@@ -751,6 +834,7 @@ func (s *ListBuildsSuite) TestListBuilds_PassesLimitAndCursor() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 5, "abc").
 		Return([]repository.Build{}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "limit=5&cursor=abc")
 	rec := httptest.NewRecorder()
@@ -763,6 +847,7 @@ func (s *ListBuildsSuite) TestListBuilds_ReturnsNextCursor_WhenPresent() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Build{}, "next-page-token", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "limit=20")
 	rec := httptest.NewRecorder()
@@ -780,6 +865,7 @@ func (s *ListBuildsSuite) TestListBuilds_Anonymous_RequestsPublicOnly() {
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, 20, "").
 		Return([]repository.Build{}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "limit=20")
 	rec := httptest.NewRecorder()
@@ -796,6 +882,7 @@ func (s *ListBuildsSuite) TestListBuilds_OtherUser_RequestsPublicAndAuthenticate
 			return len(vis) == 2
 		}), 20, "").
 		Return([]repository.Build{}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(ctx, "limit=20")
 	rec := httptest.NewRecorder()
@@ -830,6 +917,20 @@ func (s *ListBuildsSuite) TestListBuilds_InvalidCursor_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *ListBuildsSuite) TestListBuilds_PreferencesError_Returns500() {
+	s.mockBuildRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Build{}, "", nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
+
+	req := s.newRequest(s.T().Context(), "limit=20")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type GetBuildSuite struct {
 	suite.Suite
 
@@ -841,6 +942,7 @@ type GetBuildSuite struct {
 	mockKeyboardRepo   *mocks.MockKeyboardRepository
 	mockSwitchRepo     *mocks.MockSwitchRepository
 	mockKeycapSetRepo  *mocks.MockKeycapSetRepository
+	mockPrefs          *mocks.MockPreferencesReader
 	handler            http.HandlerFunc
 }
 
@@ -857,7 +959,8 @@ func (s *GetBuildSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = GetBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.handler = GetBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo, s.mockPrefs)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing -
@@ -883,6 +986,7 @@ func (s *GetBuildSuite) TestGetBuild_Found_ReturnsBuild() {
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
 		Return(&repository.Build{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(s.T().Context(), "build1")
 	rec := httptest.NewRecorder()
@@ -928,6 +1032,7 @@ func (s *GetBuildSuite) TestGetBuild_SharedVisibility_ReturnsBuild() {
 	s.mockBuildRepo.EXPECT().
 		Get(mock.Anything, "alice", "build1").
 		Return(&repository.Build{UserID: "alice", ID: "build1", Visibility: repository.VisibilityAuthenticated}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	req := s.newRequest(ctx, "build1")
 	rec := httptest.NewRecorder()
@@ -938,6 +1043,86 @@ func (s *GetBuildSuite) TestGetBuild_SharedVisibility_ReturnsBuild() {
 	var got api.Build
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("build1", got.Id)
+}
+
+func (s *GetBuildSuite) TestGetBuild_NonOwnerShowPriceToOthersTrue_IncludesStabsPrice() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	s.stubOwnedKeyboard()
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{
+			UserID: "alice", ID: "build1", Visibility: repository.VisibilityPublic,
+			Stabs: &repository.BuildStabs{Price: floatPtr(12.5)},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	req := s.newRequest(ctx, "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Stabs)
+	s.Require().NotNil(got.Stabs.Price)
+	s.InDelta(12.5, *got.Stabs.Price, 0.0001)
+}
+
+func (s *GetBuildSuite) TestGetBuild_NonOwnerShowPriceToOthersFalse_OmitsStabsPrice() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	s.stubOwnedKeyboard()
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{
+			UserID: "alice", ID: "build1", Visibility: repository.VisibilityPublic,
+			Stabs: &repository.BuildStabs{Price: floatPtr(12.5)},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+
+	req := s.newRequest(ctx, "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Stabs)
+	s.Nil(got.Stabs.Price)
+}
+
+func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceNoPreferencesLookup() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	s.stubOwnedKeyboard()
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{
+			UserID: "alice", ID: "build1", Visibility: repository.VisibilityPrivate,
+			Stabs: &repository.BuildStabs{Price: floatPtr(12.5)},
+		}, nil)
+	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+
+	req := s.newRequest(ctx, "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Stabs)
+	s.Require().NotNil(got.Stabs.Price)
+	s.InDelta(12.5, *got.Stabs.Price, 0.0001)
+}
+
+func (s *GetBuildSuite) TestGetBuild_NonOwnerPreferencesError_Returns500() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{UserID: "alice", ID: "build1", Visibility: repository.VisibilityPublic}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
+
+	req := s.newRequest(ctx, "build1")
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetBuildSuite) TestGetBuild_RepositoryError_Returns500() {

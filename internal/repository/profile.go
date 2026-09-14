@@ -25,6 +25,22 @@ type ProfilePreferences struct {
 	ShowPriceToOthers bool   `dynamodbav:"show_price_to_others" json:"show_price_to_others"`
 }
 
+// ShowPriceSingle reports whether price should be shown on a single-item
+// GET: the owner always sees it; a non-owner only if ShowPriceToOthers.
+func (p ProfilePreferences) ShowPriceSingle(isOwner bool) bool {
+	return isOwner || p.ShowPriceToOthers
+}
+
+// ShowPriceSummary reports whether price should be shown on a list
+// summary: gated by ShowPriceToMe (owner) or ShowPriceToOthers (non-owner) -
+// unlike ShowPriceSingle, the owner isn't shown price unconditionally here.
+func (p ProfilePreferences) ShowPriceSummary(isOwner bool) bool {
+	if isOwner {
+		return p.ShowPriceToMe
+	}
+	return p.ShowPriceToOthers
+}
+
 // DefaultProfilePreferences mirrors ProfilePreferences' OpenAPI schema
 // defaults - the Go zero value isn't usable directly, since ShowPriceToMe
 // defaults true but its zero value is false.

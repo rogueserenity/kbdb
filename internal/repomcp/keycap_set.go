@@ -14,7 +14,7 @@ import (
 // kit's own purchase.price; a non-owner sees it only if
 // ownerPrefs.ShowPriceToOthers.
 func KeycapSetToMCP(ks repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeycapSet {
-	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
+	showPrice := ownerPrefs.ShowPriceSingle(isOwner)
 	var kits []schema.KeycapKit
 	if len(ks.Kits) > 0 {
 		ids := sortedKitIDs(ks.Kits)
@@ -81,11 +81,7 @@ func KeycapSetToMCPSummary(ks repository.KeycapSet, isOwner bool, ownerPrefs rep
 		PrimaryKitHasImage: primaryKit != nil && primaryKit.ImagePath != nil,
 		OrderStatus:        repository.AggregateOrderStatus(ks.Kits),
 	}
-	showPrice := ownerPrefs.ShowPriceToOthers
-	if isOwner {
-		showPrice = ownerPrefs.ShowPriceToMe
-	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSummary(isOwner) {
 		prices := make([]*float64, 0, len(ks.Kits))
 		for _, k := range ks.Kits {
 			prices = append(prices, k.Purchase.Price)

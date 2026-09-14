@@ -98,6 +98,108 @@ var _ = Describe("Getting a build", func() {
 		})
 	})
 
+	Context("given a public build with priced stabs and the owner has show_price_to_others true", func() {
+		var (
+			buildID, profileUsername string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			buildID = "public-build-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedBuildWithStabs(ctx, ownerID, buildID, keyboardID, "public")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("getting the build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, buildID, token)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns the stabs price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Stabs *struct {
+							Price *float64 `json:"price"`
+						} `json:"stabs"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Stabs).NotTo(BeNil())
+					Expect(got.Stabs.Price).NotTo(BeNil())
+					Expect(*got.Stabs.Price).To(Equal(12.5))
+				})
+			})
+		})
+	})
+
+	Context("given a private build with priced stabs and the owner has show_price_to_me false", func() {
+		var (
+			buildID, profileUsername string
+		)
+
+		BeforeEach(func(ctx SpecContext) {
+			buildID = "private-build-" + uuid.NewString()
+			profileUsername = "u" + uuid.NewString()[:8]
+			Expect(db.SeedBuildWithStabs(ctx, ownerID, buildID, keyboardID, "private")).To(Succeed())
+			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
+				Username: profileUsername,
+				Preferences: map[string]any{
+					"currency": "USD", "show_price_to_me": false, "show_price_to_others": false,
+				},
+			})).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+			Expect(db.DeleteProfile(ctx, ownerID, profileUsername)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("getting the build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, buildID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("still returns the stabs price - single-item GET always shows the owner their own price", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+					var got struct {
+						Stabs *struct {
+							Price *float64 `json:"price"`
+						} `json:"stabs"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Stabs).NotTo(BeNil())
+					Expect(got.Stabs.Price).NotTo(BeNil())
+					Expect(*got.Stabs.Price).To(Equal(12.5))
+				})
+			})
+		})
+	})
+
 	Context("given a private build", func() {
 		var buildID string
 

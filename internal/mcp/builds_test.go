@@ -521,6 +521,7 @@ type HandleGetBuildSuite struct {
 	suite.Suite
 
 	mockBuilds *mocks.MockBuildRepository
+	mockPrefs  *mocks.MockPreferencesReader
 }
 
 func TestHandleGetBuildSuite(t *testing.T) {
@@ -529,6 +530,7 @@ func TestHandleGetBuildSuite(t *testing.T) {
 
 func (s *HandleGetBuildSuite) SetupTest() {
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
 }
 
 func (s *HandleGetBuildSuite) TestSucceeds() {
@@ -539,8 +541,9 @@ func (s *HandleGetBuildSuite) TestSucceeds() {
 			Keyboard:   "kb-1",
 			Visibility: repository.VisibilityPrivate,
 		}, nil)
+	// Owner path: no GetPreferences call expected.
 
-	handler := handleGetBuild(s.mockBuilds)
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
 
 	s.Require().NoError(err)
@@ -549,7 +552,7 @@ func (s *HandleGetBuildSuite) TestSucceeds() {
 }
 
 func (s *HandleGetBuildSuite) TestBlankBuildID_ReturnsError() {
-	handler := handleGetBuild(s.mockBuilds)
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "  "})
 
 	s.Require().ErrorContains(err, "build_id must not be blank")
@@ -560,7 +563,7 @@ func (s *HandleGetBuildSuite) TestNotFound_ReturnsNotFound() {
 		Get(mock.Anything, mock.Anything, "missing").
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleGetBuild(s.mockBuilds)
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "missing"})
 
 	s.Require().ErrorIs(err, errBuildNotFound)
@@ -571,7 +574,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPrivateBuild_ReturnsNotFound() {
 		Get(mock.Anything, otherID, "build-1").
 		Return(&repository.Build{ID: "build-1", Visibility: repository.VisibilityPrivate}, nil)
 
-	handler := handleGetBuild(s.mockBuilds)
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().ErrorIs(err, errBuildNotFound)
@@ -581,12 +584,81 @@ func (s *HandleGetBuildSuite) TestOtherUsersSharedVisibilityBuild_Succeeds() {
 	s.mockBuilds.EXPECT().
 		Get(mock.Anything, otherID, "build-1").
 		Return(&repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityAuthenticated}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleGetBuild(s.mockBuilds)
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().NoError(err)
 	s.Equal("build-1", out.Build.ID)
+}
+
+func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersTrue_IncludesStabsPrice() {
+	price := 12.5
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, otherID, "build-1").
+		Return(&repository.Build{
+			ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPublic,
+			Stabs: &repository.BuildStabs{Price: &price},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Build.Stabs)
+	s.Require().NotNil(out.Build.Stabs.Price)
+	s.InDelta(price, *out.Build.Stabs.Price, 0.0001)
+}
+
+func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersFalse_OmitsStabsPrice() {
+	price := 12.5
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, otherID, "build-1").
+		Return(&repository.Build{
+			ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPublic,
+			Stabs: &repository.BuildStabs{Price: &price},
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Build.Stabs)
+	s.Nil(out.Build.Stabs.Price)
+}
+
+func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceNoPreferencesLookup() {
+	price := 12.5
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, callerID, "build-1").
+		Return(&repository.Build{
+			ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate,
+			Stabs: &repository.BuildStabs{Price: &price},
+		}, nil)
+	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Build.Stabs)
+	s.Require().NotNil(out.Build.Stabs.Price)
+	s.InDelta(price, *out.Build.Stabs.Price, 0.0001)
+}
+
+func (s *HandleGetBuildSuite) TestOtherUsersPreferencesError_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, otherID, "build-1").
+		Return(&repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPublic}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
+
+	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
+
+	s.Require().Error(err)
 }
 
 type HandleDeleteBuildSuite struct {

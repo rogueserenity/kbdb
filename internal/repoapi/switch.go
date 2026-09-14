@@ -13,8 +13,7 @@ import (
 // ownerPrefs.ShowPriceToOthers. Returns an error if a stored Purchase date
 // doesn't match dateLayout, or an image fails to presign.
 func SwitchToAPI(ctx context.Context, sw repository.Switch, images repository.SwitchImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Switch, error) {
-	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
-	purchase, err := switchPurchaseToAPI(sw.Purchase, showPrice)
+	purchase, err := switchPurchaseToAPI(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner))
 	if err != nil {
 		return api.Switch{}, err
 	}
@@ -80,11 +79,7 @@ func SwitchToAPISummary(ctx context.Context, sw repository.Switch, images reposi
 		Type:        &sw.Type,
 		OrderStatus: sw.Purchase.OrderStatus,
 	}
-	showPrice := ownerPrefs.ShowPriceToOthers
-	if isOwner {
-		showPrice = ownerPrefs.ShowPriceToMe
-	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = sw.Purchase.Price
 	}
 
