@@ -1016,6 +1016,7 @@ paths:
       description: >
         If userId is the caller's own subject, lists all of the caller's builds. Otherwise, lists only that user's builds explicitly shared with the caller (possibly empty).
       parameters:
+        - $ref: "#/components/parameters/BuildKeyboardIdFilter"
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
       responses:
@@ -1302,6 +1303,12 @@ components:
         tries the IdP subject first and falls back to a username lookup, so
         a username that happened to match a subject string would be shadowed
         (in practice the two value spaces do not overlap).
+    BuildKeyboardIdFilter:
+      name: keyboard_id
+      in: query
+      schema:
+        type: string
+      description: If set, only return builds whose keyboard field is this keyboard's id.
     Limit:
       name: limit
       in: query

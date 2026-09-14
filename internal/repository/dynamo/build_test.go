@@ -51,7 +51,7 @@ func (s *BuildRepositorySuite) TestList_Succeeds() {
 		}, nil)
 
 	builds, next, err := s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "")
 
 	s.Require().NoError(err)
 	s.Empty(next)
@@ -60,11 +60,58 @@ func (s *BuildRepositorySuite) TestList_Succeeds() {
 	s.Equal("kb1", builds[0].Keyboard)
 }
 
+func (s *BuildRepositorySuite) TestList_KeyboardIDSet_AddsKeyboardFilter() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			nameKey, ok := findExpressionName(in.ExpressionAttributeNames, "keyboard")
+			if !ok || !strings.Contains(*in.FilterExpression, nameKey) {
+				return false
+			}
+			for _, v := range in.ExpressionAttributeValues {
+				if s, ok := v.(*types.AttributeValueMemberS); ok && s.Value == "kb1" {
+					return true
+				}
+			}
+			return false
+		})).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
+
+	_, _, err := s.repo.List(s.T().Context(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, "kb1", 20, "")
+
+	s.Require().NoError(err)
+}
+
+func (s *BuildRepositorySuite) TestList_KeyboardIDEmpty_OmitsKeyboardFilter() {
+	s.mockClient.EXPECT().
+		Query(mock.Anything, mock.MatchedBy(func(in *dynamodb.QueryInput) bool {
+			_, ok := findExpressionName(in.ExpressionAttributeNames, "keyboard")
+			return !ok
+		})).
+		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
+
+	_, _, err := s.repo.List(s.T().Context(), "alice",
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "")
+
+	s.Require().NoError(err)
+}
+
+// findExpressionName reports the placeholder key (e.g. "#0") whose
+// ExpressionAttributeNames value matches attrName.
+func findExpressionName(names map[string]string, attrName string) (string, bool) {
+	for k, v := range names {
+		if v == attrName {
+			return k, true
+		}
+	}
+	return "", false
+}
+
 func (s *BuildRepositorySuite) TestList_EmptyVisibilities_ReturnsEmptySliceWithoutQuerying() {
 	// No EXPECT() on s.mockClient.Query - an empty visibilities slice must
 	// short-circuit before building a Query, since expression.In(...)
 	// requires at least one value and would otherwise panic.
-	builds, next, err := s.repo.List(s.T().Context(), "alice", nil, 20, "")
+	builds, next, err := s.repo.List(s.T().Context(), "alice", nil, "", 20, "")
 
 	s.Require().NoError(err)
 	s.NotNil(builds)
@@ -78,7 +125,7 @@ func (s *BuildRepositorySuite) TestList_EmptyResult_ReturnsEmptySliceNotNil() {
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil)
 
 	builds, _, err := s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "")
 
 	s.Require().NoError(err)
 	s.NotNil(builds)
@@ -97,7 +144,7 @@ func (s *BuildRepositorySuite) TestList_ReturnsEncodedCursor_WhenMorePagesExist(
 		}, nil)
 
 	_, next, err := s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "")
 
 	s.Require().NoError(err)
 	s.NotEmpty(next)
@@ -119,7 +166,7 @@ func (s *BuildRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey() {
 		}, nil).Once()
 
 	_, cursor, err := s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "")
 	s.Require().NoError(err)
 
 	s.mockClient.EXPECT().
@@ -130,13 +177,13 @@ func (s *BuildRepositorySuite) TestList_DecodesCursor_IntoExclusiveStartKey() {
 		Return(&dynamodb.QueryOutput{Items: []map[string]types.AttributeValue{}}, nil).Once()
 
 	_, _, err = s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, cursor)
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, cursor)
 	s.Require().NoError(err)
 }
 
 func (s *BuildRepositorySuite) TestList_InvalidCursor_ReturnsErrInvalidCursor() {
 	builds, next, err := s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, "not-valid-base64!!")
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "not-valid-base64!!")
 
 	s.Require().ErrorIs(err, repository.ErrInvalidCursor)
 	s.Nil(builds)
@@ -149,7 +196,7 @@ func (s *BuildRepositorySuite) TestList_QueryError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	builds, next, err := s.repo.List(s.T().Context(), "alice",
-		[]repository.Visibility{repository.VisibilityPublic}, 20, "")
+		[]repository.Visibility{repository.VisibilityPublic}, "", 20, "")
 
 	s.Require().Error(err)
 	s.Nil(builds)

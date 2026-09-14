@@ -596,7 +596,7 @@ func (s *ListBuildsSuite) newRequest(ctx context.Context, query string) *http.Re
 
 func (s *ListBuildsSuite) TestListBuilds_Empty_ReturnsEmptyItems() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
@@ -614,7 +614,7 @@ func (s *ListBuildsSuite) TestListBuilds_Empty_ReturnsEmptyItems() {
 
 func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_DenormalizesBrandName() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}}, "", nil)
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -641,7 +641,7 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 
 func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeTrue_IncludesTotalCost() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{
 			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate,
 			Switches:   []repository.BuildSwitchEntry{{Switch: "sw1", Count: 70}},
@@ -688,7 +688,7 @@ func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeTrue_IncludesTotalCos
 
 func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeFalse_OmitsTotalCost() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{
 			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate,
 			Stabs: &repository.BuildStabs{Price: floatPtr(12.5)},
@@ -716,7 +716,7 @@ func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeFalse_OmitsTotalCost(
 
 func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{
 			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic,
 			Switches:   []repository.BuildSwitchEntry{{Switch: "sw1", Count: 70}},
@@ -746,7 +746,7 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersFalse_OmitsTot
 
 func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{
 			UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic,
 			Switches:   []repository.BuildSwitchEntry{{Switch: "sw1", Count: 70}},
@@ -793,7 +793,7 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesT
 
 func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPublic}}, "", nil)
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "deleted-kb").
@@ -815,7 +815,7 @@ func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyb
 
 func (s *ListBuildsSuite) TestListBuilds_KeyboardRepositoryError_Returns500() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}}, "", nil)
 	s.mockKeyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -832,7 +832,7 @@ func (s *ListBuildsSuite) TestListBuilds_KeyboardRepositoryError_Returns500() {
 
 func (s *ListBuildsSuite) TestListBuilds_PassesLimitAndCursor() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 5, "abc").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 5, "abc").
 		Return([]repository.Build{}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
@@ -845,7 +845,7 @@ func (s *ListBuildsSuite) TestListBuilds_PassesLimitAndCursor() {
 
 func (s *ListBuildsSuite) TestListBuilds_ReturnsNextCursor_WhenPresent() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{}, "next-page-token", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
@@ -863,7 +863,7 @@ func (s *ListBuildsSuite) TestListBuilds_ReturnsNextCursor_WhenPresent() {
 
 func (s *ListBuildsSuite) TestListBuilds_Anonymous_RequestsPublicOnly() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, 20, "").
+		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
@@ -880,7 +880,7 @@ func (s *ListBuildsSuite) TestListBuilds_OtherUser_RequestsPublicAndAuthenticate
 	s.mockBuildRepo.EXPECT().
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
 			return len(vis) == 2
-		}), 20, "").
+		}), mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
@@ -893,7 +893,7 @@ func (s *ListBuildsSuite) TestListBuilds_OtherUser_RequestsPublicAndAuthenticate
 
 func (s *ListBuildsSuite) TestListBuilds_RepositoryError_Returns500() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return(nil, "", errors.New("query failed"))
 
 	req := s.newRequest(s.T().Context(), "limit=20")
@@ -906,7 +906,7 @@ func (s *ListBuildsSuite) TestListBuilds_RepositoryError_Returns500() {
 
 func (s *ListBuildsSuite) TestListBuilds_InvalidCursor_Returns400() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "stale").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "stale").
 		Return(nil, "", repository.ErrInvalidCursor)
 
 	req := s.newRequest(s.T().Context(), "limit=20&cursor=stale")
@@ -919,7 +919,7 @@ func (s *ListBuildsSuite) TestListBuilds_InvalidCursor_Returns400() {
 
 func (s *ListBuildsSuite) TestListBuilds_PreferencesError_Returns500() {
 	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
+		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
 		Return([]repository.Build{}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
 

@@ -105,7 +105,9 @@ type Build struct {
 
 // BuildRepository provides access to builds.
 type BuildRepository interface {
-	List(ctx context.Context, ownerID string, visibilities []Visibility, limit int, cursor string) (builds []Build, nextCursor string, err error)
+	// List returns ownerID's builds. If keyboardID is non-empty, only
+	// builds whose Keyboard field equals keyboardID are returned.
+	List(ctx context.Context, ownerID string, visibilities []Visibility, keyboardID string, limit int, cursor string) (builds []Build, nextCursor string, err error)
 
 	// Get fetches by exact key regardless of visibility; the caller checks
 	// the result via

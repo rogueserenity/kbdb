@@ -79,10 +79,11 @@ func ListBuilds(
 
 		limit := parseListLimit(r)
 		cursor := r.URL.Query().Get("cursor")
+		keyboardID := r.URL.Query().Get("keyboard_id")
 
 		visibilities := authz.ReadableVisibilities(r.Context(), ownerID)
 
-		builds, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, limit, cursor)
+		builds, nextCursor, err := repo.List(r.Context(), ownerID, visibilities, keyboardID, limit, cursor)
 		if errors.Is(err, repository.ErrInvalidCursor) {
 			problem.BadRequest(w, "invalid pagination cursor; restart from the first page")
 			return

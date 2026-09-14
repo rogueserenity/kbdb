@@ -686,8 +686,8 @@ func (_c *MockBuildRepository_Get_Call) RunAndReturn(run func(ctx context.Contex
 }
 
 // List provides a mock function for the type MockBuildRepository
-func (_mock *MockBuildRepository) List(ctx context.Context, ownerID string, visibilities []repository.Visibility, limit int, cursor string) ([]repository.Build, string, error) {
-	ret := _mock.Called(ctx, ownerID, visibilities, limit, cursor)
+func (_mock *MockBuildRepository) List(ctx context.Context, ownerID string, visibilities []repository.Visibility, keyboardID string, limit int, cursor string) ([]repository.Build, string, error) {
+	ret := _mock.Called(ctx, ownerID, visibilities, keyboardID, limit, cursor)
 
 	if len(ret) == 0 {
 		panic("no return value specified for List")
@@ -696,23 +696,23 @@ func (_mock *MockBuildRepository) List(ctx context.Context, ownerID string, visi
 	var r0 []repository.Build
 	var r1 string
 	var r2 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []repository.Visibility, int, string) ([]repository.Build, string, error)); ok {
-		return returnFunc(ctx, ownerID, visibilities, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []repository.Visibility, string, int, string) ([]repository.Build, string, error)); ok {
+		return returnFunc(ctx, ownerID, visibilities, keyboardID, limit, cursor)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []repository.Visibility, int, string) []repository.Build); ok {
-		r0 = returnFunc(ctx, ownerID, visibilities, limit, cursor)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, []repository.Visibility, string, int, string) []repository.Build); ok {
+		r0 = returnFunc(ctx, ownerID, visibilities, keyboardID, limit, cursor)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).([]repository.Build)
 		}
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []repository.Visibility, int, string) string); ok {
-		r1 = returnFunc(ctx, ownerID, visibilities, limit, cursor)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, []repository.Visibility, string, int, string) string); ok {
+		r1 = returnFunc(ctx, ownerID, visibilities, keyboardID, limit, cursor)
 	} else {
 		r1 = ret.Get(1).(string)
 	}
-	if returnFunc, ok := ret.Get(2).(func(context.Context, string, []repository.Visibility, int, string) error); ok {
-		r2 = returnFunc(ctx, ownerID, visibilities, limit, cursor)
+	if returnFunc, ok := ret.Get(2).(func(context.Context, string, []repository.Visibility, string, int, string) error); ok {
+		r2 = returnFunc(ctx, ownerID, visibilities, keyboardID, limit, cursor)
 	} else {
 		r2 = ret.Error(2)
 	}
@@ -728,13 +728,14 @@ type MockBuildRepository_List_Call struct {
 //   - ctx context.Context
 //   - ownerID string
 //   - visibilities []repository.Visibility
+//   - keyboardID string
 //   - limit int
 //   - cursor string
-func (_e *MockBuildRepository_Expecter) List(ctx any, ownerID any, visibilities any, limit any, cursor any) *MockBuildRepository_List_Call {
-	return &MockBuildRepository_List_Call{Call: _e.mock.On("List", ctx, ownerID, visibilities, limit, cursor)}
+func (_e *MockBuildRepository_Expecter) List(ctx any, ownerID any, visibilities any, keyboardID any, limit any, cursor any) *MockBuildRepository_List_Call {
+	return &MockBuildRepository_List_Call{Call: _e.mock.On("List", ctx, ownerID, visibilities, keyboardID, limit, cursor)}
 }
 
-func (_c *MockBuildRepository_List_Call) Run(run func(ctx context.Context, ownerID string, visibilities []repository.Visibility, limit int, cursor string)) *MockBuildRepository_List_Call {
+func (_c *MockBuildRepository_List_Call) Run(run func(ctx context.Context, ownerID string, visibilities []repository.Visibility, keyboardID string, limit int, cursor string)) *MockBuildRepository_List_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -748,13 +749,17 @@ func (_c *MockBuildRepository_List_Call) Run(run func(ctx context.Context, owner
 		if args[2] != nil {
 			arg2 = args[2].([]repository.Visibility)
 		}
-		var arg3 int
+		var arg3 string
 		if args[3] != nil {
-			arg3 = args[3].(int)
+			arg3 = args[3].(string)
 		}
-		var arg4 string
+		var arg4 int
 		if args[4] != nil {
-			arg4 = args[4].(string)
+			arg4 = args[4].(int)
+		}
+		var arg5 string
+		if args[5] != nil {
+			arg5 = args[5].(string)
 		}
 		run(
 			arg0,
@@ -762,6 +767,7 @@ func (_c *MockBuildRepository_List_Call) Run(run func(ctx context.Context, owner
 			arg2,
 			arg3,
 			arg4,
+			arg5,
 		)
 	})
 	return _c
@@ -772,7 +778,7 @@ func (_c *MockBuildRepository_List_Call) Return(builds []repository.Build, nextC
 	return _c
 }
 
-func (_c *MockBuildRepository_List_Call) RunAndReturn(run func(ctx context.Context, ownerID string, visibilities []repository.Visibility, limit int, cursor string) ([]repository.Build, string, error)) *MockBuildRepository_List_Call {
+func (_c *MockBuildRepository_List_Call) RunAndReturn(run func(ctx context.Context, ownerID string, visibilities []repository.Visibility, keyboardID string, limit int, cursor string) ([]repository.Build, string, error)) *MockBuildRepository_List_Call {
 	_c.Call.Return(run)
 	return _c
 }

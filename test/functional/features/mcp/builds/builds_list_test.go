@@ -93,6 +93,41 @@ var _ = Describe("Listing builds over MCP", func() {
 			)
 		})
 
+		Context("given the owner has builds referencing two different keyboards", func() {
+			var otherKeyboardID, matchingBuildID, otherBuildID string
+
+			BeforeEach(func(ctx SpecContext) {
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				matchingBuildID = "matching-build-" + uuid.NewString()
+				otherBuildID = "other-build-" + uuid.NewString()
+
+				Expect(db.SeedKeyboard(ctx, ownerID, otherKeyboardID, "private")).To(Succeed())
+				Expect(db.SeedBuild(ctx, ownerID, matchingBuildID, keyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuild(ctx, ownerID, otherBuildID, otherKeyboardID, "public")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteBuild(ctx, ownerID, matchingBuildID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, ownerID, otherBuildID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, ownerID, otherKeyboardID)).To(Succeed())
+			})
+
+			When("the list_builds tool is called with keyboard_id set to one of the keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "list_builds", map[string]any{"keyboard_id": keyboardID})
+				})
+
+				It("returns only the build referencing that keyboard", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					ids := buildIDsOf(decodeListBuildsOutput(result))
+					Expect(ids).To(ContainElement(matchingBuildID))
+					Expect(ids).NotTo(ContainElement(otherBuildID))
+				})
+			})
+		})
+
 		Context("given another user owns builds at every visibility tier", func() {
 			var (
 				otherID         string

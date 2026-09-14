@@ -43,7 +43,7 @@ var getBuildTool = &mcp.Tool{
 
 var listBuildsTool = &mcp.Tool{
 	Name:        "list_builds",
-	Description: "Lists builds in a user's collection, most useful for browsing. Returns an abbreviated shape, including the referenced keyboard's brand/name; call get_build for a single build's full details. Omit user_id to list your own builds.",
+	Description: "Lists builds in a user's collection, most useful for browsing. Returns an abbreviated shape, including the referenced keyboard's brand/name; call get_build for a single build's full details. Omit user_id to list your own builds. Set keyboard_id to only return builds built on that keyboard.",
 }
 
 var updateBuildTool = &mcp.Tool{
@@ -83,7 +83,7 @@ func handleListBuilds(
 
 		visibilities := authz.ReadableVisibilities(ctx, ownerID)
 
-		builds, nextCursor, err := buildRepo.List(ctx, ownerID, visibilities, clampListLimit(in.Limit), in.Cursor)
+		builds, nextCursor, err := buildRepo.List(ctx, ownerID, visibilities, in.KeyboardID, clampListLimit(in.Limit), in.Cursor)
 		if errors.Is(err, repository.ErrInvalidCursor) {
 			return nil, schema.ListBuildsOutput{}, errors.New("invalid cursor; restart from the first page")
 		}
