@@ -19,8 +19,7 @@ import (
 // an error if a stored Purchase date doesn't match dateLayout, or an image
 // fails to presign.
 func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Keyboard, error) {
-	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
-	purchase, err := keyboardPurchaseToAPI(kb.Purchase, showPrice)
+	purchase, err := keyboardPurchaseToAPI(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner))
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -122,11 +121,7 @@ func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images re
 		OrderStatus: kb.Purchase.OrderStatus,
 		Image:       image,
 	}
-	showPrice := ownerPrefs.ShowPriceToOthers
-	if isOwner {
-		showPrice = ownerPrefs.ShowPriceToMe
-	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = kb.Purchase.Price
 	}
 

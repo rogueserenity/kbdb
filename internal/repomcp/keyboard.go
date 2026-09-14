@@ -10,7 +10,6 @@ import (
 // repoapi.KeyboardToAPI does. The owner always sees their own
 // purchase.price; a non-owner sees it only if ownerPrefs.ShowPriceToOthers.
 func KeyboardToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Keyboard {
-	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
 	return schema.Keyboard{
 		ID:         kb.ID,
 		Brand:      kb.Brand,
@@ -19,7 +18,7 @@ func KeyboardToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs repository.P
 		Layout:     kb.Layout,
 		Design:     keyboardDesignToMCP(kb.Design),
 		PCB:        keyboardPCBToMCP(kb.PCB),
-		Purchase:   keyboardPurchaseToMCP(kb.Purchase, showPrice),
+		Purchase:   keyboardPurchaseToMCP(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
 		Notes:      kb.Notes,
 		Visibility: string(kb.Visibility),
 		HasImages:  len(kb.Images) > 0,
@@ -41,11 +40,7 @@ func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs repos
 		OrderStatus: kb.Purchase.OrderStatus,
 		HasImages:   len(kb.Images) > 0,
 	}
-	showPrice := ownerPrefs.ShowPriceToOthers
-	if isOwner {
-		showPrice = ownerPrefs.ShowPriceToMe
-	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = kb.Purchase.Price
 	}
 

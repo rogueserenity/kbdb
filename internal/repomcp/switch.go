@@ -14,7 +14,6 @@ import (
 // owner always sees their own purchase.price; a non-owner sees it only if
 // ownerPrefs.ShowPriceToOthers.
 func SwitchToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Switch {
-	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
 	return schema.Switch{
 		ID:           sw.ID,
 		Brand:        sw.Brand,
@@ -26,7 +25,7 @@ func SwitchToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.Profi
 		Material:     switchMaterialToMCP(sw.Material),
 		Force:        switchForceToMCP(sw.Force),
 		Spring:       switchSpringToMCP(sw.Spring),
-		Purchase:     switchPurchaseToMCP(sw.Purchase, showPrice),
+		Purchase:     switchPurchaseToMCP(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
 		Notes:        sw.Notes,
 		Visibility:   string(sw.Visibility),
 		HasImage:     sw.ImagePath != nil,
@@ -48,11 +47,7 @@ func SwitchToMCPSummary(sw repository.Switch, isOwner bool, ownerPrefs repositor
 		OrderStatus: sw.Purchase.OrderStatus,
 		HasImage:    sw.ImagePath != nil,
 	}
-	showPrice := ownerPrefs.ShowPriceToOthers
-	if isOwner {
-		showPrice = ownerPrefs.ShowPriceToMe
-	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = sw.Purchase.Price
 	}
 

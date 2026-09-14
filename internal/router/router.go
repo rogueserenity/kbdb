@@ -123,11 +123,11 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, buildImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, buildImageStore, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/builds",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo, profileRepo))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",

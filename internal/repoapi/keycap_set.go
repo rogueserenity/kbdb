@@ -20,7 +20,7 @@ import (
 // can have an unbounded number of kits, each potentially needing its own S3
 // presign.
 func KeycapSetToAPI(ctx context.Context, ks repository.KeycapSet, images repository.KeycapKitImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapSet, error) {
-	showPrice := isOwner || ownerPrefs.ShowPriceToOthers
+	showPrice := ownerPrefs.ShowPriceSingle(isOwner)
 	var kits *[]api.KeycapKit
 	if len(ks.Kits) > 0 {
 		ids := sortedKitIDs(ks.Kits)
@@ -118,11 +118,7 @@ func KeycapSetToAPISummary(ctx context.Context, ks repository.KeycapSet, images 
 		Profile:     ks.Profile,
 		OrderStatus: repository.AggregateOrderStatus(ks.Kits),
 	}
-	showPrice := ownerPrefs.ShowPriceToOthers
-	if isOwner {
-		showPrice = ownerPrefs.ShowPriceToMe
-	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSummary(isOwner) {
 		prices := make([]*float64, 0, len(ks.Kits))
 		for _, k := range ks.Kits {
 			prices = append(prices, k.Purchase.Price)

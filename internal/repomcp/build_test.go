@@ -56,7 +56,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 		Images: repository.BuildImagesMap([]repository.BuildImage{
 			{ImageID: "img-1", Path: repository.BuildImageKey("builds/u-1/build-1/images/img-1")},
 		}),
-	}, true)
+	}, true, repository.ProfilePreferences{})
 
 	s.Equal("build-1", out.ID)
 	s.Equal("kb-1", out.Keyboard)
@@ -79,7 +79,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 	s.True(out.HasImages)
 }
 
-func (s *BuildToMCPSuite) TestIsOwnerFalse_OmitsStabsPrice() {
+func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPrice() {
 	out := BuildToMCP(repository.Build{
 		ID:       "build-1",
 		Keyboard: "kb-1",
@@ -88,15 +88,47 @@ func (s *BuildToMCPSuite) TestIsOwnerFalse_OmitsStabsPrice() {
 			Price: floatPtr(12.5),
 		},
 		Visibility: repository.VisibilityPublic,
-	}, false)
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
 	s.Require().NotNil(out.Stabs)
 	s.Nil(out.Stabs.Price)
 	s.Equal(strPtr("Durock v3"), out.Stabs.Name)
 }
 
+func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPrice() {
+	out := BuildToMCP(repository.Build{
+		ID:       "build-1",
+		Keyboard: "kb-1",
+		Stabs: &repository.BuildStabs{
+			Name:  strPtr("Durock v3"),
+			Price: floatPtr(12.5),
+		},
+		Visibility: repository.VisibilityPublic,
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Require().NotNil(out.Stabs)
+	s.Require().NotNil(out.Stabs.Price)
+	s.InDelta(12.5, *out.Stabs.Price, 0.0001)
+}
+
+func (s *BuildToMCPSuite) TestOwner_AlwaysIncludesStabsPriceRegardlessOfShowPriceToMe() {
+	out := BuildToMCP(repository.Build{
+		ID:       "build-1",
+		Keyboard: "kb-1",
+		Stabs: &repository.BuildStabs{
+			Name:  strPtr("Durock v3"),
+			Price: floatPtr(12.5),
+		},
+		Visibility: repository.VisibilityPublic,
+	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
+
+	s.Require().NotNil(out.Stabs)
+	s.Require().NotNil(out.Stabs.Price)
+	s.InDelta(12.5, *out.Stabs.Price, 0.0001)
+}
+
 func (s *BuildToMCPSuite) TestNoImages_HasImagesFalse() {
-	out := BuildToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}, true)
+	out := BuildToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
 
 	s.False(out.HasImages)
 	s.Nil(out.Switches)

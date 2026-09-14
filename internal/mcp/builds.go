@@ -120,7 +120,10 @@ func handleListBuilds(
 	}
 }
 
-func handleGetBuild(repo repository.BuildRepository) mcp.ToolHandlerFor[schema.GetBuildInput, schema.GetBuildOutput] {
+func handleGetBuild(
+	repo repository.BuildRepository,
+	prefs repository.PreferencesReader,
+) mcp.ToolHandlerFor[schema.GetBuildInput, schema.GetBuildOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetBuildInput) (*mcp.CallToolResult, schema.GetBuildOutput, error) {
 		if strings.TrimSpace(in.BuildID) == "" {
 			return nil, schema.GetBuildOutput{}, errors.New("build_id must not be blank")
@@ -137,7 +140,17 @@ func handleGetBuild(repo repository.BuildRepository) mcp.ToolHandlerFor[schema.G
 			return nil, schema.GetBuildOutput{}, err
 		}
 
-		return nil, schema.GetBuildOutput{Build: repomcp.BuildToMCP(*b, authz.IsOwner(ctx, ownerID))}, nil
+		isOwner := authz.IsOwner(ctx, ownerID)
+		var ownerPrefs repository.ProfilePreferences
+		if !isOwner {
+			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			if err != nil {
+				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.BuildID, in.BuildID)
+				return nil, schema.GetBuildOutput{}, errors.New("failed to get build")
+			}
+		}
+
+		return nil, schema.GetBuildOutput{Build: repomcp.BuildToMCP(*b, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -185,8 +198,8 @@ func handleCreateBuild(
 			return nil, schema.CreateBuildOutput{}, errors.New("failed to create build")
 		}
 
-		// isOwner: true - create always targets the caller's own collection.
-		return nil, schema.CreateBuildOutput{Build: repomcp.BuildToMCP(*created, true)}, nil
+		// isOwner: true, this always targets the caller's own collection.
+		return nil, schema.CreateBuildOutput{Build: repomcp.BuildToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -231,8 +244,8 @@ func handleUpdateBuild(
 			return nil, schema.UpdateBuildOutput{}, mutErr
 		}
 
-		// isOwner: true - update always targets the caller's own collection.
-		return nil, schema.UpdateBuildOutput{Build: repomcp.BuildToMCP(*updated, true)}, nil
+		// isOwner: true, this always targets the caller's own collection.
+		return nil, schema.UpdateBuildOutput{Build: repomcp.BuildToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
