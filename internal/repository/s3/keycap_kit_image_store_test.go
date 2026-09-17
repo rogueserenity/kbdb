@@ -44,8 +44,13 @@ func (s *KeycapKitImageStoreSuite) TestPresignGet_Succeeds() {
 	s.Equal("https://example.com/presigned-get", url)
 }
 
-func (s *KeycapKitImageStoreSuite) TestPresignGet_AppliesConfiguredExpiry() {
-	s.store.getExpiry = 24 * time.Hour
+func (s *KeycapKitImageStoreSuite) TestPresignGet_AppliesConfiguredBucketAndExpiry() {
+	fixedNow := time.Date(2026, 1, 1, 10, 0, 0, 0, time.UTC)
+	s.store.getPresignCfg = getPresignConfig{
+		bucket:  24 * time.Hour,
+		minTTL:  3 * time.Hour,
+		nowFunc: func() time.Time { return fixedNow },
+	}
 
 	s.mockPresign.EXPECT().
 		PresignGetObject(mock.Anything, mock.Anything, mock.MatchedBy(func(optFns []func(*s3.PresignOptions)) bool {
@@ -54,7 +59,7 @@ func (s *KeycapKitImageStoreSuite) TestPresignGet_AppliesConfiguredExpiry() {
 				fn(&opts)
 			}
 
-			return opts.Expires == 24*time.Hour
+			return opts.Expires == 14*time.Hour && opts.Presigner != nil
 		})).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
 

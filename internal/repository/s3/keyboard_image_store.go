@@ -13,21 +13,22 @@ import (
 
 // KeyboardImageStore is the S3-backed repository.KeyboardImageStore.
 type KeyboardImageStore struct {
-	client    s3API
-	presign   s3PresignAPI
-	bucket    string
-	getExpiry time.Duration
+	client        s3API
+	presign       s3PresignAPI
+	bucket        string
+	getPresignCfg getPresignConfig
 }
 
 var _ repository.KeyboardImageStore = (*KeyboardImageStore)(nil)
 
 // NewKeyboardImageStore returns a KeyboardImageStore backed by client.
-func NewKeyboardImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, getExpiry time.Duration) *KeyboardImageStore {
+// getBucket/getMinTTL control GET presign bucketing - see [getPresignConfig].
+func NewKeyboardImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, getBucket, getMinTTL time.Duration) *KeyboardImageStore {
 	return &KeyboardImageStore{
-		client:    client,
-		presign:   presign,
-		bucket:    bucket,
-		getExpiry: getExpiry,
+		client:        client,
+		presign:       presign,
+		bucket:        bucket,
+		getPresignCfg: getPresignConfig{bucket: getBucket, minTTL: getMinTTL},
 	}
 }
 
@@ -36,12 +37,7 @@ func (s *KeyboardImageStore) PresignGetKeyboardImage(ctx context.Context, key re
 	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(string(key)),
-	}, func(o *s3.PresignOptions) {
-		// Zero getExpiry falls through to the SDK's own default (15m).
-		if s.getExpiry > 0 {
-			o.Expires = s.getExpiry
-		}
-	})
+	}, s.getPresignCfg.presignOptionFns()...)
 	if err != nil {
 		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)
 	}

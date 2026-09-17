@@ -360,7 +360,8 @@ Resources:
           IDP_CONSENT_PUBLIC_TOKEN: !Ref IdpConsentPublicToken
           LOGOUT_RETURN_ORIGINS: !Ref LogoutReturnOrigins
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
-          IMAGE_GET_PRESIGN_EXPIRY: 24h
+          IMAGE_GET_PRESIGN_BUCKET: 24h
+          IMAGE_GET_PRESIGN_MIN_TTL: 3h
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
           KEYCAP_SET_TABLE_NAME: !Ref KeycapSetTable
