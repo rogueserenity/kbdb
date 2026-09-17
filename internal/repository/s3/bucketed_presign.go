@@ -2,6 +2,7 @@ package s3
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -73,6 +74,23 @@ func (c getPresignConfig) presignOptionFns() []func(*s3.PresignOptions) {
 			}
 		},
 	}
+}
+
+// cacheControl returns the response-cache-control value browsers/CDNs
+// should apply to the object body itself for a GET minted at c.now(), or ""
+// if bucketing isn't configured. Since the presigned URL is byte-identical
+// for every call within the same window (see [getPresignConfig.window]),
+// immutable is safe: the object at that URL genuinely will not change
+// before the URL itself expires, so a caching client can skip
+// revalidation entirely rather than re-fetching on every load.
+func (c getPresignConfig) cacheControl() string {
+	if c.bucket <= 0 {
+		return ""
+	}
+
+	_, expires := c.window()
+
+	return fmt.Sprintf("public, max-age=%d, immutable", int(expires.Seconds()))
 }
 
 // fixedTimeSigner wraps an [s3.HTTPPresignerV4], overriding whatever

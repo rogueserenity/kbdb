@@ -90,6 +90,23 @@ func (s *GetPresignConfigSuite) TestPresignOptionFns_ZeroBucket_ReturnsNil() {
 	s.Nil(cfg.presignOptionFns())
 }
 
+func (s *GetPresignConfigSuite) TestCacheControl_MidBucket_UsesRemainingWindowAsMaxAge() {
+	bucketStart := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	cfg := getPresignConfig{
+		bucket:  24 * time.Hour,
+		minTTL:  3 * time.Hour,
+		nowFunc: func() time.Time { return bucketStart.Add(10 * time.Hour) },
+	}
+
+	s.Equal("public, max-age=50400, immutable", cfg.cacheControl())
+}
+
+func (s *GetPresignConfigSuite) TestCacheControl_ZeroBucket_ReturnsEmpty() {
+	cfg := getPresignConfig{}
+
+	s.Empty(cfg.cacheControl())
+}
+
 func (s *GetPresignConfigSuite) TestNow_NoNowFunc_UsesWallClock() {
 	cfg := getPresignConfig{}
 

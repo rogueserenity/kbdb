@@ -44,10 +44,15 @@ func NewKeycapKitImageStore(client *s3.Client, presign *s3.PresignClient, bucket
 
 // PresignGet implements repository.KeycapKitImageStore.
 func (s *KeycapKitImageStore) PresignGet(ctx context.Context, key repository.KeycapKitImageKey) (string, error) {
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
+	in := &s3.GetObjectInput{
 		Bucket: aws.String(s.bucket),
 		Key:    aws.String(string(key)),
-	}, s.getPresignCfg.presignOptionFns()...)
+	}
+	if cc := s.getPresignCfg.cacheControl(); cc != "" {
+		in.ResponseCacheControl = aws.String(cc)
+	}
+
+	req, err := s.presign.PresignGetObject(ctx, in, s.getPresignCfg.presignOptionFns()...)
 	if err != nil {
 		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)
 	}

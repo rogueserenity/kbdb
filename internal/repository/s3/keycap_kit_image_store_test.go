@@ -53,7 +53,9 @@ func (s *KeycapKitImageStoreSuite) TestPresignGet_AppliesConfiguredBucketAndExpi
 	}
 
 	s.mockPresign.EXPECT().
-		PresignGetObject(mock.Anything, mock.Anything, mock.MatchedBy(func(optFns []func(*s3.PresignOptions)) bool {
+		PresignGetObject(mock.Anything, mock.MatchedBy(func(in *s3.GetObjectInput) bool {
+			return in.ResponseCacheControl != nil && *in.ResponseCacheControl == "public, max-age=50400, immutable"
+		}), mock.MatchedBy(func(optFns []func(*s3.PresignOptions)) bool {
 			var opts s3.PresignOptions
 			for _, fn := range optFns {
 				fn(&opts)
