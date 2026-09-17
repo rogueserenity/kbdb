@@ -723,12 +723,13 @@ func (s *ProfileRepositorySuite) TestUpdate_RenameConflictExhaustsRetries_Return
 }
 
 func (s *ProfileRepositorySuite) TestSetAvatarPath_NoUserID_ReturnsErrNoUserID() {
-	err := s.repo.SetAvatarPath(s.T().Context(), "profiles/user-alice/avatar")
+	old, err := s.repo.SetAvatarPath(s.T().Context(), "profiles/user-alice/avatar/img2")
 
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
+	s.Nil(old)
 }
 
-func (s *ProfileRepositorySuite) TestSetAvatarPath_OneUpdateItem_NoRead() {
+func (s *ProfileRepositorySuite) TestSetAvatarPath_OneUpdateItem_NoRead_NoPreviousAvatar_ReturnsNil() {
 	// No GetItem - SetAvatarPath writes avatar_path directly under
 	// attribute_exists(user_id).
 	var captured *dynamodb.UpdateItemInput
@@ -737,24 +738,43 @@ func (s *ProfileRepositorySuite) TestSetAvatarPath_OneUpdateItem_NoRead() {
 			captured = in
 			return true
 		})).
-		Return(&dynamodb.UpdateItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"user_id": &types.AttributeValueMemberS{Value: "user-alice"},
+		}}, nil)
 
-	err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar")
+	old, err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar/img2")
 	s.Require().NoError(err)
+	s.Nil(old)
 
 	s.Equal("profile-table", *captured.TableName)
 	s.Equal("user-alice", captured.Key["user_id"].(*types.AttributeValueMemberS).Value)
 	s.True(setsAttr(captured, "avatar_path"))
 	s.Contains(*captured.ConditionExpression, "attribute_exists")
+	s.Equal(types.ReturnValueAllOld, captured.ReturnValues)
+}
+
+func (s *ProfileRepositorySuite) TestSetAvatarPath_PreviousAvatar_ReturnsPreviousKey() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"avatar_path": &types.AttributeValueMemberS{Value: "profiles/user-alice/avatar/img1"},
+		}}, nil)
+
+	old, err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar/img2")
+
+	s.Require().NoError(err)
+	s.Require().NotNil(old)
+	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar/img1"), *old)
 }
 
 func (s *ProfileRepositorySuite) TestSetAvatarPath_NoProfile_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
 
-	err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar")
+	old, err := s.repo.SetAvatarPath(s.updateCtx(), "profiles/user-alice/avatar/img2")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(old)
 }
 
 func (s *ProfileRepositorySuite) TestClearAvatarPath_NoUserID_ReturnsErrNoUserID() {

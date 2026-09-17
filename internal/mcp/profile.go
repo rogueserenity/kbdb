@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/rogueserenity/kbdb/internal/log"
@@ -187,7 +188,7 @@ func handleSetProfileImage(
 			return nil, schema.SetProfileImageOutput{}, err
 		}
 
-		key, err := repository.NewProfileImageKey(ctx)
+		key, err := repository.NewProfileImageKey(ctx, uuid.NewString())
 		if err != nil {
 			log.FromContext(ctx).Error("building profile image key", log.Error, err, log.ProfileID, ownerID)
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
@@ -199,8 +200,15 @@ func handleSetProfileImage(
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
 		}
 
-		if mutErr := handleMutationError(ctx, repo.SetAvatarPath(ctx, key)); mutErr != nil {
+		oldKey, err := repo.SetAvatarPath(ctx, key)
+		if mutErr := handleMutationError(ctx, err); mutErr != nil {
 			return nil, schema.SetProfileImageOutput{}, mutErr
+		}
+
+		if oldKey != nil {
+			if err := images.Delete(ctx, *oldKey); err != nil {
+				log.FromContext(ctx).Error("deleting superseded profile image", log.Error, err, log.ProfileID, ownerID)
+			}
 		}
 
 		return nil, schema.SetProfileImageOutput{UploadURL: uploadURL}, nil

@@ -366,7 +366,7 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
-		key, err := repository.NewKeycapKitImageKey(ctx, in.KeycapSetID, in.KitID)
+		key, err := repository.NewKeycapKitImageKey(ctx, in.KeycapSetID, in.KitID, uuid.NewString())
 		if err != nil {
 			log.FromContext(ctx).Error("building keycap kit image key", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
@@ -378,9 +378,15 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
-		err = keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
+		oldKey, err := keycapSetRepo.SetKitImagePath(ctx, in.KeycapSetID, in.KitID, key)
 		if mutErr := handleMutationError(ctx, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID); mutErr != nil {
 			return nil, schema.SetKeycapKitImageOutput{}, mutErr
+		}
+
+		if oldKey != nil {
+			if err := images.Delete(ctx, *oldKey); err != nil {
+				log.FromContext(ctx).Error("deleting superseded keycap kit image", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
+			}
 		}
 
 		return nil, schema.SetKeycapKitImageOutput{UploadURL: uploadURL}, nil

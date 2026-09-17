@@ -155,6 +155,85 @@ var _ = Describe("Setting a keycap kit's image", func() {
 					})
 				})
 			})
+
+			Context("given the kit already has an image set", func() {
+				var firstImageURL string
+
+				BeforeEach(func(ctx SpecContext) {
+					firstResp, err := client.SetKitImage(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"content_type":"image/png"}`)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(firstResp.StatusCode).To(Equal(http.StatusCreated))
+
+					var created struct {
+						UploadURL string `json:"upload_url"`
+					}
+					Expect(json.NewDecoder(firstResp.Body).Decode(&created)).To(Succeed())
+
+					putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, "image/png", bytes.NewReader([]byte("first-kit-image-bytes")))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+					getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+
+					var set struct {
+						Kits []struct {
+							KitID string `json:"kit_id"`
+							Image *struct {
+								URL string `json:"url"`
+							} `json:"image"`
+						} `json:"kits"`
+					}
+					Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+					Expect(set.Kits).To(HaveLen(1))
+					Expect(set.Kits[0].Image).NotTo(BeNil())
+					firstImageURL = set.Kits[0].Image.URL
+				})
+
+				When("setting the kit's image again", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.SetKitImage(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"content_type":"image/png"}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("replaces it with a new key, deleting the superseded object", func(ctx SpecContext) {
+						By("returning 201 with a fresh upload_url")
+						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+						var created struct {
+							UploadURL string `json:"upload_url"`
+						}
+						Expect(json.NewDecoder(resp.Body).Decode(&created)).To(Succeed())
+
+						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, "image/png", bytes.NewReader([]byte("second-kit-image-bytes")))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+						By("showing a different image URL on a follow-up GetKeycapSet")
+						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var set struct {
+							Kits []struct {
+								KitID string `json:"kit_id"`
+								Image *struct {
+									URL string `json:"url"`
+								} `json:"image"`
+							} `json:"kits"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+						Expect(set.Kits).To(HaveLen(1))
+						Expect(set.Kits[0].Image).NotTo(BeNil())
+						Expect(set.Kits[0].Image.URL).NotTo(Equal(firstImageURL))
+
+						By("no longer serving the superseded object at its old presigned URL")
+						oldImageResp, err := api.DoPresigned(ctx, http.MethodGet, firstImageURL, "", nil)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(oldImageResp.StatusCode).To(Equal(http.StatusNotFound))
+					})
+				})
+			})
 		})
 
 		Context("given the caller is a different authenticated user", func() {

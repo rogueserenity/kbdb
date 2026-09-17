@@ -21,14 +21,14 @@ func TestNewProfileImageKeySuite(t *testing.T) {
 func (s *NewProfileImageKeySuite) TestSucceeds() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
 
-	key, err := repository.NewProfileImageKey(ctx)
+	key, err := repository.NewProfileImageKey(ctx, "img1")
 
 	s.Require().NoError(err)
-	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar"), key)
+	s.Equal(repository.ProfileImageKey("profiles/user-alice/avatar/img1"), key)
 }
 
 func (s *NewProfileImageKeySuite) TestNoUserIDInContext_ReturnsError() {
-	key, err := repository.NewProfileImageKey(context.Background())
+	key, err := repository.NewProfileImageKey(context.Background(), "img1")
 
 	s.Require().ErrorIs(err, repository.ErrNoUserID)
 	s.Empty(key)

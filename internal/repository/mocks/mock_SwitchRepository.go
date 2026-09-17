@@ -407,20 +407,31 @@ func (_c *MockSwitchRepository_List_Call) RunAndReturn(run func(ctx context.Cont
 }
 
 // SetImagePath provides a mock function for the type MockSwitchRepository
-func (_mock *MockSwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) error {
+func (_mock *MockSwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) (*repository.SwitchImageKey, error) {
 	ret := _mock.Called(ctx, id, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetImagePath")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.SwitchImageKey) error); ok {
+	var r0 *repository.SwitchImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.SwitchImageKey) (*repository.SwitchImageKey, error)); ok {
+		return returnFunc(ctx, id, key)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.SwitchImageKey) *repository.SwitchImageKey); ok {
 		r0 = returnFunc(ctx, id, key)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.SwitchImageKey)
+		}
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.SwitchImageKey) error); ok {
+		r1 = returnFunc(ctx, id, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockSwitchRepository_SetImagePath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetImagePath'
@@ -459,12 +470,12 @@ func (_c *MockSwitchRepository_SetImagePath_Call) Run(run func(ctx context.Conte
 	return _c
 }
 
-func (_c *MockSwitchRepository_SetImagePath_Call) Return(err error) *MockSwitchRepository_SetImagePath_Call {
-	_c.Call.Return(err)
+func (_c *MockSwitchRepository_SetImagePath_Call) Return(switchImageKey *repository.SwitchImageKey, err error) *MockSwitchRepository_SetImagePath_Call {
+	_c.Call.Return(switchImageKey, err)
 	return _c
 }
 
-func (_c *MockSwitchRepository_SetImagePath_Call) RunAndReturn(run func(ctx context.Context, id string, key repository.SwitchImageKey) error) *MockSwitchRepository_SetImagePath_Call {
+func (_c *MockSwitchRepository_SetImagePath_Call) RunAndReturn(run func(ctx context.Context, id string, key repository.SwitchImageKey) (*repository.SwitchImageKey, error)) *MockSwitchRepository_SetImagePath_Call {
 	_c.Call.Return(run)
 	return _c
 }

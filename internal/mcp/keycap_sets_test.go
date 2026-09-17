@@ -1274,10 +1274,10 @@ func (s *HandleSetKeycapKitImageSuite) SetupTest() {
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 }
 
-func (s *HandleSetKeycapKitImageSuite) TestSucceeds() {
+func (s *HandleSetKeycapKitImageSuite) TestNoExistingImage_Succeeds() {
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
-		Return(nil)
+		Return(nil, nil)
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
 		Return("https://example.com/upload", nil)
@@ -1289,6 +1289,56 @@ func (s *HandleSetKeycapKitImageSuite) TestSucceeds() {
 		ContentType: "image/png",
 	})
 
+	s.Require().NoError(err)
+	s.Equal("https://example.com/upload", out.UploadURL)
+	// mockImages has no .EXPECT() for Delete - verifies no cleanup is
+	// attempted when there was no previous image.
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestExistingImage_DeletesSupersededObject() {
+	oldKey := repository.KeycapKitImageKey("keycap-sets/alice/ks-1/kits/kit-1/image/old")
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
+		Return(&oldKey, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, oldKey).
+		Return(nil)
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "kit-1",
+		ContentType: "image/png",
+	})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/upload", out.UploadURL)
+}
+
+func (s *HandleSetKeycapKitImageSuite) TestExistingImage_DeleteFails_StillSucceeds() {
+	oldKey := repository.KeycapKitImageKey("keycap-sets/alice/ks-1/kits/kit-1/image/old")
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
+		Return(&oldKey, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.Anything, "image/png").
+		Return("https://example.com/upload", nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, oldKey).
+		Return(errors.New("s3: access denied"))
+
+	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
+	_, out, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
+		KeycapSetID: "ks-1",
+		KitID:       "kit-1",
+		ContentType: "image/png",
+	})
+
+	// Cleanup is best-effort - the new pointer is already live and correct,
+	// so a cleanup failure doesn't fail the call.
 	s.Require().NoError(err)
 	s.Equal("https://example.com/upload", out.UploadURL)
 }
@@ -1333,7 +1383,7 @@ func (s *HandleSetKeycapKitImageSuite) TestKitNotFound_ReturnsNotFound() {
 		Return("https://example.com/upload", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks-1", "missing-kit", mock.Anything).
-		Return(repository.ErrNotFound)
+		Return(nil, repository.ErrNotFound)
 
 	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{
@@ -1351,7 +1401,7 @@ func (s *HandleSetKeycapKitImageSuite) TestMutationConflict_ReturnsConflictError
 		Return("https://example.com/upload", nil)
 	s.mockRepo.EXPECT().
 		SetKitImagePath(mock.Anything, "ks-1", "kit-1", mock.Anything).
-		Return(repository.ErrMutationConflict)
+		Return(nil, repository.ErrMutationConflict)
 
 	handler := handleSetKeycapKitImage(s.mockRepo, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.SetKeycapKitImageInput{

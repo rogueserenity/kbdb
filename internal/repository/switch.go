@@ -97,9 +97,10 @@ type SwitchRepository interface {
 	// Delete. Idempotent: a nonexistent id is not an error.
 	Delete(ctx context.Context, id string) error
 
-	// SetImagePath sets the caller's switch's ImagePath. Returns ErrNotFound
-	// if id doesn't exist.
-	SetImagePath(ctx context.Context, id string, key SwitchImageKey) error
+	// SetImagePath sets the caller's switch's ImagePath to key, returning
+	// the previous key that was replaced, or nil if none was set. Returns
+	// ErrNotFound if id doesn't exist.
+	SetImagePath(ctx context.Context, id string, key SwitchImageKey) (*SwitchImageKey, error)
 
 	// ClearImagePath clears the caller's switch's ImagePath and returns the
 	// key that was cleared, or nil if it was already unset. Idempotent: a
@@ -112,18 +113,21 @@ type SwitchRepository interface {
 // SwitchImageStore.
 type SwitchImageKey string
 
-// NewSwitchImageKey builds the deterministic object key for switchID's
-// image. ownerID comes from ctx, not a parameter, so a caller can't build a
-// key addressing anyone else's prefix. Fixed, no extension - a re-upload
-// overwrites the same object, so there's no orphan accumulation from
-// repeated uploads.
-func NewSwitchImageKey(ctx context.Context, switchID string) (SwitchImageKey, error) {
+// NewSwitchImageKey builds a fresh object key for switchID's image, unique
+// per call via imageID (a caller-generated UUID - see AddKeyboardImage's
+// same pattern). ownerID comes from ctx, not a parameter, so a caller can't
+// build a key addressing anyone else's prefix. A re-upload gets a new key
+// rather than overwriting the same object, so its presigned GET URL is
+// guaranteed to change too - see internal/repository/s3.getPresignConfig,
+// whose cache-control assumes the object at a given key never changes.
+// SetImagePath's caller is responsible for deleting the superseded object.
+func NewSwitchImageKey(ctx context.Context, switchID, imageID string) (SwitchImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return "", ErrNoUserID
 	}
 
-	return SwitchImageKey(fmt.Sprintf("switches/%s/%s/image", ownerID, switchID)), nil
+	return SwitchImageKey(fmt.Sprintf("switches/%s/%s/image/%s", ownerID, switchID, imageID)), nil
 }
 
 // SwitchImageStore stores a switch's image object in a private object

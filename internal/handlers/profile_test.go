@@ -724,11 +724,16 @@ func (s *SetProfileImageSuite) ownerCtx() context.Context {
 	return kbdbctx.WithUserID(s.T().Context(), "user-alice")
 }
 
-const setProfileImageTestKey = repository.ProfileImageKey("profiles/user-alice/avatar")
+// setProfileImageTestKeyMatcher matches any freshly generated avatar key
+// (profiles/user-alice/avatar/<uuid>) - the handler mints a new one per
+// call, so tests can't assert an exact constant key any more.
+func setProfileImageTestKeyMatcher(key repository.ProfileImageKey) bool {
+	return strings.HasPrefix(string(key), "profiles/user-alice/avatar/")
+}
 
-func (s *SetProfileImageSuite) TestSucceeds() {
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(nil)
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+func (s *SetProfileImageSuite) TestNoExistingAvatar_Succeeds() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher)).Return(nil, nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
 
 	rec := httptest.NewRecorder()
@@ -741,6 +746,36 @@ func (s *SetProfileImageSuite) TestSucceeds() {
 	}
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("https://example.com/presigned-put", got.UploadURL)
+	// mockImages has no .EXPECT() for Delete - verifies no cleanup is
+	// attempted when there was no previous avatar.
+}
+
+func (s *SetProfileImageSuite) TestExistingAvatar_DeletesSupersededObject() {
+	oldKey := repository.ProfileImageKey("profiles/user-alice/avatar/old")
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher)).Return(&oldKey, nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher), "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, oldKey).Return(nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
+func (s *SetProfileImageSuite) TestExistingAvatar_DeleteFails_StillReturns201() {
+	oldKey := repository.ProfileImageKey("profiles/user-alice/avatar/old")
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher)).Return(&oldKey, nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher), "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, oldKey).Return(errors.New("s3: access denied"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+
+	// Cleanup is best-effort - the new pointer is already live and correct,
+	// so a cleanup failure doesn't fail the request.
+	s.Equal(http.StatusCreated, rec.Code)
 }
 
 func (s *SetProfileImageSuite) TestNotOwner_404() {
@@ -791,9 +826,9 @@ func (s *SetProfileImageSuite) TestUnapprovedContentType_400() {
 }
 
 func (s *SetProfileImageSuite) TestNoProfile_404() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrNotFound)
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher)).Return(nil, repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
@@ -803,9 +838,9 @@ func (s *SetProfileImageSuite) TestNoProfile_404() {
 }
 
 func (s *SetProfileImageSuite) TestMutationConflict_409() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrMutationConflict)
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher)).Return(nil, repository.ErrMutationConflict)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
@@ -814,7 +849,7 @@ func (s *SetProfileImageSuite) TestMutationConflict_409() {
 }
 
 func (s *SetProfileImageSuite) TestPresignError_500() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(setProfileImageTestKeyMatcher), "image/png").
 		Return("", errors.New("s3: access denied"))
 
 	rec := httptest.NewRecorder()

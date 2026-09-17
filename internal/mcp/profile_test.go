@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -461,17 +462,50 @@ func (s *HandleSetProfileImageSuite) call(in schema.SetProfileImageInput) (schem
 	return out, err
 }
 
-func (s *HandleSetProfileImageSuite) avatarKey() repository.ProfileImageKey {
-	return repository.ProfileImageKey("profiles/" + callerID + "/avatar")
+// avatarKeyMatcher matches any freshly generated avatar key
+// (profiles/<callerID>/avatar/<uuid>) - the handler mints a new one per
+// call, so tests can't assert an exact constant key any more.
+func (s *HandleSetProfileImageSuite) avatarKeyMatcher(key repository.ProfileImageKey) bool {
+	return strings.HasPrefix(string(key), "profiles/"+callerID+"/avatar/")
 }
 
-func (s *HandleSetProfileImageSuite) TestValid_ReturnsUploadURL() {
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(nil)
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+func (s *HandleSetProfileImageSuite) TestNoExistingAvatar_ReturnsUploadURL() {
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher)).Return(nil, nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher), "image/png").
 		Return("https://example.com/put", nil)
 
 	out, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
 
+	s.Require().NoError(err)
+	s.Equal("https://example.com/put", out.UploadURL)
+	// mockImages has no .EXPECT() for Delete - verifies no cleanup is
+	// attempted when there was no previous avatar.
+}
+
+func (s *HandleSetProfileImageSuite) TestExistingAvatar_DeletesSupersededObject() {
+	oldKey := repository.ProfileImageKey("profiles/" + callerID + "/avatar/old")
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher)).Return(&oldKey, nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher), "image/png").
+		Return("https://example.com/put", nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, oldKey).Return(nil)
+
+	out, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/put", out.UploadURL)
+}
+
+func (s *HandleSetProfileImageSuite) TestExistingAvatar_DeleteFails_StillSucceeds() {
+	oldKey := repository.ProfileImageKey("profiles/" + callerID + "/avatar/old")
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher)).Return(&oldKey, nil)
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher), "image/png").
+		Return("https://example.com/put", nil)
+	s.mockImages.EXPECT().Delete(mock.Anything, oldKey).Return(errors.New("s3: access denied"))
+
+	out, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+
+	// Cleanup is best-effort - the new pointer is already live and correct,
+	// so a cleanup failure doesn't fail the call.
 	s.Require().NoError(err)
 	s.Equal("https://example.com/put", out.UploadURL)
 }
@@ -484,9 +518,9 @@ func (s *HandleSetProfileImageSuite) TestUnapprovedContentType_ErrorNoRepoCall()
 }
 
 func (s *HandleSetProfileImageSuite) TestNoProfile_NotFoundError() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher), "image/png").
 		Return("https://example.com/put", nil)
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(repository.ErrNotFound)
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher)).Return(nil, repository.ErrNotFound)
 
 	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
 
@@ -494,9 +528,9 @@ func (s *HandleSetProfileImageSuite) TestNoProfile_NotFoundError() {
 }
 
 func (s *HandleSetProfileImageSuite) TestMutationConflict_RetryableError() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher), "image/png").
 		Return("https://example.com/put", nil)
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(repository.ErrMutationConflict)
+	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher)).Return(nil, repository.ErrMutationConflict)
 
 	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
 
@@ -504,7 +538,7 @@ func (s *HandleSetProfileImageSuite) TestMutationConflict_RetryableError() {
 }
 
 func (s *HandleSetProfileImageSuite) TestPresignError_GenericError() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, mock.MatchedBy(s.avatarKeyMatcher), "image/png").
 		Return("", errors.New("s3 down"))
 
 	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})

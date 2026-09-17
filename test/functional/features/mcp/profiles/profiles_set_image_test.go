@@ -108,7 +108,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 						})
 					})
 
-					It("replaces it, no need to delete first", func() {
+					It("replaces it", func() {
 						Expect(err).NotTo(HaveOccurred())
 						Expect(result.IsError).To(BeFalse())
 					})

@@ -229,7 +229,7 @@ func handleSetSwitchImage(
 			return nil, schema.SetSwitchImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
-		key, err := repository.NewSwitchImageKey(ctx, in.SwitchID)
+		key, err := repository.NewSwitchImageKey(ctx, in.SwitchID, uuid.NewString())
 		if err != nil {
 			log.FromContext(ctx).Error("building switch image key", log.SwitchID, in.SwitchID, log.Error, err)
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
@@ -241,9 +241,15 @@ func handleSetSwitchImage(
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
 		}
 
-		err = switchRepo.SetImagePath(ctx, in.SwitchID, key)
+		oldKey, err := switchRepo.SetImagePath(ctx, in.SwitchID, key)
 		if mutErr := handleMutationError(ctx, err, log.SwitchID, in.SwitchID); mutErr != nil {
 			return nil, schema.SetSwitchImageOutput{}, mutErr
+		}
+
+		if oldKey != nil {
+			if err := images.Delete(ctx, *oldKey); err != nil {
+				log.FromContext(ctx).Error("deleting superseded switch image", log.SwitchID, in.SwitchID, log.Error, err)
+			}
 		}
 
 		return nil, schema.SetSwitchImageOutput{UploadURL: uploadURL}, nil

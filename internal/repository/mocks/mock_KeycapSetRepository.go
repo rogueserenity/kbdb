@@ -556,20 +556,31 @@ func (_c *MockKeycapSetRepository_List_Call) RunAndReturn(run func(ctx context.C
 }
 
 // SetKitImagePath provides a mock function for the type MockKeycapSetRepository
-func (_mock *MockKeycapSetRepository) SetKitImagePath(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey) error {
+func (_mock *MockKeycapSetRepository) SetKitImagePath(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKitImageKey, error) {
 	ret := _mock.Called(ctx, setID, kitID, key)
 
 	if len(ret) == 0 {
 		panic("no return value specified for SetKitImagePath")
 	}
 
-	var r0 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, repository.KeycapKitImageKey) error); ok {
+	var r0 *repository.KeycapKitImageKey
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, repository.KeycapKitImageKey) (*repository.KeycapKitImageKey, error)); ok {
+		return returnFunc(ctx, setID, kitID, key)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string, repository.KeycapKitImageKey) *repository.KeycapKitImageKey); ok {
 		r0 = returnFunc(ctx, setID, kitID, key)
 	} else {
-		r0 = ret.Error(0)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeycapKitImageKey)
+		}
 	}
-	return r0
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, string, repository.KeycapKitImageKey) error); ok {
+		r1 = returnFunc(ctx, setID, kitID, key)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
 }
 
 // MockKeycapSetRepository_SetKitImagePath_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SetKitImagePath'
@@ -614,12 +625,12 @@ func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Run(run func(ctx context
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Return(err error) *MockKeycapSetRepository_SetKitImagePath_Call {
-	_c.Call.Return(err)
+func (_c *MockKeycapSetRepository_SetKitImagePath_Call) Return(keycapKitImageKey *repository.KeycapKitImageKey, err error) *MockKeycapSetRepository_SetKitImagePath_Call {
+	_c.Call.Return(keycapKitImageKey, err)
 	return _c
 }
 
-func (_c *MockKeycapSetRepository_SetKitImagePath_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey) error) *MockKeycapSetRepository_SetKitImagePath_Call {
+func (_c *MockKeycapSetRepository_SetKitImagePath_Call) RunAndReturn(run func(ctx context.Context, setID string, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKitImageKey, error)) *MockKeycapSetRepository_SetKitImagePath_Call {
 	_c.Call.Return(run)
 	return _c
 }

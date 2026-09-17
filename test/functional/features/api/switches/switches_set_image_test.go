@@ -124,10 +124,33 @@ var _ = Describe("Setting a switch's image", func() {
 			})
 
 			Context("given the switch already has an image set", func() {
+				var firstImageURL string
+
 				BeforeEach(func(ctx SpecContext) {
 					firstResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(firstResp.StatusCode).To(Equal(http.StatusCreated))
+
+					var created struct {
+						UploadURL string `json:"upload_url"`
+					}
+					Expect(json.NewDecoder(firstResp.Body).Decode(&created)).To(Succeed())
+
+					putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader([]byte("first-image-bytes")))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+					getResp, err := client.Get(ctx, ownerID, switchID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+
+					var sw struct {
+						Image *struct {
+							URL string `json:"url"`
+						} `json:"image"`
+					}
+					Expect(json.NewDecoder(getResp.Body).Decode(&sw)).To(Succeed())
+					Expect(sw.Image).NotTo(BeNil())
+					firstImageURL = sw.Image.URL
 				})
 
 				When("setting the switch's image again", func() {
@@ -137,8 +160,36 @@ var _ = Describe("Setting a switch's image", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("replaces it, no need to delete first", func() {
+					It("replaces it with a new key, deleting the superseded object", func(ctx SpecContext) {
+						By("returning 201 with a fresh upload_url")
 						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+						var created struct {
+							UploadURL string `json:"upload_url"`
+						}
+						Expect(json.NewDecoder(resp.Body).Decode(&created)).To(Succeed())
+
+						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader([]byte("second-image-bytes")))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+						By("showing a different image URL on a follow-up GetSwitch")
+						getResp, err := client.Get(ctx, ownerID, switchID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var sw struct {
+							Image *struct {
+								URL string `json:"url"`
+							} `json:"image"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&sw)).To(Succeed())
+						Expect(sw.Image).NotTo(BeNil())
+						Expect(sw.Image.URL).NotTo(Equal(firstImageURL))
+
+						By("no longer serving the superseded object at its old presigned URL")
+						oldImageResp, err := api.DoPresigned(ctx, http.MethodGet, firstImageURL, "", nil)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(oldImageResp.StatusCode).To(Equal(http.StatusNotFound))
 					})
 				})
 			})

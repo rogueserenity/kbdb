@@ -1748,14 +1748,19 @@ func (s *SetKeycapKitImageSuite) ownerCtx() context.Context {
 	return kbdbctx.WithUserID(s.T().Context(), "alice")
 }
 
-const setKeycapKitImageTestKey = repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
+// setKeycapKitImageTestKeyMatcher matches any freshly generated kit image
+// key (keycap-sets/alice/ks1/kits/kit1/image/<uuid>) - the handler mints a
+// new one per call, so tests can't assert an exact constant key any more.
+func setKeycapKitImageTestKeyMatcher(key repository.KeycapKitImageKey) bool {
+	return strings.HasPrefix(string(key), "keycap-sets/alice/ks1/kits/kit1/image/")
+}
 
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NoExistingImage_Succeeds() {
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(nil)
+		SetKitImagePath(mock.Anything, "ks1", "kit1", mock.MatchedBy(setKeycapKitImageTestKeyMatcher)).
+		Return(nil, nil)
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
@@ -1770,6 +1775,48 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_Succeeds() {
 	}
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("https://example.com/presigned-put", got.UploadURL)
+	// mockImages has no .EXPECT() for Delete - verifies no cleanup is
+	// attempted when there was no previous image.
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_ExistingImage_DeletesSupersededObject() {
+	oldKey := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image/old")
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", mock.MatchedBy(setKeycapKitImageTestKeyMatcher)).
+		Return(&oldKey, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, oldKey).
+		Return(nil)
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusCreated, rec.Code)
+}
+
+func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_ExistingImage_DeleteFails_StillReturns201() {
+	oldKey := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image/old")
+	s.mockRepo.EXPECT().
+		SetKitImagePath(mock.Anything, "ks1", "kit1", mock.MatchedBy(setKeycapKitImageTestKeyMatcher)).
+		Return(&oldKey, nil)
+	s.mockImages.EXPECT().
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
+		Return("https://example.com/presigned-put", nil)
+	s.mockImages.EXPECT().
+		Delete(mock.Anything, oldKey).
+		Return(errors.New("s3: access denied"))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	// Cleanup is best-effort - the new pointer is already live and correct,
+	// so a cleanup failure doesn't fail the request.
+	s.Equal(http.StatusCreated, rec.Code)
 }
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotOwner_Returns404() {
@@ -1819,11 +1866,11 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_UnapprovedContentType_Ret
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(repository.ErrNotFound)
+		SetKitImagePath(mock.Anything, "ks1", "kit1", mock.MatchedBy(setKeycapKitImageTestKeyMatcher)).
+		Return(nil, repository.ErrNotFound)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1835,7 +1882,7 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_NotFound_Returns404() {
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
 		Return("", errors.New("s3: access denied"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
@@ -1850,11 +1897,11 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_PresignError_Returns500()
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns500() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(errors.New("put item failed"))
+		SetKitImagePath(mock.Anything, "ks1", "kit1", mock.MatchedBy(setKeycapKitImageTestKeyMatcher)).
+		Return(nil, errors.New("put item failed"))
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()
@@ -1866,11 +1913,11 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 
 func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
+		PresignPut(mock.Anything, mock.MatchedBy(setKeycapKitImageTestKeyMatcher), "image/png").
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(repository.ErrMutationConflict)
+		SetKitImagePath(mock.Anything, "ks1", "kit1", mock.MatchedBy(setKeycapKitImageTestKeyMatcher)).
+		Return(nil, repository.ErrMutationConflict)
 
 	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
 	rec := httptest.NewRecorder()

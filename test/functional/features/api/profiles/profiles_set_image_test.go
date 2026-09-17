@@ -130,10 +130,33 @@ var _ = Describe("Setting a profile's avatar", func() {
 			})
 
 			Context("given the avatar is already set", func() {
+				var firstAvatarURL string
+
 				BeforeEach(func(ctx SpecContext) {
 					firstResp, err := client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(firstResp.StatusCode).To(Equal(http.StatusCreated))
+
+					var created struct {
+						UploadURL string `json:"upload_url"`
+					}
+					Expect(json.NewDecoder(firstResp.Body).Decode(&created)).To(Succeed())
+
+					putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader([]byte("first-avatar-bytes")))
+					Expect(err).NotTo(HaveOccurred())
+					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+					getResp, err := client.Get(ctx, ownerID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+
+					var p struct {
+						Avatar *struct {
+							URL string `json:"url"`
+						} `json:"avatar"`
+					}
+					Expect(json.NewDecoder(getResp.Body).Decode(&p)).To(Succeed())
+					Expect(p.Avatar).NotTo(BeNil())
+					firstAvatarURL = p.Avatar.URL
 				})
 
 				When("setting the avatar again", func() {
@@ -143,8 +166,36 @@ var _ = Describe("Setting a profile's avatar", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("replaces it, no need to delete first", func() {
+					It("replaces it with a new key, deleting the superseded object", func(ctx SpecContext) {
+						By("returning 201 with a fresh upload_url")
 						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+						var created struct {
+							UploadURL string `json:"upload_url"`
+						}
+						Expect(json.NewDecoder(resp.Body).Decode(&created)).To(Succeed())
+
+						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader([]byte("second-avatar-bytes")))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
+
+						By("showing a different avatar URL on a follow-up GetProfile")
+						getResp, err := client.Get(ctx, ownerID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var p struct {
+							Avatar *struct {
+								URL string `json:"url"`
+							} `json:"avatar"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&p)).To(Succeed())
+						Expect(p.Avatar).NotTo(BeNil())
+						Expect(p.Avatar.URL).NotTo(Equal(firstAvatarURL))
+
+						By("no longer serving the superseded object at its old presigned URL")
+						oldImageResp, err := api.DoPresigned(ctx, http.MethodGet, firstAvatarURL, "", nil)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(oldImageResp.StatusCode).To(Equal(http.StatusNotFound))
 					})
 				})
 			})

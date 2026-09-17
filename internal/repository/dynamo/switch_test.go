@@ -362,18 +362,37 @@ func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 }
 
 
-func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
+func (s *SwitchRepositorySuite) TestSetImagePath_NoPreviousImage_ReturnsNil() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			return strings.Contains(*in.UpdateExpression, "SET") &&
-				strings.Contains(*in.ConditionExpression, "attribute_exists")
+				strings.Contains(*in.ConditionExpression, "attribute_exists") &&
+				in.ReturnValues == types.ReturnValueAllOld
 		})).
-		Return(&dynamodb.UpdateItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"id": &types.AttributeValueMemberS{Value: "sw1"},
+		}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image")
+	old, err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image/img2")
 
 	s.Require().NoError(err)
+	s.Nil(old)
+}
+
+func (s *SwitchRepositorySuite) TestSetImagePath_PreviousImage_ReturnsPreviousKey() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.UpdateItemOutput{Attributes: map[string]types.AttributeValue{
+			"image_path": &types.AttributeValueMemberS{Value: "switches/alice/sw1/image/img1"},
+		}}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	old, err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image/img2")
+
+	s.Require().NoError(err)
+	s.Require().NotNil(old)
+	s.Equal(repository.SwitchImageKey("switches/alice/sw1/image/img1"), *old)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
@@ -382,9 +401,10 @@ func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
 		Return(nil, &types.ConditionalCheckFailedException{})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.SetImagePath(ctx, "sw1", "p")
+	old, err := s.repo.SetImagePath(ctx, "sw1", "p")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(old)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_UpdateItemError_Propagates() {
@@ -393,17 +413,19 @@ func (s *SwitchRepositorySuite) TestSetImagePath_UpdateItemError_Propagates() {
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.SetImagePath(ctx, "sw1", "p")
+	old, err := s.repo.SetImagePath(ctx, "sw1", "p")
 
 	s.Require().Error(err)
 	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Nil(old)
 }
 
 func (s *SwitchRepositorySuite) TestSetImagePath_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on UpdateItem - see repository.ErrNoUserID.
-	err := s.repo.SetImagePath(s.T().Context(), "sw1", "p")
+	old, err := s.repo.SetImagePath(s.T().Context(), "sw1", "p")
 
 	s.Require().Error(err)
+	s.Nil(old)
 }
 
 func (s *SwitchRepositorySuite) TestClearImagePath_Succeeds() {

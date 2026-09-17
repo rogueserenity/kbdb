@@ -521,7 +521,7 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 			return
 		}
 
-		key, err := repository.NewKeycapKitImageKey(r.Context(), setID, kitID)
+		key, err := repository.NewKeycapKitImageKey(r.Context(), setID, kitID, uuid.NewString())
 		if err != nil {
 			log.FromContext(r.Context()).Error("building keycap kit image key", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
 			problem.Internal(w, "failed to set kit image")
@@ -535,9 +535,15 @@ func SetKeycapKitImage(keycapSetRepo repository.KeycapSetRepository, images repo
 			return
 		}
 
-		err = keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
+		oldKey, err := keycapSetRepo.SetKitImagePath(r.Context(), setID, kitID, key)
 		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
+		}
+
+		if oldKey != nil {
+			if err := images.Delete(r.Context(), *oldKey); err != nil {
+				log.FromContext(r.Context()).Error("deleting superseded keycap kit image", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, kitID)
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

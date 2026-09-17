@@ -414,10 +414,13 @@ func profileUpdateExpression(p *repository.Profile) expression.UpdateBuilder {
 }
 
 // SetAvatarPath implements repository.ProfileRepository.
-func (r *ProfileRepository) SetAvatarPath(ctx context.Context, key repository.ProfileImageKey) error {
+// SetAvatarPath implements repository.ProfileRepository. ALL_OLD reports
+// the key that was replaced, or nil when none was set - the caller uses
+// this to delete the superseded S3 object.
+func (r *ProfileRepository) SetAvatarPath(ctx context.Context, key repository.ProfileImageKey) (*repository.ProfileImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("setting avatar path: %w", repository.ErrNoUserID)
+		return nil, fmt.Errorf("setting avatar path: %w", repository.ErrNoUserID)
 	}
 
 	expr, err := expression.NewBuilder().
@@ -425,25 +428,36 @@ func (r *ProfileRepository) SetAvatarPath(ctx context.Context, key repository.Pr
 		WithCondition(expression.AttributeExists(expression.Name("user_id"))).
 		Build()
 	if err != nil {
-		return fmt.Errorf("building avatar path update for user %q: %w", ownerID, err)
+		return nil, fmt.Errorf("building avatar path update for user %q: %w", ownerID, err)
 	}
 
-	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:                 &r.profileTableName,
 		Key:                       map[string]types.AttributeValue{"user_id": &types.AttributeValueMemberS{Value: ownerID}},
 		UpdateExpression:          expr.Update(),
 		ConditionExpression:       expr.Condition(),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllOld,
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
-			return repository.ErrNotFound
+			return nil, repository.ErrNotFound
 		}
-		return fmt.Errorf("setting avatar path for user %q: %w", ownerID, err)
+		return nil, fmt.Errorf("setting avatar path for user %q: %w", ownerID, err)
 	}
 
-	return nil
+	old := struct {
+		AvatarPath *repository.ProfileImageKey `dynamodbav:"avatar_path"`
+	}{}
+	if err := attributevalue.UnmarshalMap(out.Attributes, &old); err != nil {
+		return nil, fmt.Errorf("unmarshalling previous avatar path for user %q: %w", ownerID, err)
+	}
+	if old.AvatarPath == nil {
+		return nil, nil //nolint:nilnil // no avatar already set is a valid, expected result
+	}
+
+	return old.AvatarPath, nil
 }
 
 // ClearAvatarPath implements repository.ProfileRepository. ALL_OLD reports

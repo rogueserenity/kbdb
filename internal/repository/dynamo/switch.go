@@ -238,10 +238,13 @@ func setOrRemovePtr[T any](update expression.UpdateBuilder, name string, v *T) e
 }
 
 // SetImagePath implements repository.SwitchRepository.
-func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) error {
+// SetImagePath implements repository.SwitchRepository. ALL_OLD reports the
+// key that was replaced, or nil when none was set - the caller uses this to
+// delete the superseded S3 object.
+func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) (*repository.SwitchImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("setting image path for switch %q: %w", id, repository.ErrNoUserID)
+		return nil, fmt.Errorf("setting image path for switch %q: %w", id, repository.ErrNoUserID)
 	}
 
 	expr, err := expression.NewBuilder().
@@ -249,25 +252,36 @@ func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repo
 		WithCondition(expression.AttributeExists(expression.Name("id"))).
 		Build()
 	if err != nil {
-		return fmt.Errorf("building switch image path update for switch %q: %w", id, err)
+		return nil, fmt.Errorf("building switch image path update for switch %q: %w", id, err)
 	}
 
-	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:                 &r.tableName,
 		Key:                       switchKey(ownerID, id),
 		UpdateExpression:          expr.Update(),
 		ConditionExpression:       expr.Condition(),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllOld,
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
-			return repository.ErrNotFound
+			return nil, repository.ErrNotFound
 		}
-		return fmt.Errorf("setting image path for switch %q owner %q: %w", id, ownerID, err)
+		return nil, fmt.Errorf("setting image path for switch %q owner %q: %w", id, ownerID, err)
 	}
 
-	return nil
+	old := struct {
+		ImagePath *repository.SwitchImageKey `dynamodbav:"image_path"`
+	}{}
+	if err := attributevalue.UnmarshalMap(out.Attributes, &old); err != nil {
+		return nil, fmt.Errorf("unmarshalling previous switch %q image path for owner %q: %w", id, ownerID, err)
+	}
+	if old.ImagePath == nil {
+		return nil, nil //nolint:nilnil // no image already set is a valid, expected result
+	}
+
+	return old.ImagePath, nil
 }
 
 // ClearImagePath implements repository.SwitchRepository. ALL_OLD reports the

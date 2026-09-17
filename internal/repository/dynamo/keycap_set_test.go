@@ -816,18 +816,34 @@ func (s *KeycapSetRepositorySuite) TestDeleteKit_NoUserIDInContext_ReturnsError(
 	s.Require().Error(err)
 }
 
-func (s *KeycapSetRepositorySuite) TestSetKitImagePath_Succeeds() {
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NoPreviousImage_ReturnsNil() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			return strings.Contains(*in.UpdateExpression, "SET") &&
-				strings.Contains(*in.ConditionExpression, "attribute_exists")
+				strings.Contains(*in.ConditionExpression, "attribute_exists") &&
+				in.ReturnValues == types.ReturnValueAllOld
 		})).
-		Return(&dynamodb.UpdateItemOutput{}, nil)
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.itemWithKit("Base", nil)}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	old, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image/img2")
 
 	s.Require().NoError(err)
+	s.Nil(old)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_PreviousImage_ReturnsPreviousKey() {
+	oldPath := "keycap-sets/alice/ks1/kits/kit1/image/img1"
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.itemWithKit("Base", &oldPath)}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	old, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image/img2")
+
+	s.Require().NoError(err)
+	s.Require().NotNil(old)
+	s.Equal(repository.KeycapKitImageKey(oldPath), *old)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NotFound_ReturnsErrNotFound() {
@@ -836,9 +852,10 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NotFound_ReturnsErrNotFou
 		Return(nil, &types.ConditionalCheckFailedException{})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.SetKitImagePath(ctx, "ks1", "missing-kit", "p")
+	old, err := s.repo.SetKitImagePath(ctx, "ks1", "missing-kit", "p")
 
 	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Nil(old)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_UpdateItemError_Propagates() {
@@ -847,15 +864,17 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_UpdateItemError_Propagate
 		Return(nil, errors.New("dynamodb: throttled"))
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "p")
+	old, err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "p")
 
 	s.Require().Error(err)
+	s.Nil(old)
 }
 
 func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NoUserIDInContext_ReturnsError() {
-	err := s.repo.SetKitImagePath(s.T().Context(), "ks1", "kit1", "p")
+	old, err := s.repo.SetKitImagePath(s.T().Context(), "ks1", "kit1", "p")
 
 	s.Require().Error(err)
+	s.Nil(old)
 }
 
 func (s *KeycapSetRepositorySuite) TestClearKitImagePath_Succeeds() {

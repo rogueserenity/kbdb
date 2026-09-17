@@ -414,10 +414,13 @@ func (r *KeycapSetRepository) classifyDeleteKitConflict(ctx context.Context, own
 }
 
 // SetKitImagePath implements repository.KeycapSetRepository.
-func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) error {
+// SetKitImagePath implements repository.KeycapSetRepository. ALL_OLD
+// reports the key that was replaced, or nil when none was set - the caller
+// uses this to delete the superseded S3 object.
+func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) (*repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
-		return fmt.Errorf("setting kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
+		return nil, fmt.Errorf("setting kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
 	kitPath := "kits." + kitID
@@ -426,25 +429,37 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID 
 		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
 		Build()
 	if err != nil {
-		return fmt.Errorf("building set-kit-image expression for keycap set %q: %w", setID, err)
+		return nil, fmt.Errorf("building set-kit-image expression for keycap set %q: %w", setID, err)
 	}
 
-	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+	out, err := r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
 		TableName:                 &r.tableName,
 		Key:                       keycapSetKey(ownerID, setID),
 		UpdateExpression:          expr.Update(),
 		ConditionExpression:       expr.Condition(),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
+		ReturnValues:              types.ReturnValueAllOld,
 	})
 	if err != nil {
 		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
-			return repository.ErrNotFound
+			return nil, repository.ErrNotFound
 		}
-		return fmt.Errorf("setting kit %q image path in keycap set %q owner %q: %w", kitID, setID, ownerID, err)
+		return nil, fmt.Errorf("setting kit %q image path in keycap set %q owner %q: %w", kitID, setID, ownerID, err)
 	}
 
-	return nil
+	old := struct {
+		Kits map[string]repository.KeycapKit `dynamodbav:"kits"`
+	}{}
+	if err := attributevalue.UnmarshalMap(out.Attributes, &old); err != nil {
+		return nil, fmt.Errorf("unmarshalling previous kit %q image path in keycap set %q owner %q: %w", kitID, setID, ownerID, err)
+	}
+	kit, ok := old.Kits[kitID]
+	if !ok || kit.ImagePath == nil {
+		return nil, nil //nolint:nilnil // no image already set is a valid, expected result
+	}
+
+	return kit.ImagePath, nil
 }
 
 // ClearKitImagePath implements repository.KeycapSetRepository. ALL_OLD

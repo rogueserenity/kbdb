@@ -358,7 +358,7 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 			return
 		}
 
-		key, err := repository.NewSwitchImageKey(r.Context(), id)
+		key, err := repository.NewSwitchImageKey(r.Context(), id, uuid.NewString())
 		if err != nil {
 			log.FromContext(r.Context()).Error("building switch image key", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to set switch image")
@@ -372,9 +372,15 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 			return
 		}
 
-		err = switchRepo.SetImagePath(r.Context(), id, key)
+		oldKey, err := switchRepo.SetImagePath(r.Context(), id, key)
 		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
+		}
+
+		if oldKey != nil {
+			if err := images.Delete(r.Context(), *oldKey); err != nil {
+				log.FromContext(r.Context()).Error("deleting superseded switch image", log.Error, err, log.SwitchID, id)
+			}
 		}
 
 		w.Header().Set("Content-Type", "application/json")

@@ -165,9 +165,10 @@ type KeycapSetRepository interface {
 	// setID doesn't exist for the owner.
 	DeleteKit(ctx context.Context, setID, kitID string) error
 
-	// SetKitImagePath sets the kit matching kitID's ImagePath. Returns
-	// ErrNotFound if setID or the kit doesn't exist.
-	SetKitImagePath(ctx context.Context, setID, kitID string, key KeycapKitImageKey) error
+	// SetKitImagePath sets the kit matching kitID's ImagePath to key,
+	// returning the previous key that was replaced, or nil if none was
+	// set. Returns ErrNotFound if setID or the kit doesn't exist.
+	SetKitImagePath(ctx context.Context, setID, kitID string, key KeycapKitImageKey) (*KeycapKitImageKey, error)
 
 	// ClearKitImagePath clears the kit matching kitID's ImagePath and
 	// returns the key that was cleared, or nil if it was already unset.
@@ -180,18 +181,21 @@ type KeycapSetRepository interface {
 // KeycapKitImageStore.
 type KeycapKitImageKey string
 
-// NewKeycapKitImageKey builds the deterministic object key for kitID's
-// image within setID. ownerID comes from ctx, not a parameter, so a caller
-// can't build a key addressing anyone else's prefix. Fixed, no extension -
-// a re-upload overwrites the same object, so there's no orphan
-// accumulation from repeated uploads.
-func NewKeycapKitImageKey(ctx context.Context, setID, kitID string) (KeycapKitImageKey, error) {
+// NewKeycapKitImageKey builds a fresh object key for kitID's image within
+// setID, unique per call via imageID (a caller-generated UUID). ownerID
+// comes from ctx, not a parameter, so a caller can't build a key addressing
+// anyone else's prefix. A re-upload gets a new key rather than overwriting
+// the same object, so its presigned GET URL is guaranteed to change too -
+// see internal/repository/s3.getPresignConfig, whose cache-control assumes
+// the object at a given key never changes. SetKitImagePath's caller is
+// responsible for deleting the superseded object.
+func NewKeycapKitImageKey(ctx context.Context, setID, kitID, imageID string) (KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return "", ErrNoUserID
 	}
 
-	return KeycapKitImageKey(fmt.Sprintf("keycap-sets/%s/%s/kits/%s/image", ownerID, setID, kitID)), nil
+	return KeycapKitImageKey(fmt.Sprintf("keycap-sets/%s/%s/kits/%s/image/%s", ownerID, setID, kitID, imageID)), nil
 }
 
 // KeycapKitImageStore stores a kit's image object in a private object

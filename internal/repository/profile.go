@@ -137,9 +137,10 @@ type ProfileRepository interface {
 	// enforces this), each a begins_with filter on its directory index.
 	ListPublic(ctx context.Context, usernamePrefix, discordPrefix string, limit int, cursor string) ([]Profile, string, error)
 
-	// SetAvatarPath sets the caller's profile's AvatarPath to key. Returns
-	// ErrNotFound if the caller has no profile.
-	SetAvatarPath(ctx context.Context, key ProfileImageKey) error
+	// SetAvatarPath sets the caller's profile's AvatarPath to key,
+	// returning the previous key that was replaced, or nil if none was
+	// set. Returns ErrNotFound if the caller has no profile.
+	SetAvatarPath(ctx context.Context, key ProfileImageKey) (*ProfileImageKey, error)
 
 	// ClearAvatarPath clears the caller's profile's AvatarPath and returns
 	// the key that was cleared, or nil if it was already unset (idempotent,
@@ -150,16 +151,20 @@ type ProfileRepository interface {
 // ProfileImageKey is the object key a profile's avatar is stored under.
 type ProfileImageKey string
 
-// NewProfileImageKey builds the caller's avatar object key. ownerID comes
-// from ctx so a caller can't address another user's prefix. Fixed key, no
-// per-image id - a re-upload overwrites in place.
-func NewProfileImageKey(ctx context.Context) (ProfileImageKey, error) {
+// NewProfileImageKey builds a fresh avatar object key, unique per call via
+// imageID (a caller-generated UUID). ownerID comes from ctx so a caller
+// can't address another user's prefix. A re-upload gets a new key rather
+// than overwriting in place, so its presigned GET URL is guaranteed to
+// change too - see internal/repository/s3.getPresignConfig, whose
+// cache-control assumes the object at a given key never changes.
+// SetAvatarPath's caller is responsible for deleting the superseded object.
+func NewProfileImageKey(ctx context.Context, imageID string) (ProfileImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return "", ErrNoUserID
 	}
 
-	return ProfileImageKey(fmt.Sprintf("profiles/%s/avatar", ownerID)), nil
+	return ProfileImageKey(fmt.Sprintf("profiles/%s/avatar/%s", ownerID, imageID)), nil
 }
 
 // ProfileImageStore stores a profile's avatar object in a private object
