@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/getkin/kin-openapi/openapi3"
 	"github.com/getkin/kin-openapi/openapi3filter"
@@ -33,7 +34,10 @@ import (
 // for why. idpConsentPublicToken configures the GET /authorize consent page and
 // GET /logout (see internal/consent); logoutReturnOrigins restricts
 // /logout's return_to param. version is advertised to MCP clients in the
-// server's initialize handshake.
+// server's initialize handshake. presignTTL is both how long a freshly
+// minted presigned GET image URL is valid for, and how long each
+// repoapi entity struct caches it in the DB before re-signing (see
+// [github.com/rogueserenity/kbdb/internal/repoapi]'s resolveImageURL).
 func New(
 	verifier *auth.Verifier,
 	switchRepo repository.SwitchRepository,
@@ -48,12 +52,13 @@ func New(
 	profileImageStore repository.ProfileImageStore,
 	issuerURL, idpConsentPublicToken, version string,
 	logoutReturnOrigins []string,
+	presignTTL time.Duration,
 ) http.Handler {
 	validate := restOpenAPIValidator()
 
-	sr := repoapi.Switch{Images: switchImageStore}
-	kr := repoapi.Keyboard{Images: keyboardImageStore}
-	kcr := repoapi.KeycapSet{Images: imageStore}
+	sr := repoapi.Switch{Images: switchImageStore, Repo: switchRepo, PresignTTL: presignTTL}
+	kr := repoapi.Keyboard{Images: keyboardImageStore, Repo: keyboardRepo, PresignTTL: presignTTL}
+	kcr := repoapi.KeycapSet{Images: imageStore, Repo: keycapSetRepo, PresignTTL: presignTTL}
 	br := repoapi.Build{
 		Repo:           buildRepo,
 		Images:         buildImageStore,
@@ -63,8 +68,9 @@ func New(
 		KeyboardRepo:   keyboardRepo,
 		SwitchRepo:     switchRepo,
 		KeycapSetRepo:  keycapSetRepo,
+		PresignTTL:     presignTTL,
 	}
-	pr := repoapi.Profile{Images: profileImageStore}
+	pr := repoapi.Profile{Images: profileImageStore, Repo: profileRepo, PresignTTL: presignTTL}
 
 	mux := http.NewServeMux()
 

@@ -222,8 +222,12 @@ func (s *KeyboardToAPISuite) TestImagesPresent_PresignsEachAndPreservesOrder() {
 	images := mocks.NewMockKeyboardImageStore(s.T())
 	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img1).Return("https://example.com/img1", nil)
 	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img2).Return("https://example.com/img2", nil)
+	repo := mocks.NewMockKeyboardRepository(s.T())
+	repo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := Keyboard{Images: images}
+	kr := Keyboard{Images: images, Repo: repo}
 	out, err := kr.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
@@ -323,8 +327,12 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirst
 	}
 	images := mocks.NewMockKeyboardImageStore(s.T())
 	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img1).Return("https://example.com/img1", nil)
+	repo := mocks.NewMockKeyboardRepository(s.T())
+	repo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := Keyboard{Images: images}
+	kr := Keyboard{Images: images, Repo: repo}
 	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 

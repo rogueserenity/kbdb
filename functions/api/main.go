@@ -73,13 +73,13 @@ func main() {
 	})
 	// All entities' images currently live in the same bucket.
 	presignClient := s3.NewPresignClient(s3Client)
-	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.ImageGetPresignExpiry)
-	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.ImageGetPresignExpiry)
-	keyboardImageStore := imagestore.NewKeyboardImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.ImageGetPresignExpiry)
-	switchImageStore := imagestore.NewSwitchImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.ImageGetPresignExpiry)
-	profileImageStore := imagestore.NewProfileImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.ImageGetPresignExpiry)
+	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
+	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
+	keyboardImageStore := imagestore.NewKeyboardImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
+	switchImageStore := imagestore.NewSwitchImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
+	profileImageStore := imagestore.NewProfileImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
 
-	handler := router.New(verifier, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, profileRepo, profileImageStore, cfg.OIDCIssuerURL, cfg.IDPConsentPublicToken, Version, strings.Split(cfg.LogoutReturnOrigins, ","))
+	handler := router.New(verifier, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, profileRepo, profileImageStore, cfg.OIDCIssuerURL, cfg.IDPConsentPublicToken, Version, strings.Split(cfg.LogoutReturnOrigins, ","), cfg.GetPresignTTL)
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

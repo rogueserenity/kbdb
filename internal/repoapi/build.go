@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
 
@@ -23,6 +24,7 @@ type Build struct {
 	KeyboardRepo   repository.KeyboardRepository
 	SwitchRepo     repository.SwitchRepository
 	KeycapSetRepo  repository.KeycapSetRepository
+	PresignTTL     time.Duration
 }
 
 // ToAPI maps a repository.Build to its wire representation, resolving the
@@ -47,7 +49,7 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		return api.Build{}, err
 	}
 
-	imgs, err := b.imagesToAPI(ctx, repository.SortedBuildImages(build.Images))
+	imgs, err := b.imagesToAPI(ctx, build.UserID, build.ID, repository.SortedBuildImages(build.Images))
 	if err != nil {
 		return api.Build{}, err
 	}
@@ -136,11 +138,12 @@ func (b Build) ToAPISummary(ctx context.Context, build repository.Build, isOwner
 
 	var image *api.BuildImage
 	if imgs := repository.SortedBuildImages(build.Images); len(imgs) > 0 {
-		url, err := b.Images.PresignGetBuildImage(ctx, imgs[0].Path)
+		img := imgs[0]
+		url, err := b.resolveBuildImageURL(ctx, build.UserID, build.ID, img)
 		if err != nil {
-			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", imgs[0].ImageID, err)
+			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", img.ImageID, err)
 		}
-		image = &api.BuildImage{ImageId: imgs[0].ImageID, Url: url}
+		image = &api.BuildImage{ImageId: img.ImageID, Url: url}
 	}
 
 	summary := api.BuildSummary{
@@ -306,7 +309,8 @@ func (b Build) keyboardRefToAPI(
 
 	if resolveImages {
 		if imgs := repository.SortedKeyboardImages(kb.Images); len(imgs) > 0 {
-			url, err := b.KeyboardImages.PresignGetKeyboardImage(ctx, imgs[0].Path)
+			img := imgs[0]
+			url, err := b.resolveKeyboardImageURL(ctx, ownerID, keyboardID, img)
 			if err != nil {
 				return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
 			}
@@ -369,7 +373,7 @@ func (b Build) switchEntriesResolvedToAPI(
 			}
 
 			if resolveImages && sw.ImagePath != nil {
-				url, err := b.SwitchImages.PresignGet(ctx, *sw.ImagePath)
+				url, err := b.resolveSwitchImageURL(ctx, *sw)
 				if err != nil {
 					errs[i] = fmt.Errorf("presigning switch image for switch %q: %w", e.Switch, err)
 					return
@@ -446,7 +450,7 @@ func (b Build) keycapKitEntriesResolvedToAPI(
 			costs[i] = kit.Purchase.Price
 
 			if resolveImages && kit.ImagePath != nil {
-				url, err := b.KitImages.PresignGet(ctx, *kit.ImagePath)
+				url, err := b.resolveKeycapKitImageURL(ctx, ownerID, ks.ID, *kit)
 				if err != nil {
 					errs[i] = fmt.Errorf("presigning kit image for kit %q: %w", e.Kit, err)
 					return
@@ -472,10 +476,10 @@ func (b Build) findKeycapKit(kits map[string]repository.KeycapKit, kitID string)
 	return &kit
 }
 
-// imagesToAPI mints a fresh presigned GET URL per image, per request -
-// never persisted, mirroring [KeycapSet.KitToAPI]'s handling of a kit's
-// image. images is already ordered (by Seq) by the caller.
-func (b Build) imagesToAPI(ctx context.Context, images []repository.BuildImage) (*[]api.BuildImage, error) {
+// imagesToAPI resolves a presigned GET URL per image, reusing each image's
+// cached URL if still fresh, mirroring [KeycapSet.KitToAPI]'s handling of a
+// kit's image. images is already ordered (by Seq) by the caller.
+func (b Build) imagesToAPI(ctx context.Context, ownerID, buildID string, images []repository.BuildImage) (*[]api.BuildImage, error) {
 	if len(images) == 0 {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
 	}
@@ -489,7 +493,7 @@ func (b Build) imagesToAPI(ctx context.Context, images []repository.BuildImage) 
 		go func(i int, img repository.BuildImage) {
 			defer wg.Done()
 
-			url, err := b.Images.PresignGetBuildImage(ctx, img.Path)
+			url, err := b.resolveBuildImageURL(ctx, ownerID, buildID, img)
 			if err != nil {
 				errs[i] = fmt.Errorf("presigning build image %q: %w", img.ImageID, err)
 				return
@@ -504,4 +508,58 @@ func (b Build) imagesToAPI(ctx context.Context, images []repository.BuildImage) 
 	}
 
 	return &out, nil
+}
+
+// resolveBuildImageURL presigns img.Path, reusing its cached GET URL if
+// still fresh enough.
+func (b Build) resolveBuildImageURL(ctx context.Context, ownerID, buildID string, img repository.BuildImage) (string, error) {
+	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, b.PresignTTL,
+		func() (string, error) { return b.Images.PresignGetBuildImage(ctx, img.Path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := b.Repo.SetImageGetCache(ctx, ownerID, buildID, img.ImageID, img.Path, url, expiresAt)
+			return err
+		},
+	)
+}
+
+// resolveKeyboardImageURL presigns img.Path, reusing its cached GET URL if
+// still fresh enough. Uses b.KeyboardImages/b.KeyboardRepo rather than
+// Keyboard's own resolver, since Build resolves a referenced keyboard's
+// image via its own store/repo fields, not a repoapi.Keyboard value.
+func (b Build) resolveKeyboardImageURL(ctx context.Context, ownerID, keyboardID string, img repository.KeyboardImage) (string, error) {
+	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, b.PresignTTL,
+		func() (string, error) { return b.KeyboardImages.PresignGetKeyboardImage(ctx, img.Path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := b.KeyboardRepo.SetImageGetCache(ctx, ownerID, keyboardID, img.ImageID, img.Path, url, expiresAt)
+			return err
+		},
+	)
+}
+
+// resolveSwitchImageURL presigns sw.ImagePath, reusing its cached GET URL
+// if still fresh enough. Callers must check sw.ImagePath != nil first.
+func (b Build) resolveSwitchImageURL(ctx context.Context, sw repository.Switch) (string, error) {
+	path := *sw.ImagePath
+
+	return resolveImageURL(sw.GetURL, sw.GetURLExpiresAt, b.PresignTTL,
+		func() (string, error) { return b.SwitchImages.PresignGet(ctx, path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := b.SwitchRepo.SetImageGetCache(ctx, sw.UserID, sw.ID, path, url, expiresAt)
+			return err
+		},
+	)
+}
+
+// resolveKeycapKitImageURL presigns k.ImagePath, reusing its cached GET URL
+// if still fresh enough. Callers must check k.ImagePath != nil first.
+func (b Build) resolveKeycapKitImageURL(ctx context.Context, ownerID, setID string, k repository.KeycapKit) (string, error) {
+	path := *k.ImagePath
+
+	return resolveImageURL(k.GetURL, k.GetURLExpiresAt, b.PresignTTL,
+		func() (string, error) { return b.KitImages.PresignGet(ctx, path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := b.KeycapSetRepo.SetKitImageGetCache(ctx, ownerID, setID, k.KitID, path, url, expiresAt)
+			return err
+		},
+	)
 }

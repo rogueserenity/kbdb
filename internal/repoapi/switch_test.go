@@ -258,8 +258,12 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedU
 	sw.ImagePath = &switchImageKey
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
+	repo := mocks.NewMockSwitchRepository(s.T())
+	repo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	sr := Switch{Images: images}
+	sr := Switch{Images: images, Repo: repo}
 	summary, err := sr.ToAPISummary(s.T().Context(), sw, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
@@ -286,8 +290,12 @@ func (s *SwitchToAPISuite) TestImagePresent_ReturnsPresignedURL() {
 	sw.ImagePath = &switchImageKey
 	images := mocks.NewMockSwitchImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
+	repo := mocks.NewMockSwitchRepository(s.T())
+	repo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	sr := Switch{Images: images}
+	sr := Switch{Images: images, Repo: repo}
 	out, err := sr.ToAPI(s.T().Context(), sw, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 

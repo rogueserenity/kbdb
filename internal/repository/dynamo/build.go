@@ -513,3 +513,34 @@ func (r *BuildRepository) DeleteImage(ctx context.Context, buildID, imageID stri
 	}
 	return &entry.Path, nil
 }
+
+// SetImageGetCache implements repository.BuildRepository.
+func (r *BuildRepository) SetImageGetCache(ctx context.Context, ownerID, buildID, imageID string, forPath repository.BuildImageKey, url string, expiresAt time.Time) (bool, error) {
+	imagePath := "images." + imageID
+	update := expression.Set(expression.Name(imagePath+".get_url"), expression.Value(url)).
+		Set(expression.Name(imagePath+".get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(expression.Name(imagePath)).
+		And(expression.Name(imagePath + ".path").Equal(expression.Value(forPath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return false, fmt.Errorf("building image get-cache update for build %q: %w", buildID, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       buildKey(ownerID, buildID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("setting image %q get-cache for build %q owner %q: %w", imageID, buildID, ownerID, err)
+	}
+
+	return true, nil
+}

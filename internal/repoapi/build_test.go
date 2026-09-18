@@ -52,6 +52,7 @@ func TestBuildToAPISuite(t *testing.T) {
 // buildToAPIDeps bundles the mocks BuildToAPI needs; the returned
 // EXPECT()s must be set up by the caller before invoking BuildToAPI.
 type buildToAPIDeps struct {
+	buildRepo      *mocks.MockBuildRepository
 	images         *mocks.MockBuildImageStore
 	kitImages      *mocks.MockKeycapKitImageStore
 	keyboardImages *mocks.MockKeyboardImageStore
@@ -65,7 +66,8 @@ func newBuildToAPIDeps(t interface {
 	mock.TestingT
 	Cleanup(func())
 }) buildToAPIDeps {
-	return buildToAPIDeps{
+	d := buildToAPIDeps{
+		buildRepo:      mocks.NewMockBuildRepository(t),
 		images:         mocks.NewMockBuildImageStore(t),
 		kitImages:      mocks.NewMockKeycapKitImageStore(t),
 		keyboardImages: mocks.NewMockKeyboardImageStore(t),
@@ -74,6 +76,26 @@ func newBuildToAPIDeps(t interface {
 		switchRepo:     mocks.NewMockSwitchRepository(t),
 		keycapSetRepo:  mocks.NewMockKeycapSetRepository(t),
 	}
+	d.expectCache()
+	return d
+}
+
+// expectCache stubs every entity's cache write-back method as a no-op
+// success, .Maybe() since not every test exercises a path that presigns an
+// image.
+func (d buildToAPIDeps) expectCache() {
+	d.buildRepo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
+	d.keyboardRepo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
+	d.switchRepo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
+	d.keycapSetRepo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 }
 
 func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build, error) {
@@ -82,6 +104,7 @@ func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build
 
 func (d buildToAPIDeps) mapper() Build {
 	return Build{
+		Repo:           d.buildRepo,
 		Images:         d.images,
 		KitImages:      d.kitImages,
 		KeyboardImages: d.keyboardImages,

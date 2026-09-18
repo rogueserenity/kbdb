@@ -23,7 +23,7 @@ type Config struct {
 	ProfileTableName         string `env:"PROFILE_TABLE_NAME" required:""`
 	ProfileUsernameTableName string `env:"PROFILE_USERNAME_TABLE_NAME" required:""`
 
-	ImageGetPresignExpiry time.Duration `env:"IMAGE_GET_PRESIGN_EXPIRY" default:"24h" help:"How long presigned GET image URLs remain valid; presigned PUT URLs keep the AWS SDK's default (15m)."`
+	GetPresignTTL time.Duration `env:"GET_PRESIGN_TTL" default:"24h" help:"How long a freshly-signed presigned GET image URL remains valid; presigned PUT URLs keep the AWS SDK's default (15m)."`
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`

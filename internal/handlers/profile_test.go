@@ -35,7 +35,7 @@ func TestGetProfileSuite(t *testing.T) {
 func (s *GetProfileSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = GetProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages})
+	s.handler = GetProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *GetProfileSuite) newRequest(ctx context.Context, identifier string) *http.Request {
@@ -142,7 +142,7 @@ func TestCreateProfileSuite(t *testing.T) {
 func (s *CreateProfileSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = CreateProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages})
+	s.handler = CreateProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 // profileUserID is the {userId} path value every test posts to; owner vs.
@@ -316,7 +316,7 @@ func TestUpdateProfileSuite(t *testing.T) {
 func (s *UpdateProfileSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = UpdateProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages})
+	s.handler = UpdateProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 // put builds a PUT request with body as JSON and ctx caller set to caller
@@ -572,7 +572,7 @@ func TestListProfilesSuite(t *testing.T) {
 func (s *ListProfilesSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = ListProfiles(s.mockRepo, repoapi.Profile{Images: s.mockImages})
+	s.handler = ListProfiles(s.mockRepo, repoapi.Profile{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *ListProfilesSuite) request(query string) *http.Request {
@@ -663,6 +663,9 @@ func (s *ListProfilesSuite) TestAvatarPresigned_WhenSet() {
 			{OwnerID: "user-alice", Username: "alice", Discoverable: true, AvatarPath: &key},
 		}, "", nil)
 	s.mockImages.EXPECT().PresignGet(mock.Anything, key).Return("https://signed/avatar", nil)
+	s.mockRepo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.request("limit=20"))

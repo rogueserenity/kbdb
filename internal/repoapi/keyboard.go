@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -12,7 +13,9 @@ import (
 
 // Keyboard maps repository.Keyboard to and from its wire representations.
 type Keyboard struct {
-	Images repository.KeyboardImageStore
+	Images     repository.KeyboardImageStore
+	Repo       repository.KeyboardRepository
+	PresignTTL time.Duration
 }
 
 // ToAPI maps a repository.Keyboard to its wire representation. The owner
@@ -26,7 +29,7 @@ func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner boo
 		return api.Keyboard{}, err
 	}
 
-	imgs, err := k.imagesToAPI(ctx, repository.SortedKeyboardImages(kb.Images))
+	imgs, err := k.imagesToAPI(ctx, kb.UserID, kb.ID, repository.SortedKeyboardImages(kb.Images))
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -46,10 +49,10 @@ func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner boo
 	}, nil
 }
 
-// imagesToAPI mints a fresh presigned GET URL per image, per request -
-// never persisted, mirroring [Build.imagesToAPI]. images is already
-// ordered (by Seq) by the caller.
-func (k Keyboard) imagesToAPI(ctx context.Context, images []repository.KeyboardImage) (*[]api.KeyboardImage, error) {
+// imagesToAPI resolves a presigned GET URL per image, reusing each image's
+// cached URL if still fresh, mirroring [Build.imagesToAPI]. images is
+// already ordered (by Seq) by the caller.
+func (k Keyboard) imagesToAPI(ctx context.Context, ownerID, keyboardID string, images []repository.KeyboardImage) (*[]api.KeyboardImage, error) {
 	if len(images) == 0 {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
 	}
@@ -63,7 +66,7 @@ func (k Keyboard) imagesToAPI(ctx context.Context, images []repository.KeyboardI
 		go func(i int, img repository.KeyboardImage) {
 			defer wg.Done()
 
-			url, err := k.Images.PresignGetKeyboardImage(ctx, img.Path)
+			url, err := k.resolveKeyboardImageURL(ctx, ownerID, keyboardID, img)
 			if err != nil {
 				errs[i] = fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
 				return
@@ -107,11 +110,12 @@ func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardSummary, error) {
 	var image *api.KeyboardImage
 	if first := repository.SortedKeyboardImages(kb.Images); len(first) > 0 {
-		url, err := k.Images.PresignGetKeyboardImage(ctx, first[0].Path)
+		img := first[0]
+		url, err := k.resolveKeyboardImageURL(ctx, kb.UserID, kb.ID, img)
 		if err != nil {
-			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", first[0].ImageID, err)
+			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
 		}
-		image = &api.KeyboardImage{ImageId: first[0].ImageID, Url: url}
+		image = &api.KeyboardImage{ImageId: img.ImageID, Url: url}
 	}
 
 	summary := api.KeyboardSummary{
@@ -128,6 +132,18 @@ func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOw
 	}
 
 	return summary, nil
+}
+
+// resolveKeyboardImageURL presigns img.Path, reusing its cached GET URL if
+// still fresh enough.
+func (k Keyboard) resolveKeyboardImageURL(ctx context.Context, ownerID, keyboardID string, img repository.KeyboardImage) (string, error) {
+	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, k.PresignTTL,
+		func() (string, error) { return k.Images.PresignGetKeyboardImage(ctx, img.Path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := k.Repo.SetImageGetCache(ctx, ownerID, keyboardID, img.ImageID, img.Path, url, expiresAt)
+			return err
+		},
+	)
 }
 
 func (k Keyboard) materialColorToAPI(m repository.KeyboardMaterialColor) *api.MaterialColor {

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -26,6 +27,11 @@ type KeycapKit struct {
 	Name      string             `dynamodbav:"name" json:"name"`
 	ImagePath *KeycapKitImageKey `dynamodbav:"image_path,omitempty" json:"image_path,omitempty"`
 	Purchase  KeycapKitPurchase  `dynamodbav:"purchase" json:"purchase"`
+
+	// GetURL/GetURLExpiresAt cache the last presigned GET URL for
+	// ImagePath. SetKitImagePath clears both when ImagePath changes.
+	GetURL          *string    `dynamodbav:"get_url,omitempty" json:"-"`
+	GetURLExpiresAt *time.Time `dynamodbav:"get_url_expires_at,omitempty" json:"-"`
 }
 
 // KeycapSet is a keycap set in a user's collection, or shared with the
@@ -174,6 +180,14 @@ type KeycapSetRepository interface {
 	// Idempotent: a kit with no ImagePath already set is not an error.
 	// Returns ErrNotFound if setID or the kit doesn't exist.
 	ClearKitImagePath(ctx context.Context, setID, kitID string) (*KeycapKitImageKey, error)
+
+	// SetKitImageGetCache stores url/expiresAt as the matching kit's
+	// cached GET URL, conditioned on ImagePath still equalling forPath.
+	// Takes an explicit ownerID, unlike Set/ClearKitImagePath, since this
+	// is called from read paths that may be viewing another user's set.
+	// Returns ok=false (not an error) if that condition fails or setID/the
+	// kit doesn't exist.
+	SetKitImageGetCache(ctx context.Context, ownerID, setID, kitID string, forPath KeycapKitImageKey, url string, expiresAt time.Time) (ok bool, err error)
 }
 
 // KeycapKitImageKey is the object key a kit's image is stored under in a

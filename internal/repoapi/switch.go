@@ -3,6 +3,7 @@ package repoapi
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -10,7 +11,9 @@ import (
 
 // Switch maps repository.Switch to and from its wire representations.
 type Switch struct {
-	Images repository.SwitchImageStore
+	Images     repository.SwitchImageStore
+	Repo       repository.SwitchRepository
+	PresignTTL time.Duration
 }
 
 // ToAPI maps a repository.Switch to its wire representation. The owner
@@ -25,7 +28,7 @@ func (s Switch) ToAPI(ctx context.Context, sw repository.Switch, isOwner bool, o
 
 	var image *api.SwitchImage
 	if sw.ImagePath != nil {
-		url, err := s.Images.PresignGet(ctx, *sw.ImagePath)
+		url, err := s.resolveSwitchImageURL(ctx, sw)
 		if err != nil {
 			return api.Switch{}, fmt.Errorf("presigning switch image: %w", err)
 		}
@@ -89,7 +92,7 @@ func (s Switch) ToAPISummary(ctx context.Context, sw repository.Switch, isOwner 
 	}
 
 	if sw.ImagePath != nil {
-		url, err := s.Images.PresignGet(ctx, *sw.ImagePath)
+		url, err := s.resolveSwitchImageURL(ctx, sw)
 		if err != nil {
 			return api.SwitchSummary{}, fmt.Errorf("presigning switch image: %w", err)
 		}
@@ -97,6 +100,20 @@ func (s Switch) ToAPISummary(ctx context.Context, sw repository.Switch, isOwner 
 	}
 
 	return summary, nil
+}
+
+// resolveSwitchImageURL presigns sw.ImagePath, reusing its cached GET URL
+// if still fresh enough. Callers must check sw.ImagePath != nil first.
+func (s Switch) resolveSwitchImageURL(ctx context.Context, sw repository.Switch) (string, error) {
+	path := *sw.ImagePath
+
+	return resolveImageURL(sw.GetURL, sw.GetURLExpiresAt, s.PresignTTL,
+		func() (string, error) { return s.Images.PresignGet(ctx, path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := s.Repo.SetImageGetCache(ctx, sw.UserID, sw.ID, path, url, expiresAt)
+			return err
+		},
+	)
 }
 
 func (s Switch) materialToAPI(m repository.SwitchMaterial) *api.SwitchMaterial {

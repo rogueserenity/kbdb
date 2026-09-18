@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"slices"
 	"sync"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -13,7 +14,9 @@ import (
 
 // KeycapSet maps repository.KeycapSet to and from its wire representations.
 type KeycapSet struct {
-	Images repository.KeycapKitImageStore
+	Images     repository.KeycapKitImageStore
+	Repo       repository.KeycapSetRepository
+	PresignTTL time.Duration
 }
 
 // ToAPI maps a repository.KeycapSet to its wire representation. The owner
@@ -38,7 +41,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 			go func(i int, k repository.KeycapKit) {
 				defer wg.Done()
 
-				apiKit, err := ks.KitToAPI(ctx, k, showPrice)
+				apiKit, err := ks.KitToAPI(ctx, set.UserID, set.ID, k, showPrice)
 				if err != nil {
 					errs[i] = err
 					return
@@ -110,7 +113,7 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 
 	primaryKit := findKit(validPrimaryKitID(set.PrimaryKitID, set.Kits), set.Kits)
 	if primaryKit != nil && primaryKit.ImagePath != nil {
-		url, err := ks.Images.PresignGet(ctx, *primaryKit.ImagePath)
+		url, err := ks.resolveKeycapKitImageURL(ctx, set.UserID, set.ID, *primaryKit)
 		if err != nil {
 			return api.KeycapSetSummary{}, fmt.Errorf("presigning primary kit image: %w", err)
 		}
@@ -121,13 +124,13 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 }
 
 // KitToAPI maps a repository.KeycapKit to its wire representation. Image
-// is nil unless k.ImagePath is set, in which case it's a freshly minted
-// presigned GET URL - never persisted, never cached. showPrice gates
-// Purchase.Price - callers resolve it from isOwner/ownerPrefs themselves,
-// since the right rule differs between the full-set GET ([KeycapSet.ToAPI],
-// owner unconditional) and standalone kit create/update (always the
-// caller's own kit, so always true).
-func (ks KeycapSet) KitToAPI(ctx context.Context, k repository.KeycapKit, showPrice bool) (api.KeycapKit, error) {
+// is nil unless k.ImagePath is set, in which case it's a presigned GET URL,
+// reused from cache if still fresh. showPrice gates Purchase.Price -
+// callers resolve it from isOwner/ownerPrefs themselves, since the right
+// rule differs between the full-set GET ([KeycapSet.ToAPI], owner
+// unconditional) and standalone kit create/update (always the caller's own
+// kit, so always true).
+func (ks KeycapSet) KitToAPI(ctx context.Context, ownerID, setID string, k repository.KeycapKit, showPrice bool) (api.KeycapKit, error) {
 	purchase, err := ks.kitPurchaseToAPI(k.Purchase, showPrice)
 	if err != nil {
 		return api.KeycapKit{}, err
@@ -135,7 +138,7 @@ func (ks KeycapSet) KitToAPI(ctx context.Context, k repository.KeycapKit, showPr
 
 	var image *api.KeycapKitImage
 	if k.ImagePath != nil {
-		url, err := ks.Images.PresignGet(ctx, *k.ImagePath)
+		url, err := ks.resolveKeycapKitImageURL(ctx, ownerID, setID, k)
 		if err != nil {
 			return api.KeycapKit{}, fmt.Errorf("presigning kit image: %w", err)
 		}
@@ -148,6 +151,20 @@ func (ks KeycapSet) KitToAPI(ctx context.Context, k repository.KeycapKit, showPr
 		Image:    image,
 		Purchase: purchase,
 	}, nil
+}
+
+// resolveKeycapKitImageURL presigns k.ImagePath, reusing its cached GET URL
+// if still fresh enough. Callers must check k.ImagePath != nil first.
+func (ks KeycapSet) resolveKeycapKitImageURL(ctx context.Context, ownerID, setID string, k repository.KeycapKit) (string, error) {
+	path := *k.ImagePath
+
+	return resolveImageURL(k.GetURL, k.GetURLExpiresAt, ks.PresignTTL,
+		func() (string, error) { return ks.Images.PresignGet(ctx, path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := ks.Repo.SetKitImageGetCache(ctx, ownerID, setID, k.KitID, path, url, expiresAt)
+			return err
+		},
+	)
 }
 
 // KitToRepo maps a generated KeycapKitInput (already schema-validated by
