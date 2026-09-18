@@ -18,6 +18,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/mcp"
 	"github.com/rogueserenity/kbdb/internal/middleware"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -50,6 +51,21 @@ func New(
 ) http.Handler {
 	validate := restOpenAPIValidator()
 
+	sr := repoapi.Switch{Images: switchImageStore}
+	kr := repoapi.Keyboard{Images: keyboardImageStore}
+	kcr := repoapi.KeycapSet{Images: imageStore}
+	br := repoapi.Build{
+		Repo:           buildRepo,
+		Images:         buildImageStore,
+		KitImages:      imageStore,
+		KeyboardImages: keyboardImageStore,
+		SwitchImages:   switchImageStore,
+		KeyboardRepo:   keyboardRepo,
+		SwitchRepo:     switchRepo,
+		KeycapSetRepo:  keycapSetRepo,
+	}
+	pr := repoapi.Profile{Images: profileImageStore}
+
 	mux := http.NewServeMux()
 
 	// Not part of api/openapi.yaml, so not wrapped in validate - see
@@ -66,13 +82,13 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public switches (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/switches",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, switchImageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, sr, profileRepo))))
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo, switchImageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo, sr, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/switches",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo, switchImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo, sr))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateSwitch(switchRepo, switchImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateSwitch(switchRepo, sr))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore, switchImageStore))))
 	mux.Handle("POST /v1/users/{userId}/switches/{switchId}/image",
@@ -83,13 +99,13 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, keyboardImageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, kr, profileRepo))))
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo, keyboardImageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo, kr, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo, keyboardImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo, kr))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeyboard(keyboardRepo, keyboardImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeyboard(keyboardRepo, kr))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore, keyboardImageStore))))
 	mux.Handle("POST /v1/users/{userId}/keyboards/{keyboardId}/images",
@@ -100,19 +116,19 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, imageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, kcr, profileRepo))))
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, imageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, kcr, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapSet(keycapSetRepo, imageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapSet(keycapSetRepo, kcr))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapSet(keycapSetRepo, imageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapSet(keycapSetRepo, kcr))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapSet(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapKit(keycapSetRepo, imageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapKit(keycapSetRepo, kcr))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapKit(keycapSetRepo, imageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapKit(keycapSetRepo, kcr))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapKit(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
@@ -123,13 +139,13 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, buildImageStore, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, br, profileRepo))))
 	mux.Handle("POST /v1/users/{userId}/builds",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo, profileRepo))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, br, profileRepo))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, buildImageStore, imageStore, keyboardImageStore, switchImageStore, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds/{buildId}/images",
@@ -141,18 +157,18 @@ func New(
 	// read discoverable profiles; the handler applies the
 	// discoverable-or-owner rule itself (see internal/profileread).
 	mux.Handle("GET /v1/profile/{identifier}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetProfile(profileRepo, profileImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.GetProfile(profileRepo, pr))))
 	// Same path as the GET, POST only. Default OidcAuthorizer at the gateway
 	// (security: [BearerAuth] in api/openapi.yaml, no anonymous override);
 	// the handler requires {identifier} to be the caller's own subject via
 	// authz.IsOwner (a username there, or anyone else's subject, is 404).
 	mux.Handle("POST /v1/profile/{identifier}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateProfile(profileRepo, profileImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.CreateProfile(profileRepo, pr))))
 	// Same path/auth as the POST - PUT only. {identifier} must be the
 	// caller's own subject (authz.IsOwner); a full replace of the
 	// body-settable fields, avatar untouched.
 	mux.Handle("PUT /v1/profile/{identifier}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateProfile(profileRepo, profileImageStore))))
+		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateProfile(profileRepo, pr))))
 	// Same path/auth as the POST/PUT - DELETE only. {identifier} must be the
 	// caller's own subject (authz.IsOwner). A leaf delete (nothing
 	// references a Profile), idempotent: no profile is still 204.
@@ -160,7 +176,7 @@ func New(
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteProfile(profileRepo, profileImageStore))))
 	// The public directory: anonymous OK, only discoverable profiles returned.
 	mux.Handle("GET /v1/profiles",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListProfiles(profileRepo, profileImageStore))))
+		middleware.OptionalAuth(verifier)(validate(handlers.ListProfiles(profileRepo, pr))))
 	// Avatar upload/removal - single-slot image, the switch pattern. Default
 	// OidcAuthorizer at the gateway; {identifier} must be the caller's own
 	// subject (authz.IsOwner), and the response to POST is a presigned S3

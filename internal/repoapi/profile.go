@@ -8,22 +8,27 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// ProfileToAPI maps a repository.Profile to its wire shape, presigning the
-// avatar if set. Errors only if presigning fails.
-func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.ProfileImageStore) (api.Profile, error) {
-	prefs := profilePreferencesToAPI(p.Preferences)
+// Profile maps repository.Profile to and from its wire representations.
+type Profile struct {
+	Images repository.ProfileImageStore
+}
+
+// ToAPI maps a repository.Profile to its wire shape, presigning the avatar
+// if set. Errors only if presigning fails.
+func (p Profile) ToAPI(ctx context.Context, prof repository.Profile) (api.Profile, error) {
+	prefs := p.preferencesToAPI(prof.Preferences)
 	out := api.Profile{
-		Username:        p.Username,
-		UserId:          &p.OwnerID,
-		Discoverable:    &p.Discoverable,
-		DiscordUsername: p.DiscordUsername,
-		Bio:             p.Bio,
-		Links:           profileLinksToAPI(p.Links),
+		Username:        prof.Username,
+		UserId:          &prof.OwnerID,
+		Discoverable:    &prof.Discoverable,
+		DiscordUsername: prof.DiscordUsername,
+		Bio:             prof.Bio,
+		Links:           p.linksToAPI(prof.Links),
 		Preferences:     &prefs,
 	}
 
-	if p.AvatarPath != nil {
-		url, err := images.PresignGet(ctx, *p.AvatarPath)
+	if prof.AvatarPath != nil {
+		url, err := p.Images.PresignGet(ctx, *prof.AvatarPath)
 		if err != nil {
 			return api.Profile{}, fmt.Errorf("presigning profile avatar: %w", err)
 		}
@@ -33,17 +38,17 @@ func ProfileToAPI(ctx context.Context, p repository.Profile, images repository.P
 	return out, nil
 }
 
-// ProfileToAPISummary maps a repository.Profile to a directory row -
-// no bio or links, avatar presigned if set.
-func ProfileToAPISummary(ctx context.Context, p repository.Profile, images repository.ProfileImageStore) (api.ProfileSummary, error) {
+// ToAPISummary maps a repository.Profile to a directory row - no bio or
+// links, avatar presigned if set.
+func (p Profile) ToAPISummary(ctx context.Context, prof repository.Profile) (api.ProfileSummary, error) {
 	summary := api.ProfileSummary{
-		Username:        &p.Username,
-		UserId:          &p.OwnerID,
-		DiscordUsername: p.DiscordUsername,
+		Username:        &prof.Username,
+		UserId:          &prof.OwnerID,
+		DiscordUsername: prof.DiscordUsername,
 	}
 
-	if p.AvatarPath != nil {
-		url, err := images.PresignGet(ctx, *p.AvatarPath)
+	if prof.AvatarPath != nil {
+		url, err := p.Images.PresignGet(ctx, *prof.AvatarPath)
 		if err != nil {
 			return api.ProfileSummary{}, fmt.Errorf("presigning profile avatar: %w", err)
 		}
@@ -53,35 +58,35 @@ func ProfileToAPISummary(ctx context.Context, p repository.Profile, images repos
 	return summary, nil
 }
 
-// ProfileToRepo maps a ProfileInput to a repository.Profile. OwnerID,
-// AvatarPath, and the GSI discriminators are set downstream, not here.
-func ProfileToRepo(in api.ProfileInput) repository.Profile {
-	p := repository.Profile{
+// ToRepo maps a ProfileInput to a repository.Profile. OwnerID, AvatarPath,
+// and the GSI discriminators are set downstream, not here.
+func (p Profile) ToRepo(in api.ProfileInput) repository.Profile {
+	prof := repository.Profile{
 		Username:        in.Username,
 		DiscordUsername: in.DiscordUsername,
 		Bio:             in.Bio,
-		Links:           profileLinksToRepo(in.Links),
+		Links:           p.linksToRepo(in.Links),
 		Preferences:     repository.DefaultProfilePreferences(),
 	}
 	if in.Discoverable != nil {
-		p.Discoverable = *in.Discoverable
+		prof.Discoverable = *in.Discoverable
 	}
 	if in.Preferences != nil {
-		p.Preferences = profilePreferencesToRepo(*in.Preferences)
+		prof.Preferences = p.preferencesToRepo(*in.Preferences)
 	}
 
-	return p
+	return prof
 }
 
-func profilePreferencesToAPI(p repository.ProfilePreferences) api.ProfilePreferences {
+func (p Profile) preferencesToAPI(prefs repository.ProfilePreferences) api.ProfilePreferences {
 	return api.ProfilePreferences{
-		Currency:          p.Currency,
-		ShowPriceToMe:     p.ShowPriceToMe,
-		ShowPriceToOthers: p.ShowPriceToOthers,
+		Currency:          prefs.Currency,
+		ShowPriceToMe:     prefs.ShowPriceToMe,
+		ShowPriceToOthers: prefs.ShowPriceToOthers,
 	}
 }
 
-func profilePreferencesToRepo(in api.ProfilePreferences) repository.ProfilePreferences {
+func (p Profile) preferencesToRepo(in api.ProfilePreferences) repository.ProfilePreferences {
 	return repository.ProfilePreferences{
 		Currency:          in.Currency,
 		ShowPriceToMe:     in.ShowPriceToMe,
@@ -89,7 +94,7 @@ func profilePreferencesToRepo(in api.ProfilePreferences) repository.ProfilePrefe
 	}
 }
 
-func profileLinksToAPI(links []repository.ProfileLink) *[]api.ProfileLink {
+func (p Profile) linksToAPI(links []repository.ProfileLink) *[]api.ProfileLink {
 	if len(links) == 0 {
 		return nil
 	}
@@ -102,7 +107,7 @@ func profileLinksToAPI(links []repository.ProfileLink) *[]api.ProfileLink {
 	return &out
 }
 
-func profileLinksToRepo(links *[]api.ProfileLink) []repository.ProfileLink {
+func (p Profile) linksToRepo(links *[]api.ProfileLink) []repository.ProfileLink {
 	if links == nil || len(*links) == 0 {
 		return nil
 	}

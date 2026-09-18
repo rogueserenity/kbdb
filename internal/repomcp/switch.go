@@ -5,15 +5,20 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// SwitchToMCP maps a repository.Switch to its MCP tool shape. Optional
-// fields pass through as pointers rather than being dereferenced, so a
-// recorded zero survives the round trip instead of being indistinguishable
-// from unset - the same reason repoapi.SwitchToAPI keeps them. The nested
+// Switch maps repository.Switch to and from its MCP tool shape. It has no
+// dependencies - unlike repoapi.Switch, this never presigns an image URL;
+// ToMCP reports only HasImage.
+type Switch struct{}
+
+// ToMCP maps a repository.Switch to its MCP tool shape. Optional fields
+// pass through as pointers rather than being dereferenced, so a recorded
+// zero survives the round trip instead of being indistinguishable from
+// unset - the same reason [repoapi.Switch.ToAPI] keeps them. The nested
 // material/force/spring/purchase groups still collapse to nil when every
 // field in them is unset, so an all-empty group is omitted entirely. The
 // owner always sees their own purchase.price; a non-owner sees it only if
 // ownerPrefs.ShowPriceToOthers.
-func SwitchToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Switch {
+func (s Switch) ToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Switch {
 	return schema.Switch{
 		ID:           sw.ID,
 		Brand:        sw.Brand,
@@ -22,23 +27,23 @@ func SwitchToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.Profi
 		Type:         sw.Type,
 		Pins:         sw.Pins,
 		FactoryLubed: sw.FactoryLubed,
-		Material:     switchMaterialToMCP(sw.Material),
-		Force:        switchForceToMCP(sw.Force),
-		Spring:       switchSpringToMCP(sw.Spring),
-		Purchase:     switchPurchaseToMCP(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
+		Material:     s.materialToMCP(sw.Material),
+		Force:        s.forceToMCP(sw.Force),
+		Spring:       s.springToMCP(sw.Spring),
+		Purchase:     s.purchaseToMCP(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
 		Notes:        sw.Notes,
 		Visibility:   string(sw.Visibility),
 		HasImage:     sw.ImagePath != nil,
 	}
 }
 
-// SwitchToMCPSummary maps a repository.Switch to the abbreviated shape
+// ToMCPSummary maps a repository.Switch to the abbreviated shape
 // list_switches returns. Lifts order_status out of purchase, so a switch
 // still on order is visible while browsing a list. Price is shown per
 // ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
-// (non-owner) - unlike [SwitchToMCP], the owner isn't unconditionally
+// (non-owner) - unlike [Switch.ToMCP], the owner isn't unconditionally
 // shown price here.
-func SwitchToMCPSummary(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.SwitchSummary {
+func (s Switch) ToMCPSummary(sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.SwitchSummary {
 	summary := schema.SwitchSummary{
 		ID:          sw.ID,
 		Brand:       sw.Brand,
@@ -54,7 +59,7 @@ func SwitchToMCPSummary(sw repository.Switch, isOwner bool, ownerPrefs repositor
 	return summary
 }
 
-func switchMaterialToMCP(m repository.SwitchMaterial) *schema.SwitchMaterial {
+func (s Switch) materialToMCP(m repository.SwitchMaterial) *schema.SwitchMaterial {
 	if m.TopHousing == nil && m.BottomHousing == nil && m.Stem == nil {
 		return nil
 	}
@@ -66,7 +71,7 @@ func switchMaterialToMCP(m repository.SwitchMaterial) *schema.SwitchMaterial {
 	}
 }
 
-func switchForceToMCP(f repository.SwitchForce) *schema.SwitchForce {
+func (s Switch) forceToMCP(f repository.SwitchForce) *schema.SwitchForce {
 	if f.Actuation == nil && f.BottomOut == nil {
 		return nil
 	}
@@ -77,21 +82,21 @@ func switchForceToMCP(f repository.SwitchForce) *schema.SwitchForce {
 	}
 }
 
-func switchSpringToMCP(s repository.SwitchSpring) *schema.SwitchSpring {
-	if s.Material == nil && s.PreTravel == nil && s.TotalTravel == nil {
+func (s Switch) springToMCP(sp repository.SwitchSpring) *schema.SwitchSpring {
+	if sp.Material == nil && sp.PreTravel == nil && sp.TotalTravel == nil {
 		return nil
 	}
 
 	return &schema.SwitchSpring{
-		Material:    s.Material,
-		PreTravel:   s.PreTravel,
-		TotalTravel: s.TotalTravel,
+		Material:    sp.Material,
+		PreTravel:   sp.PreTravel,
+		TotalTravel: sp.TotalTravel,
 	}
 }
 
-// Dates pass through as strings, unlike repoapi.SwitchToAPI, so this can't
-// fail on a malformed one.
-func switchPurchaseToMCP(p repository.SwitchPurchase, showPrice bool) *schema.SwitchPurchase {
+// Dates pass through as strings, unlike [repoapi.Switch.ToAPI], so this
+// can't fail on a malformed one.
+func (s Switch) purchaseToMCP(p repository.SwitchPurchase, showPrice bool) *schema.SwitchPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil && p.Quantity == nil {
 		return nil
@@ -111,11 +116,11 @@ func switchPurchaseToMCP(p repository.SwitchPurchase, showPrice bool) *schema.Sw
 	return out
 }
 
-// SwitchFromMCP maps a create_switch/update_switch tool argument to its
-// repository shape. ID and UserID are left unset: the caller sets ID (fresh
-// for a create, the target's for an update), and UserID comes from ctx in
-// the repository layer.
-func SwitchFromMCP(in schema.SwitchInput) repository.Switch {
+// FromMCP maps a create_switch/update_switch tool argument to its
+// repository shape. ID and UserID are left unset: the caller sets ID
+// (fresh for a create, the target's for an update), and UserID comes from
+// ctx in the repository layer.
+func (s Switch) FromMCP(in schema.SwitchInput) repository.Switch {
 	return repository.Switch{
 		Brand:        in.Brand,
 		Manufacturer: in.Manufacturer,
@@ -123,16 +128,16 @@ func SwitchFromMCP(in schema.SwitchInput) repository.Switch {
 		Type:         in.Type,
 		Pins:         in.Pins,
 		FactoryLubed: in.FactoryLubed,
-		Material:     switchMaterialFromMCP(in.Material),
-		Force:        switchForceFromMCP(in.Force),
-		Spring:       switchSpringFromMCP(in.Spring),
-		Purchase:     switchPurchaseFromMCP(in.Purchase),
+		Material:     s.materialFromMCP(in.Material),
+		Force:        s.forceFromMCP(in.Force),
+		Spring:       s.springFromMCP(in.Spring),
+		Purchase:     s.purchaseFromMCP(in.Purchase),
 		Notes:        in.Notes,
 		Visibility:   repository.Visibility(in.Visibility),
 	}
 }
 
-func switchMaterialFromMCP(m *schema.SwitchMaterial) repository.SwitchMaterial {
+func (s Switch) materialFromMCP(m *schema.SwitchMaterial) repository.SwitchMaterial {
 	if m == nil {
 		return repository.SwitchMaterial{}
 	}
@@ -144,7 +149,7 @@ func switchMaterialFromMCP(m *schema.SwitchMaterial) repository.SwitchMaterial {
 	}
 }
 
-func switchForceFromMCP(f *schema.SwitchForce) repository.SwitchForce {
+func (s Switch) forceFromMCP(f *schema.SwitchForce) repository.SwitchForce {
 	if f == nil {
 		return repository.SwitchForce{}
 	}
@@ -155,19 +160,19 @@ func switchForceFromMCP(f *schema.SwitchForce) repository.SwitchForce {
 	}
 }
 
-func switchSpringFromMCP(s *schema.SwitchSpring) repository.SwitchSpring {
-	if s == nil {
+func (s Switch) springFromMCP(sp *schema.SwitchSpring) repository.SwitchSpring {
+	if sp == nil {
 		return repository.SwitchSpring{}
 	}
 
 	return repository.SwitchSpring{
-		Material:    s.Material,
-		PreTravel:   s.PreTravel,
-		TotalTravel: s.TotalTravel,
+		Material:    sp.Material,
+		PreTravel:   sp.PreTravel,
+		TotalTravel: sp.TotalTravel,
 	}
 }
 
-func switchPurchaseFromMCP(p *schema.SwitchPurchase) repository.SwitchPurchase {
+func (s Switch) purchaseFromMCP(p *schema.SwitchPurchase) repository.SwitchPurchase {
 	if p == nil {
 		return repository.SwitchPurchase{}
 	}

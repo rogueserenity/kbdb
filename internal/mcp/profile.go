@@ -71,7 +71,7 @@ func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[sche
 			return nil, schema.GetProfileOutput{}, errProfileNotFound
 		}
 
-		return nil, schema.GetProfileOutput{Profile: repomcp.ProfileToMCP(*p)}, nil
+		return nil, schema.GetProfileOutput{Profile: repomcp.Profile{}.ToMCP(*p)}, nil
 	}
 }
 
@@ -95,7 +95,7 @@ func handleCreateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 			return nil, schema.CreateProfileOutput{}, errors.New("failed to create profile")
 		}
 
-		return nil, schema.CreateProfileOutput{Profile: repomcp.ProfileToMCP(*created)}, nil
+		return nil, schema.CreateProfileOutput{Profile: repomcp.Profile{}.ToMCP(*created)}, nil
 	}
 }
 
@@ -114,7 +114,7 @@ func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 			return nil, schema.UpdateProfileOutput{}, mutErr
 		}
 
-		return nil, schema.UpdateProfileOutput{Profile: repomcp.ProfileToMCP(*updated)}, nil
+		return nil, schema.UpdateProfileOutput{Profile: repomcp.Profile{}.ToMCP(*updated)}, nil
 	}
 }
 
@@ -166,7 +166,7 @@ func handleListProfiles(repo repository.ProfileRepository) mcp.ToolHandlerFor[sc
 
 		items := make([]schema.ProfileSummary, len(profiles))
 		for i, p := range profiles {
-			items[i] = repomcp.ProfileToMCPSummary(p)
+			items[i] = repomcp.Profile{}.ToMCPSummary(p)
 		}
 
 		return nil, schema.ListProfilesOutput{Profiles: items, NextCursor: nextCursor}, nil
@@ -244,7 +244,7 @@ func handleDeleteProfileImage(
 // it) and maps the input to a repository.Profile, joining every violation
 // into one error like validatedSwitch.
 func validatedProfile(in schema.ProfileInput) (repository.Profile, error) {
-	p := repomcp.ProfileFromMCP(in)
+	p := repomcp.Profile{}.FromMCP(in)
 
 	profilevalidate.Normalize(&p)
 	fieldErrs := profilevalidate.Validate(p)

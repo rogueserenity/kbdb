@@ -12,13 +12,26 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// BuildToAPI maps a repository.Build to its wire representation, resolving
-// the Keyboard/Switch/KeycapSet references it carries into denormalized
+// Build maps repository.Build to and from its wire representations,
+// resolving the Keyboard/Switch/KeycapSet references it carries.
+type Build struct {
+	Repo           repository.BuildRepository
+	Images         repository.BuildImageStore
+	KitImages      repository.KeycapKitImageStore
+	KeyboardImages repository.KeyboardImageStore
+	SwitchImages   repository.SwitchImageStore
+	KeyboardRepo   repository.KeyboardRepository
+	SwitchRepo     repository.SwitchRepository
+	KeycapSetRepo  repository.KeycapSetRepository
+}
+
+// ToAPI maps a repository.Build to its wire representation, resolving the
+// Keyboard/Switch/KeycapSet references it carries into denormalized
 // objects so a client can render the build without follow-up requests. A
 // reference that can't be resolved (repository.ErrNotFound - e.g. deleted
 // after the build referenced it, see
 // https://github.com/rogueserenity/kbdb/issues/172) is left nil rather than
-// failing the whole request, mirroring [BuildToAPISummary]; any other
+// failing the whole request, mirroring [Build.ToAPISummary]; any other
 // repository error, or b.BuildDate not matching dateLayout, or an image
 // failing to presign, still fails it.
 //
@@ -27,63 +40,52 @@ import (
 // Switches, and KeycapKits all belong to the same owner as the build
 // itself, so ownerPrefs (looked up once for the build's owner) governs
 // price visibility across the whole composite.
-func BuildToAPI(
-	ctx context.Context, b repository.Build,
-	images repository.BuildImageStore,
-	kitImages repository.KeycapKitImageStore,
-	keyboardImages repository.KeyboardImageStore,
-	switchImages repository.SwitchImageStore,
-	keyboardRepo repository.KeyboardRepository,
-	switchRepo repository.SwitchRepository,
-	keycapSetRepo repository.KeycapSetRepository,
-	isOwner bool,
-	ownerPrefs repository.ProfilePreferences,
-) (api.Build, error) {
+func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Build, error) {
 	showPrice := ownerPrefs.ShowPriceSingle(isOwner)
-	buildDate, err := buildDateToAPI(b.BuildDate)
+	buildDate, err := b.dateToAPI(build.BuildDate)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	imgs, err := buildImagesToAPI(ctx, repository.SortedBuildImages(b.Images), images)
+	imgs, err := b.imagesToAPI(ctx, repository.SortedBuildImages(build.Images))
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	keyboardRef, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo, keyboardImages, true)
+	keyboardRef, keyboardPrice, err := b.keyboardRefToAPI(ctx, build.UserID, build.Keyboard, true)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	switches, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo, switchImages, true)
+	switches, switchesCost, err := b.switchEntriesResolvedToAPI(ctx, build.UserID, build.Switches, true)
 	if err != nil {
 		return api.Build{}, err
 	}
 
-	keycapKits, keycapKitsCost, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, kitImages, true)
+	keycapKits, keycapKitsCost, err := b.keycapKitEntriesResolvedToAPI(ctx, build.UserID, build.KeycapKits, true)
 	if err != nil {
 		return api.Build{}, err
 	}
 
 	out := api.Build{
-		Id:            b.ID,
+		Id:            build.ID,
 		Keyboard:      keyboardRef,
-		Plate:         b.Plate,
-		CaseMountType: buildCaseMountTypeToAPI(b.CaseMountType),
-		Stabs:         buildStabsToAPI(b.Stabs, showPrice),
-		Foam:          b.Foam,
+		Plate:         build.Plate,
+		CaseMountType: b.caseMountTypeToAPI(build.CaseMountType),
+		Stabs:         b.stabsToAPI(build.Stabs, showPrice),
+		Foam:          build.Foam,
 		Switches:      switches,
 		KeycapKits:    keycapKits,
 		BuildDate:     buildDate,
-		Notes:         b.Notes,
-		Visibility:    api.Visibility(b.Visibility),
+		Notes:         build.Notes,
+		Visibility:    api.Visibility(build.Visibility),
 		Images:        imgs,
 	}
 
 	if showPrice {
 		var stabsPrice *float64
-		if b.Stabs != nil {
-			stabsPrice = b.Stabs.Price
+		if build.Stabs != nil {
+			stabsPrice = build.Stabs.Price
 		}
 		out.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
@@ -91,78 +93,50 @@ func BuildToAPI(
 	return out, nil
 }
 
-// sumKnownCosts sums the non-nil components, treating a nil one as
-// excluded rather than zero. Returns nil if none are set.
-func sumKnownCosts(components ...*float64) *float64 {
-	var total float64
-	var haveAny bool
-	for _, c := range components {
-		if c == nil {
-			continue
-		}
-		total += *c
-		haveAny = true
-	}
-
-	if !haveAny {
-		return nil //nolint:nilnil // no known-priced components is a valid, expected result
-	}
-
-	return &total
-}
-
-// BuildToRepo maps a generated BuildInput (already schema-validated by the
+// ToRepo maps a generated BuildInput (already schema-validated by the
 // OpenAPI request validator) to a repository.Build. It does not set UserID
 // or ID - those come from the request's path/caller, not the body, and stay
 // the handler's responsibility. Images is never set here - a build's images
 // are managed entirely through the dedicated image endpoints, never carried
 // in a build write.
-func BuildToRepo(in api.BuildInput) repository.Build {
+func (b Build) ToRepo(in api.BuildInput) repository.Build {
 	return repository.Build{
 		Keyboard:      in.Keyboard,
 		Plate:         in.Plate,
-		CaseMountType: buildCaseMountTypeToRepo(in.CaseMountType),
-		Stabs:         buildStabsToRepo(in.Stabs),
+		CaseMountType: b.caseMountTypeToRepo(in.CaseMountType),
+		Stabs:         b.stabsToRepo(in.Stabs),
 		Foam:          in.Foam,
-		Switches:      buildSwitchEntriesToRepo(in.Switches),
-		KeycapKits:    buildKeycapKitEntriesToRepo(in.KeycapKits),
-		BuildDate:     buildDateToRepo(in.BuildDate),
+		Switches:      b.switchEntriesToRepo(in.Switches),
+		KeycapKits:    b.keycapKitEntriesToRepo(in.KeycapKits),
+		BuildDate:     b.dateToRepo(in.BuildDate),
 		Notes:         in.Notes,
 		Visibility:    repository.Visibility(in.Visibility),
 	}
 }
 
-// BuildToAPISummary denormalizes the referenced Keyboard's brand/name via
-// a per-item keyboardRepo.Get call - no batch-get precedent exists, and a
+// ToAPISummary denormalizes the referenced Keyboard's brand/name via a
+// per-item KeyboardRepo.Get call - no batch-get precedent exists, and a
 // list page is capped at 100 items, so this O(n) fetch is the simplest
 // correct approach for now. If the keyboard can't be resolved
 // (repository.ErrNotFound - e.g. deleted after the build was created, see
 // https://github.com/rogueserenity/kbdb/issues/172), Keyboard is left nil
 // rather than failing the whole request; any other error still fails it.
 //
-// TotalCost mirrors [BuildToAPI]'s calculation, gated by
+// TotalCost mirrors [Build.ToAPI]'s calculation, gated by
 // ownerPrefs.ShowPriceSummary(isOwner) instead of ShowPriceSingle - unlike
-// [BuildToAPI], the owner isn't unconditionally shown price here. Unlike
+// [Build.ToAPI], the owner isn't unconditionally shown price here. Unlike
 // keyboardPrice, switches/keycap kits are only resolved when price will be
 // shown, since cost is the only thing this uses them for.
-func BuildToAPISummary(
-	ctx context.Context, b repository.Build,
-	keyboardRepo repository.KeyboardRepository,
-	switchRepo repository.SwitchRepository,
-	keycapSetRepo repository.KeycapSetRepository,
-	images repository.BuildImageStore,
-	isOwner bool,
-	ownerPrefs repository.ProfilePreferences,
-) (api.BuildSummary, error) {
+func (b Build) ToAPISummary(ctx context.Context, build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.BuildSummary, error) {
 	showPrice := ownerPrefs.ShowPriceSummary(isOwner)
-	buildDate, err := buildDateToAPI(b.BuildDate)
+	buildDate, err := b.dateToAPI(build.BuildDate)
 	if err != nil {
 		return api.BuildSummary{}, err
 	}
 
 	var image *api.BuildImage
-	if imgs := repository.SortedBuildImages(b.Images); len(imgs) > 0 {
-		url, err := images.PresignGetBuildImage(ctx, imgs[0].Path)
+	if imgs := repository.SortedBuildImages(build.Images); len(imgs) > 0 {
+		url, err := b.Images.PresignGetBuildImage(ctx, imgs[0].Path)
 		if err != nil {
 			return api.BuildSummary{}, fmt.Errorf("presigning build image %q: %w", imgs[0].ImageID, err)
 		}
@@ -170,13 +144,13 @@ func BuildToAPISummary(
 	}
 
 	summary := api.BuildSummary{
-		Id:         &b.ID,
-		KeyboardId: &b.Keyboard,
+		Id:         &build.ID,
+		KeyboardId: &build.Keyboard,
 		BuildDate:  buildDate,
 		Image:      image,
 	}
 
-	kb, keyboardPrice, err := buildKeyboardRefToAPI(ctx, b.UserID, b.Keyboard, keyboardRepo, nil, false)
+	kb, keyboardPrice, err := b.keyboardRefToAPI(ctx, build.UserID, build.Keyboard, false)
 	if err != nil {
 		return api.BuildSummary{}, err
 	}
@@ -185,19 +159,19 @@ func BuildToAPISummary(
 	}
 
 	if showPrice {
-		_, switchesCost, err := buildSwitchEntriesResolvedToAPI(ctx, b.UserID, b.Switches, switchRepo, nil, false)
+		_, switchesCost, err := b.switchEntriesResolvedToAPI(ctx, build.UserID, build.Switches, false)
 		if err != nil {
 			return api.BuildSummary{}, err
 		}
 
-		_, keycapKitsCost, err := buildKeycapKitEntriesResolvedToAPI(ctx, b.UserID, b.KeycapKits, keycapSetRepo, nil, false)
+		_, keycapKitsCost, err := b.keycapKitEntriesResolvedToAPI(ctx, build.UserID, build.KeycapKits, false)
 		if err != nil {
 			return api.BuildSummary{}, err
 		}
 
 		var stabsPrice *float64
-		if b.Stabs != nil {
-			stabsPrice = b.Stabs.Price
+		if build.Stabs != nil {
+			stabsPrice = build.Stabs.Price
 		}
 		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
@@ -205,7 +179,7 @@ func BuildToAPISummary(
 	return summary, nil
 }
 
-func buildDateToAPI(s *string) (*openapi_types.Date, error) {
+func (b Build) dateToAPI(s *string) (*openapi_types.Date, error) {
 	if s == nil {
 		return nil, nil //nolint:nilnil // no build date is a valid, expected result
 	}
@@ -218,7 +192,7 @@ func buildDateToAPI(s *string) (*openapi_types.Date, error) {
 	return d, nil
 }
 
-func buildDateToRepo(d *openapi_types.Date) *string {
+func (b Build) dateToRepo(d *openapi_types.Date) *string {
 	if d == nil {
 		return nil
 	}
@@ -227,7 +201,7 @@ func buildDateToRepo(d *openapi_types.Date) *string {
 	return &s
 }
 
-func buildCaseMountTypeToAPI(cmt *repository.BuildCaseMountType) *api.BuildCaseMountType {
+func (b Build) caseMountTypeToAPI(cmt *repository.BuildCaseMountType) *api.BuildCaseMountType {
 	if cmt == nil {
 		return nil
 	}
@@ -238,7 +212,7 @@ func buildCaseMountTypeToAPI(cmt *repository.BuildCaseMountType) *api.BuildCaseM
 	}
 }
 
-func buildCaseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.BuildCaseMountType {
+func (b Build) caseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.BuildCaseMountType {
 	if cmt == nil {
 		return nil
 	}
@@ -249,7 +223,7 @@ func buildCaseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.BuildCase
 	}
 }
 
-func buildStabsToAPI(s *repository.BuildStabs, showPrice bool) *api.BuildStabs {
+func (b Build) stabsToAPI(s *repository.BuildStabs, showPrice bool) *api.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -265,7 +239,7 @@ func buildStabsToAPI(s *repository.BuildStabs, showPrice bool) *api.BuildStabs {
 	return out
 }
 
-func buildStabsToRepo(s *api.BuildStabs) *repository.BuildStabs {
+func (b Build) stabsToRepo(s *api.BuildStabs) *repository.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -277,7 +251,7 @@ func buildStabsToRepo(s *api.BuildStabs) *repository.BuildStabs {
 	}
 }
 
-func buildSwitchEntriesToRepo(entries *[]api.BuildSwitchEntry) []repository.BuildSwitchEntry {
+func (b Build) switchEntriesToRepo(entries *[]api.BuildSwitchEntry) []repository.BuildSwitchEntry {
 	if entries == nil {
 		return nil
 	}
@@ -290,7 +264,7 @@ func buildSwitchEntriesToRepo(entries *[]api.BuildSwitchEntry) []repository.Buil
 	return out
 }
 
-func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repository.BuildKeycapKitEntry {
+func (b Build) keycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repository.BuildKeycapKitEntry {
 	if entries == nil {
 		return nil
 	}
@@ -303,20 +277,18 @@ func buildKeycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repositor
 	return out
 }
 
-// buildKeyboardRefToAPI resolves keyboardID into a denormalized reference
-// plus its purchase price. Returns (nil, nil, nil) if the keyboard no
-// longer exists.
+// keyboardRefToAPI resolves keyboardID into a denormalized reference plus
+// its purchase price. Returns (nil, nil, nil) if the keyboard no longer
+// exists.
 //
-// resolveImages false skips presigning ImageUrl; keyboardImages may be nil
-// in that case. When true, the ref surfaces only the keyboard's first
-// image (kb.Images[0]), mirroring how [BuildToAPISummary] picks a build's
-// own Images[0] for its summary thumbnail.
-func buildKeyboardRefToAPI(
-	ctx context.Context, ownerID, keyboardID string,
-	keyboardRepo repository.KeyboardRepository, keyboardImages repository.KeyboardImageStore,
-	resolveImages bool,
+// resolveImages false skips presigning ImageUrl. When true, the ref
+// surfaces only the keyboard's first image (kb.Images[0]), mirroring how
+// [Build.ToAPISummary] picks a build's own Images[0] for its summary
+// thumbnail.
+func (b Build) keyboardRefToAPI(
+	ctx context.Context, ownerID, keyboardID string, resolveImages bool,
 ) (*api.BuildKeyboardRef, *float64, error) {
-	kb, err := keyboardRepo.Get(ctx, ownerID, keyboardID)
+	kb, err := b.KeyboardRepo.Get(ctx, ownerID, keyboardID)
 	if err != nil {
 		if errors.Is(err, repository.ErrNotFound) {
 			return nil, nil, nil //nolint:nilnil // deleted-after-reference is a valid, expected result
@@ -334,7 +306,7 @@ func buildKeyboardRefToAPI(
 
 	if resolveImages {
 		if imgs := repository.SortedKeyboardImages(kb.Images); len(imgs) > 0 {
-			url, err := keyboardImages.PresignGetKeyboardImage(ctx, imgs[0].Path)
+			url, err := b.KeyboardImages.PresignGetKeyboardImage(ctx, imgs[0].Path)
 			if err != nil {
 				return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
 			}
@@ -345,9 +317,9 @@ func buildKeyboardRefToAPI(
 	return ref, kb.Purchase.Price, nil
 }
 
-// buildSwitchEntriesResolvedToAPI resolves each entry's Switch id into a
-// denormalized reference via a per-entry switchRepo.Get call - same
-// per-item-fetch approach as [BuildToAPISummary]'s keyboard lookup, run
+// switchEntriesResolvedToAPI resolves each entry's Switch id into a
+// denormalized reference via a per-entry SwitchRepo.Get call - same
+// per-item-fetch approach as [Build.ToAPISummary]'s keyboard lookup, run
 // concurrently across entries since each only touches its own out[i]. An
 // entry whose switch no longer exists keeps its Count but leaves Switch
 // nil rather than dropping the entry or failing the request. Also returns
@@ -357,12 +329,9 @@ func buildKeyboardRefToAPI(
 // (Price/Quantity)*Count only when Quantity is set and non-zero; otherwise
 // its cost is unknown and excluded rather than guessed at.
 //
-// resolveImages false skips presigning ImageUrl; switchImages may be nil in
-// that case.
-func buildSwitchEntriesResolvedToAPI(
-	ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry,
-	switchRepo repository.SwitchRepository, switchImages repository.SwitchImageStore,
-	resolveImages bool,
+// resolveImages false skips presigning ImageUrl.
+func (b Build) switchEntriesResolvedToAPI(
+	ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry, resolveImages bool,
 ) (*[]api.BuildSwitchEntryResolved, *float64, error) {
 	if entries == nil {
 		return nil, nil, nil //nolint:nilnil // no switches is a valid, expected result
@@ -378,7 +347,7 @@ func buildSwitchEntriesResolvedToAPI(
 		go func(i int, e repository.BuildSwitchEntry) {
 			defer wg.Done()
 
-			sw, err := switchRepo.Get(ctx, ownerID, e.Switch)
+			sw, err := b.SwitchRepo.Get(ctx, ownerID, e.Switch)
 			if err != nil {
 				if !errors.Is(err, repository.ErrNotFound) {
 					errs[i] = fmt.Errorf("getting switch %q: %w", e.Switch, err)
@@ -400,7 +369,7 @@ func buildSwitchEntriesResolvedToAPI(
 			}
 
 			if resolveImages && sw.ImagePath != nil {
-				url, err := switchImages.PresignGet(ctx, *sw.ImagePath)
+				url, err := b.SwitchImages.PresignGet(ctx, *sw.ImagePath)
 				if err != nil {
 					errs[i] = fmt.Errorf("presigning switch image for switch %q: %w", e.Switch, err)
 					return
@@ -424,22 +393,19 @@ func buildSwitchEntriesResolvedToAPI(
 	return &out, sumKnownCosts(costs...), nil
 }
 
-// buildKeycapKitEntriesResolvedToAPI resolves each entry's (KeycapSet, Kit)
-// pair into a denormalized reference plus the kit's own name/image, via a
-// per-entry keycapSetRepo.Get call - same per-item-fetch approach as
-// [buildSwitchEntriesResolvedToAPI], run concurrently across entries for the
-// same reason. An entry whose keycap set - or whose kit within it - no
+// keycapKitEntriesResolvedToAPI resolves each entry's (KeycapSet, Kit) pair
+// into a denormalized reference plus the kit's own name/image, via a
+// per-entry KeycapSetRepo.Get call - same per-item-fetch approach as
+// [Build.switchEntriesResolvedToAPI], run concurrently across entries for
+// the same reason. An entry whose keycap set - or whose kit within it - no
 // longer exists keeps its KitId but leaves KeycapSet, KitName, and
 // KitImageUrl nil rather than dropping the entry or failing the request.
 // Also returns the summed price across entries whose kit has a known
 // price.
 //
-// resolveImages false skips presigning KitImageUrl; kitImages may be nil
-// in that case.
-func buildKeycapKitEntriesResolvedToAPI(
-	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
-	keycapSetRepo repository.KeycapSetRepository, kitImages repository.KeycapKitImageStore,
-	resolveImages bool,
+// resolveImages false skips presigning KitImageUrl.
+func (b Build) keycapKitEntriesResolvedToAPI(
+	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry, resolveImages bool,
 ) (*[]api.BuildKeycapKitEntryResolved, *float64, error) {
 	if entries == nil {
 		return nil, nil, nil //nolint:nilnil // no keycap kits is a valid, expected result
@@ -457,7 +423,7 @@ func buildKeycapKitEntriesResolvedToAPI(
 
 			out[i] = api.BuildKeycapKitEntryResolved{KitId: e.Kit}
 
-			ks, err := keycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
+			ks, err := b.KeycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
 			if err != nil {
 				if !errors.Is(err, repository.ErrNotFound) {
 					errs[i] = fmt.Errorf("getting keycap set %q: %w", e.KeycapSet, err)
@@ -465,7 +431,7 @@ func buildKeycapKitEntriesResolvedToAPI(
 				return
 			}
 
-			kit := findKeycapKit(ks.Kits, e.Kit)
+			kit := b.findKeycapKit(ks.Kits, e.Kit)
 			if kit == nil {
 				return
 			}
@@ -480,7 +446,7 @@ func buildKeycapKitEntriesResolvedToAPI(
 			costs[i] = kit.Purchase.Price
 
 			if resolveImages && kit.ImagePath != nil {
-				url, err := kitImages.PresignGet(ctx, *kit.ImagePath)
+				url, err := b.KitImages.PresignGet(ctx, *kit.ImagePath)
 				if err != nil {
 					errs[i] = fmt.Errorf("presigning kit image for kit %q: %w", e.Kit, err)
 					return
@@ -498,7 +464,7 @@ func buildKeycapKitEntriesResolvedToAPI(
 	return &out, sumKnownCosts(costs...), nil
 }
 
-func findKeycapKit(kits map[string]repository.KeycapKit, kitID string) *repository.KeycapKit {
+func (b Build) findKeycapKit(kits map[string]repository.KeycapKit, kitID string) *repository.KeycapKit {
 	kit, ok := kits[kitID]
 	if !ok {
 		return nil
@@ -506,10 +472,10 @@ func findKeycapKit(kits map[string]repository.KeycapKit, kitID string) *reposito
 	return &kit
 }
 
-// buildImagesToAPI mints a fresh presigned GET URL per image, per request -
-// never persisted, mirroring [KeycapKitToAPI]'s handling of a kit's image.
-// images is already ordered (by Seq) by the caller.
-func buildImagesToAPI(ctx context.Context, images []repository.BuildImage, store repository.BuildImageStore) (*[]api.BuildImage, error) {
+// imagesToAPI mints a fresh presigned GET URL per image, per request -
+// never persisted, mirroring [KeycapSet.KitToAPI]'s handling of a kit's
+// image. images is already ordered (by Seq) by the caller.
+func (b Build) imagesToAPI(ctx context.Context, images []repository.BuildImage) (*[]api.BuildImage, error) {
 	if len(images) == 0 {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
 	}
@@ -523,7 +489,7 @@ func buildImagesToAPI(ctx context.Context, images []repository.BuildImage, store
 		go func(i int, img repository.BuildImage) {
 			defer wg.Done()
 
-			url, err := store.PresignGetBuildImage(ctx, img.Path)
+			url, err := b.Images.PresignGetBuildImage(ctx, img.Path)
 			if err != nil {
 				errs[i] = fmt.Errorf("presigning build image %q: %w", img.ImageID, err)
 				return

@@ -102,7 +102,7 @@ func handleListKeycapSets(
 		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.KeycapSetSummary, len(sets))
 		for i, ks := range sets {
-			items[i] = repomcp.KeycapSetToMCPSummary(ks, isOwner, ownerPrefs)
+			items[i] = repomcp.KeycapSet{}.ToMCPSummary(ks, isOwner, ownerPrefs)
 		}
 
 		return nil, schema.ListKeycapSetsOutput{KeycapSets: items, NextCursor: nextCursor}, nil
@@ -139,7 +139,7 @@ func handleGetKeycapSet(
 			}
 		}
 
-		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*ks, isOwner, ownerPrefs)}, nil
+		return nil, schema.GetKeycapSetOutput{KeycapSet: repomcp.KeycapSet{}.ToMCP(*ks, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -164,7 +164,7 @@ func handleCreateKeycapSet(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateKeycapSetOutput{KeycapSet: repomcp.KeycapSet{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -189,7 +189,7 @@ func handleUpdateKeycapSet(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateKeycapSetOutput{KeycapSet: repomcp.KeycapSetToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateKeycapSetOutput{KeycapSet: repomcp.KeycapSet{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -241,7 +241,7 @@ func validatedKeycapSet(
 		return repository.KeycapSet{}, errors.New("name must not be blank")
 	}
 
-	ks := repomcp.KeycapSetFromMCP(in)
+	ks := repomcp.KeycapSet{}.FromMCP(in)
 
 	if !ks.Visibility.Valid() {
 		return repository.KeycapSet{}, fmt.Errorf(
@@ -282,7 +282,7 @@ func handleCreateKeycapKit(
 		}
 
 		// isOwner: true - a kit is always added to the caller's own set.
-		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*created, true)}, nil
+		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*created, true)}, nil
 	}
 }
 
@@ -310,7 +310,7 @@ func handleUpdateKeycapKit(
 		}
 
 		// isOwner: true - a kit is always updated on the caller's own set.
-		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapKitToMCP(*updated, true)}, nil
+		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*updated, true)}, nil
 	}
 }
 
@@ -451,7 +451,7 @@ func validatedKeycapKit(
 		}
 	}
 
-	kit := repomcp.KeycapKitFromMCP(in)
+	kit := repomcp.KeycapSet{}.KitFromMCP(in)
 
 	fieldErrs := lookup.ValidateKeycapKit(ctx, kit)
 	if len(fieldErrs) > 0 {

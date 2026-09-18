@@ -9,62 +9,66 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// BuildToMCP never presigns an image URL, unlike
-// [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPI] - it reports
+// Build maps repository.Build to and from its MCP tool shape.
+type Build struct {
+	KeyboardRepo repository.KeyboardRepository
+}
+
+// ToMCP never presigns an image URL, unlike
+// [github.com/rogueserenity/kbdb/internal/repoapi.Build.ToAPI] - it reports
 // only HasImages, so this can't fail on a presign error. The owner always
 // sees their own Stabs.Price; a non-owner sees it only if
 // ownerPrefs.ShowPriceToOthers.
-func BuildToMCP(b repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Build {
+func (b Build) ToMCP(build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Build {
 	return schema.Build{
-		ID:            b.ID,
-		Keyboard:      b.Keyboard,
-		Plate:         b.Plate,
-		CaseMountType: buildCaseMountTypeToMCP(b.CaseMountType),
-		Stabs:         buildStabsToMCP(b.Stabs, ownerPrefs.ShowPriceSingle(isOwner)),
-		Foam:          b.Foam,
-		Switches:      buildSwitchEntriesToMCP(b.Switches),
-		KeycapKits:    buildKeycapKitEntriesToMCP(b.KeycapKits),
-		BuildDate:     b.BuildDate,
-		Notes:         b.Notes,
-		Visibility:    string(b.Visibility),
-		HasImages:     len(b.Images) > 0,
+		ID:            build.ID,
+		Keyboard:      build.Keyboard,
+		Plate:         build.Plate,
+		CaseMountType: b.caseMountTypeToMCP(build.CaseMountType),
+		Stabs:         b.stabsToMCP(build.Stabs, ownerPrefs.ShowPriceSingle(isOwner)),
+		Foam:          build.Foam,
+		Switches:      b.switchEntriesToMCP(build.Switches),
+		KeycapKits:    b.keycapKitEntriesToMCP(build.KeycapKits),
+		BuildDate:     build.BuildDate,
+		Notes:         build.Notes,
+		Visibility:    string(build.Visibility),
+		HasImages:     len(build.Images) > 0,
 	}
 }
 
-// BuildFromMCP leaves ID and UserID unset: the caller sets ID, and UserID
-// comes from ctx in the repository layer. Images are left unset too -
-// never carried in a build write, managed one at a time via their own
-// tools.
-func BuildFromMCP(in schema.BuildInput) repository.Build {
+// FromMCP leaves ID and UserID unset: the caller sets ID, and UserID comes
+// from ctx in the repository layer. Images are left unset too - never
+// carried in a build write, managed one at a time via their own tools.
+func (b Build) FromMCP(in schema.BuildInput) repository.Build {
 	return repository.Build{
 		Keyboard:      in.Keyboard,
 		Plate:         in.Plate,
-		CaseMountType: buildCaseMountTypeFromMCP(in.CaseMountType),
-		Stabs:         buildStabsFromMCP(in.Stabs),
+		CaseMountType: b.caseMountTypeFromMCP(in.CaseMountType),
+		Stabs:         b.stabsFromMCP(in.Stabs),
 		Foam:          in.Foam,
-		Switches:      buildSwitchEntriesFromMCP(in.Switches),
-		KeycapKits:    buildKeycapKitEntriesFromMCP(in.KeycapKits),
+		Switches:      b.switchEntriesFromMCP(in.Switches),
+		KeycapKits:    b.keycapKitEntriesFromMCP(in.KeycapKits),
 		BuildDate:     in.BuildDate,
 		Notes:         in.Notes,
 		Visibility:    repository.Visibility(in.Visibility),
 	}
 }
 
-// BuildToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.BuildToAPISummary]'s
-// keyboardRepo.Get denormalization but reports HasImage rather than a
+// ToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.Build.ToAPISummary]'s
+// KeyboardRepo.Get denormalization but reports HasImage rather than a
 // presigned URL.
-func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo repository.KeyboardRepository) (schema.BuildSummary, error) {
+func (b Build) ToMCPSummary(ctx context.Context, build repository.Build) (schema.BuildSummary, error) {
 	summary := schema.BuildSummary{
-		ID:         b.ID,
-		KeyboardID: b.Keyboard,
-		BuildDate:  b.BuildDate,
-		HasImage:   len(b.Images) > 0,
+		ID:         build.ID,
+		KeyboardID: build.Keyboard,
+		BuildDate:  build.BuildDate,
+		HasImage:   len(build.Images) > 0,
 	}
 
-	kb, err := keyboardRepo.Get(ctx, b.UserID, b.Keyboard)
+	kb, err := b.KeyboardRepo.Get(ctx, build.UserID, build.Keyboard)
 	if err != nil {
 		if !errors.Is(err, repository.ErrNotFound) {
-			return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", b.Keyboard, b.ID, err)
+			return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", build.Keyboard, build.ID, err)
 		}
 		// Leave summary.Keyboard nil.
 	} else {
@@ -74,7 +78,7 @@ func BuildToMCPSummary(ctx context.Context, b repository.Build, keyboardRepo rep
 	return summary, nil
 }
 
-func buildCaseMountTypeToMCP(cmt *repository.BuildCaseMountType) *schema.BuildCaseMountType {
+func (b Build) caseMountTypeToMCP(cmt *repository.BuildCaseMountType) *schema.BuildCaseMountType {
 	if cmt == nil {
 		return nil
 	}
@@ -85,7 +89,7 @@ func buildCaseMountTypeToMCP(cmt *repository.BuildCaseMountType) *schema.BuildCa
 	}
 }
 
-func buildCaseMountTypeFromMCP(cmt *schema.BuildCaseMountType) *repository.BuildCaseMountType {
+func (b Build) caseMountTypeFromMCP(cmt *schema.BuildCaseMountType) *repository.BuildCaseMountType {
 	if cmt == nil {
 		return nil
 	}
@@ -96,7 +100,7 @@ func buildCaseMountTypeFromMCP(cmt *schema.BuildCaseMountType) *repository.Build
 	}
 }
 
-func buildStabsToMCP(s *repository.BuildStabs, showPrice bool) *schema.BuildStabs {
+func (b Build) stabsToMCP(s *repository.BuildStabs, showPrice bool) *schema.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -112,7 +116,7 @@ func buildStabsToMCP(s *repository.BuildStabs, showPrice bool) *schema.BuildStab
 	return out
 }
 
-func buildStabsFromMCP(s *schema.BuildStabs) *repository.BuildStabs {
+func (b Build) stabsFromMCP(s *schema.BuildStabs) *repository.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -124,7 +128,7 @@ func buildStabsFromMCP(s *schema.BuildStabs) *repository.BuildStabs {
 	}
 }
 
-func buildSwitchEntriesToMCP(entries []repository.BuildSwitchEntry) []schema.BuildSwitchEntry {
+func (b Build) switchEntriesToMCP(entries []repository.BuildSwitchEntry) []schema.BuildSwitchEntry {
 	if entries == nil {
 		return nil
 	}
@@ -137,7 +141,7 @@ func buildSwitchEntriesToMCP(entries []repository.BuildSwitchEntry) []schema.Bui
 	return out
 }
 
-func buildSwitchEntriesFromMCP(entries []schema.BuildSwitchEntry) []repository.BuildSwitchEntry {
+func (b Build) switchEntriesFromMCP(entries []schema.BuildSwitchEntry) []repository.BuildSwitchEntry {
 	if entries == nil {
 		return nil
 	}
@@ -150,7 +154,7 @@ func buildSwitchEntriesFromMCP(entries []schema.BuildSwitchEntry) []repository.B
 	return out
 }
 
-func buildKeycapKitEntriesToMCP(entries []repository.BuildKeycapKitEntry) []schema.BuildKeycapKitEntry {
+func (b Build) keycapKitEntriesToMCP(entries []repository.BuildKeycapKitEntry) []schema.BuildKeycapKitEntry {
 	if entries == nil {
 		return nil
 	}
@@ -163,7 +167,7 @@ func buildKeycapKitEntriesToMCP(entries []repository.BuildKeycapKitEntry) []sche
 	return out
 }
 
-func buildKeycapKitEntriesFromMCP(entries []schema.BuildKeycapKitEntry) []repository.BuildKeycapKitEntry {
+func (b Build) keycapKitEntriesFromMCP(entries []schema.BuildKeycapKitEntry) []repository.BuildKeycapKitEntry {
 	if entries == nil {
 		return nil
 	}

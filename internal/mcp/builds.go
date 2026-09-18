@@ -101,7 +101,7 @@ func handleListBuilds(
 			go func(i int, b repository.Build) {
 				defer wg.Done()
 
-				summary, err := repomcp.BuildToMCPSummary(ctx, b, keyboardRepo)
+				summary, err := repomcp.Build{KeyboardRepo: keyboardRepo}.ToMCPSummary(ctx, b)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping build %q to MCP summary: %w", b.ID, err)
 					return
@@ -150,7 +150,7 @@ func handleGetBuild(
 			}
 		}
 
-		return nil, schema.GetBuildOutput{Build: repomcp.BuildToMCP(*b, isOwner, ownerPrefs)}, nil
+		return nil, schema.GetBuildOutput{Build: repomcp.Build{}.ToMCP(*b, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -199,7 +199,7 @@ func handleCreateBuild(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateBuildOutput{Build: repomcp.BuildToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateBuildOutput{Build: repomcp.Build{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -245,7 +245,7 @@ func handleUpdateBuild(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateBuildOutput{Build: repomcp.BuildToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateBuildOutput{Build: repomcp.Build{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -269,7 +269,7 @@ func validatedBuild(ctx context.Context, in schema.BuildInput) (repository.Build
 		}
 	}
 
-	b := repomcp.BuildFromMCP(in)
+	b := repomcp.Build{}.FromMCP(in)
 
 	if !b.Visibility.Valid() {
 		return repository.Build{}, fmt.Errorf(

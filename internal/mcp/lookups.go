@@ -40,6 +40,6 @@ func handleGetLookup() mcp.ToolHandlerFor[schema.GetLookupInput, schema.GetLooku
 			return nil, schema.GetLookupOutput{}, fmt.Errorf("lookup category %q not found", in.Category)
 		}
 
-		return nil, repomcp.LookupToMCP(l), nil
+		return nil, repomcp.Lookup{}.ToMCP(l), nil
 	}
 }

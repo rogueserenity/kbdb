@@ -15,6 +15,7 @@ import (
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -36,7 +37,7 @@ func (s *ListKeyboardsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListKeyboards(s.mockRepo, s.mockImages, s.mockPrefs)
+	s.handler = ListKeyboards(s.mockRepo, repoapi.Keyboard{Images: s.mockImages}, s.mockPrefs)
 }
 
 func (s *ListKeyboardsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -255,7 +256,7 @@ func (s *GetKeyboardSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetKeyboard(s.mockRepo, s.mockImages, s.mockPrefs)
+	s.handler = GetKeyboard(s.mockRepo, repoapi.Keyboard{Images: s.mockImages}, s.mockPrefs)
 }
 
 func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
@@ -473,7 +474,7 @@ func TestCreateKeyboardSuite(t *testing.T) {
 func (s *CreateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
-	s.handler = CreateKeyboard(s.mockKeyboardRepo, s.mockImages)
+	s.handler = CreateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages})
 }
 
 func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -749,7 +750,7 @@ func TestUpdateKeyboardSuite(t *testing.T) {
 func (s *UpdateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
-	s.handler = UpdateKeyboard(s.mockKeyboardRepo, s.mockImages)
+	s.handler = UpdateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages})
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {

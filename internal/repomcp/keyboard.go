@@ -5,32 +5,37 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// KeyboardToMCP maps a repository.Keyboard to its MCP tool shape. Pointers
-// pass through undereferenced so a recorded zero survives, as
-// repoapi.KeyboardToAPI does. The owner always sees their own
+// Keyboard maps repository.Keyboard to and from its MCP tool shape. It has
+// no dependencies - unlike repoapi.Keyboard, this never presigns image
+// URLs; ToMCP reports only HasImages.
+type Keyboard struct{}
+
+// ToMCP maps a repository.Keyboard to its MCP tool shape. Pointers pass
+// through undereferenced so a recorded zero survives, as
+// [repoapi.Keyboard.ToAPI] does. The owner always sees their own
 // purchase.price; a non-owner sees it only if ownerPrefs.ShowPriceToOthers.
-func KeyboardToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Keyboard {
+func (k Keyboard) ToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Keyboard {
 	return schema.Keyboard{
 		ID:         kb.ID,
 		Brand:      kb.Brand,
 		Name:       kb.Name,
 		Size:       kb.Size,
 		Layout:     kb.Layout,
-		Design:     keyboardDesignToMCP(kb.Design),
-		PCB:        keyboardPCBToMCP(kb.PCB),
-		Purchase:   keyboardPurchaseToMCP(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
+		Design:     k.designToMCP(kb.Design),
+		PCB:        k.pcbToMCP(kb.PCB),
+		Purchase:   k.purchaseToMCP(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
 		Notes:      kb.Notes,
 		Visibility: string(kb.Visibility),
 		HasImages:  len(kb.Images) > 0,
 	}
 }
 
-// KeyboardToMCPSummary lifts order_status out of purchase, so a keyboard
-// still on order is visible while browsing a list. Price is shown per
+// ToMCPSummary lifts order_status out of purchase, so a keyboard still on
+// order is visible while browsing a list. Price is shown per
 // ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
-// (non-owner) - unlike [KeyboardToMCP], the owner isn't unconditionally
+// (non-owner) - unlike [Keyboard.ToMCP], the owner isn't unconditionally
 // shown price here.
-func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeyboardSummary {
+func (k Keyboard) ToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeyboardSummary {
 	summary := schema.KeyboardSummary{
 		ID:          kb.ID,
 		Brand:       kb.Brand,
@@ -47,10 +52,10 @@ func KeyboardToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs repos
 	return summary
 }
 
-func keyboardDesignToMCP(d repository.KeyboardDesign) *schema.KeyboardDesign {
-	topCase := keyboardMaterialColorToMCP(d.TopCase)
-	bottomCase := keyboardMaterialColorToMCP(d.BottomCase)
-	weight := keyboardMaterialColorToMCP(d.Weight)
+func (k Keyboard) designToMCP(d repository.KeyboardDesign) *schema.KeyboardDesign {
+	topCase := k.materialColorToMCP(d.TopCase)
+	bottomCase := k.materialColorToMCP(d.BottomCase)
+	weight := k.materialColorToMCP(d.Weight)
 
 	if topCase == nil && bottomCase == nil && weight == nil && len(d.Plates) == 0 {
 		return nil
@@ -64,7 +69,7 @@ func keyboardDesignToMCP(d repository.KeyboardDesign) *schema.KeyboardDesign {
 	}
 }
 
-func keyboardMaterialColorToMCP(mc repository.KeyboardMaterialColor) *schema.KeyboardMaterialColor {
+func (k Keyboard) materialColorToMCP(mc repository.KeyboardMaterialColor) *schema.KeyboardMaterialColor {
 	if mc.Material == nil && mc.Color == nil {
 		return nil
 	}
@@ -75,7 +80,7 @@ func keyboardMaterialColorToMCP(mc repository.KeyboardMaterialColor) *schema.Key
 	}
 }
 
-func keyboardPCBToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
+func (k Keyboard) pcbToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
 	if p.Thickness == nil && p.Firmware == nil && p.Assembly == nil && p.Connectivity == nil {
 		return nil
 	}
@@ -88,9 +93,9 @@ func keyboardPCBToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
 	}
 }
 
-// Dates pass through as strings, unlike repoapi.KeyboardToAPI, so this can't
-// fail on a malformed one.
-func keyboardPurchaseToMCP(p repository.KeyboardPurchase, showPrice bool) *schema.KeyboardPurchase {
+// Dates pass through as strings, unlike [repoapi.Keyboard.ToAPI], so this
+// can't fail on a malformed one.
+func (k Keyboard) purchaseToMCP(p repository.KeyboardPurchase, showPrice bool) *schema.KeyboardPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil
@@ -109,37 +114,37 @@ func keyboardPurchaseToMCP(p repository.KeyboardPurchase, showPrice bool) *schem
 	return out
 }
 
-// KeyboardFromMCP maps a create_keyboard/update_keyboard tool argument to
-// its repository shape. ID and UserID are left unset: the caller sets ID,
-// and UserID comes from ctx in the repository layer.
-func KeyboardFromMCP(in schema.KeyboardInput) repository.Keyboard {
+// FromMCP maps a create_keyboard/update_keyboard tool argument to its
+// repository shape. ID and UserID are left unset: the caller sets ID, and
+// UserID comes from ctx in the repository layer.
+func (k Keyboard) FromMCP(in schema.KeyboardInput) repository.Keyboard {
 	return repository.Keyboard{
 		Brand:      in.Brand,
 		Name:       in.Name,
 		Size:       in.Size,
 		Layout:     in.Layout,
-		Design:     keyboardDesignFromMCP(in.Design),
-		PCB:        keyboardPCBFromMCP(in.PCB),
-		Purchase:   keyboardPurchaseFromMCP(in.Purchase),
+		Design:     k.designFromMCP(in.Design),
+		PCB:        k.pcbFromMCP(in.PCB),
+		Purchase:   k.purchaseFromMCP(in.Purchase),
 		Notes:      in.Notes,
 		Visibility: repository.Visibility(in.Visibility),
 	}
 }
 
-func keyboardDesignFromMCP(d *schema.KeyboardDesign) repository.KeyboardDesign {
+func (k Keyboard) designFromMCP(d *schema.KeyboardDesign) repository.KeyboardDesign {
 	if d == nil {
 		return repository.KeyboardDesign{}
 	}
 
 	return repository.KeyboardDesign{
-		TopCase:    keyboardMaterialColorFromMCP(d.TopCase),
-		BottomCase: keyboardMaterialColorFromMCP(d.BottomCase),
-		Weight:     keyboardMaterialColorFromMCP(d.Weight),
+		TopCase:    k.materialColorFromMCP(d.TopCase),
+		BottomCase: k.materialColorFromMCP(d.BottomCase),
+		Weight:     k.materialColorFromMCP(d.Weight),
 		Plates:     d.Plates,
 	}
 }
 
-func keyboardMaterialColorFromMCP(mc *schema.KeyboardMaterialColor) repository.KeyboardMaterialColor {
+func (k Keyboard) materialColorFromMCP(mc *schema.KeyboardMaterialColor) repository.KeyboardMaterialColor {
 	if mc == nil {
 		return repository.KeyboardMaterialColor{}
 	}
@@ -150,7 +155,7 @@ func keyboardMaterialColorFromMCP(mc *schema.KeyboardMaterialColor) repository.K
 	}
 }
 
-func keyboardPCBFromMCP(p *schema.KeyboardPCB) repository.KeyboardPCB {
+func (k Keyboard) pcbFromMCP(p *schema.KeyboardPCB) repository.KeyboardPCB {
 	if p == nil {
 		return repository.KeyboardPCB{}
 	}
@@ -163,7 +168,7 @@ func keyboardPCBFromMCP(p *schema.KeyboardPCB) repository.KeyboardPCB {
 	}
 }
 
-func keyboardPurchaseFromMCP(p *schema.KeyboardPurchase) repository.KeyboardPurchase {
+func (k Keyboard) purchaseFromMCP(p *schema.KeyboardPurchase) repository.KeyboardPurchase {
 	if p == nil {
 		return repository.KeyboardPurchase{}
 	}

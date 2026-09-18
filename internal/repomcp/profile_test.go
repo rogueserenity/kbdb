@@ -31,7 +31,7 @@ func (s *ProfileMapperSuite) TestProfileToMCP_FullProfile() {
 		},
 	}
 
-	out := ProfileToMCP(p)
+	out := Profile{}.ToMCP(p)
 
 	s.Equal("alice", out.Username)
 	s.Equal("user-alice", out.UserID)
@@ -48,13 +48,13 @@ func (s *ProfileMapperSuite) TestProfileToMCP_FullProfile() {
 
 func (s *ProfileMapperSuite) TestProfileToMCP_AvatarReportedAsBool() {
 	key := repository.ProfileImageKey("profiles/user-alice/avatar")
-	out := ProfileToMCP(repository.Profile{Username: "alice", AvatarPath: &key})
+	out := Profile{}.ToMCP(repository.Profile{Username: "alice", AvatarPath: &key})
 
 	s.True(out.HasAvatar)
 }
 
 func (s *ProfileMapperSuite) TestProfileToMCP_EmptyLinks_Nil() {
-	out := ProfileToMCP(repository.Profile{Username: "alice"})
+	out := Profile{}.ToMCP(repository.Profile{Username: "alice"})
 
 	s.Nil(out.Links)
 }
@@ -62,7 +62,7 @@ func (s *ProfileMapperSuite) TestProfileToMCP_EmptyLinks_Nil() {
 func (s *ProfileMapperSuite) TestProfileFromMCP_MapsWritableFields() {
 	discord := "alice_kb"
 	bio := "keebs"
-	p := ProfileFromMCP(schema.ProfileInput{
+	p := Profile{}.FromMCP(schema.ProfileInput{
 		Username:        "alice",
 		Discoverable:    true,
 		DiscordUsername: &discord,
@@ -84,7 +84,7 @@ func (s *ProfileMapperSuite) TestProfileFromMCP_MapsWritableFields() {
 }
 
 func (s *ProfileMapperSuite) TestProfileFromMCP_ServerOwnedFieldsUnset() {
-	p := ProfileFromMCP(schema.ProfileInput{Username: "alice"})
+	p := Profile{}.FromMCP(schema.ProfileInput{Username: "alice"})
 
 	s.Empty(p.OwnerID)
 	s.Nil(p.AvatarPath)
@@ -93,7 +93,7 @@ func (s *ProfileMapperSuite) TestProfileFromMCP_ServerOwnedFieldsUnset() {
 }
 
 func (s *ProfileMapperSuite) TestProfileFromMCP_MapsPreferences() {
-	p := ProfileFromMCP(schema.ProfileInput{
+	p := Profile{}.FromMCP(schema.ProfileInput{
 		Username:    "alice",
 		Preferences: &schema.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
 	})
@@ -102,7 +102,7 @@ func (s *ProfileMapperSuite) TestProfileFromMCP_MapsPreferences() {
 }
 
 func (s *ProfileMapperSuite) TestProfileFromMCP_PreferencesOmitted_DefaultsApplied() {
-	p := ProfileFromMCP(schema.ProfileInput{Username: "alice"})
+	p := Profile{}.FromMCP(schema.ProfileInput{Username: "alice"})
 
 	s.Equal(repository.DefaultProfilePreferences(), p.Preferences)
 }
@@ -113,7 +113,7 @@ func (s *ProfileMapperSuite) TestProfileToMCP_MapsPreferences() {
 		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
 	}
 
-	out := ProfileToMCP(p)
+	out := Profile{}.ToMCP(p)
 
 	s.Equal(schema.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, out.Preferences)
 }

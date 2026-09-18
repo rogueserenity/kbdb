@@ -28,7 +28,7 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 	status := "Delivered"
 	notes := "daily driver"
 
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		ID:     "kb-1",
 		Brand:  "Mode",
 		Name:   "Sixty",
@@ -59,7 +59,7 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 }
 
 func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {
-	out := KeyboardToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
+	out := Keyboard{}.ToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
 
 	s.Nil(out.Design)
 	s.Nil(out.PCB)
@@ -73,7 +73,7 @@ func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {
 // is enough to keep the group, since it's a sibling of the three parts
 // rather than one of them.
 func (s *KeyboardToMCPSuite) TestDesignWithOnlyPlates_IsRetained() {
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		Design: repository.KeyboardDesign{Plates: []string{"Brass"}},
 	}, true, repository.ProfilePreferences{})
 
@@ -85,7 +85,7 @@ func (s *KeyboardToMCPSuite) TestDesignWithOnlyPlates_IsRetained() {
 func (s *KeyboardToMCPSuite) TestDesignWithOnlyOnePart_IsRetained() {
 	material := "PC"
 
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		Design: repository.KeyboardDesign{
 			Weight: repository.KeyboardMaterialColor{Material: &material},
 		},
@@ -105,7 +105,7 @@ func (s *KeyboardToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	price := 0.0
 	thickness := 0.0
 
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		PCB:      repository.KeyboardPCB{Thickness: &thickness},
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{})
@@ -123,7 +123,7 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 	status := "Delivered"
 	price := 199.99
 
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status, Price: &price},
 		Visibility: repository.VisibilityPublic,
@@ -138,7 +138,7 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	price := 199.99
 
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
@@ -152,7 +152,7 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 func (s *KeyboardToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
 	price := 199.99
 
-	out := KeyboardToMCP(repository.Keyboard{
+	out := Keyboard{}.ToMCP(repository.Keyboard{
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
@@ -177,7 +177,7 @@ func (s *KeyboardToMCPSummarySuite) TestIncludesOrderStatusFromPurchase() {
 	size := "TKL"
 	status := "Shipped"
 
-	out := KeyboardToMCPSummary(repository.Keyboard{
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Brand:    "Mode",
 		Name:     "Sixty",
@@ -192,7 +192,7 @@ func (s *KeyboardToMCPSummarySuite) TestIncludesOrderStatusFromPurchase() {
 }
 
 func (s *KeyboardToMCPSummarySuite) TestNoPurchase_LeavesOrderStatusNil() {
-	out := KeyboardToMCPSummary(repository.Keyboard{ID: "kb-1"}, true, repository.ProfilePreferences{})
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{ID: "kb-1"}, true, repository.ProfilePreferences{})
 
 	s.Nil(out.OrderStatus)
 }
@@ -200,7 +200,7 @@ func (s *KeyboardToMCPSummarySuite) TestNoPurchase_LeavesOrderStatusNil() {
 func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 	price := 199.99
 
-	out := KeyboardToMCPSummary(repository.Keyboard{
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
@@ -212,7 +212,7 @@ func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 	price := 199.99
 
-	out := KeyboardToMCPSummary(repository.Keyboard{
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
@@ -223,7 +223,7 @@ func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice() {
 	price := 199.99
 
-	out := KeyboardToMCPSummary(repository.Keyboard{
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
@@ -234,7 +234,7 @@ func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPric
 func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	price := 199.99
 
-	out := KeyboardToMCPSummary(repository.Keyboard{
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
@@ -257,7 +257,7 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 	firmware := "QMK/VIA"
 	price := 0.0
 
-	out := KeyboardFromMCP(schema.KeyboardInput{
+	out := Keyboard{}.FromMCP(schema.KeyboardInput{
 		Brand: "Mode",
 		Name:  "Sixty",
 		Size:  &size,
@@ -282,14 +282,14 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 // ID and UserID are set by the caller and the repository layer
 // respectively, never by the tool argument.
 func (s *KeyboardFromMCPSuite) TestLeavesIdentityUnset() {
-	out := KeyboardFromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
+	out := Keyboard{}.FromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
 
 	s.Empty(out.ID)
 	s.Empty(out.UserID)
 }
 
 func (s *KeyboardFromMCPSuite) TestNilGroups_MapToZeroValues() {
-	out := KeyboardFromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
+	out := Keyboard{}.FromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
 
 	s.Nil(out.Design.TopCase.Material)
 	s.Nil(out.PCB.Firmware)

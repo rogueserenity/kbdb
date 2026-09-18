@@ -87,7 +87,7 @@ func handleListSwitches(
 		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.SwitchSummary, len(switches))
 		for i, sw := range switches {
-			items[i] = repomcp.SwitchToMCPSummary(sw, isOwner, ownerPrefs)
+			items[i] = repomcp.Switch{}.ToMCPSummary(sw, isOwner, ownerPrefs)
 		}
 
 		return nil, schema.ListSwitchesOutput{Switches: items, NextCursor: nextCursor}, nil
@@ -124,7 +124,7 @@ func handleGetSwitch(
 			}
 		}
 
-		return nil, schema.GetSwitchOutput{Switch: repomcp.SwitchToMCP(*sw, isOwner, ownerPrefs)}, nil
+		return nil, schema.GetSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*sw, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -153,7 +153,7 @@ func handleCreateSwitch(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateSwitchOutput{Switch: repomcp.SwitchToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -178,7 +178,7 @@ func handleUpdateSwitch(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateSwitchOutput{Switch: repomcp.SwitchToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -307,7 +307,7 @@ func validatedSwitch(
 		}
 	}
 
-	sw := repomcp.SwitchFromMCP(in)
+	sw := repomcp.Switch{}.FromMCP(in)
 
 	if !sw.Visibility.Valid() {
 		return repository.Switch{}, fmt.Errorf(

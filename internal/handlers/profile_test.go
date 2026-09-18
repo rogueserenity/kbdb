@@ -15,6 +15,7 @@ import (
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -34,7 +35,7 @@ func TestGetProfileSuite(t *testing.T) {
 func (s *GetProfileSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = GetProfile(s.mockRepo, s.mockImages)
+	s.handler = GetProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages})
 }
 
 func (s *GetProfileSuite) newRequest(ctx context.Context, identifier string) *http.Request {
@@ -141,7 +142,7 @@ func TestCreateProfileSuite(t *testing.T) {
 func (s *CreateProfileSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = CreateProfile(s.mockRepo, s.mockImages)
+	s.handler = CreateProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages})
 }
 
 // profileUserID is the {userId} path value every test posts to; owner vs.
@@ -315,7 +316,7 @@ func TestUpdateProfileSuite(t *testing.T) {
 func (s *UpdateProfileSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = UpdateProfile(s.mockRepo, s.mockImages)
+	s.handler = UpdateProfile(s.mockRepo, repoapi.Profile{Images: s.mockImages})
 }
 
 // put builds a PUT request with body as JSON and ctx caller set to caller
@@ -571,7 +572,7 @@ func TestListProfilesSuite(t *testing.T) {
 func (s *ListProfilesSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockProfileRepository(s.T())
 	s.mockImages = mocks.NewMockProfileImageStore(s.T())
-	s.handler = ListProfiles(s.mockRepo, s.mockImages)
+	s.handler = ListProfiles(s.mockRepo, repoapi.Profile{Images: s.mockImages})
 }
 
 func (s *ListProfilesSuite) request(query string) *http.Request {

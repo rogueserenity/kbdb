@@ -15,6 +15,7 @@ import (
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -49,7 +50,17 @@ func (s *CreateBuildSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = CreateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	br := repoapi.Build{
+		Repo:           s.mockBuildRepo,
+		Images:         s.mockImages,
+		KitImages:      s.mockKitImages,
+		KeyboardImages: s.mockKeyboardImages,
+		SwitchImages:   s.mockSwitchImages,
+		KeyboardRepo:   s.mockKeyboardRepo,
+		SwitchRepo:     s.mockSwitchRepo,
+		KeycapSetRepo:  s.mockKeycapSetRepo,
+	}
+	s.handler = CreateBuild(s.mockBuildRepo, br, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing
@@ -386,7 +397,17 @@ func (s *UpdateBuildSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
-	s.handler = UpdateBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
+	br := repoapi.Build{
+		Repo:           s.mockBuildRepo,
+		Images:         s.mockImages,
+		KitImages:      s.mockKitImages,
+		KeyboardImages: s.mockKeyboardImages,
+		SwitchImages:   s.mockSwitchImages,
+		KeyboardRepo:   s.mockKeyboardRepo,
+		SwitchRepo:     s.mockSwitchRepo,
+		KeycapSetRepo:  s.mockKeycapSetRepo,
+	}
+	s.handler = UpdateBuild(s.mockBuildRepo, br, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo)
 }
 
 func (s *UpdateBuildSuite) stubOwnedKeyboard() {
@@ -585,7 +606,14 @@ func (s *ListBuildsSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListBuilds(s.mockBuildRepo, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo, s.mockImages, s.mockPrefs)
+	br := repoapi.Build{
+		Repo:          s.mockBuildRepo,
+		Images:        s.mockImages,
+		KeyboardRepo:  s.mockKeyboardRepo,
+		SwitchRepo:    s.mockSwitchRepo,
+		KeycapSetRepo: s.mockKeycapSetRepo,
+	}
+	s.handler = ListBuilds(s.mockBuildRepo, br, s.mockPrefs)
 }
 
 func (s *ListBuildsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -960,7 +988,17 @@ func (s *GetBuildSuite) SetupTest() {
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetBuild(s.mockBuildRepo, s.mockImages, s.mockKitImages, s.mockKeyboardImages, s.mockSwitchImages, s.mockKeyboardRepo, s.mockSwitchRepo, s.mockKeycapSetRepo, s.mockPrefs)
+	br := repoapi.Build{
+		Repo:           s.mockBuildRepo,
+		Images:         s.mockImages,
+		KitImages:      s.mockKitImages,
+		KeyboardImages: s.mockKeyboardImages,
+		SwitchImages:   s.mockSwitchImages,
+		KeyboardRepo:   s.mockKeyboardRepo,
+		SwitchRepo:     s.mockSwitchRepo,
+		KeycapSetRepo:  s.mockKeycapSetRepo,
+	}
+	s.handler = GetBuild(s.mockBuildRepo, br, s.mockPrefs)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing -
