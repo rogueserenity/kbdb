@@ -30,7 +30,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 	notes := "first build"
 	buildDate := "2026-01-15"
 
-	out := BuildToMCP(repository.Build{
+	out := Build{}.ToMCP(repository.Build{
 		ID:       "build-1",
 		Keyboard: "kb-1",
 		Plate:    &plate,
@@ -80,7 +80,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 }
 
 func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPrice() {
-	out := BuildToMCP(repository.Build{
+	out := Build{}.ToMCP(repository.Build{
 		ID:       "build-1",
 		Keyboard: "kb-1",
 		Stabs: &repository.BuildStabs{
@@ -96,7 +96,7 @@ func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPrice() {
 }
 
 func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPrice() {
-	out := BuildToMCP(repository.Build{
+	out := Build{}.ToMCP(repository.Build{
 		ID:       "build-1",
 		Keyboard: "kb-1",
 		Stabs: &repository.BuildStabs{
@@ -112,7 +112,7 @@ func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPrice()
 }
 
 func (s *BuildToMCPSuite) TestOwner_AlwaysIncludesStabsPriceRegardlessOfShowPriceToMe() {
-	out := BuildToMCP(repository.Build{
+	out := Build{}.ToMCP(repository.Build{
 		ID:       "build-1",
 		Keyboard: "kb-1",
 		Stabs: &repository.BuildStabs{
@@ -128,7 +128,7 @@ func (s *BuildToMCPSuite) TestOwner_AlwaysIncludesStabsPriceRegardlessOfShowPric
 }
 
 func (s *BuildToMCPSuite) TestNoImages_HasImagesFalse() {
-	out := BuildToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
+	out := Build{}.ToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
 
 	s.False(out.HasImages)
 	s.Nil(out.Switches)
@@ -140,7 +140,7 @@ func (s *BuildToMCPSuite) TestBuildFromMCP_MapsAllFields() {
 	notes := "first build"
 	buildDate := "2026-01-15"
 
-	out := BuildFromMCP(schema.BuildInput{
+	out := Build{}.FromMCP(schema.BuildInput{
 		Keyboard: "kb-1",
 		Plate:    &plate,
 		CaseMountType: &schema.BuildCaseMountType{
@@ -181,7 +181,7 @@ func (s *BuildToMCPSuite) TestBuildFromMCP_MapsAllFields() {
 }
 
 func (s *BuildToMCPSuite) TestBuildFromMCP_AllOptionalFieldsNil_MapsToNil() {
-	out := BuildFromMCP(schema.BuildInput{Keyboard: "kb-1", Visibility: "private"})
+	out := Build{}.FromMCP(schema.BuildInput{Keyboard: "kb-1", Visibility: "private"})
 
 	s.Nil(out.Plate)
 	s.Nil(out.CaseMountType)
@@ -210,7 +210,7 @@ func (s *BuildToMCPSummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName
 		Get(mock.Anything, "alice", "kb-1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1", Brand: "Keychron", Name: "Q1"}, nil)
 
-	out, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Equal("build-1", out.ID)
@@ -230,7 +230,7 @@ func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFai
 		Get(mock.Anything, "alice", "kb-1").
 		Return(nil, repository.ErrNotFound)
 
-	out, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Nil(out.Keyboard)
@@ -245,7 +245,7 @@ func (s *BuildToMCPSummarySuite) TestKeyboardRepositoryError_ReturnsError() {
 		Get(mock.Anything, "alice", "kb-1").
 		Return(nil, errors.New("dynamo unavailable"))
 
-	_, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	_, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
 	s.Require().Error(err)
 }
 
@@ -260,7 +260,7 @@ func (s *BuildToMCPSummarySuite) TestHasImages_ReportsTrue() {
 		Get(mock.Anything, "alice", "kb-1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
 
-	out, err := BuildToMCPSummary(context.Background(), b, keyboards)
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.True(out.HasImage)

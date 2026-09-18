@@ -36,8 +36,8 @@ func TestKeycapSetToAPISuite(t *testing.T) {
 
 func (s *KeycapSetToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	ks := fullRepoKeycapSet()
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Equal(ks.ID, out.Id)
@@ -52,8 +52,8 @@ func (s *KeycapSetToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeycapSetToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	ks := repository.KeycapSet{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPrivate}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Nil(out.Profile)
@@ -69,8 +69,8 @@ func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 		"kit2": {KitID: "kit2", Name: "Extension"},
 	}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Kits)
@@ -89,8 +89,8 @@ func (s *KeycapSetToAPISuite) TestKitsWithDifferingOrderStatus_SetsAggregateOrde
 		"kit2": {KitID: "kit2", Name: "Extension", Purchase: repository.KeycapKitPurchase{OrderStatus: &ordered}},
 	}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapSetToAPI(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.OrderStatus)
@@ -103,8 +103,8 @@ func (s *KeycapSetToAPISuite) TestMalformedStoredKitPurchaseDate_ReturnsError() 
 		"kit1": {KitID: "kit1", Name: "Base", Purchase: repository.KeycapKitPurchase{OrderDate: strPtr("not-a-date")}},
 	}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	_, err := KeycapSetToAPI(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	_, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{})
 
 	s.Require().Error(err)
 }
@@ -117,7 +117,8 @@ func (s *KeycapSetToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsKitPriceKe
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapSetToAPI(context.Background(), ks, images, false, repository.ProfilePreferences{ShowPriceToOthers: false})
+	kr := KeycapSet{Images: images}
+	out, err := kr.ToAPI(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Kits)
@@ -137,7 +138,8 @@ func (s *KeycapSetToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesKitPrice
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapSetToAPI(context.Background(), ks, images, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	kr := KeycapSet{Images: images}
+	out, err := kr.ToAPI(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Kits)
@@ -154,7 +156,8 @@ func (s *KeycapSetToAPISuite) TestOwner_AlwaysIncludesKitPriceRegardlessOfShowPr
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapSetToAPI(context.Background(), ks, images, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	kr := KeycapSet{Images: images}
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Kits)
@@ -166,9 +169,9 @@ func (s *KeycapSetToAPISuite) TestOwner_AlwaysIncludesKitPriceRegardlessOfShowPr
 func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() {
 	ks := fullRepoKeycapSet()
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Equal(&ks.ID, summary.Id)
@@ -183,9 +186,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_SetsAggregateOrderStatus
 	shipped := "Shipped"
 	ks.Kits = map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}}}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.OrderStatus)
@@ -201,7 +204,8 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_Reso
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *kit.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	kr := KeycapSet{Images: images}
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.PrimaryKitImage)
@@ -215,9 +219,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithNoImage_Ni
 	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 	ks.PrimaryKitID = &kit.KitID
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 	s.Nil(summary.PrimaryKitImage)
 }
@@ -227,9 +231,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitDeleted_NilIma
 	danglingID := "no-longer-a-kit"
 	ks.PrimaryKitID = &danglingID
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 	s.Nil(summary.PrimaryKitImage)
 }
@@ -244,9 +248,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_IsOwner_SumsKnownKitPric
 	kit2.Purchase.Price = floatPtr(35.00)
 	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.TotalCost)
@@ -263,9 +267,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_IsOwner_ExcludesUnpriced
 	kit2.Purchase.Price = nil
 	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.TotalCost)
@@ -279,9 +283,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NoPricedKits_NilTotalCos
 	kit.Purchase.Price = nil
 	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Nil(summary.TotalCost)
@@ -293,9 +297,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_OwnerShowPriceToMeFalse_
 	kit.ImagePath = nil
 	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Nil(summary.TotalCost)
@@ -307,9 +311,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwnerShowPriceToOther
 	kit.ImagePath = nil
 	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, false, repository.ProfilePreferences{ShowPriceToOthers: false})
+	summary, err := kr.ToAPISummary(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 	s.Require().NoError(err)
 
 	s.Nil(summary.TotalCost)
@@ -321,9 +325,9 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwnerShowPriceToOther
 	kit.ImagePath = nil
 	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	summary, err := KeycapSetToAPISummary(context.Background(), ks, images, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	summary, err := kr.ToAPISummary(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(summary.TotalCost)
@@ -351,7 +355,7 @@ func TestKeycapSetToRepoSuite(t *testing.T) {
 
 func (s *KeycapSetToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	in := fullAPIKeycapSetInput()
-	out := KeycapSetToRepo(in)
+	out := KeycapSet{}.ToRepo(in)
 
 	s.Equal(in.Brand, out.Brand)
 	s.Equal(in.Name, out.Name)
@@ -366,7 +370,7 @@ func (s *KeycapSetToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeycapSetToRepoSuite) TestAllOptionalFieldsNil_MapsToNil() {
 	in := api.KeycapSetInput{Brand: "GMK", Name: "Laser", Visibility: api.Visibility(repository.VisibilityPrivate)}
 
-	out := KeycapSetToRepo(in)
+	out := KeycapSet{}.ToRepo(in)
 
 	s.Nil(out.Profile)
 	s.Nil(out.Material)
@@ -401,7 +405,8 @@ func (s *KeycapKitToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapKitToAPI(context.Background(), k, images, true)
+	kr := KeycapSet{Images: images}
+	out, err := kr.KitToAPI(context.Background(), k, true)
 	s.Require().NoError(err)
 
 	s.Equal(k.KitID, out.KitId)
@@ -421,8 +426,8 @@ func (s *KeycapKitToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeycapKitToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	k := repository.KeycapKit{KitID: "kit1", Name: "Base"}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	out, err := KeycapKitToAPI(context.Background(), k, images, true)
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.KitToAPI(context.Background(), k, true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Purchase)
@@ -435,8 +440,8 @@ func (s *KeycapKitToAPISuite) TestMalformedStoredDate_ReturnsError() {
 		Purchase: repository.KeycapKitPurchase{OrderDate: strPtr("not-a-date")},
 	}
 
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	_, err := KeycapKitToAPI(context.Background(), k, images, true)
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	_, err := kr.KitToAPI(context.Background(), k, true)
 
 	s.Require().Error(err)
 }
@@ -446,7 +451,8 @@ func (s *KeycapKitToAPISuite) TestShowPriceFalse_OmitsPriceKeepsRestOfPurchase()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapKitToAPI(context.Background(), k, images, false)
+	kr := KeycapSet{Images: images}
+	out, err := kr.KitToAPI(context.Background(), k, false)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -460,7 +466,8 @@ func (s *KeycapKitToAPISuite) TestShowPriceTrue_IncludesPrice() {
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
 
-	out, err := KeycapKitToAPI(context.Background(), k, images, true)
+	kr := KeycapSet{Images: images}
+	out, err := kr.KitToAPI(context.Background(), k, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -473,7 +480,8 @@ func (s *KeycapKitToAPISuite) TestPresignGetFails_ReturnsError() {
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("", errors.New("s3: access denied"))
 
-	_, err := KeycapKitToAPI(context.Background(), k, images, true)
+	kr := KeycapSet{Images: images}
+	_, err := kr.KitToAPI(context.Background(), k, true)
 
 	s.Require().Error(err)
 }
@@ -499,7 +507,7 @@ func TestKeycapKitToRepoSuite(t *testing.T) {
 
 func (s *KeycapKitToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	in := fullAPIKeycapKitInput()
-	out := KeycapKitToRepo(in)
+	out := KeycapSet{}.KitToRepo(in)
 
 	s.Equal(in.Name, out.Name)
 	s.Equal(in.Purchase.Vendor, out.Purchase.Vendor)
@@ -511,7 +519,7 @@ func (s *KeycapKitToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *KeycapKitToRepoSuite) TestPurchaseNil_MapsToZeroValue() {
 	in := api.KeycapKitInput{Name: "Base"}
 
-	out := KeycapKitToRepo(in)
+	out := KeycapSet{}.KitToRepo(in)
 
 	s.Equal(repository.KeycapKitPurchase{}, out.Purchase)
 }

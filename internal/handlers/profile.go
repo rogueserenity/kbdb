@@ -39,7 +39,7 @@ func validateProfileInput(w http.ResponseWriter, p *repository.Profile) (ok bool
 // GetProfile returns the profile for {identifier} (an IdP subject or a
 // username). Anonymous callers are allowed. A non-discoverable profile, or
 // an identifier matching nothing, is 404 (not 403) for anyone but the owner.
-func GetProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+func GetProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		identifier := r.PathValue("identifier")
 
@@ -54,7 +54,7 @@ func GetProfile(repo repository.ProfileRepository, images repository.ProfileImag
 			return
 		}
 
-		out, err := repoapi.ProfileToAPI(r.Context(), *p, images)
+		out, err := pr.ToAPI(r.Context(), *p)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err, log.ProfileID, identifier)
 			problem.Internal(w, "failed to get profile")
@@ -71,7 +71,7 @@ func GetProfile(repo repository.ProfileRepository, images repository.ProfileImag
 // discord_username are mutually-exclusive begins-with filters (both is a
 // 400); a next_cursor can't be reused across filters (also a 400).
 // Anonymous callers are allowed.
-func ListProfiles(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+func ListProfiles(repo repository.ProfileRepository, pr repoapi.Profile) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		limit := parseListLimit(r)
 		cursor := r.URL.Query().Get("cursor")
@@ -104,7 +104,7 @@ func ListProfiles(repo repository.ProfileRepository, images repository.ProfileIm
 			go func(i int, p repository.Profile) {
 				defer wg.Done()
 
-				summary, err := repoapi.ProfileToAPISummary(ctx, p, images)
+				summary, err := pr.ToAPISummary(ctx, p)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping profile %q to API summary: %w", p.Username, err)
 					return
@@ -135,7 +135,7 @@ func ListProfiles(repo repository.ProfileRepository, images repository.ProfileIm
 // caller's own subject (anything else is 404, not 403). A second create is
 // 409 .../errors/conflict; a username taken by another user is 409
 // .../errors/username-unavailable.
-func CreateProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+func CreateProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.PathValue("identifier")
 
@@ -150,7 +150,7 @@ func CreateProfile(repo repository.ProfileRepository, images repository.ProfileI
 			return
 		}
 
-		p := repoapi.ProfileToRepo(in)
+		p := pr.ToRepo(in)
 
 		if !validateProfileInput(w, &p) {
 			return
@@ -174,7 +174,7 @@ func CreateProfile(repo repository.ProfileRepository, images repository.ProfileI
 			return
 		}
 
-		out, err := repoapi.ProfileToAPI(r.Context(), *created, images)
+		out, err := pr.ToAPI(r.Context(), *created)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err)
 			problem.Internal(w, "failed to create profile")
@@ -192,7 +192,7 @@ func CreateProfile(repo repository.ProfileRepository, images repository.ProfileI
 // 403). Full replace: an omitted body field is cleared, the avatar
 // untouched. A username taken by another user is 409
 // .../errors/username-unavailable.
-func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileImageStore) http.HandlerFunc {
+func UpdateProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		userID := r.PathValue("identifier")
 
@@ -207,7 +207,7 @@ func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileI
 			return
 		}
 
-		p := repoapi.ProfileToRepo(in)
+		p := pr.ToRepo(in)
 
 		if !validateProfileInput(w, &p) {
 			return
@@ -222,7 +222,7 @@ func UpdateProfile(repo repository.ProfileRepository, images repository.ProfileI
 			return
 		}
 
-		out, err := repoapi.ProfileToAPI(r.Context(), *updated, images)
+		out, err := pr.ToAPI(r.Context(), *updated)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err)
 			problem.Internal(w, "failed to update profile")

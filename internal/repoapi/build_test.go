@@ -80,8 +80,20 @@ func (d buildToAPIDeps) call(ctx context.Context, b repository.Build) (api.Build
 	return d.callWithPrefs(ctx, b, true, repository.ProfilePreferences{})
 }
 
+func (d buildToAPIDeps) mapper() Build {
+	return Build{
+		Images:         d.images,
+		KitImages:      d.kitImages,
+		KeyboardImages: d.keyboardImages,
+		SwitchImages:   d.switchImages,
+		KeyboardRepo:   d.keyboardRepo,
+		SwitchRepo:     d.switchRepo,
+		KeycapSetRepo:  d.keycapSetRepo,
+	}
+}
+
 func (d buildToAPIDeps) callWithPrefs(ctx context.Context, b repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Build, error) {
-	return BuildToAPI(ctx, b, d.images, d.kitImages, d.keyboardImages, d.switchImages, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, isOwner, ownerPrefs)
+	return d.mapper().ToAPI(ctx, b, isOwner, ownerPrefs)
 }
 
 func (d buildToAPIDeps) callSummary(ctx context.Context, b repository.Build) (api.BuildSummary, error) {
@@ -89,7 +101,7 @@ func (d buildToAPIDeps) callSummary(ctx context.Context, b repository.Build) (ap
 }
 
 func (d buildToAPIDeps) callSummaryWithPrefs(ctx context.Context, b repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.BuildSummary, error) {
-	return BuildToAPISummary(ctx, b, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, d.images, isOwner, ownerPrefs)
+	return d.mapper().ToAPISummary(ctx, b, isOwner, ownerPrefs)
 }
 
 // expectFullyResolvable sets up every dependency in fullRepoBuild() (kb1,
@@ -748,7 +760,7 @@ func TestBuildToRepoSuite(t *testing.T) {
 
 func (s *BuildToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	in := fullAPIBuildInput()
-	out := BuildToRepo(in)
+	out := Build{}.ToRepo(in)
 
 	s.Equal(in.Keyboard, out.Keyboard)
 	s.Equal(in.Plate, out.Plate)
@@ -776,7 +788,7 @@ func (s *BuildToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 func (s *BuildToRepoSuite) TestAllOptionalFieldsNil_MapsToNil() {
 	in := api.BuildInput{Keyboard: "kb1", Visibility: api.Visibility(repository.VisibilityPrivate)}
 
-	out := BuildToRepo(in)
+	out := Build{}.ToRepo(in)
 
 	s.Nil(out.Plate)
 	s.Nil(out.CaseMountType)
@@ -1051,6 +1063,6 @@ func (s *BuildToAPISummarySuite) TestDoesNotResolveKitImages() {
 			}},
 		}, nil)
 
-	_, err := BuildToAPISummary(context.Background(), b, d.keyboardRepo, d.switchRepo, d.keycapSetRepo, d.images, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	_, err := d.mapper().ToAPISummary(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 }

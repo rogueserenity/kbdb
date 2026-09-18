@@ -5,26 +5,28 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-	"time"
-
-	openapi_types "github.com/oapi-codegen/runtime/types"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// KeyboardToAPI maps a repository.Keyboard to its wire representation. The
-// owner always sees their own purchase.price; a non-owner sees it only if
+// Keyboard maps repository.Keyboard to and from its wire representations.
+type Keyboard struct {
+	Images repository.KeyboardImageStore
+}
+
+// ToAPI maps a repository.Keyboard to its wire representation. The owner
+// always sees their own purchase.price; a non-owner sees it only if
 // ownerPrefs.ShowPriceToOthers. The rest of purchase is unaffected. Returns
 // an error if a stored Purchase date doesn't match dateLayout, or an image
 // fails to presign.
-func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Keyboard, error) {
-	purchase, err := keyboardPurchaseToAPI(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner))
+func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Keyboard, error) {
+	purchase, err := k.purchaseToAPI(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner))
 	if err != nil {
 		return api.Keyboard{}, err
 	}
 
-	imgs, err := keyboardImagesToAPI(ctx, repository.SortedKeyboardImages(kb.Images), images)
+	imgs, err := k.imagesToAPI(ctx, repository.SortedKeyboardImages(kb.Images))
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -35,8 +37,8 @@ func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repositor
 		Name:       kb.Name,
 		Size:       kb.Size,
 		Layout:     kb.Layout,
-		Design:     keyboardDesignToAPI(kb.Design),
-		Pcb:        keyboardPCBToAPI(kb.PCB),
+		Design:     k.designToAPI(kb.Design),
+		Pcb:        k.pcbToAPI(kb.PCB),
 		Purchase:   purchase,
 		Notes:      kb.Notes,
 		Visibility: api.Visibility(kb.Visibility),
@@ -44,10 +46,10 @@ func KeyboardToAPI(ctx context.Context, kb repository.Keyboard, images repositor
 	}, nil
 }
 
-// keyboardImagesToAPI mints a fresh presigned GET URL per image, per
-// request - never persisted, mirroring [buildImagesToAPI]. images is
-// already ordered (by Seq) by the caller.
-func keyboardImagesToAPI(ctx context.Context, images []repository.KeyboardImage, store repository.KeyboardImageStore) (*[]api.KeyboardImage, error) {
+// imagesToAPI mints a fresh presigned GET URL per image, per request -
+// never persisted, mirroring [Build.imagesToAPI]. images is already
+// ordered (by Seq) by the caller.
+func (k Keyboard) imagesToAPI(ctx context.Context, images []repository.KeyboardImage) (*[]api.KeyboardImage, error) {
 	if len(images) == 0 {
 		return nil, nil //nolint:nilnil // no images is a valid, expected result
 	}
@@ -61,7 +63,7 @@ func keyboardImagesToAPI(ctx context.Context, images []repository.KeyboardImage,
 		go func(i int, img repository.KeyboardImage) {
 			defer wg.Done()
 
-			url, err := store.PresignGetKeyboardImage(ctx, img.Path)
+			url, err := k.Images.PresignGetKeyboardImage(ctx, img.Path)
 			if err != nil {
 				errs[i] = fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
 				return
@@ -78,34 +80,34 @@ func keyboardImagesToAPI(ctx context.Context, images []repository.KeyboardImage,
 	return &out, nil
 }
 
-// KeyboardToRepo maps a generated KeyboardInput (already schema-validated by
-// the OpenAPI request validator) to a repository.Keyboard. It does not set
+// ToRepo maps a generated KeyboardInput (already schema-validated by the
+// OpenAPI request validator) to a repository.Keyboard. It does not set
 // UserID or ID - those come from the request's path/caller, not the body,
 // and stay the handler's responsibility.
-func KeyboardToRepo(in api.KeyboardInput) repository.Keyboard {
+func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 	return repository.Keyboard{
 		Brand:      in.Brand,
 		Name:       in.Name,
 		Size:       in.Size,
 		Layout:     in.Layout,
-		Design:     keyboardDesignToRepo(in.Design),
-		PCB:        keyboardPCBToRepo(in.Pcb),
-		Purchase:   keyboardPurchaseToRepo(in.Purchase),
+		Design:     k.designToRepo(in.Design),
+		PCB:        k.pcbToRepo(in.Pcb),
+		Purchase:   k.purchaseToRepo(in.Purchase),
 		Notes:      in.Notes,
 		Visibility: repository.Visibility(in.Visibility),
 	}
 }
 
-// KeyboardToAPISummary maps a repository.Keyboard to the KeyboardSummary
-// schema returned by the list endpoint. Image is the first entry of
-// Images, presigned, if any - mirrors [BuildToAPISummary]'s handling of a
-// build's images. Price is shown per ownerPrefs.ShowPriceToMe (owner) or
-// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [KeyboardToAPI], the
+// ToAPISummary maps a repository.Keyboard to the KeyboardSummary schema
+// returned by the list endpoint. Image is the first entry of Images,
+// presigned, if any - mirrors [Build.ToAPISummary]'s handling of a build's
+// images. Price is shown per ownerPrefs.ShowPriceToMe (owner) or
+// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [Keyboard.ToAPI], the
 // owner isn't unconditionally shown price here.
-func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images repository.KeyboardImageStore, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardSummary, error) {
+func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardSummary, error) {
 	var image *api.KeyboardImage
 	if first := repository.SortedKeyboardImages(kb.Images); len(first) > 0 {
-		url, err := images.PresignGetKeyboardImage(ctx, first[0].Path)
+		url, err := k.Images.PresignGetKeyboardImage(ctx, first[0].Path)
 		if err != nil {
 			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", first[0].ImageID, err)
 		}
@@ -128,7 +130,7 @@ func KeyboardToAPISummary(ctx context.Context, kb repository.Keyboard, images re
 	return summary, nil
 }
 
-func keyboardMaterialColorToAPI(m repository.KeyboardMaterialColor) *api.MaterialColor {
+func (k Keyboard) materialColorToAPI(m repository.KeyboardMaterialColor) *api.MaterialColor {
 	if m.Material == nil && m.Color == nil {
 		return nil
 	}
@@ -139,7 +141,7 @@ func keyboardMaterialColorToAPI(m repository.KeyboardMaterialColor) *api.Materia
 	}
 }
 
-func keyboardMaterialColorToRepo(m *api.MaterialColor) repository.KeyboardMaterialColor {
+func (k Keyboard) materialColorToRepo(m *api.MaterialColor) repository.KeyboardMaterialColor {
 	if m == nil {
 		return repository.KeyboardMaterialColor{}
 	}
@@ -150,10 +152,10 @@ func keyboardMaterialColorToRepo(m *api.MaterialColor) repository.KeyboardMateri
 	}
 }
 
-func keyboardDesignToAPI(d repository.KeyboardDesign) *api.KeyboardDesign {
-	topCase := keyboardMaterialColorToAPI(d.TopCase)
-	bottomCase := keyboardMaterialColorToAPI(d.BottomCase)
-	weight := keyboardMaterialColorToAPI(d.Weight)
+func (k Keyboard) designToAPI(d repository.KeyboardDesign) *api.KeyboardDesign {
+	topCase := k.materialColorToAPI(d.TopCase)
+	bottomCase := k.materialColorToAPI(d.BottomCase)
+	weight := k.materialColorToAPI(d.Weight)
 	if topCase == nil && bottomCase == nil && weight == nil && d.Plates == nil {
 		return nil
 	}
@@ -171,15 +173,15 @@ func keyboardDesignToAPI(d repository.KeyboardDesign) *api.KeyboardDesign {
 	}
 }
 
-func keyboardDesignToRepo(d *api.KeyboardDesign) repository.KeyboardDesign {
+func (k Keyboard) designToRepo(d *api.KeyboardDesign) repository.KeyboardDesign {
 	if d == nil {
 		return repository.KeyboardDesign{}
 	}
 
 	out := repository.KeyboardDesign{
-		TopCase:    keyboardMaterialColorToRepo(d.TopCase),
-		BottomCase: keyboardMaterialColorToRepo(d.BottomCase),
-		Weight:     keyboardMaterialColorToRepo(d.Weight),
+		TopCase:    k.materialColorToRepo(d.TopCase),
+		BottomCase: k.materialColorToRepo(d.BottomCase),
+		Weight:     k.materialColorToRepo(d.Weight),
 	}
 	if d.Plates != nil {
 		out.Plates = *d.Plates
@@ -188,7 +190,7 @@ func keyboardDesignToRepo(d *api.KeyboardDesign) repository.KeyboardDesign {
 	return out
 }
 
-func keyboardPCBToAPI(p repository.KeyboardPCB) *api.KeyboardPCB {
+func (k Keyboard) pcbToAPI(p repository.KeyboardPCB) *api.KeyboardPCB {
 	if p.Thickness == nil && p.Firmware == nil && p.Assembly == nil && p.Connectivity == nil {
 		return nil
 	}
@@ -201,7 +203,7 @@ func keyboardPCBToAPI(p repository.KeyboardPCB) *api.KeyboardPCB {
 	}
 }
 
-func keyboardPCBToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
+func (k Keyboard) pcbToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
 	if p == nil {
 		return repository.KeyboardPCB{}
 	}
@@ -214,10 +216,7 @@ func keyboardPCBToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
 	}
 }
 
-// dateLayout matches how openapi_types.Date marshals/unmarshals.
-const dateLayout = "2006-01-02"
-
-func keyboardPurchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (*api.Purchase, error) {
+func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
@@ -247,16 +246,7 @@ func keyboardPurchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (*api.
 	return out, nil
 }
 
-func parseAPIDate(s string) (*openapi_types.Date, error) {
-	t, err := time.Parse(dateLayout, s)
-	if err != nil {
-		return nil, fmt.Errorf("stored date %q does not match layout %q: %w", s, dateLayout, err)
-	}
-
-	return &openapi_types.Date{Time: t}, nil
-}
-
-func keyboardPurchaseToRepo(p *api.Purchase) repository.KeyboardPurchase {
+func (k Keyboard) purchaseToRepo(p *api.Purchase) repository.KeyboardPurchase {
 	if p == nil {
 		return repository.KeyboardPurchase{}
 	}

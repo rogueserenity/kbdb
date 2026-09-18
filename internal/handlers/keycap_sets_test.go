@@ -15,6 +15,7 @@ import (
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/problem"
+	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
 	"github.com/rogueserenity/kbdb/internal/repository/mocks"
 )
@@ -36,7 +37,7 @@ func (s *ListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListKeycapSets(s.mockRepo, s.mockImages, s.mockPrefs)
+	s.handler = ListKeycapSets(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages}, s.mockPrefs)
 }
 
 func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -297,7 +298,7 @@ func (s *GetKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetKeycapSet(s.mockRepo, s.mockImages, s.mockPrefs)
+	s.handler = GetKeycapSet(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages}, s.mockPrefs)
 }
 
 func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
@@ -549,7 +550,7 @@ func TestCreateKeycapSetSuite(t *testing.T) {
 func (s *CreateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, s.mockImages)
+	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages})
 }
 
 func (s *CreateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -718,7 +719,7 @@ func TestUpdateKeycapSetSuite(t *testing.T) {
 func (s *UpdateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, s.mockImages)
+	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages})
 }
 
 func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1127,7 +1128,7 @@ func TestCreateKeycapKitSuite(t *testing.T) {
 func (s *CreateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapKit(s.mockRepo, s.mockImages)
+	s.handler = CreateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages})
 }
 
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1302,7 +1303,7 @@ func TestUpdateKeycapKitSuite(t *testing.T) {
 func (s *UpdateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapKit(s.mockRepo, s.mockImages)
+	s.handler = UpdateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages})
 }
 
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {

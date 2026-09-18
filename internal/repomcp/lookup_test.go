@@ -29,7 +29,7 @@ func (s *LookupToMCPSuite) mustGetCategory(category lookup.Category) lookup.Look
 func (s *LookupToMCPSuite) TestPlainStringCategory_PassesValuesThrough() {
 	l := s.mustGetCategory(lookup.CategoryVendor)
 
-	out := repomcp.LookupToMCP(l)
+	out := repomcp.Lookup{}.ToMCP(l)
 
 	s.Equal("vendor", out.Category)
 	s.Contains(out.Values, "Amazon")
@@ -38,7 +38,7 @@ func (s *LookupToMCPSuite) TestPlainStringCategory_PassesValuesThrough() {
 func (s *LookupToMCPSuite) TestKeyboardLayout_DecodesTypedValues() {
 	l := s.mustGetCategory(lookup.CategoryKeyboardLayout)
 
-	out := repomcp.LookupToMCP(l)
+	out := repomcp.Lookup{}.ToMCP(l)
 
 	s.Equal(string(lookup.CategoryKeyboardLayout), out.Category)
 	s.NotEmpty(out.Values)
@@ -48,7 +48,7 @@ func (s *LookupToMCPSuite) TestKeyboardLayout_DecodesTypedValues() {
 func (s *LookupToMCPSuite) TestBuildCaseMountType_DecodesTypedValues() {
 	l := s.mustGetCategory(lookup.CategoryBuildCaseMountType)
 
-	out := repomcp.LookupToMCP(l)
+	out := repomcp.Lookup{}.ToMCP(l)
 
 	s.Equal(string(lookup.CategoryBuildCaseMountType), out.Category)
 	s.NotEmpty(out.Values)

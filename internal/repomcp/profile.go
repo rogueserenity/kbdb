@@ -5,40 +5,44 @@ import (
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// ProfileToMCP maps a repository.Profile to its MCP tool shape: avatar as a
-// bool.
-func ProfileToMCP(p repository.Profile) schema.Profile {
-	prefs := profilePreferencesToMCP(p.Preferences)
+// Profile maps repository.Profile to and from its MCP tool shape. It has
+// no dependencies - unlike repoapi.Profile, this never presigns the
+// avatar; ToMCP reports only HasAvatar.
+type Profile struct{}
+
+// ToMCP maps a repository.Profile to its MCP tool shape: avatar as a bool.
+func (p Profile) ToMCP(prof repository.Profile) schema.Profile {
+	prefs := p.preferencesToMCP(prof.Preferences)
 	return schema.Profile{
-		Username:        p.Username,
-		UserID:          p.OwnerID,
-		Discoverable:    p.Discoverable,
-		DiscordUsername: p.DiscordUsername,
-		Bio:             p.Bio,
-		Links:           profileLinksToMCP(p.Links),
-		HasAvatar:       p.AvatarPath != nil,
+		Username:        prof.Username,
+		UserID:          prof.OwnerID,
+		Discoverable:    prof.Discoverable,
+		DiscordUsername: prof.DiscordUsername,
+		Bio:             prof.Bio,
+		Links:           p.linksToMCP(prof.Links),
+		HasAvatar:       prof.AvatarPath != nil,
 		Preferences:     prefs,
 	}
 }
 
-// ProfileToMCPSummary maps a repository.Profile to a list_profiles row -
-// no bio or links, avatar as a bool.
-func ProfileToMCPSummary(p repository.Profile) schema.ProfileSummary {
+// ToMCPSummary maps a repository.Profile to a list_profiles row - no bio
+// or links, avatar as a bool.
+func (p Profile) ToMCPSummary(prof repository.Profile) schema.ProfileSummary {
 	return schema.ProfileSummary{
-		Username:        p.Username,
-		UserID:          p.OwnerID,
-		DiscordUsername: p.DiscordUsername,
-		HasAvatar:       p.AvatarPath != nil,
+		Username:        prof.Username,
+		UserID:          prof.OwnerID,
+		DiscordUsername: prof.DiscordUsername,
+		HasAvatar:       prof.AvatarPath != nil,
 	}
 }
 
-// ProfileFromMCP maps a create_profile / update_profile tool input to a
+// FromMCP maps a create_profile / update_profile tool input to a
 // repository.Profile. OwnerID, AvatarPath, and the GSI discriminators
 // are set downstream, not here.
-func ProfileFromMCP(in schema.ProfileInput) repository.Profile {
+func (p Profile) FromMCP(in schema.ProfileInput) repository.Profile {
 	prefs := repository.DefaultProfilePreferences()
 	if in.Preferences != nil {
-		prefs = profilePreferencesFromMCP(*in.Preferences)
+		prefs = p.preferencesFromMCP(*in.Preferences)
 	}
 
 	return repository.Profile{
@@ -46,20 +50,20 @@ func ProfileFromMCP(in schema.ProfileInput) repository.Profile {
 		Discoverable:    in.Discoverable,
 		DiscordUsername: in.DiscordUsername,
 		Bio:             in.Bio,
-		Links:           profileLinksFromMCP(in.Links),
+		Links:           p.linksFromMCP(in.Links),
 		Preferences:     prefs,
 	}
 }
 
-func profilePreferencesToMCP(p repository.ProfilePreferences) schema.ProfilePreferences {
+func (p Profile) preferencesToMCP(prefs repository.ProfilePreferences) schema.ProfilePreferences {
 	return schema.ProfilePreferences{
-		Currency:          p.Currency,
-		ShowPriceToMe:     p.ShowPriceToMe,
-		ShowPriceToOthers: p.ShowPriceToOthers,
+		Currency:          prefs.Currency,
+		ShowPriceToMe:     prefs.ShowPriceToMe,
+		ShowPriceToOthers: prefs.ShowPriceToOthers,
 	}
 }
 
-func profilePreferencesFromMCP(in schema.ProfilePreferences) repository.ProfilePreferences {
+func (p Profile) preferencesFromMCP(in schema.ProfilePreferences) repository.ProfilePreferences {
 	return repository.ProfilePreferences{
 		Currency:          in.Currency,
 		ShowPriceToMe:     in.ShowPriceToMe,
@@ -67,7 +71,7 @@ func profilePreferencesFromMCP(in schema.ProfilePreferences) repository.ProfileP
 	}
 }
 
-func profileLinksFromMCP(links []schema.ProfileLink) []repository.ProfileLink {
+func (p Profile) linksFromMCP(links []schema.ProfileLink) []repository.ProfileLink {
 	if len(links) == 0 {
 		return nil
 	}
@@ -80,7 +84,7 @@ func profileLinksFromMCP(links []schema.ProfileLink) []repository.ProfileLink {
 	return out
 }
 
-func profileLinksToMCP(links []repository.ProfileLink) []schema.ProfileLink {
+func (p Profile) linksToMCP(links []repository.ProfileLink) []schema.ProfileLink {
 	if len(links) == 0 {
 		return nil
 	}

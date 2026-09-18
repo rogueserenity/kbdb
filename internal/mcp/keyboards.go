@@ -93,7 +93,7 @@ func handleListKeyboards(
 		isOwner := authz.IsOwner(ctx, ownerID)
 		items := make([]schema.KeyboardSummary, len(keyboards))
 		for i, kb := range keyboards {
-			items[i] = repomcp.KeyboardToMCPSummary(kb, isOwner, ownerPrefs)
+			items[i] = repomcp.Keyboard{}.ToMCPSummary(kb, isOwner, ownerPrefs)
 		}
 
 		return nil, schema.ListKeyboardsOutput{Keyboards: items, NextCursor: nextCursor}, nil
@@ -130,7 +130,7 @@ func handleGetKeyboard(
 			}
 		}
 
-		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*kb, isOwner, ownerPrefs)}, nil
+		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*kb, isOwner, ownerPrefs)}, nil
 	}
 }
 
@@ -155,7 +155,7 @@ func handleCreateKeyboard(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -180,7 +180,7 @@ func handleUpdateKeyboard(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.KeyboardToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
 	}
 }
 
@@ -336,7 +336,7 @@ func validatedKeyboard(
 		}
 	}
 
-	kb := repomcp.KeyboardFromMCP(in)
+	kb := repomcp.Keyboard{}.FromMCP(in)
 
 	if !kb.Visibility.Valid() {
 		return repository.Keyboard{}, fmt.Errorf(

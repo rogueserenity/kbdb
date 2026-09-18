@@ -65,13 +65,10 @@ func validateBuildReferences(
 
 // ListBuilds handles GET /v1/users/{userId}/builds. total_cost visibility
 // is gated by the owner's Profile preferences - see
-// [repoapi.BuildToAPISummary].
+// [repoapi.Build.ToAPISummary].
 func ListBuilds(
 	repo repository.BuildRepository,
-	keyboardRepo repository.KeyboardRepository,
-	switchRepo repository.SwitchRepository,
-	keycapSetRepo repository.KeycapSetRepository,
-	images repository.BuildImageStore,
+	br repoapi.Build,
 	prefs repository.PreferencesReader,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +109,7 @@ func ListBuilds(
 			go func(i int, b repository.Build) {
 				defer wg.Done()
 
-				summary, err := repoapi.BuildToAPISummary(ctx, b, keyboardRepo, switchRepo, keycapSetRepo, images, isOwner, ownerPrefs)
+				summary, err := br.ToAPISummary(ctx, b, isOwner, ownerPrefs)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping build %q to API summary: %w", b.ID, err)
 					return
@@ -142,16 +139,10 @@ func ListBuilds(
 // GetBuild returns 404, not 403, for a build that exists but isn't
 // readable by the caller, to avoid revealing it exists. The owner always
 // sees their own price; a non-owner's visibility is gated by the owner's
-// Profile preferences - see [repoapi.BuildToAPI].
+// Profile preferences - see [repoapi.Build.ToAPI].
 func GetBuild(
 	repo repository.BuildRepository,
-	images repository.BuildImageStore,
-	kitImages repository.KeycapKitImageStore,
-	keyboardImages repository.KeyboardImageStore,
-	switchImages repository.SwitchImageStore,
-	keyboardRepo repository.KeyboardRepository,
-	switchRepo repository.SwitchRepository,
-	keycapSetRepo repository.KeycapSetRepository,
+	br repoapi.Build,
 	prefs repository.PreferencesReader,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -186,7 +177,7 @@ func GetBuild(
 			}
 		}
 
-		out, err := repoapi.BuildToAPI(r.Context(), *b, images, kitImages, keyboardImages, switchImages, keyboardRepo, switchRepo, keycapSetRepo, isOwner, ownerPrefs)
+		out, err := br.ToAPI(r.Context(), *b, isOwner, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to get build")
@@ -203,10 +194,7 @@ func GetBuild(
 // collection, to avoid revealing it exists.
 func CreateBuild(
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
-	kitImages repository.KeycapKitImageStore,
-	keyboardImages repository.KeyboardImageStore,
-	switchImages repository.SwitchImageStore,
+	br repoapi.Build,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -225,7 +213,7 @@ func CreateBuild(
 			return
 		}
 
-		b := repoapi.BuildToRepo(in)
+		b := br.ToRepo(in)
 
 		if !validateBuildLookups(r.Context(), w, b) {
 			return
@@ -257,7 +245,7 @@ func CreateBuild(
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := repoapi.BuildToAPI(r.Context(), *created, images, kitImages, keyboardImages, switchImages, keyboardRepo, switchRepo, keycapSetRepo, true, repository.ProfilePreferences{})
+		out, err := br.ToAPI(r.Context(), *created, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, created.ID)
 			problem.Internal(w, "failed to create build")
@@ -276,10 +264,7 @@ func CreateBuild(
 // avoid revealing it exists.
 func UpdateBuild(
 	buildRepo repository.BuildRepository,
-	images repository.BuildImageStore,
-	kitImages repository.KeycapKitImageStore,
-	keyboardImages repository.KeyboardImageStore,
-	switchImages repository.SwitchImageStore,
+	br repoapi.Build,
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
@@ -299,7 +284,7 @@ func UpdateBuild(
 			return
 		}
 
-		b := repoapi.BuildToRepo(in)
+		b := br.ToRepo(in)
 
 		if !validateBuildLookups(r.Context(), w, b) {
 			return
@@ -317,7 +302,7 @@ func UpdateBuild(
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := repoapi.BuildToAPI(r.Context(), *updated, images, kitImages, keyboardImages, switchImages, keyboardRepo, switchRepo, keycapSetRepo, true, repository.ProfilePreferences{})
+		out, err := br.ToAPI(r.Context(), *updated, true, repository.ProfilePreferences{})
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, updated.ID)
 			problem.Internal(w, "failed to update build")

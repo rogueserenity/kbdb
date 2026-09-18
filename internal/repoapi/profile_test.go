@@ -38,7 +38,8 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 		},
 	}
 
-	out, err := ProfileToAPI(s.T().Context(), p, mocks.NewMockProfileImageStore(s.T()))
+	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
+	out, err := pr.ToAPI(s.T().Context(), p)
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
@@ -59,10 +60,11 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 func (s *ProfileMapperSuite) TestProfileToAPI_ExposesSubjectAsUserID() {
 	// user_id is on the single-profile response so callers can address the
 	// {userId}-keyed collection routes.
-	out, err := ProfileToAPI(s.T().Context(), repository.Profile{
+	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
+	out, err := pr.ToAPI(s.T().Context(), repository.Profile{
 		OwnerID:  "user-alice",
 		Username: "alice",
-	}, mocks.NewMockProfileImageStore(s.T()))
+	})
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
@@ -81,7 +83,8 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
 		AvatarPath: profileImageKeyPtr("profiles/user-alice/avatar"),
 	}
 
-	out, err := ProfileToAPI(s.T().Context(), p, images)
+	pr := Profile{Images: images}
+	out, err := pr.ToAPI(s.T().Context(), p)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(out.Avatar)
@@ -92,17 +95,18 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignError_Propagates() {
 	images := mocks.NewMockProfileImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, mock.Anything).Return("", errors.New("s3 down"))
 
-	_, err := ProfileToAPI(s.T().Context(), repository.Profile{
+	pr := Profile{Images: images}
+	_, err := pr.ToAPI(s.T().Context(), repository.Profile{
 		Username:   "alice",
 		AvatarPath: profileImageKeyPtr("profiles/user-alice/avatar"),
-	}, images)
+	})
 
 	s.Require().Error(err)
 }
 
 func (s *ProfileMapperSuite) TestProfileToAPI_EmptyLinks_OmittedNotEmptySlice() {
-	out, err := ProfileToAPI(s.T().Context(), repository.Profile{Username: "alice"},
-		mocks.NewMockProfileImageStore(s.T()))
+	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
+	out, err := pr.ToAPI(s.T().Context(), repository.Profile{Username: "alice"})
 
 	s.Require().NoError(err)
 	s.Nil(out.Links)
@@ -117,7 +121,7 @@ func (s *ProfileMapperSuite) TestProfileToRepo_MapsBodyFields_NotAvatarOrDerived
 		Links:           &[]api.ProfileLink{{Name: "Twitch", Url: "https://twitch.tv/alice"}},
 	}
 
-	p := ProfileToRepo(in)
+	p := Profile{}.ToRepo(in)
 
 	s.Equal("alice", p.Username)
 	s.True(p.Discoverable)
@@ -132,7 +136,7 @@ func (s *ProfileMapperSuite) TestProfileToRepo_MapsBodyFields_NotAvatarOrDerived
 }
 
 func (s *ProfileMapperSuite) TestProfileToRepo_DiscoverableOmitted_DefaultsFalse() {
-	p := ProfileToRepo(api.ProfileInput{Username: "alice"})
+	p := Profile{}.ToRepo(api.ProfileInput{Username: "alice"})
 
 	s.False(p.Discoverable)
 }
@@ -145,13 +149,13 @@ func (s *ProfileMapperSuite) TestProfileToRepo_MapsPreferences() {
 		},
 	}
 
-	p := ProfileToRepo(in)
+	p := Profile{}.ToRepo(in)
 
 	s.Equal(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, p.Preferences)
 }
 
 func (s *ProfileMapperSuite) TestProfileToRepo_PreferencesOmitted_DefaultsApplied() {
-	p := ProfileToRepo(api.ProfileInput{Username: "alice"})
+	p := Profile{}.ToRepo(api.ProfileInput{Username: "alice"})
 
 	s.Equal(repository.DefaultProfilePreferences(), p.Preferences)
 }
@@ -162,7 +166,8 @@ func (s *ProfileMapperSuite) TestProfileToAPI_MapsPreferences() {
 		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
 	}
 
-	out, err := ProfileToAPI(s.T().Context(), p, mocks.NewMockProfileImageStore(s.T()))
+	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
+	out, err := pr.ToAPI(s.T().Context(), p)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(out.Preferences)
