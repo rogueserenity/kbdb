@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -376,6 +377,30 @@ func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
 	s.Require().NoError(err)
 }
 
+func (s *SwitchRepositorySuite) TestSetImagePath_AlsoClearsCachedGetURL() {
+	// A cached GET URL was signed against the old image_path, so it must
+	// not outlive it - see SetImagePath's doc comment.
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	err := s.repo.SetImagePath(ctx, "sw1", "switches/alice/sw1/image")
+	s.Require().NoError(err)
+
+	s.Contains(*captured.UpdateExpression, "REMOVE", "expected a REMOVE clause")
+	names := make(map[string]bool, len(captured.ExpressionAttributeNames))
+	for _, v := range captured.ExpressionAttributeNames {
+		names[v] = true
+	}
+	s.True(names["get_url"], "get_url should be REMOVEd")
+	s.True(names["get_url_expires_at"], "get_url_expires_at should be REMOVEd")
+}
+
 func (s *SwitchRepositorySuite) TestSetImagePath_NotFound_ReturnsErrNotFound() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
@@ -451,10 +476,78 @@ func (s *SwitchRepositorySuite) TestClearImagePath_NotFound_ReturnsErrNotFound()
 	s.Nil(cleared)
 }
 
+func (s *SwitchRepositorySuite) TestClearImagePath_AlsoClearsCachedGetURL() {
+	// A cached GET URL is meaningless once image_path is gone - see
+	// ClearImagePath's doc comment.
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.ClearImagePath(ctx, "sw1")
+	s.Require().NoError(err)
+
+	names := make(map[string]bool, len(captured.ExpressionAttributeNames))
+	for _, v := range captured.ExpressionAttributeNames {
+		names[v] = true
+	}
+	s.True(names["get_url"], "get_url should be REMOVEd")
+	s.True(names["get_url_expires_at"], "get_url_expires_at should be REMOVEd")
+}
+
 func (s *SwitchRepositorySuite) TestClearImagePath_NoUserIDInContext_ReturnsError() {
 	// No EXPECT() on UpdateItem - see repository.ErrNoUserID.
 	cleared, err := s.repo.ClearImagePath(s.T().Context(), "sw1")
 
 	s.Require().Error(err)
 	s.Nil(cleared)
+}
+
+func (s *SwitchRepositorySuite) TestSetImageGetCache_PathMatches_WritesURLAndReturnsTrue() {
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	expiresAt := time.Now().Add(24 * time.Hour)
+	ok, err := s.repo.SetImageGetCache(s.T().Context(), "alice", "sw1", "switches/alice/sw1/image", "https://example.com/presigned", expiresAt)
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal("alice", captured.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	s.Equal("sw1", captured.Key["id"].(*types.AttributeValueMemberS).Value)
+	s.Contains(*captured.ConditionExpression, "attribute_exists")
+}
+
+func (s *SwitchRepositorySuite) TestSetImageGetCache_PathChanged_ReturnsFalseWithoutError() {
+	// image_path no longer equals forPath - a concurrent SetImagePath/
+	// ClearImagePath raced this write, so the condition fails and it's not
+	// an error - the caller's freshly-minted URL is still returned to the
+	// requester, just not persisted.
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ok, err := s.repo.SetImageGetCache(s.T().Context(), "alice", "sw1", "switches/alice/sw1/image", "https://example.com/presigned", time.Now().Add(24*time.Hour))
+
+	s.Require().NoError(err)
+	s.False(ok)
+}
+
+func (s *SwitchRepositorySuite) TestSetImageGetCache_UpdateItemError_Propagates() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ok, err := s.repo.SetImageGetCache(s.T().Context(), "alice", "sw1", "switches/alice/sw1/image", "https://example.com/presigned", time.Now().Add(24*time.Hour))
+
+	s.Require().Error(err)
+	s.False(ok)
 }
