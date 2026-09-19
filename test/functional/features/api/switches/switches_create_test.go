@@ -162,6 +162,44 @@ var _ = Describe("Creating a switch", func() {
 				})
 			})
 		})
+
+		Context("given the purchase price exceeds Money's maximum", func() {
+			When("creating a switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"price":1e15}}`)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusCreated {
+						captureCreatedID(resp)
+					}
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
+
+		Context("given the purchase price is negative", func() {
+			When("creating a switch", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private","purchase":{"price":-1}}`)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusCreated {
+						captureCreatedID(resp)
+					}
+				})
+
+				It("returns 400 with a problem+json body", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+				})
+			})
+		})
 	})
 
 	Context("given the caller is anonymous", func() {
