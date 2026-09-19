@@ -224,6 +224,25 @@ var _ = Describe("Updating a profile", func() {
 			})
 		})
 
+		Context("given a PUT with an unknown top-level field", func() {
+			When("updating the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Update(ctx, ownerID, ownerToken, fmt.Sprintf(
+						`{"username": %q, "discoverable": true, "show_price_to_others": true}`, username))
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 with a validation-failed problem", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+
+					problem := decodeProblem(resp)
+					Expect(problem.Type).To(Equal("https://mykeebs.info/errors/bad-request"))
+					Expect(problem.InvalidParams).NotTo(BeEmpty())
+				})
+			})
+		})
+
 		Context("given the new username is taken by another user", func() {
 			var (
 				otherID   string

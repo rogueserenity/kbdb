@@ -1426,6 +1426,7 @@ components:
       description: >
         Full purchase-lifecycle tracking, used by keyboards and keycap set
         kits (which get separate order/delivery dates and status).
+      additionalProperties: false
       properties:
         vendor:
           type: string
@@ -1445,6 +1446,7 @@ components:
     MaterialColor:
       type: object
       description: A physical part described by material and color.
+      additionalProperties: false
       properties:
         material:
           type: string
@@ -1455,6 +1457,7 @@ components:
 
     KeyboardDesign:
       type: object
+      additionalProperties: false
       properties:
         top_case:
           $ref: "#/components/schemas/MaterialColor"
@@ -1470,6 +1473,7 @@ components:
 
     KeyboardPCB:
       type: object
+      additionalProperties: false
       properties:
         thickness:
           type: number
@@ -1488,6 +1492,7 @@ components:
     KeyboardInput:
       type: object
       required: [brand, name, visibility]
+      additionalProperties: false
       properties:
         brand:
           type: string
@@ -1525,6 +1530,7 @@ components:
         call allocates a slot and returns a presigned S3 PUT URL, then the
         client PUTs the bytes to that URL with a matching Content-Type.
       required: [content_type]
+      additionalProperties: false
       properties:
         content_type:
           type: string
@@ -1613,6 +1619,7 @@ components:
 
     SwitchMaterial:
       type: object
+      additionalProperties: false
       properties:
         top_housing:
           type: string
@@ -1626,6 +1633,7 @@ components:
 
     SwitchForce:
       type: object
+      additionalProperties: false
       properties:
         actuation:
           type: number
@@ -1638,6 +1646,7 @@ components:
 
     SwitchSpring:
       type: object
+      additionalProperties: false
       properties:
         material:
           type: string
@@ -1656,6 +1665,7 @@ components:
       description: >
         Same purchase-lifecycle tracking as Purchase, plus a quantity
         field since switches are bought in bulk.
+      additionalProperties: false
       properties:
         vendor:
           type: string
@@ -1677,6 +1687,7 @@ components:
     SwitchInput:
       type: object
       required: [brand, name, type, visibility]
+      additionalProperties: false
       properties:
         brand:
           type: string
@@ -1784,6 +1795,7 @@ components:
     ProfileLink:
       type: object
       required: [name, url]
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -1825,6 +1837,7 @@ components:
     ProfilePreferences:
       type: object
       required: [currency, show_price_to_me, show_price_to_others]
+      additionalProperties: false
       properties:
         currency:
           type: string
@@ -1855,6 +1868,7 @@ components:
     ProfileInput:
       type: object
       required: [username]
+      additionalProperties: false
       properties:
         preferences:
           $ref: "#/components/schemas/ProfilePreferences"
@@ -1948,6 +1962,7 @@ components:
     KeycapKitInput:
       type: object
       required: [name]
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -2008,6 +2023,7 @@ components:
     KeycapSetInput:
       type: object
       required: [brand, name, visibility]
+      additionalProperties: false
       properties:
         brand:
           type: string
@@ -2106,6 +2122,7 @@ components:
     BuildSwitchEntry:
       type: object
       required: [switch, count]
+      additionalProperties: false
       properties:
         switch:
           type: string
@@ -2119,6 +2136,7 @@ components:
     BuildKeycapKitEntry:
       type: object
       required: [keycap_set, kit]
+      additionalProperties: false
       properties:
         keycap_set:
           type: string
@@ -2233,6 +2251,7 @@ components:
 
     BuildStabs:
       type: object
+      additionalProperties: false
       properties:
         name:
           type: string
@@ -2245,6 +2264,7 @@ components:
 
     BuildCaseMountType:
       type: object
+      additionalProperties: false
       properties:
         type:
           type: string
@@ -2260,6 +2280,7 @@ components:
     BuildInput:
       type: object
       required: [keyboard, visibility]
+      additionalProperties: false
       properties:
         keyboard:
           type: string
