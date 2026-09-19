@@ -77,13 +77,17 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
 	images.EXPECT().
 		PresignGet(mock.Anything, repository.ProfileImageKey("profiles/user-alice/avatar")).
 		Return("https://example.com/avatar", nil)
+	repo := mocks.NewMockProfileRepository(s.T())
+	repo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
 	p := repository.Profile{
 		Username:   "alice",
 		AvatarPath: profileImageKeyPtr("profiles/user-alice/avatar"),
 	}
 
-	pr := Profile{Images: images}
+	pr := Profile{Images: images, Repo: repo}
 	out, err := pr.ToAPI(s.T().Context(), p)
 
 	s.Require().NoError(err)

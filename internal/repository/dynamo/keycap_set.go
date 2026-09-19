@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -413,7 +414,9 @@ func (r *KeycapSetRepository) classifyDeleteKitConflict(ctx context.Context, own
 	return nil
 }
 
-// SetKitImagePath implements repository.KeycapSetRepository.
+// SetKitImagePath implements repository.KeycapSetRepository. Also clears
+// any cached GET URL - it was signed against the old ImagePath, so it must
+// not outlive it.
 func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID string, key repository.KeycapKitImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -421,8 +424,11 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID 
 	}
 
 	kitPath := "kits." + kitID
+	update := expression.Set(expression.Name(kitPath+".image_path"), expression.Value(key)).
+		Remove(expression.Name(kitPath + ".get_url")).
+		Remove(expression.Name(kitPath + ".get_url_expires_at"))
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Set(expression.Name(kitPath+".image_path"), expression.Value(key))).
+		WithUpdate(update).
 		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
 		Build()
 	if err != nil {
@@ -448,7 +454,8 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID 
 }
 
 // ClearKitImagePath implements repository.KeycapSetRepository. ALL_OLD
-// reports the key that was cleared, or nil when nothing was set.
+// reports the key that was cleared, or nil when nothing was set. Also
+// clears any cached GET URL, which is meaningless once ImagePath is gone.
 func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitID string) (*repository.KeycapKitImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
@@ -456,8 +463,11 @@ func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitI
 	}
 
 	kitPath := "kits." + kitID
+	update := expression.Remove(expression.Name(kitPath + ".image_path")).
+		Remove(expression.Name(kitPath + ".get_url")).
+		Remove(expression.Name(kitPath + ".get_url_expires_at"))
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Remove(expression.Name(kitPath + ".image_path"))).
+		WithUpdate(update).
 		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
 		Build()
 	if err != nil {
@@ -492,6 +502,37 @@ func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitI
 	}
 
 	return kit.ImagePath, nil
+}
+
+// SetKitImageGetCache implements repository.KeycapSetRepository.
+func (r *KeycapSetRepository) SetKitImageGetCache(ctx context.Context, ownerID, setID, kitID string, forPath repository.KeycapKitImageKey, url string, expiresAt time.Time) (bool, error) {
+	kitPath := "kits." + kitID
+	update := expression.Set(expression.Name(kitPath+".get_url"), expression.Value(url)).
+		Set(expression.Name(kitPath+".get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(expression.Name(kitPath)).
+		And(expression.Name(kitPath + ".image_path").Equal(expression.Value(forPath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return false, fmt.Errorf("building kit image get-cache update for keycap set %q: %w", setID, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       keycapSetKey(ownerID, setID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("setting kit %q image get-cache in keycap set %q owner %q: %w", kitID, setID, ownerID, err)
+	}
+
+	return true, nil
 }
 
 func keycapSetKey(ownerID, setID string) map[string]types.AttributeValue {

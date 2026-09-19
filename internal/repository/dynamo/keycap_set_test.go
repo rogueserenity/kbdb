@@ -4,6 +4,7 @@ import (
 	"errors"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb/types"
@@ -858,6 +859,30 @@ func (s *KeycapSetRepositorySuite) TestSetKitImagePath_NoUserIDInContext_Returns
 	s.Require().Error(err)
 }
 
+func (s *KeycapSetRepositorySuite) TestSetKitImagePath_AlsoClearsCachedGetURL() {
+	// A cached GET URL was signed against the old ImagePath, so it must
+	// not outlive it - see SetKitImagePath's doc comment.
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	err := s.repo.SetKitImagePath(ctx, "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image")
+	s.Require().NoError(err)
+
+	s.Contains(*captured.UpdateExpression, "REMOVE", "expected a REMOVE clause")
+	names := make(map[string]bool, len(captured.ExpressionAttributeNames))
+	for _, v := range captured.ExpressionAttributeNames {
+		names[v] = true
+	}
+	s.True(names["get_url"], "get_url should be REMOVEd")
+	s.True(names["get_url_expires_at"], "get_url_expires_at should be REMOVEd")
+}
+
 func (s *KeycapSetRepositorySuite) TestClearKitImagePath_Succeeds() {
 	imagePath := "keycap-sets/alice/ks1/kits/kit1/image"
 	s.mockClient.EXPECT().
@@ -917,6 +942,75 @@ func (s *KeycapSetRepositorySuite) TestClearKitImagePath_NoUserIDInContext_Retur
 
 	s.Require().Error(err)
 	s.Nil(cleared)
+}
+
+func (s *KeycapSetRepositorySuite) TestClearKitImagePath_AlsoClearsCachedGetURL() {
+	// A cached GET URL is meaningless once ImagePath is gone - see
+	// ClearKitImagePath's doc comment.
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.itemWithKit("Base", nil)}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.ClearKitImagePath(ctx, "ks1", "kit1")
+	s.Require().NoError(err)
+
+	names := make(map[string]bool, len(captured.ExpressionAttributeNames))
+	for _, v := range captured.ExpressionAttributeNames {
+		names[v] = true
+	}
+	s.True(names["get_url"], "get_url should be REMOVEd")
+	s.True(names["get_url_expires_at"], "get_url_expires_at should be REMOVEd")
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImageGetCache_PathMatches_WritesURLAndReturnsTrue() {
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	expiresAt := time.Now().Add(24 * time.Hour)
+	ok, err := s.repo.SetKitImageGetCache(s.T().Context(), "alice", "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image", "https://example.com/presigned", expiresAt)
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal("alice", captured.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	s.Equal("ks1", captured.Key["id"].(*types.AttributeValueMemberS).Value)
+	s.Contains(*captured.ConditionExpression, "attribute_exists")
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImageGetCache_PathChanged_ReturnsFalseWithoutError() {
+	// kits.<id>.image_path no longer equals forPath (or the kit itself is
+	// gone) - a concurrent SetKitImagePath/ClearKitImagePath raced this
+	// write, so the condition fails and it's not an error - the caller's
+	// freshly-minted URL is still returned to the requester, just not
+	// persisted.
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ok, err := s.repo.SetKitImageGetCache(s.T().Context(), "alice", "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image", "https://example.com/presigned", time.Now().Add(24*time.Hour))
+
+	s.Require().NoError(err)
+	s.False(ok)
+}
+
+func (s *KeycapSetRepositorySuite) TestSetKitImageGetCache_UpdateItemError_Propagates() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ok, err := s.repo.SetKitImageGetCache(s.T().Context(), "alice", "ks1", "kit1", "keycap-sets/alice/ks1/kits/kit1/image", "https://example.com/presigned", time.Now().Add(24*time.Hour))
+
+	s.Require().Error(err)
+	s.False(ok)
 }
 
 // namesPrimaryKitID reports whether "primary_kit_id" was referenced

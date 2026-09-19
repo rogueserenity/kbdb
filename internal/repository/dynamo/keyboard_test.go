@@ -531,6 +531,51 @@ func (s *KeyboardRepositorySuite) TestDeleteImage_NoUserIDInContext_ReturnsError
 	s.Nil(removed)
 }
 
+func (s *KeyboardRepositorySuite) TestSetImageGetCache_PathMatches_WritesURLAndReturnsTrue() {
+	var captured *dynamodb.UpdateItemInput
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			captured = in
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	expiresAt := time.Now().Add(24 * time.Hour)
+	ok, err := s.repo.SetImageGetCache(s.T().Context(), "alice", "kb1", "img1", "keyboards/alice/kb1/img1", "https://example.com/presigned", expiresAt)
+
+	s.Require().NoError(err)
+	s.True(ok)
+	s.Equal("alice", captured.Key["user_id"].(*types.AttributeValueMemberS).Value)
+	s.Equal("kb1", captured.Key["id"].(*types.AttributeValueMemberS).Value)
+	s.Contains(*captured.ConditionExpression, "attribute_exists")
+}
+
+func (s *KeyboardRepositorySuite) TestSetImageGetCache_PathChanged_ReturnsFalseWithoutError() {
+	// images.<id>.path no longer equals forPath (or the entry itself is
+	// gone) - a concurrent AddImage/DeleteImage raced this write, so the
+	// condition fails and it's not an error - the caller's freshly-minted
+	// URL is still returned to the requester, just not persisted.
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ok, err := s.repo.SetImageGetCache(s.T().Context(), "alice", "kb1", "img1", "keyboards/alice/kb1/img1", "https://example.com/presigned", time.Now().Add(24*time.Hour))
+
+	s.Require().NoError(err)
+	s.False(ok)
+}
+
+func (s *KeyboardRepositorySuite) TestSetImageGetCache_UpdateItemError_Propagates() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.Anything).
+		Return(nil, errors.New("dynamodb: throttled"))
+
+	ok, err := s.repo.SetImageGetCache(s.T().Context(), "alice", "kb1", "img1", "keyboards/alice/kb1/img1", "https://example.com/presigned", time.Now().Add(24*time.Hour))
+
+	s.Require().Error(err)
+	s.False(ok)
+}
+
 // storedKeyboard is a GetItemOutput for the classify path's existence check.
 func (s *KeyboardRepositorySuite) storedKeyboard() *dynamodb.GetItemOutput {
 	return &dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{

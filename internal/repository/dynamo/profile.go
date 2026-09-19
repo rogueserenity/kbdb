@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -413,15 +414,20 @@ func profileUpdateExpression(p *repository.Profile) expression.UpdateBuilder {
 	return update
 }
 
-// SetAvatarPath implements repository.ProfileRepository.
+// SetAvatarPath implements repository.ProfileRepository. Also clears any
+// cached GET URL - it was signed against the old AvatarPath, so it must
+// not outlive it.
 func (r *ProfileRepository) SetAvatarPath(ctx context.Context, key repository.ProfileImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return fmt.Errorf("setting avatar path: %w", repository.ErrNoUserID)
 	}
 
+	update := expression.Set(expression.Name("avatar_path"), expression.Value(key)).
+		Remove(expression.Name("get_url")).
+		Remove(expression.Name("get_url_expires_at"))
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Set(expression.Name("avatar_path"), expression.Value(key))).
+		WithUpdate(update).
 		WithCondition(expression.AttributeExists(expression.Name("user_id"))).
 		Build()
 	if err != nil {
@@ -447,15 +453,19 @@ func (r *ProfileRepository) SetAvatarPath(ctx context.Context, key repository.Pr
 }
 
 // ClearAvatarPath implements repository.ProfileRepository. ALL_OLD reports
-// the key that was cleared, or nil when nothing was set.
+// the key that was cleared, or nil when nothing was set. Also clears any
+// cached GET URL, which is meaningless once AvatarPath is gone.
 func (r *ProfileRepository) ClearAvatarPath(ctx context.Context) (*repository.ProfileImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("clearing avatar path: %w", repository.ErrNoUserID)
 	}
 
+	update := expression.Remove(expression.Name("avatar_path")).
+		Remove(expression.Name("get_url")).
+		Remove(expression.Name("get_url_expires_at"))
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Remove(expression.Name("avatar_path"))).
+		WithUpdate(update).
 		WithCondition(expression.AttributeExists(expression.Name("user_id"))).
 		Build()
 	if err != nil {
@@ -489,6 +499,36 @@ func (r *ProfileRepository) ClearAvatarPath(ctx context.Context) (*repository.Pr
 	}
 
 	return old.AvatarPath, nil
+}
+
+// SetImageGetCache implements repository.ProfileRepository.
+func (r *ProfileRepository) SetImageGetCache(ctx context.Context, ownerID string, forPath repository.ProfileImageKey, url string, expiresAt time.Time) (bool, error) {
+	update := expression.Set(expression.Name("get_url"), expression.Value(url)).
+		Set(expression.Name("get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(expression.Name("user_id")).
+		And(expression.Name("avatar_path").Equal(expression.Value(forPath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return false, fmt.Errorf("building image get-cache update for user %q: %w", ownerID, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.profileTableName,
+		Key:                       map[string]types.AttributeValue{"user_id": &types.AttributeValueMemberS{Value: ownerID}},
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("setting image get-cache for user %q: %w", ownerID, err)
+	}
+
+	return true, nil
 }
 
 // Delete implements repository.ProfileRepository. A two-item

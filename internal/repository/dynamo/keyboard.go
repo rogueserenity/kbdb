@@ -366,3 +366,34 @@ func (r *KeyboardRepository) classifyDeleteImageConflict(ctx context.Context, ow
 	}
 	return nil, nil //nolint:nilnil // no such image already absent is a valid, expected result
 }
+
+// SetImageGetCache implements repository.KeyboardRepository.
+func (r *KeyboardRepository) SetImageGetCache(ctx context.Context, ownerID, keyboardID, imageID string, forPath repository.KeyboardImageKey, url string, expiresAt time.Time) (bool, error) {
+	imagePath := "images." + imageID
+	update := expression.Set(expression.Name(imagePath+".get_url"), expression.Value(url)).
+		Set(expression.Name(imagePath+".get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(expression.Name(imagePath)).
+		And(expression.Name(imagePath + ".path").Equal(expression.Value(forPath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return false, fmt.Errorf("building image get-cache update for keyboard %q: %w", keyboardID, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       keyboardKey(ownerID, keyboardID),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("setting image %q get-cache for keyboard %q owner %q: %w", imageID, keyboardID, ownerID, err)
+	}
+
+	return true, nil
+}

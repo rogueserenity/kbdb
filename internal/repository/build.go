@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -47,6 +48,10 @@ type BuildCaseMountType struct {
 type BuildImageEntry struct {
 	Path BuildImageKey `dynamodbav:"path" json:"-"`
 	Seq  int           `dynamodbav:"seq" json:"-"`
+
+	// GetURL/GetURLExpiresAt cache the last presigned GET URL for Path.
+	GetURL          *string    `dynamodbav:"get_url,omitempty" json:"-"`
+	GetURLExpiresAt *time.Time `dynamodbav:"get_url_expires_at,omitempty" json:"-"`
 }
 
 // BuildImage is an image id paired with its stored entry, the ordered
@@ -56,6 +61,10 @@ type BuildImage struct {
 	ImageID string
 	Path    BuildImageKey
 	Seq     int
+
+	// GetURL/GetURLExpiresAt mirror BuildImageEntry's cache fields.
+	GetURL          *string
+	GetURLExpiresAt *time.Time
 }
 
 // SortedBuildImages flattens an Images map into a slice ordered by Seq
@@ -63,7 +72,13 @@ type BuildImage struct {
 func SortedBuildImages(images map[string]BuildImageEntry) []BuildImage {
 	out := make([]BuildImage, 0, len(images))
 	for id, entry := range images {
-		out = append(out, BuildImage{ImageID: id, Path: entry.Path, Seq: entry.Seq})
+		out = append(out, BuildImage{
+			ImageID:         id,
+			Path:            entry.Path,
+			Seq:             entry.Seq,
+			GetURL:          entry.GetURL,
+			GetURLExpiresAt: entry.GetURLExpiresAt,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out
@@ -71,7 +86,7 @@ func SortedBuildImages(images map[string]BuildImageEntry) []BuildImage {
 
 // BuildImagesMap builds an Images map from an ordered slice, assigning Seq
 // by position. The inverse of SortedBuildImages, for callers holding images
-// as a list (reload tooling, tests).
+// as a list (reload tooling, tests). Cache fields are dropped.
 func BuildImagesMap(images []BuildImage) map[string]BuildImageEntry {
 	if len(images) == 0 {
 		return nil
@@ -139,6 +154,14 @@ type BuildRepository interface {
 	// key that was cleared. Idempotent: an imageID not present returns
 	// (nil, nil). Returns ErrNotFound if buildID doesn't exist.
 	DeleteImage(ctx context.Context, buildID, imageID string) (*BuildImageKey, error)
+
+	// SetImageGetCache stores url/expiresAt as the matching image's cached
+	// GET URL, conditioned on its Path still equalling forPath. Takes an
+	// explicit ownerID, unlike AddImage/DeleteImage, since this is called
+	// from read paths that may be viewing another user's build. Returns
+	// ok=false (not an error) if that condition fails or buildID/imageID
+	// doesn't exist.
+	SetImageGetCache(ctx context.Context, ownerID, buildID, imageID string, forPath BuildImageKey, url string, expiresAt time.Time) (ok bool, err error)
 
 	// FindBuildsReferencingKeyboard returns the ids of every build owned by
 	// ownerID whose keyboard field is keyboardID. Used by KeyboardRepository

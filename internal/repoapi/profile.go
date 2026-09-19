@@ -3,6 +3,7 @@ package repoapi
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -10,7 +11,9 @@ import (
 
 // Profile maps repository.Profile to and from its wire representations.
 type Profile struct {
-	Images repository.ProfileImageStore
+	Images     repository.ProfileImageStore
+	Repo       repository.ProfileRepository
+	PresignTTL time.Duration
 }
 
 // ToAPI maps a repository.Profile to its wire shape, presigning the avatar
@@ -28,7 +31,7 @@ func (p Profile) ToAPI(ctx context.Context, prof repository.Profile) (api.Profil
 	}
 
 	if prof.AvatarPath != nil {
-		url, err := p.Images.PresignGet(ctx, *prof.AvatarPath)
+		url, err := p.resolveProfileImageURL(ctx, prof)
 		if err != nil {
 			return api.Profile{}, fmt.Errorf("presigning profile avatar: %w", err)
 		}
@@ -48,7 +51,7 @@ func (p Profile) ToAPISummary(ctx context.Context, prof repository.Profile) (api
 	}
 
 	if prof.AvatarPath != nil {
-		url, err := p.Images.PresignGet(ctx, *prof.AvatarPath)
+		url, err := p.resolveProfileImageURL(ctx, prof)
 		if err != nil {
 			return api.ProfileSummary{}, fmt.Errorf("presigning profile avatar: %w", err)
 		}
@@ -56,6 +59,21 @@ func (p Profile) ToAPISummary(ctx context.Context, prof repository.Profile) (api
 	}
 
 	return summary, nil
+}
+
+// resolveProfileImageURL presigns prof.AvatarPath, reusing its cached GET
+// URL if still fresh enough. Callers must check prof.AvatarPath != nil
+// first.
+func (p Profile) resolveProfileImageURL(ctx context.Context, prof repository.Profile) (string, error) {
+	path := *prof.AvatarPath
+
+	return resolveImageURL(prof.GetURL, prof.GetURLExpiresAt, p.PresignTTL,
+		func() (string, error) { return p.Images.PresignGet(ctx, path) },
+		func(url string, expiresAt time.Time) error {
+			_, err := p.Repo.SetImageGetCache(ctx, prof.OwnerID, path, url, expiresAt)
+			return err
+		},
+	)
 }
 
 // ToRepo maps a ProfileInput to a repository.Profile. OwnerID, AvatarPath,

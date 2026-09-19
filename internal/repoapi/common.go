@@ -19,6 +19,37 @@ func parseAPIDate(s string) (*openapi_types.Date, error) {
 	return &openapi_types.Date{Time: t}, nil
 }
 
+// getPresignRefreshFloor is the minimum remaining validity a cached
+// presigned GET URL must have to be reused; below this, resolveImageURL
+// signs a fresh one instead of risking a URL that expires mid-use.
+const getPresignRefreshFloor = 60 * time.Second
+
+// resolveImageURL returns a presigned GET URL for an image, reusing
+// cachedURL if it has more than getPresignRefreshFloor left before
+// cachedExpiresAt, and otherwise minting a fresh one via mint and
+// persisting it via writeBack. writeBack's own failure isn't fatal - the
+// freshly minted url is still valid and returned regardless.
+func resolveImageURL(
+	cachedURL *string,
+	cachedExpiresAt *time.Time,
+	presignTTL time.Duration,
+	mint func() (url string, err error),
+	writeBack func(url string, expiresAt time.Time) error,
+) (string, error) {
+	if cachedURL != nil && cachedExpiresAt != nil && time.Until(*cachedExpiresAt) > getPresignRefreshFloor {
+		return *cachedURL, nil
+	}
+
+	url, err := mint()
+	if err != nil {
+		return "", err
+	}
+
+	_ = writeBack(url, time.Now().Add(presignTTL))
+
+	return url, nil
+}
+
 // sumKnownCosts sums the non-nil components, treating a nil one as
 // excluded rather than zero. Returns nil if none are set.
 func sumKnownCosts(components ...*float64) *float64 {

@@ -37,7 +37,7 @@ func (s *ListKeyboardsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListKeyboards(s.mockRepo, repoapi.Keyboard{Images: s.mockImages}, s.mockPrefs)
+	s.handler = ListKeyboards(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
 }
 
 func (s *ListKeyboardsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -256,7 +256,7 @@ func (s *GetKeyboardSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetKeyboard(s.mockRepo, repoapi.Keyboard{Images: s.mockImages}, s.mockPrefs)
+	s.handler = GetKeyboard(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
 }
 
 func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
@@ -474,7 +474,7 @@ func TestCreateKeyboardSuite(t *testing.T) {
 func (s *CreateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
-	s.handler = CreateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages})
+	s.handler = CreateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
 }
 
 func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -750,7 +750,7 @@ func TestUpdateKeyboardSuite(t *testing.T) {
 func (s *UpdateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
-	s.handler = UpdateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages})
+	s.handler = UpdateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {

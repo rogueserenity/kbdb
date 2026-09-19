@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -62,6 +63,11 @@ type Switch struct {
 	Notes        *string         `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility   Visibility      `dynamodbav:"visibility" json:"visibility"`
 	ImagePath    *SwitchImageKey `dynamodbav:"image_path,omitempty" json:"-"`
+
+	// GetURL/GetURLExpiresAt cache the last presigned GET URL for
+	// ImagePath. SetImagePath clears both when ImagePath changes.
+	GetURL          *string    `dynamodbav:"get_url,omitempty" json:"-"`
+	GetURLExpiresAt *time.Time `dynamodbav:"get_url_expires_at,omitempty" json:"-"`
 }
 
 // SwitchRepository provides access to switches. List/Get take an explicit
@@ -106,6 +112,14 @@ type SwitchRepository interface {
 	// switch with no ImagePath already set is not an error. Returns
 	// ErrNotFound if id doesn't exist.
 	ClearImagePath(ctx context.Context, id string) (*SwitchImageKey, error)
+
+	// SetImageGetCache stores url/expiresAt as the switch's cached
+	// presigned GET URL, conditioned on ImagePath still equalling forPath.
+	// Takes an explicit ownerID, unlike Set/ClearImagePath, since this is
+	// called from read paths that may be viewing another user's switch.
+	// Returns ok=false (not an error) if that condition fails or the
+	// switch doesn't exist.
+	SetImageGetCache(ctx context.Context, ownerID, id string, forPath SwitchImageKey, url string, expiresAt time.Time) (ok bool, err error)
 }
 
 // SwitchImageKey is the object key a switch's image is stored under in a

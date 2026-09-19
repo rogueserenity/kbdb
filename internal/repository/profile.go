@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"time"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -78,6 +79,11 @@ type Profile struct {
 	// it forward from the stored item rather than touching it.
 	AvatarPath *ProfileImageKey `dynamodbav:"avatar_path,omitempty" json:"-"`
 
+	// GetURL/GetURLExpiresAt cache the last presigned GET URL for
+	// AvatarPath. SetAvatarPath clears both when AvatarPath changes.
+	GetURL          *string    `dynamodbav:"get_url,omitempty" json:"-"`
+	GetURLExpiresAt *time.Time `dynamodbav:"get_url_expires_at,omitempty" json:"-"`
+
 	// DiscoverablePK / DiscordPK are the constant ("1") partition keys of the
 	// two sparse directory GSIs, written only when the profile belongs in
 	// each index (DiscordPK additionally requires DiscordUsername != nil).
@@ -145,6 +151,14 @@ type ProfileRepository interface {
 	// the key that was cleared, or nil if it was already unset (idempotent,
 	// not an error). Returns ErrNotFound if the caller has no profile.
 	ClearAvatarPath(ctx context.Context) (*ProfileImageKey, error)
+
+	// SetImageGetCache stores url/expiresAt as ownerID's cached avatar GET
+	// URL, conditioned on AvatarPath still equalling forPath. Takes an
+	// explicit ownerID, unlike the other Set*/Clear* methods here, since
+	// this is called from read paths that may be viewing another user's
+	// profile, not just self-writes. Returns ok=false (not an error) if
+	// that condition fails or ownerID has no profile.
+	SetImageGetCache(ctx context.Context, ownerID string, forPath ProfileImageKey, url string, expiresAt time.Time) (ok bool, err error)
 }
 
 // ProfileImageKey is the object key a profile's avatar is stored under.

@@ -116,8 +116,12 @@ func (s *KeycapSetToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsKitPriceKe
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
+	kr := KeycapSet{Images: images, Repo: repo}
 	out, err := kr.ToAPI(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 	s.Require().NoError(err)
 
@@ -137,8 +141,12 @@ func (s *KeycapSetToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesKitPrice
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
+	kr := KeycapSet{Images: images, Repo: repo}
 	out, err := kr.ToAPI(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
@@ -155,8 +163,12 @@ func (s *KeycapSetToAPISuite) TestOwner_AlwaysIncludesKitPriceRegardlessOfShowPr
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *repoKit.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
+	kr := KeycapSet{Images: images, Repo: repo}
 	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)
 
@@ -203,8 +215,12 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_Reso
 
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *kit.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
+	kr := KeycapSet{Images: images, Repo: repo}
 	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
@@ -404,9 +420,13 @@ func (s *KeycapKitToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	k := fullRepoKeycapKit()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
-	out, err := kr.KitToAPI(context.Background(), k, true)
+	kr := KeycapSet{Images: images, Repo: repo}
+	out, err := kr.KitToAPI(context.Background(), "alice", "ks1", k, true)
 	s.Require().NoError(err)
 
 	s.Equal(k.KitID, out.KitId)
@@ -427,7 +447,7 @@ func (s *KeycapKitToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	k := repository.KeycapKit{KitID: "kit1", Name: "Base"}
 
 	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-	out, err := kr.KitToAPI(context.Background(), k, true)
+	out, err := kr.KitToAPI(context.Background(), "alice", "ks1", k, true)
 	s.Require().NoError(err)
 
 	s.Nil(out.Purchase)
@@ -441,7 +461,7 @@ func (s *KeycapKitToAPISuite) TestMalformedStoredDate_ReturnsError() {
 	}
 
 	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-	_, err := kr.KitToAPI(context.Background(), k, true)
+	_, err := kr.KitToAPI(context.Background(), "alice", "ks1", k, true)
 
 	s.Require().Error(err)
 }
@@ -450,9 +470,13 @@ func (s *KeycapKitToAPISuite) TestShowPriceFalse_OmitsPriceKeepsRestOfPurchase()
 	k := fullRepoKeycapKit()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
-	out, err := kr.KitToAPI(context.Background(), k, false)
+	kr := KeycapSet{Images: images, Repo: repo}
+	out, err := kr.KitToAPI(context.Background(), "alice", "ks1", k, false)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -465,9 +489,13 @@ func (s *KeycapKitToAPISuite) TestShowPriceTrue_IncludesPrice() {
 	k := fullRepoKeycapKit()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", nil)
+	repo := mocks.NewMockKeycapSetRepository(s.T())
+	repo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
-	kr := KeycapSet{Images: images}
-	out, err := kr.KitToAPI(context.Background(), k, true)
+	kr := KeycapSet{Images: images, Repo: repo}
+	out, err := kr.KitToAPI(context.Background(), "alice", "ks1", k, true)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
@@ -481,7 +509,7 @@ func (s *KeycapKitToAPISuite) TestPresignGetFails_ReturnsError() {
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("", errors.New("s3: access denied"))
 
 	kr := KeycapSet{Images: images}
-	_, err := kr.KitToAPI(context.Background(), k, true)
+	_, err := kr.KitToAPI(context.Background(), "alice", "ks1", k, true)
 
 	s.Require().Error(err)
 }

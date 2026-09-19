@@ -37,7 +37,7 @@ func (s *ListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListKeycapSets(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages}, s.mockPrefs)
+	s.handler = ListKeycapSets(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
 }
 
 func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -230,6 +230,9 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPri
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	s.mockImages.EXPECT().PresignGet(mock.Anything, imagePath).Return("https://example.com/presigned-get", nil)
+	s.mockRepo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
@@ -298,7 +301,7 @@ func (s *GetKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetKeycapSet(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages}, s.mockPrefs)
+	s.handler = GetKeycapSet(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
 }
 
 func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
@@ -341,6 +344,9 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_KitWithImagePath_IncludesPresignedU
 	s.mockImages.EXPECT().
 		PresignGet(mock.Anything, imagePath).
 		Return("https://example.com/presigned-get", nil)
+	s.mockRepo.EXPECT().
+		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -550,7 +556,7 @@ func TestCreateKeycapSetSuite(t *testing.T) {
 func (s *CreateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages})
+	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockKeycapSetRepo})
 }
 
 func (s *CreateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -719,7 +725,7 @@ func TestUpdateKeycapSetSuite(t *testing.T) {
 func (s *UpdateKeycapSetSuite) SetupTest() {
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages})
+	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockKeycapSetRepo})
 }
 
 func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1128,7 +1134,7 @@ func TestCreateKeycapKitSuite(t *testing.T) {
 func (s *CreateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = CreateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages})
+	s.handler = CreateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -1303,7 +1309,7 @@ func TestUpdateKeycapKitSuite(t *testing.T) {
 func (s *UpdateKeycapKitSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.handler = UpdateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages})
+	s.handler = UpdateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {

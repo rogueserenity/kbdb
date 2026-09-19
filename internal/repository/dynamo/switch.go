@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/feature/dynamodb/attributevalue"
@@ -237,15 +238,20 @@ func setOrRemovePtr[T any](update expression.UpdateBuilder, name string, v *T) e
 	return update.Set(expression.Name(name), expression.Value(*v))
 }
 
-// SetImagePath implements repository.SwitchRepository.
+// SetImagePath implements repository.SwitchRepository. Also clears any
+// cached GET URL - it was signed against the old ImagePath, so it must not
+// outlive it.
 func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repository.SwitchImageKey) error {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return fmt.Errorf("setting image path for switch %q: %w", id, repository.ErrNoUserID)
 	}
 
+	update := expression.Set(expression.Name("image_path"), expression.Value(key)).
+		Remove(expression.Name("get_url")).
+		Remove(expression.Name("get_url_expires_at"))
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Set(expression.Name("image_path"), expression.Value(key))).
+		WithUpdate(update).
 		WithCondition(expression.AttributeExists(expression.Name("id"))).
 		Build()
 	if err != nil {
@@ -271,15 +277,19 @@ func (r *SwitchRepository) SetImagePath(ctx context.Context, id string, key repo
 }
 
 // ClearImagePath implements repository.SwitchRepository. ALL_OLD reports the
-// key that was cleared, or nil when nothing was set.
+// key that was cleared, or nil when nothing was set. Also clears any
+// cached GET URL, which is meaningless once ImagePath is gone.
 func (r *SwitchRepository) ClearImagePath(ctx context.Context, id string) (*repository.SwitchImageKey, error) {
 	ownerID, ok := kbdbctx.UserID(ctx)
 	if !ok {
 		return nil, fmt.Errorf("clearing image path for switch %q: %w", id, repository.ErrNoUserID)
 	}
 
+	update := expression.Remove(expression.Name("image_path")).
+		Remove(expression.Name("get_url")).
+		Remove(expression.Name("get_url_expires_at"))
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Remove(expression.Name("image_path"))).
+		WithUpdate(update).
 		WithCondition(expression.AttributeExists(expression.Name("id"))).
 		Build()
 	if err != nil {
@@ -313,6 +323,36 @@ func (r *SwitchRepository) ClearImagePath(ctx context.Context, id string) (*repo
 	}
 
 	return old.ImagePath, nil
+}
+
+// SetImageGetCache implements repository.SwitchRepository.
+func (r *SwitchRepository) SetImageGetCache(ctx context.Context, ownerID, id string, forPath repository.SwitchImageKey, url string, expiresAt time.Time) (bool, error) {
+	update := expression.Set(expression.Name("get_url"), expression.Value(url)).
+		Set(expression.Name("get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(expression.Name("id")).
+		And(expression.Name("image_path").Equal(expression.Value(forPath)))
+
+	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
+	if err != nil {
+		return false, fmt.Errorf("building image get-cache update for switch %q: %w", id, err)
+	}
+
+	_, err = r.client.UpdateItem(ctx, &dynamodb.UpdateItemInput{
+		TableName:                 &r.tableName,
+		Key:                       switchKey(ownerID, id),
+		UpdateExpression:          expr.Update(),
+		ConditionExpression:       expr.Condition(),
+		ExpressionAttributeNames:  expr.Names(),
+		ExpressionAttributeValues: expr.Values(),
+	})
+	if err != nil {
+		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			return false, nil
+		}
+		return false, fmt.Errorf("setting image get-cache for switch %q owner %q: %w", id, ownerID, err)
+	}
+
+	return true, nil
 }
 
 // cursorEnvelope is the JSON payload base64-encoded into a cursor string.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"time"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 )
@@ -54,6 +55,10 @@ type KeyboardPurchase struct {
 type KeyboardImageEntry struct {
 	Path KeyboardImageKey `dynamodbav:"path" json:"-"`
 	Seq  int              `dynamodbav:"seq" json:"-"`
+
+	// GetURL/GetURLExpiresAt cache the last presigned GET URL for Path.
+	GetURL          *string    `dynamodbav:"get_url,omitempty" json:"-"`
+	GetURLExpiresAt *time.Time `dynamodbav:"get_url_expires_at,omitempty" json:"-"`
 }
 
 // KeyboardImage is an image id paired with its stored entry, the ordered
@@ -63,6 +68,10 @@ type KeyboardImage struct {
 	ImageID string
 	Path    KeyboardImageKey
 	Seq     int
+
+	// GetURL/GetURLExpiresAt mirror KeyboardImageEntry's cache fields.
+	GetURL          *string
+	GetURLExpiresAt *time.Time
 }
 
 // SortedKeyboardImages flattens an Images map into a slice ordered by Seq
@@ -70,7 +79,13 @@ type KeyboardImage struct {
 func SortedKeyboardImages(images map[string]KeyboardImageEntry) []KeyboardImage {
 	out := make([]KeyboardImage, 0, len(images))
 	for id, entry := range images {
-		out = append(out, KeyboardImage{ImageID: id, Path: entry.Path, Seq: entry.Seq})
+		out = append(out, KeyboardImage{
+			ImageID:         id,
+			Path:            entry.Path,
+			Seq:             entry.Seq,
+			GetURL:          entry.GetURL,
+			GetURLExpiresAt: entry.GetURLExpiresAt,
+		})
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Seq < out[j].Seq })
 	return out
@@ -78,7 +93,7 @@ func SortedKeyboardImages(images map[string]KeyboardImageEntry) []KeyboardImage 
 
 // KeyboardImagesMap builds an Images map from an ordered slice, assigning
 // Seq by position. The inverse of SortedKeyboardImages, for callers holding
-// images as a list (e.g. reload tooling, tests).
+// images as a list (e.g. reload tooling, tests). Cache fields are dropped.
 func KeyboardImagesMap(images []KeyboardImage) map[string]KeyboardImageEntry {
 	if len(images) == 0 {
 		return nil
@@ -159,6 +174,14 @@ type KeyboardRepository interface {
 	// imageID not present is not an error. Returns ErrNotFound if keyboardID
 	// doesn't exist for the owner.
 	DeleteImage(ctx context.Context, keyboardID, imageID string) (*KeyboardImageKey, error)
+
+	// SetImageGetCache stores url/expiresAt as the matching image's cached
+	// GET URL, conditioned on its Path still equalling forPath. Takes an
+	// explicit ownerID, unlike AddImage/DeleteImage, since this is called
+	// from read paths that may be viewing another user's keyboard. Returns
+	// ok=false (not an error) if that condition fails or
+	// keyboardID/imageID doesn't exist.
+	SetImageGetCache(ctx context.Context, ownerID, keyboardID, imageID string, forPath KeyboardImageKey, url string, expiresAt time.Time) (ok bool, err error)
 }
 
 // KeyboardImageKey is the object key an image is stored under in a

@@ -37,7 +37,7 @@ func (s *ListSwitchesSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListSwitches(s.mockRepo, repoapi.Switch{Images: s.mockImages}, s.mockPrefs)
+	s.handler = ListSwitches(s.mockRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
 }
 
 func (s *ListSwitchesSuite) newRequest(ctx context.Context, query string) *http.Request {
@@ -256,7 +256,7 @@ func (s *GetSwitchSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetSwitch(s.mockRepo, repoapi.Switch{Images: s.mockImages}, s.mockPrefs)
+	s.handler = GetSwitch(s.mockRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
 }
 
 func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
@@ -474,7 +474,7 @@ func TestCreateSwitchSuite(t *testing.T) {
 func (s *CreateSwitchSuite) SetupTest() {
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
-	s.handler = CreateSwitch(s.mockSwitchRepo, repoapi.Switch{Images: s.mockImages})
+	s.handler = CreateSwitch(s.mockSwitchRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockSwitchRepo})
 }
 
 func (s *CreateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -685,7 +685,7 @@ func TestUpdateSwitchSuite(t *testing.T) {
 func (s *UpdateSwitchSuite) SetupTest() {
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
-	s.handler = UpdateSwitch(s.mockSwitchRepo, repoapi.Switch{Images: s.mockImages})
+	s.handler = UpdateSwitch(s.mockSwitchRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockSwitchRepo})
 }
 
 func (s *UpdateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
