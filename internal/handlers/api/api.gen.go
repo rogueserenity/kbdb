@@ -271,7 +271,7 @@ type BuildSummary struct {
 	// KeyboardId The id of the referenced Keyboard resource - always present, even if that keyboard no longer exists (in which case `keyboard` below is omitted). Useful for grouping builds by keyboard.
 	KeyboardId *string `json:"keyboard_id,omitempty"`
 
-	// TotalCost Total cost of the build's priced components (keyboard, switches, keycap kits, stabs). Components with no known price are excluded rather than treated as zero, so this may undercount. Omitted for a build the caller doesn't own, same as Build.total_cost.
+	// TotalCost Total cost of the build's priced components (keyboard, switches, keycap kits, stabs). Components with no known price are excluded rather than treated as zero, so this may undercount. Present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is.
 	TotalCost *Money `json:"total_cost,omitempty"`
 
 	// Visibility Who can read this build. Only ever present for the build's owner - no preference can expose it to another caller.
@@ -430,7 +430,7 @@ type KeyboardSummary struct {
 	Name        *string        `json:"name,omitempty"`
 	OrderStatus *string        `json:"order_status,omitempty"`
 
-	// Price Same as Keyboard.purchase.price - omitted for a keyboard the caller doesn't own.
+	// Price What the keyboard cost. Present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is.
 	Price *Money  `json:"price,omitempty"`
 	Size  *string `json:"size,omitempty"`
 
@@ -541,7 +541,7 @@ type KeycapSetSummary struct {
 	PrimaryKitImage *KeycapKitImage `json:"primary_kit_image,omitempty"`
 	Profile         *string         `json:"profile,omitempty"`
 
-	// TotalCost Total cost of the set's kits with a known purchase price. Kits with no known price are excluded rather than treated as zero, so this may undercount. Omitted for a keycap set the caller doesn't own, same as each kit's purchase.price.
+	// TotalCost Total cost of the set's kits with a known purchase price. Kits with no known price are excluded rather than treated as zero, so this may undercount. Present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is.
 	TotalCost *Money `json:"total_cost,omitempty"`
 
 	// Visibility Who can read this keycap set. Set on the keycap set itself, not derived from its kits, which have no visibility of their own. Only ever present for the set's owner - no preference can expose it to another caller.
@@ -818,7 +818,7 @@ type SwitchSummary struct {
 	Name        *string      `json:"name,omitempty"`
 	OrderStatus *string      `json:"order_status,omitempty"`
 
-	// Price Same as Switch.purchase.price - omitted for a switch the caller doesn't own.
+	// Price What the switch cost. Present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is.
 	Price *Money `json:"price,omitempty"`
 
 	// Type Open vocabulary — validated against the "switch_type" lookup at request time.

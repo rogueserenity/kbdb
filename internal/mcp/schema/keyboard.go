@@ -22,8 +22,8 @@ type KeyboardSummary struct {
 	Layout      *string  `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
 	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImages   bool     `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
-	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; omitted if the caller doesn't own this keyboard"`
-	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; omitted if the caller doesn't own this keyboard"`
+	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; only ever present for the keyboard's owner"`
 }
 
 // GetKeyboardInput is the get_keyboard tool input.

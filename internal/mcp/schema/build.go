@@ -119,8 +119,8 @@ type BuildSummary struct {
 	BuildDate  *string               `json:"build_date,omitempty" jsonschema:"when the build was assembled (YYYY-MM-DD)"`
 	HasImage   bool                  `json:"has_image" jsonschema:"whether this build has any images on file"`
 	Keyboard   *BuildSummaryKeyboard `json:"keyboard,omitempty" jsonschema:"the build's keyboard, denormalized for display; omitted if the referenced keyboard no longer exists"`
-	TotalCost  *float64              `json:"total_cost,omitempty" jsonschema:"total cost of the build's priced components (keyboard, switches, keycap kits, stabs); components with no known price are excluded rather than treated as zero, so this may undercount; omitted if the caller doesn't own this build"`
-	Visibility *string               `json:"visibility,omitempty" jsonschema:"who can read this build; one of \"public\", \"authenticated\", \"private\"; omitted if the caller doesn't own this build"`
+	TotalCost  *float64              `json:"total_cost,omitempty" jsonschema:"total cost of the build's priced components (keyboard, switches, keycap kits, stabs); components with no known price are excluded rather than treated as zero, so this may undercount; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Visibility *string               `json:"visibility,omitempty" jsonschema:"who can read this build; one of \"public\", \"authenticated\", \"private\"; only ever present for the build's owner"`
 }
 
 // BuildSummaryKeyboard is BuildSummary's denormalized keyboard reference.

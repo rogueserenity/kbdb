@@ -1604,8 +1604,9 @@ components:
         price:
           $ref: "#/components/schemas/Money"
           description: >
-            Same as Keyboard.purchase.price - omitted for a keyboard the
-            caller doesn't own.
+            What the keyboard cost. Present for the owner only if their
+            show_price_to_me preference is set, and for any other caller
+            only if the owner's show_price_to_others is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
@@ -1785,8 +1786,9 @@ components:
         price:
           $ref: "#/components/schemas/Money"
           description: >
-            Same as Switch.purchase.price - omitted for a switch the
-            caller doesn't own.
+            What the switch cost. Present for the owner only if their
+            show_price_to_me preference is set, and for any other caller
+            only if the owner's show_price_to_others is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
@@ -2118,8 +2120,9 @@ components:
           description: >
             Total cost of the set's kits with a known purchase price.
             Kits with no known price are excluded rather than treated as
-            zero, so this may undercount. Omitted for a keycap set the
-            caller doesn't own, same as each kit's purchase.price.
+            zero, so this may undercount. Present for the owner only if
+            their show_price_to_me preference is set, and for any other
+            caller only if the owner's show_price_to_others is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
@@ -2452,8 +2455,9 @@ components:
             Total cost of the build's priced components (keyboard,
             switches, keycap kits, stabs). Components with no known price
             are excluded rather than treated as zero, so this may
-            undercount. Omitted for a build the caller doesn't own, same
-            as Build.total_cost.
+            undercount. Present for the owner only if their
+            show_price_to_me preference is set, and for any other caller
+            only if the owner's show_price_to_others is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
