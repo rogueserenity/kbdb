@@ -89,6 +89,10 @@ func (s Switch) ToAPISummary(ctx context.Context, sw repository.Switch, isOwner 
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = sw.Purchase.Price
 	}
+	if isOwner {
+		v := api.Visibility(sw.Visibility)
+		summary.Visibility = &v
+	}
 
 	if sw.ImagePath != nil {
 		url, err := s.resolveSwitchImageURL(ctx, sw)

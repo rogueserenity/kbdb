@@ -1606,6 +1606,12 @@ components:
           description: >
             Same as Keyboard.purchase.price - omitted for a keyboard the
             caller doesn't own.
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Same as Keyboard.visibility - omitted for a keyboard the
+            caller doesn't own. Unlike price, no owner preference can
+            expose this to anyone else.
 
     KeyboardListPage:
       type: object
@@ -1781,6 +1787,12 @@ components:
           description: >
             Same as Switch.purchase.price - omitted for a switch the
             caller doesn't own.
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Same as Switch.visibility - omitted for a switch the caller
+            doesn't own. Unlike price, no owner preference can expose
+            this to anyone else.
 
     SwitchListPage:
       type: object
@@ -2108,6 +2120,14 @@ components:
             Kits with no known price are excluded rather than treated as
             zero, so this may undercount. Omitted for a keycap set the
             caller doesn't own, same as each kit's purchase.price.
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Same as KeycapSet.visibility - the set's own value, not
+            derived from its kits (kits have no visibility of their own).
+            Omitted for a keycap set the caller doesn't own. Unlike
+            total_cost, no owner preference can expose this to anyone
+            else.
 
     KeycapSetListPage:
       type: object
@@ -2435,6 +2455,12 @@ components:
             are excluded rather than treated as zero, so this may
             undercount. Omitted for a build the caller doesn't own, same
             as Build.total_cost.
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Same as Build.visibility - omitted for a build the caller
+            doesn't own. Unlike total_cost, no owner preference can
+            expose this to anyone else.
 
     BuildListPage:
       type: object

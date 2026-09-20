@@ -11,7 +11,9 @@ import (
 
 // Build maps repository.Build to and from its MCP tool shape.
 type Build struct {
-	KeyboardRepo repository.KeyboardRepository
+	KeyboardRepo  repository.KeyboardRepository
+	SwitchRepo    repository.SwitchRepository
+	KeycapSetRepo repository.KeycapSetRepository
 }
 
 // ToMCP never presigns an image URL, unlike
@@ -56,14 +58,26 @@ func (b Build) FromMCP(in schema.BuildInput) repository.Build {
 
 // ToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.Build.ToAPISummary]'s
 // KeyboardRepo.Get denormalization but reports HasImage rather than a
-// presigned URL.
-func (b Build) ToMCPSummary(ctx context.Context, build repository.Build) (schema.BuildSummary, error) {
+// presigned URL. TotalCost is shown per ownerPrefs.ShowPriceToMe (owner)
+// or ownerPrefs.ShowPriceToOthers (non-owner) - unlike [Build.ToMCP], the
+// owner isn't unconditionally shown price here - and the switches and
+// keycap kits it sums are only fetched when it will be shown, since cost
+// is the only thing this uses them for.
+func (b Build) ToMCPSummary(
+	ctx context.Context, build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences,
+) (schema.BuildSummary, error) {
 	summary := schema.BuildSummary{
 		ID:         build.ID,
 		KeyboardID: build.Keyboard,
 		BuildDate:  build.BuildDate,
 		HasImage:   len(build.Images) > 0,
 	}
+	if isOwner {
+		v := string(build.Visibility)
+		summary.Visibility = &v
+	}
+
+	var keyboardPrice *float64
 
 	kb, err := b.KeyboardRepo.Get(ctx, build.UserID, build.Keyboard)
 	if err != nil {
@@ -73,9 +87,83 @@ func (b Build) ToMCPSummary(ctx context.Context, build repository.Build) (schema
 		// Leave summary.Keyboard nil.
 	} else {
 		summary.Keyboard = &schema.BuildSummaryKeyboard{Brand: kb.Brand, Name: kb.Name}
+		keyboardPrice = kb.Purchase.Price
+	}
+
+	if ownerPrefs.ShowPriceSummary(isOwner) {
+		switchesCost, err := b.switchesCost(ctx, build.UserID, build.Switches)
+		if err != nil {
+			return schema.BuildSummary{}, err
+		}
+
+		keycapKitsCost, err := b.keycapKitsCost(ctx, build.UserID, build.KeycapKits)
+		if err != nil {
+			return schema.BuildSummary{}, err
+		}
+
+		var stabsPrice *float64
+		if build.Stabs != nil {
+			stabsPrice = build.Stabs.Price
+		}
+		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
 
 	return summary, nil
+}
+
+// switchesCost sums the cost of entries whose switch has a known per-unit
+// price, mirroring
+// [github.com/rogueserenity/kbdb/internal/repoapi.Build.switchEntriesResolvedToAPI]'s
+// calculation: switches are bought in bulk (SwitchPurchase.Price is the
+// total for Quantity units, not a per-unit price), so an entry contributes
+// (Price/Quantity)*Count only when Quantity is set and non-zero; otherwise
+// its cost is unknown and excluded rather than guessed at. An entry whose
+// switch no longer exists contributes nothing rather than failing.
+func (b Build) switchesCost(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry) (*float64, error) {
+	costs := make([]*float64, 0, len(entries))
+
+	for _, e := range entries {
+		sw, err := b.SwitchRepo.Get(ctx, ownerID, e.Switch)
+		if err != nil {
+			if !errors.Is(err, repository.ErrNotFound) {
+				return nil, fmt.Errorf("getting switch %q: %w", e.Switch, err)
+			}
+			continue
+		}
+
+		if sw.Purchase.Price != nil && sw.Purchase.Quantity != nil && *sw.Purchase.Quantity != 0 {
+			entryCost := *sw.Purchase.Price / float64(*sw.Purchase.Quantity) * float64(e.Count)
+			costs = append(costs, &entryCost)
+		}
+	}
+
+	return sumKnownCosts(costs...), nil
+}
+
+// keycapKitsCost sums the price of each entry's kit, mirroring
+// [github.com/rogueserenity/kbdb/internal/repoapi.Build.keycapKitEntriesResolvedToAPI]'s
+// calculation. An entry whose keycap set - or whose kit within it - no
+// longer exists contributes nothing rather than failing.
+func (b Build) keycapKitsCost(
+	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
+) (*float64, error) {
+	costs := make([]*float64, 0, len(entries))
+
+	for _, e := range entries {
+		ks, err := b.KeycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
+		if err != nil {
+			if !errors.Is(err, repository.ErrNotFound) {
+				return nil, fmt.Errorf("getting keycap set %q: %w", e.KeycapSet, err)
+			}
+			continue
+		}
+
+		if kit := findKit(&e.Kit, ks.Kits); kit != nil {
+			costs = append(costs, kit.Purchase.Price)
+		}
+	}
+
+	return sumKnownCosts(costs...), nil
 }
 
 func (b Build) caseMountTypeToMCP(cmt *repository.BuildCaseMountType) *schema.BuildCaseMountType {

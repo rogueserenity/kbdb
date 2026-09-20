@@ -296,3 +296,24 @@ func (s *KeyboardFromMCPSuite) TestNilGroups_MapToZeroValues() {
 	s.Nil(out.Purchase.Vendor)
 	s.Empty(out.Design.Plates)
 }
+
+func (s *KeyboardToMCPSummarySuite) TestOwner_IncludesVisibility() {
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
+		ID:         "kb-1",
+		Visibility: repository.VisibilityPrivate,
+	}, true, repository.ProfilePreferences{})
+
+	s.Require().NotNil(out.Visibility)
+	s.Equal("private", *out.Visibility)
+}
+
+func (s *KeyboardToMCPSummarySuite) TestNonOwner_OmitsVisibility() {
+	// ShowPriceToOthers true, so only visibility is withheld here - it is
+	// owner-only outright, not preference-gated the way price is.
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
+		ID:         "kb-1",
+		Visibility: repository.VisibilityPublic,
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Nil(out.Visibility)
+}

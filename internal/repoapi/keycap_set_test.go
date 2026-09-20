@@ -552,3 +552,29 @@ func (s *KeycapKitToRepoSuite) TestPurchaseNil_MapsToZeroValue() {
 
 	s.Equal(repository.KeycapKitPurchase{}, out.Purchase)
 }
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_Owner_IncludesSetsOwnVisibility() {
+	ks := fullRepoKeycapSet()
+
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+
+	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.Visibility)
+	s.Equal(api.Visibility(ks.Visibility), *summary.Visibility)
+}
+
+func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwner_OmitsVisibility() {
+	ks := fullRepoKeycapSet()
+
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+
+	// ShowPriceToOthers true, so only visibility is withheld here - it is
+	// owner-only outright, not preference-gated the way total_cost is.
+	summary, err := kr.ToAPISummary(
+		context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Nil(summary.Visibility)
+}

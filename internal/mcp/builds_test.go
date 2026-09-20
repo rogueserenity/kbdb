@@ -398,6 +398,9 @@ type HandleListBuildsSuite struct {
 
 	mockBuilds    *mocks.MockBuildRepository
 	mockKeyboards *mocks.MockKeyboardRepository
+	mockSwitches  *mocks.MockSwitchRepository
+	mockKeycaps   *mocks.MockKeycapSetRepository
+	mockPrefs     *mocks.MockPreferencesReader
 }
 
 func TestHandleListBuildsSuite(t *testing.T) {
@@ -407,10 +410,18 @@ func TestHandleListBuildsSuite(t *testing.T) {
 func (s *HandleListBuildsSuite) SetupTest() {
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
+	s.mockKeycaps = mocks.NewMockKeycapSetRepository(s.T())
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
 }
 
 func (s *HandleListBuildsSuite) handler() mcp.ToolHandlerFor[schema.ListBuildsInput, schema.ListBuildsOutput] {
-	return handleListBuilds(s.mockBuilds, s.mockKeyboards)
+	s.mockPrefs.EXPECT().
+		GetPreferences(mock.Anything, mock.Anything).
+		Return(repository.ProfilePreferences{}, nil).
+		Maybe()
+
+	return handleListBuilds(s.mockBuilds, s.mockKeyboards, s.mockSwitches, s.mockKeycaps, s.mockPrefs)
 }
 
 func (s *HandleListBuildsSuite) TestEmpty_ReturnsEmptyList() {
@@ -1006,4 +1017,41 @@ func (s *HandleDeleteBuildImageSuite) TestImageDeleteFailure_ReturnsError_DoesNo
 	s.Require().ErrorContains(err, "failed to delete build image")
 	// mockBuilds has no .EXPECT() for DeleteImage - verifies the DB record
 	// was never touched.
+}
+
+func (s *HandleListBuildsSuite) TestOwnCollection_IncludesVisibility() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
+		Return([]repository.Build{
+			{UserID: callerID, ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate},
+		}, "", nil)
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, callerID, "kb-1").
+		Return(&repository.Keyboard{ID: "kb-1"}, nil)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Builds, 1)
+	s.Require().NotNil(out.Builds[0].Visibility)
+	s.Equal("private", *out.Builds[0].Visibility)
+}
+
+func (s *HandleListBuildsSuite) TestOtherUsersCollection_OmitsVisibility() {
+	s.mockBuilds.EXPECT().
+		List(mock.Anything, otherID, mock.Anything, mock.Anything, 20, "").
+		Return([]repository.Build{
+			{UserID: otherID, ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPublic},
+		}, "", nil)
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, otherID, "kb-1").
+		Return(&repository.Keyboard{ID: "kb-1"}, nil)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{UserID: otherID})
+
+	s.Require().NoError(err)
+	s.Require().Len(out.Builds, 1)
+	s.Nil(out.Builds[0].Visibility)
 }

@@ -53,7 +53,9 @@ func (s *ListKeyboardsSuite) TestListKeyboards_Owner_RequestsAllVisibilities() {
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
 			return len(vis) == 3
 		}), 20, "").
-		Return([]repository.Keyboard{{ID: "kb1", Brand: "Keychron", Name: "Q1"}}, "", nil)
+		Return([]repository.Keyboard{
+			{ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPrivate},
+		}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	rec := httptest.NewRecorder()
@@ -65,7 +67,8 @@ func (s *ListKeyboardsSuite) TestListKeyboards_Owner_RequestsAllVisibilities() {
 	var got api.KeyboardListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	id, brand, name := "kb1", "Keychron", "Q1"
-	s.Equal(&[]api.KeyboardSummary{{Id: &id, Brand: &brand, Name: &name}}, got.Items)
+	visibility := api.Private
+	s.Equal(&[]api.KeyboardSummary{{Id: &id, Brand: &brand, Name: &name, Visibility: &visibility}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 

@@ -23,6 +23,7 @@ type SwitchSummary struct {
 	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImage    bool     `json:"has_image" jsonschema:"whether this switch has an image on file"`
 	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; omitted if the caller doesn't own this switch"`
+	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\"; omitted if the caller doesn't own this switch"`
 }
 
 // GetSwitchInput is the get_switch tool arguments.

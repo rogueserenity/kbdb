@@ -429,3 +429,26 @@ func (s *KeyboardToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {
 	s.Equal(repository.KeyboardPCB{}, kb.PCB)
 	s.Equal(repository.KeyboardPurchase{}, kb.Purchase)
 }
+
+func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_Owner_IncludesVisibility() {
+	kb := fullRepoKeyboard()
+	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
+
+	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.Visibility)
+	s.Equal(api.Visibility(kb.Visibility), *summary.Visibility)
+}
+
+func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwner_OmitsVisibility() {
+	kb := fullRepoKeyboard()
+	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
+
+	// ShowPriceToOthers true, so only visibility is withheld here - it is
+	// owner-only outright, not preference-gated the way price is.
+	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Nil(summary.Visibility)
+}

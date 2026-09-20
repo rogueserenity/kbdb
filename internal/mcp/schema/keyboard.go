@@ -23,6 +23,7 @@ type KeyboardSummary struct {
 	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImages   bool     `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
 	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; omitted if the caller doesn't own this keyboard"`
+	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; omitted if the caller doesn't own this keyboard"`
 }
 
 // GetKeyboardInput is the get_keyboard tool input.

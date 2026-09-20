@@ -202,6 +202,61 @@ var _ = Describe("Listing keyboards", func() {
 		})
 	})
 
+	Context("given the owner has an authenticated-visibility keyboard", func() {
+		var keyboardID string
+
+		BeforeEach(func(ctx SpecContext) {
+			keyboardID = "visibility-keyboard-" + uuid.NewString()
+			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "authenticated")).To(Succeed())
+		})
+
+		AfterEach(func(ctx SpecContext) {
+			Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+		})
+
+		Context("given the caller is the owner", func() {
+			When("listing keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, ownerToken, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("includes the visibility", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemByID(resp, keyboardID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).To(HaveKeyWithValue("visibility", "authenticated"))
+				})
+			})
+		})
+
+		Context("given the caller is not the owner", func() {
+			var token string
+
+			BeforeEach(func(ctx SpecContext) {
+				var err error
+				token, _, err = api.NewAuthIdentity(ctx)
+				Expect(err).NotTo(HaveOccurred())
+			})
+
+			When("listing keyboards", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.List(ctx, ownerID, token, -1)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("omits the visibility", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
+					item := itemByID(resp, keyboardID)
+					Expect(item).NotTo(BeNil())
+					Expect(item).NotTo(HaveKey("visibility"))
+				})
+			})
+		})
+	})
+
 	Context("given the owner has a keyboard with a purchase price and show_price_to_me is false", func() {
 		var keyboardID, profileUsername string
 

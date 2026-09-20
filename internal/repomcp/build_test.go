@@ -210,7 +210,7 @@ func (s *BuildToMCPSummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName
 		Get(mock.Anything, "alice", "kb-1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1", Brand: "Keychron", Name: "Q1"}, nil)
 
-	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b, false, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Equal("build-1", out.ID)
@@ -230,7 +230,7 @@ func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFai
 		Get(mock.Anything, "alice", "kb-1").
 		Return(nil, repository.ErrNotFound)
 
-	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b, false, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.Nil(out.Keyboard)
@@ -245,7 +245,7 @@ func (s *BuildToMCPSummarySuite) TestKeyboardRepositoryError_ReturnsError() {
 		Get(mock.Anything, "alice", "kb-1").
 		Return(nil, errors.New("dynamo unavailable"))
 
-	_, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
+	_, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b, false, repository.ProfilePreferences{})
 	s.Require().Error(err)
 }
 
@@ -260,8 +260,201 @@ func (s *BuildToMCPSummarySuite) TestHasImages_ReportsTrue() {
 		Get(mock.Anything, "alice", "kb-1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
 
-	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b)
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b, false, repository.ProfilePreferences{})
 	s.Require().NoError(err)
 
 	s.True(out.HasImage)
+}
+
+func (s *BuildToMCPSummarySuite) TestOwner_IncludesVisibility() {
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Visibility: repository.VisibilityPrivate,
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Visibility)
+	s.Equal("private", *out.Visibility)
+}
+
+func (s *BuildToMCPSummarySuite) TestNonOwner_OmitsVisibility() {
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Visibility: repository.VisibilityPublic,
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	// ShowPriceToOthers true, so only visibility is withheld here - it is
+	// owner-only outright, not preference-gated the way price is.
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(
+		context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Nil(out.Visibility)
+}
+
+func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
+	price := 180.0
+	switchPrice := 70.0
+	quantity := 70
+	kitPrice := 130.0
+	stabsPrice := 20.0
+
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Switches:   []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
+		KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}},
+		Stabs:      &repository.BuildStabs{Price: &stabsPrice},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb-1",
+			Purchase: repository.KeyboardPurchase{Price: &price},
+		}, nil)
+
+	switches := mocks.NewMockSwitchRepository(s.T())
+	switches.EXPECT().
+		Get(mock.Anything, "alice", "sw-1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw-1",
+			Purchase: repository.SwitchPurchase{Price: &switchPrice, Quantity: &quantity},
+		}, nil)
+
+	sets := mocks.NewMockKeycapSetRepository(s.T())
+	sets.EXPECT().
+		Get(mock.Anything, "alice", "ks-1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks-1",
+			Kits: map[string]repository.KeycapKit{
+				"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &kitPrice}},
+			},
+		}, nil)
+
+	out, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches, KeycapSetRepo: sets}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().NoError(err)
+
+	// 180 keyboard + (70/70)*10 switches + 130 kit + 20 stabs.
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(340.0, *out.TotalCost, 0.001)
+}
+
+func (s *BuildToMCPSummarySuite) TestPriceHidden_SkipsComponentLookupsEntirely() {
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Switches:   []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
+		KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	// Switch/keycap repos are left nil: if the mapper consulted them with
+	// price hidden, this would panic rather than quietly pass.
+	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
+}
+
+func (s *BuildToMCPSummarySuite) TestSwitchWithoutQuantity_ExcludedFromTotalRatherThanGuessed() {
+	switchPrice := 70.0
+
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Switches: []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	switches := mocks.NewMockSwitchRepository(s.T())
+	switches.EXPECT().
+		Get(mock.Anything, "alice", "sw-1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw-1",
+			Purchase: repository.SwitchPurchase{Price: &switchPrice},
+		}, nil)
+
+	out, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
+}
+
+func (s *BuildToMCPSummarySuite) TestDeletedComponent_ExcludedFromTotalRatherThanFailing() {
+	price := 180.0
+
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Switches:   []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
+		KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb-1",
+			Purchase: repository.KeyboardPurchase{Price: &price},
+		}, nil)
+
+	switches := mocks.NewMockSwitchRepository(s.T())
+	switches.EXPECT().
+		Get(mock.Anything, "alice", "sw-1").
+		Return(nil, repository.ErrNotFound)
+
+	sets := mocks.NewMockKeycapSetRepository(s.T())
+	sets.EXPECT().
+		Get(mock.Anything, "alice", "ks-1").
+		Return(nil, repository.ErrNotFound)
+
+	out, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches, KeycapSetRepo: sets}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(180.0, *out.TotalCost, 0.001)
+}
+
+func (s *BuildToMCPSummarySuite) TestSwitchRepositoryError_ReturnsError() {
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Switches: []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	switches := mocks.NewMockSwitchRepository(s.T())
+	switches.EXPECT().
+		Get(mock.Anything, "alice", "sw-1").
+		Return(nil, errors.New("dynamo unavailable"))
+
+	_, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().Error(err)
 }
