@@ -74,6 +74,9 @@ var listBuildImagesTool = &mcp.Tool{
 func handleListBuilds(
 	buildRepo repository.BuildRepository,
 	keyboardRepo repository.KeyboardRepository,
+	switchRepo repository.SwitchRepository,
+	keycapSetRepo repository.KeycapSetRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListBuildsInput, schema.ListBuildsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListBuildsInput) (*mcp.CallToolResult, schema.ListBuildsOutput, error) {
 		ownerID, err := resolveOwnerID(ctx, in.UserID)
@@ -92,6 +95,19 @@ func handleListBuilds(
 			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
 		}
 
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
+		}
+
+		isOwner := authz.IsOwner(ctx, ownerID)
+		mapper := repomcp.Build{
+			KeyboardRepo:  keyboardRepo,
+			SwitchRepo:    switchRepo,
+			KeycapSetRepo: keycapSetRepo,
+		}
+
 		items := make([]schema.BuildSummary, len(builds))
 		errs := make([]error, len(builds))
 
@@ -101,7 +117,7 @@ func handleListBuilds(
 			go func(i int, b repository.Build) {
 				defer wg.Done()
 
-				summary, err := repomcp.Build{KeyboardRepo: keyboardRepo}.ToMCPSummary(ctx, b)
+				summary, err := mapper.ToMCPSummary(ctx, b, isOwner, ownerPrefs)
 				if err != nil {
 					errs[i] = fmt.Errorf("mapping build %q to MCP summary: %w", b.ID, err)
 					return

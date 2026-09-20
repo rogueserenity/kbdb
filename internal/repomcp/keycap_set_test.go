@@ -367,3 +367,22 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitFromMCP_NoPurchase_MapsToZeroValue() 
 
 	s.Equal(repository.KeycapKitPurchase{}, out.Purchase)
 }
+
+func (s *KeycapSetToMCPSuite) TestOwner_IncludesSetsOwnVisibility() {
+	out := KeycapSet{}.ToMCPSummary(repository.KeycapSet{
+		ID:         "ks-1",
+		Visibility: repository.VisibilityPrivate,
+	}, true, repository.ProfilePreferences{})
+
+	s.Require().NotNil(out.Visibility)
+	s.Equal("private", *out.Visibility)
+}
+
+func (s *KeycapSetToMCPSuite) TestNonOwner_OmitsVisibility() {
+	out := KeycapSet{}.ToMCPSummary(repository.KeycapSet{
+		ID:         "ks-1",
+		Visibility: repository.VisibilityPublic,
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Nil(out.Visibility)
+}

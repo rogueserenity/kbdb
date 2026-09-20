@@ -129,6 +129,10 @@ func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOw
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = kb.Purchase.Price
 	}
+	if isOwner {
+		v := api.Visibility(kb.Visibility)
+		summary.Visibility = &v
+	}
 
 	return summary, nil
 }

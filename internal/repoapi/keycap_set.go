@@ -109,6 +109,10 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 		}
 		summary.TotalCost = sumKnownCosts(prices...)
 	}
+	if isOwner {
+		v := api.Visibility(set.Visibility)
+		summary.Visibility = &v
+	}
 
 	primaryKit := findKit(validPrimaryKitID(set.PrimaryKitID, set.Kits), set.Kits)
 	if primaryKit != nil && primaryKit.ImagePath != nil {

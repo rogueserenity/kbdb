@@ -74,6 +74,7 @@ type listKeyboard struct {
 	Name        string   `json:"name"`
 	OrderStatus *string  `json:"order_status"`
 	Price       *float64 `json:"price"`
+	Visibility  *string  `json:"visibility"`
 }
 
 type listOutput struct {

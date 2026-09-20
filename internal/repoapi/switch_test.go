@@ -411,3 +411,24 @@ func (s *SwitchToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {
 	s.Equal(repository.SwitchSpring{}, sw.Spring)
 	s.Equal(repository.SwitchPurchase{}, sw.Purchase)
 }
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_Owner_IncludesVisibility() {
+	sw := fullRepoSwitch()
+	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
+
+	summary, err := sr.ToAPISummary(s.T().Context(), sw, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(summary.Visibility)
+	s.Equal(api.Visibility(sw.Visibility), *summary.Visibility)
+}
+
+func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwner_OmitsVisibility() {
+	sw := fullRepoSwitch()
+	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
+
+	summary, err := sr.ToAPISummary(s.T().Context(), sw, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Nil(summary.Visibility)
+}

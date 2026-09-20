@@ -348,3 +348,22 @@ func (s *SwitchFromMCPSuite) TestNilGroups_MapToZeroValues() {
 	s.Nil(out.Purchase.DeliveryDate)
 	s.Nil(out.Purchase.OrderStatus)
 }
+
+func (s *SwitchToMCPSummarySuite) TestOwner_IncludesVisibility() {
+	out := Switch{}.ToMCPSummary(repository.Switch{
+		ID:         "sw-1",
+		Visibility: repository.VisibilityPrivate,
+	}, true, repository.ProfilePreferences{})
+
+	s.Require().NotNil(out.Visibility)
+	s.Equal("private", *out.Visibility)
+}
+
+func (s *SwitchToMCPSummarySuite) TestNonOwner_OmitsVisibility() {
+	out := Switch{}.ToMCPSummary(repository.Switch{
+		ID:         "sw-1",
+		Visibility: repository.VisibilityPublic,
+	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+
+	s.Nil(out.Visibility)
+}

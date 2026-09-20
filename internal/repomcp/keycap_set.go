@@ -67,6 +67,10 @@ func (ks KeycapSet) ToMCPSummary(set repository.KeycapSet, isOwner bool, ownerPr
 		}
 		summary.TotalCost = sumKnownCosts(prices...)
 	}
+	if isOwner {
+		v := string(set.Visibility)
+		summary.Visibility = &v
+	}
 
 	return summary
 }

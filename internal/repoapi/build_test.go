@@ -1090,3 +1090,31 @@ func (s *BuildToAPISummarySuite) TestDoesNotResolveKitImages() {
 	_, err := d.mapper().ToAPISummary(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 }
+
+func (s *BuildToAPISummarySuite) TestOwner_IncludesVisibility() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1"}, nil)
+
+	out, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Visibility)
+	s.Equal(api.Visibility(b.Visibility), *out.Visibility)
+}
+
+func (s *BuildToAPISummarySuite) TestNonOwner_OmitsVisibility() {
+	b := fullRepoBuild()
+
+	d := newBuildToAPIDeps(s.T())
+	d.expectFullyResolvable()
+
+	out, err := d.callSummaryWithPrefs(
+		context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Nil(out.Visibility)
+}

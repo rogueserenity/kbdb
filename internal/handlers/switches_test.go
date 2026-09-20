@@ -53,7 +53,7 @@ func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
 			return len(vis) == 3
 		}), 20, "").
-		Return([]repository.Switch{{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear"}}, "", nil)
+		Return([]repository.Switch{{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPrivate}}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	rec := httptest.NewRecorder()
@@ -65,7 +65,8 @@ func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
 	var got api.SwitchListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	id, brand, name, typ := "sw1", "Gateron", "Yellow", "Linear"
-	s.Equal(&[]api.SwitchSummary{{Id: &id, Brand: &brand, Name: &name, Type: &typ}}, got.Items)
+	visibility := api.Private
+	s.Equal(&[]api.SwitchSummary{{Id: &id, Brand: &brand, Name: &name, Type: &typ, Visibility: &visibility}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 

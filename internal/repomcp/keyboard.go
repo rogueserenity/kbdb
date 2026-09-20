@@ -48,6 +48,10 @@ func (k Keyboard) ToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs 
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = kb.Purchase.Price
 	}
+	if isOwner {
+		v := string(kb.Visibility)
+		summary.Visibility = &v
+	}
 
 	return summary
 }

@@ -54,7 +54,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_Owner_RequestsAllVisibilities()
 		List(mock.Anything, "alice", mock.MatchedBy(func(vis []repository.Visibility) bool {
 			return len(vis) == 3
 		}), 20, "").
-		Return([]repository.KeycapSet{{ID: "ks1", Brand: "GMK", Name: "Laser"}}, "", nil)
+		Return([]repository.KeycapSet{{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPrivate}}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
 	rec := httptest.NewRecorder()
@@ -66,7 +66,8 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_Owner_RequestsAllVisibilities()
 	var got api.KeycapSetListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	id, brand, name := "ks1", "GMK", "Laser"
-	s.Equal(&[]api.KeycapSetSummary{{Id: &id, Brand: &brand, Name: &name}}, got.Items)
+	visibility := api.Private
+	s.Equal(&[]api.KeycapSetSummary{{Id: &id, Brand: &brand, Name: &name, Visibility: &visibility}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 

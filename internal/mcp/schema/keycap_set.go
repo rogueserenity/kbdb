@@ -22,7 +22,8 @@ type KeycapSetSummary struct {
 	PrimaryKitID       *string  `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit whose image represents this set, if one is designated and it still exists"`
 	PrimaryKitHasImage bool     `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file"`
 	OrderStatus        *string  `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
-	TotalCost          *float64 `json:"total_cost,omitempty" jsonschema:"total cost of the set's kits with a known purchase price; kits with no known price are excluded rather than treated as zero, so this may undercount; omitted if the caller doesn't own this set"`
+	TotalCost          *float64 `json:"total_cost,omitempty" jsonschema:"total cost of the set's kits with a known purchase price; kits with no known price are excluded rather than treated as zero, so this may undercount; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Visibility         *string  `json:"visibility,omitempty" jsonschema:"who can read this keycap set, set on the keycap set itself rather than derived from its kits; one of \"public\", \"authenticated\", \"private\"; only ever present for the set's owner"`
 }
 
 // GetKeycapSetInput is the get_keycap_set tool input.

@@ -55,6 +55,10 @@ func (s Switch) ToMCPSummary(sw repository.Switch, isOwner bool, ownerPrefs repo
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = sw.Purchase.Price
 	}
+	if isOwner {
+		v := string(sw.Visibility)
+		summary.Visibility = &v
+	}
 
 	return summary
 }

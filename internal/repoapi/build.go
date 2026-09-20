@@ -177,6 +177,10 @@ func (b Build) ToAPISummary(ctx context.Context, build repository.Build, isOwner
 		}
 		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
+	if isOwner {
+		v := api.Visibility(build.Visibility)
+		summary.Visibility = &v
+	}
 
 	return summary, nil
 }
