@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -184,7 +185,7 @@ func (s *PresignGetSuite) TestRealSigner_XAmzExpiresMatchesReportedExpiryAndFits
 	s.Require().NoError(err)
 	q := parsed.Query()
 
-	s.Equal("ASIATESTTESTTESTTEST", q.Get("X-Amz-Credential")[:20])
+	s.Equal("test-temporary-key", strings.SplitN(q.Get("X-Amz-Credential"), "/", 2)[0])
 	s.Equal("session-token", q.Get("X-Amz-Security-Token"))
 
 	urlTTL, err := time.ParseDuration(q.Get("X-Amz-Expires") + "s")

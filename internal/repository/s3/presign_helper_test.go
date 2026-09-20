@@ -18,7 +18,7 @@ func (f fakeCredentials) Retrieve(context.Context) (aws.Credentials, error) {
 
 func expiringCredentials(d time.Duration) fakeCredentials {
 	return fakeCredentials{creds: aws.Credentials{
-		AccessKeyID:     "ASIATESTTESTTESTTEST",
+		AccessKeyID:     "test-temporary-key",
 		SecretAccessKey: "secret",
 		SessionToken:    "session-token",
 		CanExpire:       true,
@@ -28,7 +28,7 @@ func expiringCredentials(d time.Duration) fakeCredentials {
 
 func staticCredentials() fakeCredentials {
 	return fakeCredentials{creds: aws.Credentials{
-		AccessKeyID:     "AKIATESTTESTTESTTEST",
+		AccessKeyID:     "test-static-key",
 		SecretAccessKey: "secret",
 	}}
 }
