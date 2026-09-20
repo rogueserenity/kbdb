@@ -296,8 +296,6 @@ func (s *BuildToMCPSummarySuite) TestNonOwner_OmitsVisibility() {
 		Get(mock.Anything, "alice", "kb-1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
 
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way price is.
 	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(
 		context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
@@ -349,7 +347,6 @@ func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
 		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
-	// 180 keyboard + (70/70)*10 switches + 130 kit + 20 stabs.
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(340.0, *out.TotalCost, 0.001)
 }
@@ -366,8 +363,6 @@ func (s *BuildToMCPSummarySuite) TestPriceHidden_SkipsComponentLookupsEntirely()
 		Get(mock.Anything, "alice", "kb-1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
 
-	// Switch/keycap repos are left nil: if the mapper consulted them with
-	// price hidden, this would panic rather than quietly pass.
 	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(
 		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: false})
 	s.Require().NoError(err)

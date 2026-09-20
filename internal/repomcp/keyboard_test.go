@@ -308,8 +308,6 @@ func (s *KeyboardToMCPSummarySuite) TestOwner_IncludesVisibility() {
 }
 
 func (s *KeyboardToMCPSummarySuite) TestNonOwner_OmitsVisibility() {
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way price is.
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:         "kb-1",
 		Visibility: repository.VisibilityPublic,

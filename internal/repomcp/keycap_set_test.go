@@ -379,8 +379,6 @@ func (s *KeycapSetToMCPSuite) TestOwner_IncludesSetsOwnVisibility() {
 }
 
 func (s *KeycapSetToMCPSuite) TestNonOwner_OmitsVisibility() {
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way total_cost is.
 	out := KeycapSet{}.ToMCPSummary(repository.KeycapSet{
 		ID:         "ks-1",
 		Visibility: repository.VisibilityPublic,

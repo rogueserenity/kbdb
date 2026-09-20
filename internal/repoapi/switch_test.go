@@ -427,8 +427,6 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwner_OmitsVisibility() {
 	sw := fullRepoSwitch()
 	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
 
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way price is.
 	summary, err := sr.ToAPISummary(s.T().Context(), sw, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
 

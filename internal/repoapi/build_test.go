@@ -1112,8 +1112,6 @@ func (s *BuildToAPISummarySuite) TestNonOwner_OmitsVisibility() {
 	d := newBuildToAPIDeps(s.T())
 	d.expectFullyResolvable()
 
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way total_cost is.
 	out, err := d.callSummaryWithPrefs(
 		context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)

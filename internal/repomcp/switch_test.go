@@ -360,8 +360,6 @@ func (s *SwitchToMCPSummarySuite) TestOwner_IncludesVisibility() {
 }
 
 func (s *SwitchToMCPSummarySuite) TestNonOwner_OmitsVisibility() {
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way price is.
 	out := Switch{}.ToMCPSummary(repository.Switch{
 		ID:         "sw-1",
 		Visibility: repository.VisibilityPublic,

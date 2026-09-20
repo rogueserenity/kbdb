@@ -570,8 +570,6 @@ func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwner_OmitsVisibility
 
 	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
 
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way total_cost is.
 	summary, err := kr.ToAPISummary(
 		context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)

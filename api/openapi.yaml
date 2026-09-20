@@ -1610,8 +1610,7 @@ components:
           $ref: "#/components/schemas/Visibility"
           description: >
             Same as Keyboard.visibility - omitted for a keyboard the
-            caller doesn't own. Unlike price, no owner preference can
-            expose this to anyone else.
+            caller doesn't own.
 
     KeyboardListPage:
       type: object
@@ -1791,8 +1790,7 @@ components:
           $ref: "#/components/schemas/Visibility"
           description: >
             Same as Switch.visibility - omitted for a switch the caller
-            doesn't own. Unlike price, no owner preference can expose
-            this to anyone else.
+            doesn't own.
 
     SwitchListPage:
       type: object
@@ -2125,9 +2123,7 @@ components:
           description: >
             Same as KeycapSet.visibility - the set's own value, not
             derived from its kits (kits have no visibility of their own).
-            Omitted for a keycap set the caller doesn't own. Unlike
-            total_cost, no owner preference can expose this to anyone
-            else.
+            Omitted for a keycap set the caller doesn't own.
 
     KeycapSetListPage:
       type: object
@@ -2459,8 +2455,7 @@ components:
           $ref: "#/components/schemas/Visibility"
           description: >
             Same as Build.visibility - omitted for a build the caller
-            doesn't own. Unlike total_cost, no owner preference can
-            expose this to anyone else.
+            doesn't own.
 
     BuildListPage:
       type: object

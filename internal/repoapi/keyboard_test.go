@@ -445,8 +445,6 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwner_OmitsVisibility()
 	kb := fullRepoKeyboard()
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
 
-	// ShowPriceToOthers true, so only visibility is withheld here - it is
-	// owner-only outright, not preference-gated the way price is.
 	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: true})
 	s.Require().NoError(err)
 

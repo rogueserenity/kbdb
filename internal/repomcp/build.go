@@ -58,11 +58,9 @@ func (b Build) FromMCP(in schema.BuildInput) repository.Build {
 
 // ToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.Build.ToAPISummary]'s
 // KeyboardRepo.Get denormalization but reports HasImage rather than a
-// presigned URL. TotalCost is shown per ownerPrefs.ShowPriceToMe (owner)
-// or ownerPrefs.ShowPriceToOthers (non-owner) - unlike [Build.ToMCP], the
-// owner isn't unconditionally shown price here - and the switches and
-// keycap kits it sums are only fetched when it will be shown, since cost
-// is the only thing this uses them for.
+// presigned URL. Unlike [Build.ToMCP], the owner isn't unconditionally
+// shown price here. Switches and keycap kits are only fetched when
+// TotalCost will be shown, since cost is all this uses them for.
 func (b Build) ToMCPSummary(
 	ctx context.Context, build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences,
 ) (schema.BuildSummary, error) {
@@ -111,14 +109,12 @@ func (b Build) ToMCPSummary(
 	return summary, nil
 }
 
-// switchesCost sums the cost of entries whose switch has a known per-unit
-// price, mirroring
+// switchesCost mirrors
 // [github.com/rogueserenity/kbdb/internal/repoapi.Build.switchEntriesResolvedToAPI]'s
-// calculation: switches are bought in bulk (SwitchPurchase.Price is the
-// total for Quantity units, not a per-unit price), so an entry contributes
-// (Price/Quantity)*Count only when Quantity is set and non-zero; otherwise
-// its cost is unknown and excluded rather than guessed at. An entry whose
-// switch no longer exists contributes nothing rather than failing.
+// calculation: switches are bought in bulk, so
+// [github.com/rogueserenity/kbdb/internal/repository.SwitchPurchase.Price]
+// is the total for Quantity units, not a per-unit price. An entry without
+// a Quantity is excluded rather than guessed at.
 func (b Build) switchesCost(ctx context.Context, ownerID string, entries []repository.BuildSwitchEntry) (*float64, error) {
 	costs := make([]*float64, 0, len(entries))
 
@@ -140,10 +136,10 @@ func (b Build) switchesCost(ctx context.Context, ownerID string, entries []repos
 	return sumKnownCosts(costs...), nil
 }
 
-// keycapKitsCost sums the price of each entry's kit, mirroring
+// keycapKitsCost mirrors
 // [github.com/rogueserenity/kbdb/internal/repoapi.Build.keycapKitEntriesResolvedToAPI]'s
-// calculation. An entry whose keycap set - or whose kit within it - no
-// longer exists contributes nothing rather than failing.
+// calculation. A kit that no longer exists contributes nothing rather
+// than failing the whole summary.
 func (b Build) keycapKitsCost(
 	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
 ) (*float64, error) {
