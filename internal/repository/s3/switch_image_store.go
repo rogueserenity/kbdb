@@ -13,40 +13,27 @@ import (
 
 // SwitchImageStore is the S3-backed repository.SwitchImageStore.
 type SwitchImageStore struct {
-	client    s3API
-	presign   s3PresignAPI
-	bucket    string
-	getExpiry time.Duration
+	client  s3API
+	presign s3PresignAPI
+	bucket  string
+	creds   credentialsProvider
 }
 
 var _ repository.SwitchImageStore = (*SwitchImageStore)(nil)
 
 // NewSwitchImageStore returns a SwitchImageStore backed by client.
-func NewSwitchImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, getExpiry time.Duration) *SwitchImageStore {
+func NewSwitchImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, creds aws.CredentialsProvider) *SwitchImageStore {
 	return &SwitchImageStore{
-		client:    client,
-		presign:   presign,
-		bucket:    bucket,
-		getExpiry: getExpiry,
+		client:  client,
+		presign: presign,
+		bucket:  bucket,
+		creds:   creds,
 	}
 }
 
 // PresignGet implements repository.SwitchImageStore.
-func (s *SwitchImageStore) PresignGet(ctx context.Context, key repository.SwitchImageKey) (string, error) {
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(string(key)),
-	}, func(o *s3.PresignOptions) {
-		// Zero getExpiry falls through to the SDK's own default (15m).
-		if s.getExpiry > 0 {
-			o.Expires = s.getExpiry
-		}
-	})
-	if err != nil {
-		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)
-	}
-
-	return req.URL, nil
+func (s *SwitchImageStore) PresignGet(ctx context.Context, key repository.SwitchImageKey) (url string, expiresAt time.Time, err error) {
+	return presignGet(ctx, s.creds, s.presign, s.bucket, string(key))
 }
 
 // PresignPut implements repository.SwitchImageStore.

@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 	mock "github.com/stretchr/testify/mock"
@@ -105,7 +106,7 @@ func (_c *MockKeyboardImageStore_DeleteKeyboardImage_Call) RunAndReturn(run func
 }
 
 // PresignGetKeyboardImage provides a mock function for the type MockKeyboardImageStore
-func (_mock *MockKeyboardImageStore) PresignGetKeyboardImage(ctx context.Context, key repository.KeyboardImageKey) (string, error) {
+func (_mock *MockKeyboardImageStore) PresignGetKeyboardImage(ctx context.Context, key repository.KeyboardImageKey) (string, time.Time, error) {
 	ret := _mock.Called(ctx, key)
 
 	if len(ret) == 0 {
@@ -113,8 +114,9 @@ func (_mock *MockKeyboardImageStore) PresignGetKeyboardImage(ctx context.Context
 	}
 
 	var r0 string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey) (string, error)); ok {
+	var r1 time.Time
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey) (string, time.Time, error)); ok {
 		return returnFunc(ctx, key)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey) string); ok {
@@ -122,12 +124,17 @@ func (_mock *MockKeyboardImageStore) PresignGetKeyboardImage(ctx context.Context
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.KeyboardImageKey) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.KeyboardImageKey) time.Time); ok {
 		r1 = returnFunc(ctx, key)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(time.Time)
 	}
-	return r0, r1
+	if returnFunc, ok := ret.Get(2).(func(context.Context, repository.KeyboardImageKey) error); ok {
+		r2 = returnFunc(ctx, key)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
 }
 
 // MockKeyboardImageStore_PresignGetKeyboardImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PresignGetKeyboardImage'
@@ -160,12 +167,12 @@ func (_c *MockKeyboardImageStore_PresignGetKeyboardImage_Call) Run(run func(ctx 
 	return _c
 }
 
-func (_c *MockKeyboardImageStore_PresignGetKeyboardImage_Call) Return(url string, err error) *MockKeyboardImageStore_PresignGetKeyboardImage_Call {
-	_c.Call.Return(url, err)
+func (_c *MockKeyboardImageStore_PresignGetKeyboardImage_Call) Return(url string, expiresAt time.Time, err error) *MockKeyboardImageStore_PresignGetKeyboardImage_Call {
+	_c.Call.Return(url, expiresAt, err)
 	return _c
 }
 
-func (_c *MockKeyboardImageStore_PresignGetKeyboardImage_Call) RunAndReturn(run func(ctx context.Context, key repository.KeyboardImageKey) (string, error)) *MockKeyboardImageStore_PresignGetKeyboardImage_Call {
+func (_c *MockKeyboardImageStore_PresignGetKeyboardImage_Call) RunAndReturn(run func(ctx context.Context, key repository.KeyboardImageKey) (string, time.Time, error)) *MockKeyboardImageStore_PresignGetKeyboardImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

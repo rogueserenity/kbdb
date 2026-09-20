@@ -11,9 +11,8 @@ import (
 
 // Switch maps repository.Switch to and from its wire representations.
 type Switch struct {
-	Images     repository.SwitchImageStore
-	Repo       repository.SwitchRepository
-	PresignTTL time.Duration
+	Images repository.SwitchImageStore
+	Repo   repository.SwitchRepository
 }
 
 // ToAPI maps a repository.Switch to its wire representation. The owner
@@ -107,8 +106,8 @@ func (s Switch) ToAPISummary(ctx context.Context, sw repository.Switch, isOwner 
 func (s Switch) resolveSwitchImageURL(ctx context.Context, sw repository.Switch) (string, error) {
 	path := *sw.ImagePath
 
-	return resolveImageURL(sw.GetURL, sw.GetURLExpiresAt, s.PresignTTL,
-		func() (string, error) { return s.Images.PresignGet(ctx, path) },
+	return resolveImageURL(sw.GetURL, sw.GetURLExpiresAt,
+		func() (string, time.Time, error) { return s.Images.PresignGet(ctx, path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := s.Repo.SetImageGetCache(ctx, sw.UserID, sw.ID, path, url, expiresAt)
 			return err

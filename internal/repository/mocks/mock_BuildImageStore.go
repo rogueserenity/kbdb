@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 	mock "github.com/stretchr/testify/mock"
@@ -105,7 +106,7 @@ func (_c *MockBuildImageStore_DeleteBuildImage_Call) RunAndReturn(run func(ctx c
 }
 
 // PresignGetBuildImage provides a mock function for the type MockBuildImageStore
-func (_mock *MockBuildImageStore) PresignGetBuildImage(ctx context.Context, key repository.BuildImageKey) (string, error) {
+func (_mock *MockBuildImageStore) PresignGetBuildImage(ctx context.Context, key repository.BuildImageKey) (string, time.Time, error) {
 	ret := _mock.Called(ctx, key)
 
 	if len(ret) == 0 {
@@ -113,8 +114,9 @@ func (_mock *MockBuildImageStore) PresignGetBuildImage(ctx context.Context, key 
 	}
 
 	var r0 string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey) (string, error)); ok {
+	var r1 time.Time
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey) (string, time.Time, error)); ok {
 		return returnFunc(ctx, key)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey) string); ok {
@@ -122,12 +124,17 @@ func (_mock *MockBuildImageStore) PresignGetBuildImage(ctx context.Context, key 
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.BuildImageKey) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.BuildImageKey) time.Time); ok {
 		r1 = returnFunc(ctx, key)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(time.Time)
 	}
-	return r0, r1
+	if returnFunc, ok := ret.Get(2).(func(context.Context, repository.BuildImageKey) error); ok {
+		r2 = returnFunc(ctx, key)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
 }
 
 // MockBuildImageStore_PresignGetBuildImage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PresignGetBuildImage'
@@ -160,12 +167,12 @@ func (_c *MockBuildImageStore_PresignGetBuildImage_Call) Run(run func(ctx contex
 	return _c
 }
 
-func (_c *MockBuildImageStore_PresignGetBuildImage_Call) Return(url string, err error) *MockBuildImageStore_PresignGetBuildImage_Call {
-	_c.Call.Return(url, err)
+func (_c *MockBuildImageStore_PresignGetBuildImage_Call) Return(url string, expiresAt time.Time, err error) *MockBuildImageStore_PresignGetBuildImage_Call {
+	_c.Call.Return(url, expiresAt, err)
 	return _c
 }
 
-func (_c *MockBuildImageStore_PresignGetBuildImage_Call) RunAndReturn(run func(ctx context.Context, key repository.BuildImageKey) (string, error)) *MockBuildImageStore_PresignGetBuildImage_Call {
+func (_c *MockBuildImageStore_PresignGetBuildImage_Call) RunAndReturn(run func(ctx context.Context, key repository.BuildImageKey) (string, time.Time, error)) *MockBuildImageStore_PresignGetBuildImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

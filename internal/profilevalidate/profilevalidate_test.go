@@ -131,14 +131,14 @@ func (s *ValidateSuite) TestDiscordUsernameValidShapes_OK() {
 
 func (s *ValidateSuite) TestDiscordUsernameInvalidShapes_Flagged() {
 	cases := []string{
-		"A1",                   // uppercase
-		"has space",            // space
-		".lead",                // leading period
-		"trail_",               // trailing underscore
-		"a..b",                 // consecutive periods
-		"x",                    // too short
+		"A1",                    // uppercase
+		"has space",             // space
+		".lead",                 // leading period
+		"trail_",                // trailing underscore
+		"a..b",                  // consecutive periods
+		"x",                     // too short
 		strings.Repeat("x", 33), // too long
-		"na@me",                // disallowed character
+		"na@me",                 // disallowed character
 	}
 	for _, v := range cases {
 		p := valid()

@@ -14,9 +14,12 @@ import (
 	"time"
 
 	"github.com/alecthomas/kong"
+	"github.com/aws/aws-sdk-go-v2/aws"
 	awsconfig "github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
 	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
 
 	"github.com/rogueserenity/kbdb/internal/auth"
 	"github.com/rogueserenity/kbdb/internal/repository/dynamo"
@@ -73,13 +76,27 @@ func main() {
 	})
 	// All entities' images currently live in the same bucket.
 	presignClient := s3.NewPresignClient(s3Client)
-	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
-	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
-	keyboardImageStore := imagestore.NewKeyboardImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
-	switchImageStore := imagestore.NewSwitchImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
-	profileImageStore := imagestore.NewProfileImageStore(s3Client, presignClient, cfg.ImagesBucketName, cfg.GetPresignTTL)
 
-	handler := router.New(verifier, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, profileRepo, profileImageStore, cfg.OIDCIssuerURL, cfg.IDPConsentPublicToken, Version, strings.Split(cfg.LogoutReturnOrigins, ","), cfg.GetPresignTTL)
+	// Presigned GETs are signed by an assumed role rather than the ambient
+	// Lambda credentials - see Config.PresignRoleARN. CredentialsCache keeps
+	// this to one AssumeRole per session, not one per signature.
+	presignCreds := awsCfg.Credentials
+	if cfg.PresignRoleARN != "" {
+		presignCreds = aws.NewCredentialsCache(
+			stscreds.NewAssumeRoleProvider(sts.NewFromConfig(awsCfg), cfg.PresignRoleARN,
+				func(o *stscreds.AssumeRoleOptions) {
+					o.RoleSessionName = "kbdb-presign"
+					o.Duration = cfg.PresignSessionDuration
+				}),
+		)
+	}
+	keycapKitImageStore := imagestore.NewKeycapKitImageStore(s3Client, presignClient, cfg.ImagesBucketName, presignCreds)
+	buildImageStore := imagestore.NewBuildImageStore(s3Client, presignClient, cfg.ImagesBucketName, presignCreds)
+	keyboardImageStore := imagestore.NewKeyboardImageStore(s3Client, presignClient, cfg.ImagesBucketName, presignCreds)
+	switchImageStore := imagestore.NewSwitchImageStore(s3Client, presignClient, cfg.ImagesBucketName, presignCreds)
+	profileImageStore := imagestore.NewProfileImageStore(s3Client, presignClient, cfg.ImagesBucketName, presignCreds)
+
+	handler := router.New(verifier, switchRepo, switchImageStore, keyboardRepo, keyboardImageStore, keycapSetRepo, keycapKitImageStore, buildRepo, buildImageStore, profileRepo, profileImageStore, cfg.OIDCIssuerURL, cfg.IDPConsentPublicToken, Version, strings.Split(cfg.LogoutReturnOrigins, ","))
 
 	// ReadHeaderTimeout bounds a slow/malicious client independently of
 	// Lambda's own per-invocation timeout.

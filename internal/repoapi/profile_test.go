@@ -3,6 +3,7 @@ package repoapi
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -76,7 +77,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
 	images := mocks.NewMockProfileImageStore(s.T())
 	images.EXPECT().
 		PresignGet(mock.Anything, repository.ProfileImageKey("profiles/user-alice/avatar")).
-		Return("https://example.com/avatar", nil)
+		Return("https://example.com/avatar", presignExpiry(), nil)
 	repo := mocks.NewMockProfileRepository(s.T())
 	repo.EXPECT().
 		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -97,7 +98,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
 
 func (s *ProfileMapperSuite) TestProfileToAPI_PresignError_Propagates() {
 	images := mocks.NewMockProfileImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, mock.Anything).Return("", errors.New("s3 down"))
+	images.EXPECT().PresignGet(mock.Anything, mock.Anything).Return("", time.Time{}, errors.New("s3 down"))
 
 	pr := Profile{Images: images}
 	_, err := pr.ToAPI(s.T().Context(), repository.Profile{

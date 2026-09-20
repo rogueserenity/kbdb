@@ -362,7 +362,6 @@ func (s *SwitchRepositorySuite) TestDelete_DeleteItemError_Propagates() {
 	s.Require().Error(err)
 }
 
-
 func (s *SwitchRepositorySuite) TestSetImagePath_Succeeds() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {

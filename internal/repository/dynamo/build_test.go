@@ -322,7 +322,6 @@ func (s *BuildRepositorySuite) TestCreate_NoUserIDInContext_ReturnsError() {
 	s.Nil(b)
 }
 
-
 // storedBuild is a GetItemOutput for build b1 referencing keyboard kb1,
 // optionally with the given image id->seq pairs in its images map.
 func (s *BuildRepositorySuite) storedBuild(seqByImageID map[string]int) *dynamodb.GetItemOutput {

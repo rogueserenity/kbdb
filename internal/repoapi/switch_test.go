@@ -257,7 +257,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedU
 	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
 	sw.ImagePath = &switchImageKey
 	images := mocks.NewMockSwitchImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", presignExpiry(), nil)
 	repo := mocks.NewMockSwitchRepository(s.T())
 	repo.EXPECT().
 		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -276,7 +276,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_PresignError_Propagates() {
 	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
 	sw.ImagePath = &switchImageKey
 	images := mocks.NewMockSwitchImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", time.Time{}, errors.New("s3: access denied"))
 
 	sr := Switch{Images: images}
 	_, err := sr.ToAPISummary(s.T().Context(), sw, true, repository.ProfilePreferences{})
@@ -289,7 +289,7 @@ func (s *SwitchToAPISuite) TestImagePresent_ReturnsPresignedURL() {
 	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
 	sw.ImagePath = &switchImageKey
 	images := mocks.NewMockSwitchImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", nil)
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("https://example.com/img", presignExpiry(), nil)
 	repo := mocks.NewMockSwitchRepository(s.T())
 	repo.EXPECT().
 		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
@@ -318,7 +318,7 @@ func (s *SwitchToAPISuite) TestImagePresignError_Propagates() {
 	switchImageKey := repository.SwitchImageKey("switches/alice/sw1/image")
 	sw.ImagePath = &switchImageKey
 	images := mocks.NewMockSwitchImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", errors.New("s3: access denied"))
+	images.EXPECT().PresignGet(mock.Anything, *sw.ImagePath).Return("", time.Time{}, errors.New("s3: access denied"))
 
 	sr := Switch{Images: images}
 	_, err := sr.ToAPI(s.T().Context(), sw, true, repository.ProfilePreferences{})

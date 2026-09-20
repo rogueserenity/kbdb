@@ -218,4 +218,3 @@ func (s *BuildRefSuite) TestFindBuildsReferencingKeycapSet_UsesBeginsWithPrefix(
 	s.Require().NoError(err)
 	s.Empty(buildIDs)
 }
-

@@ -28,7 +28,12 @@ func TestKeycapKitImageStoreSuite(t *testing.T) {
 func (s *KeycapKitImageStoreSuite) SetupTest() {
 	s.mockClient = mocks.NewMockS3API(s.T())
 	s.mockPresign = mocks.NewMockS3PresignAPI(s.T())
-	s.store = &KeycapKitImageStore{client: s.mockClient, presign: s.mockPresign, bucket: "images-bucket"}
+	s.store = &KeycapKitImageStore{
+		client:  s.mockClient,
+		presign: s.mockPresign,
+		bucket:  "images-bucket",
+		creds:   expiringCredentials(time.Hour),
+	}
 }
 
 func (s *KeycapKitImageStoreSuite) TestPresignGet_Succeeds() {
@@ -38,14 +43,18 @@ func (s *KeycapKitImageStoreSuite) TestPresignGet_Succeeds() {
 		}), mock.Anything).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
 
-	url, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
+	before := time.Now()
+
+	url, expiresAt, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().NoError(err)
 	s.Equal("https://example.com/presigned-get", url)
+	s.WithinDuration(before.Add(time.Hour-presignMargin), expiresAt, 5*time.Second,
+		"expiresAt must track the signing credentials lifetime, less the safety margin")
 }
 
-func (s *KeycapKitImageStoreSuite) TestPresignGet_AppliesConfiguredExpiry() {
-	s.store.getExpiry = 24 * time.Hour
+func (s *KeycapKitImageStoreSuite) TestPresignGet_CapsExpiryToCredentialLifetime() {
+	s.store.creds = expiringCredentials(10 * time.Minute)
 
 	s.mockPresign.EXPECT().
 		PresignGetObject(mock.Anything, mock.Anything, mock.MatchedBy(func(optFns []func(*s3.PresignOptions)) bool {
@@ -54,13 +63,64 @@ func (s *KeycapKitImageStoreSuite) TestPresignGet_AppliesConfiguredExpiry() {
 				fn(&opts)
 			}
 
-			return opts.Expires == 24*time.Hour
+			want := 10*time.Minute - presignMargin
+
+			return opts.Expires > want-2*time.Second && opts.Expires <= want
 		})).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
 
-	_, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
+	_, _, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().NoError(err)
+}
+
+func (s *KeycapKitImageStoreSuite) TestPresignGet_StaticCredentials_UsesFixedTTL() {
+	s.store.creds = staticCredentials()
+
+	s.mockPresign.EXPECT().
+		PresignGetObject(mock.Anything, mock.Anything, mock.MatchedBy(func(optFns []func(*s3.PresignOptions)) bool {
+			var opts s3.PresignOptions
+			for _, fn := range optFns {
+				fn(&opts)
+			}
+
+			return opts.Expires == staticCredentialsTTL
+		})).
+		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
+
+	_, _, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeycapKitImageStoreSuite) TestPresignGet_CredentialsInsideMargin_StillSignsForWhatIsLeft() {
+	window := presignMargin / 2
+	s.store.creds = expiringCredentials(window)
+
+	s.mockPresign.EXPECT().
+		PresignGetObject(mock.Anything, mock.Anything, mock.MatchedBy(func(optFns []func(*s3.PresignOptions)) bool {
+			var opts s3.PresignOptions
+			for _, fn := range optFns {
+				fn(&opts)
+			}
+
+			return opts.Expires == window/2
+		})).
+		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-get"}, nil)
+
+	url, expiresAt, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().NoError(err)
+	s.Equal("https://example.com/presigned-get", url)
+	s.WithinDuration(time.Now().Add(window/2), expiresAt, 2*time.Second)
+}
+
+func (s *KeycapKitImageStoreSuite) TestPresignGet_CredentialsAlreadyExpired_Fails() {
+	s.store.creds = expiringCredentials(-time.Minute)
+
+	_, _, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
+
+	s.Require().ErrorContains(err, "signing credentials expired")
 }
 
 func (s *KeycapKitImageStoreSuite) TestPresignGet_SDKError_Propagates() {
@@ -68,7 +128,7 @@ func (s *KeycapKitImageStoreSuite) TestPresignGet_SDKError_Propagates() {
 		PresignGetObject(mock.Anything, mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3: access denied"))
 
-	url, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
+	url, _, err := s.store.PresignGet(s.T().Context(), "keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.Require().ErrorContains(err, "s3: access denied")
 	s.Empty(url)
@@ -119,4 +179,3 @@ func (s *KeycapKitImageStoreSuite) TestDelete_SDKError_Propagates() {
 
 	s.Require().ErrorContains(err, "s3: access denied")
 }
-

@@ -584,4 +584,3 @@ func (s *KeyboardRepositorySuite) storedKeyboard() *dynamodb.GetItemOutput {
 		"brand":   &types.AttributeValueMemberS{Value: "Keychron"},
 	}}
 }
-

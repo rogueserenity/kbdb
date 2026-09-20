@@ -11,9 +11,8 @@ import (
 
 // Profile maps repository.Profile to and from its wire representations.
 type Profile struct {
-	Images     repository.ProfileImageStore
-	Repo       repository.ProfileRepository
-	PresignTTL time.Duration
+	Images repository.ProfileImageStore
+	Repo   repository.ProfileRepository
 }
 
 // ToAPI maps a repository.Profile to its wire shape, presigning the avatar
@@ -67,8 +66,8 @@ func (p Profile) ToAPISummary(ctx context.Context, prof repository.Profile) (api
 func (p Profile) resolveProfileImageURL(ctx context.Context, prof repository.Profile) (string, error) {
 	path := *prof.AvatarPath
 
-	return resolveImageURL(prof.GetURL, prof.GetURLExpiresAt, p.PresignTTL,
-		func() (string, error) { return p.Images.PresignGet(ctx, path) },
+	return resolveImageURL(prof.GetURL, prof.GetURLExpiresAt,
+		func() (string, time.Time, error) { return p.Images.PresignGet(ctx, path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := p.Repo.SetImageGetCache(ctx, prof.OwnerID, path, url, expiresAt)
 			return err
