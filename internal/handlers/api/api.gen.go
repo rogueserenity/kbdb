@@ -274,7 +274,7 @@ type BuildSummary struct {
 	// TotalCost Total cost of the build's priced components (keyboard, switches, keycap kits, stabs). Components with no known price are excluded rather than treated as zero, so this may undercount. Omitted for a build the caller doesn't own, same as Build.total_cost.
 	TotalCost *Money `json:"total_cost,omitempty"`
 
-	// Visibility Same as Build.visibility - omitted for a build the caller doesn't own.
+	// Visibility Who can read this build. Only ever present for the build's owner - no preference can expose it to another caller.
 	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
@@ -434,7 +434,7 @@ type KeyboardSummary struct {
 	Price *Money  `json:"price,omitempty"`
 	Size  *string `json:"size,omitempty"`
 
-	// Visibility Same as Keyboard.visibility - omitted for a keyboard the caller doesn't own.
+	// Visibility Who can read this keyboard. Only ever present for the keyboard's owner - no preference can expose it to another caller.
 	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
@@ -544,7 +544,7 @@ type KeycapSetSummary struct {
 	// TotalCost Total cost of the set's kits with a known purchase price. Kits with no known price are excluded rather than treated as zero, so this may undercount. Omitted for a keycap set the caller doesn't own, same as each kit's purchase.price.
 	TotalCost *Money `json:"total_cost,omitempty"`
 
-	// Visibility Same as KeycapSet.visibility - the set's own value, not derived from its kits (kits have no visibility of their own). Omitted for a keycap set the caller doesn't own.
+	// Visibility Who can read this keycap set. Set on the keycap set itself, not derived from its kits, which have no visibility of their own. Only ever present for the set's owner - no preference can expose it to another caller.
 	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
@@ -824,7 +824,7 @@ type SwitchSummary struct {
 	// Type Open vocabulary — validated against the "switch_type" lookup at request time.
 	Type *string `json:"type,omitempty"`
 
-	// Visibility Same as Switch.visibility - omitted for a switch the caller doesn't own.
+	// Visibility Who can read this switch. Only ever present for the switch's owner - no preference can expose it to another caller.
 	Visibility *Visibility `json:"visibility,omitempty"`
 }
 
