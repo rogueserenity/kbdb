@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -229,7 +230,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPri
 		}}, "", nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
 
-	s.mockImages.EXPECT().PresignGet(mock.Anything, imagePath).Return("https://example.com/presigned-get", nil)
+	s.mockImages.EXPECT().PresignGet(mock.Anything, imagePath).Return("https://example.com/presigned-get", time.Now().Add(time.Hour), nil)
 	s.mockRepo.EXPECT().
 		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Maybe()
@@ -343,7 +344,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_KitWithImagePath_IncludesPresignedU
 		}, nil)
 	s.mockImages.EXPECT().
 		PresignGet(mock.Anything, imagePath).
-		Return("https://example.com/presigned-get", nil)
+		Return("https://example.com/presigned-get", time.Now().Add(time.Hour), nil)
 	s.mockRepo.EXPECT().
 		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Maybe()

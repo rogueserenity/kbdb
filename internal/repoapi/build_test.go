@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -228,8 +229,8 @@ func (s *BuildToAPISuite) TestImagesPopulated_MintsFreshPresignedURLPerImage() {
 
 	d := newBuildToAPIDeps(s.T())
 	d.expectFullyResolvable()
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", nil)
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img2).Return("https://example.com/img2", nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", presignExpiry(), nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img2).Return("https://example.com/img2", presignExpiry(), nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -248,7 +249,7 @@ func (s *BuildToAPISuite) TestPresignFails_ReturnsError() {
 	b.Images = map[string]repository.BuildImageEntry{"img1": {Path: imgPath}}
 
 	d := newBuildToAPIDeps(s.T())
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, imgPath).Return("", time.Time{}, errors.New("s3: access denied"))
 
 	_, err := d.call(context.Background(), b)
 
@@ -410,7 +411,7 @@ func (s *BuildToAPISuite) TestKitWithImage_MintsFreshPresignedURL() {
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
 		}, nil)
-	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/kit1.png", nil)
+	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/kit1.png", presignExpiry(), nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -435,7 +436,7 @@ func (s *BuildToAPISuite) TestKitImagePresignFails_ReturnsError() {
 			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base", ImagePath: &imgPath}},
 		}, nil)
-	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+	d.kitImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", time.Time{}, errors.New("s3: access denied"))
 
 	_, err := d.call(context.Background(), b)
 	s.Require().Error(err)
@@ -458,7 +459,7 @@ func (s *BuildToAPISuite) TestKeyboardWithImage_MintsFreshPresignedURLForFirstIm
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
-	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("https://example.com/kb1-img1.png", nil)
+	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("https://example.com/kb1-img1.png", presignExpiry(), nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -491,7 +492,7 @@ func (s *BuildToAPISuite) TestKeyboardImagePresignFails_ReturnsError() {
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
 			Images: repository.KeyboardImagesMap([]repository.KeyboardImage{{ImageID: "img1", Path: imgPath}}),
 		}, nil)
-	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+	d.keyboardImages.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", time.Time{}, errors.New("s3: access denied"))
 
 	_, err := d.call(context.Background(), b)
 	s.Require().Error(err)
@@ -508,7 +509,7 @@ func (s *BuildToAPISuite) TestSwitchWithImage_MintsFreshPresignedURL() {
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear", ImagePath: &imgPath}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
-	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/sw1.png", nil)
+	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("https://example.com/sw1.png", presignExpiry(), nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
@@ -544,7 +545,7 @@ func (s *BuildToAPISuite) TestSwitchImagePresignFails_ReturnsError() {
 	imgPath := repository.SwitchImageKey("switches/alice/sw1/image")
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear", ImagePath: &imgPath}, nil)
-	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", errors.New("s3: access denied"))
+	d.switchImages.EXPECT().PresignGet(mock.Anything, imgPath).Return("", time.Time{}, errors.New("s3: access denied"))
 
 	_, err := d.call(context.Background(), b)
 	s.Require().Error(err)
@@ -906,7 +907,7 @@ func (s *BuildToAPISummarySuite) TestImagesPresent_UsesFirstImageOnly() {
 	d.keyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
-	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", nil)
+	d.images.EXPECT().PresignGetBuildImage(mock.Anything, img1).Return("https://example.com/img1", presignExpiry(), nil)
 
 	out, err := d.callSummary(context.Background(), b)
 	s.Require().NoError(err)

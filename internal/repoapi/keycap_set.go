@@ -14,9 +14,8 @@ import (
 
 // KeycapSet maps repository.KeycapSet to and from its wire representations.
 type KeycapSet struct {
-	Images     repository.KeycapKitImageStore
-	Repo       repository.KeycapSetRepository
-	PresignTTL time.Duration
+	Images repository.KeycapKitImageStore
+	Repo   repository.KeycapSetRepository
 }
 
 // ToAPI maps a repository.KeycapSet to its wire representation. The owner
@@ -158,8 +157,8 @@ func (ks KeycapSet) KitToAPI(ctx context.Context, ownerID, setID string, k repos
 func (ks KeycapSet) resolveKeycapKitImageURL(ctx context.Context, ownerID, setID string, k repository.KeycapKit) (string, error) {
 	path := *k.ImagePath
 
-	return resolveImageURL(k.GetURL, k.GetURLExpiresAt, ks.PresignTTL,
-		func() (string, error) { return ks.Images.PresignGet(ctx, path) },
+	return resolveImageURL(k.GetURL, k.GetURLExpiresAt,
+		func() (string, time.Time, error) { return ks.Images.PresignGet(ctx, path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := ks.Repo.SetKitImageGetCache(ctx, ownerID, setID, k.KitID, path, url, expiresAt)
 			return err

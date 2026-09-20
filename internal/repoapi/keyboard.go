@@ -13,9 +13,8 @@ import (
 
 // Keyboard maps repository.Keyboard to and from its wire representations.
 type Keyboard struct {
-	Images     repository.KeyboardImageStore
-	Repo       repository.KeyboardRepository
-	PresignTTL time.Duration
+	Images repository.KeyboardImageStore
+	Repo   repository.KeyboardRepository
 }
 
 // ToAPI maps a repository.Keyboard to its wire representation. The owner
@@ -137,8 +136,8 @@ func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOw
 // resolveKeyboardImageURL presigns img.Path, reusing its cached GET URL if
 // still fresh enough.
 func (k Keyboard) resolveKeyboardImageURL(ctx context.Context, ownerID, keyboardID string, img repository.KeyboardImage) (string, error) {
-	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, k.PresignTTL,
-		func() (string, error) { return k.Images.PresignGetKeyboardImage(ctx, img.Path) },
+	return resolveImageURL(img.GetURL, img.GetURLExpiresAt,
+		func() (string, time.Time, error) { return k.Images.PresignGetKeyboardImage(ctx, img.Path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := k.Repo.SetImageGetCache(ctx, ownerID, keyboardID, img.ImageID, img.Path, url, expiresAt)
 			return err

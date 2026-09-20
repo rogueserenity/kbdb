@@ -26,4 +26,3 @@ func (c *LookupsClient) ListCategories(ctx context.Context) (*http.Response, err
 func (c *LookupsClient) GetCategory(ctx context.Context, category string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodGet, "/v1/lookups/"+category, "", nil)
 }
-

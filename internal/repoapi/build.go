@@ -24,7 +24,6 @@ type Build struct {
 	KeyboardRepo   repository.KeyboardRepository
 	SwitchRepo     repository.SwitchRepository
 	KeycapSetRepo  repository.KeycapSetRepository
-	PresignTTL     time.Duration
 }
 
 // ToAPI maps a repository.Build to its wire representation, resolving the
@@ -513,8 +512,7 @@ func (b Build) imagesToAPI(ctx context.Context, ownerID, buildID string, images 
 // resolveBuildImageURL presigns img.Path, reusing its cached GET URL if
 // still fresh enough.
 func (b Build) resolveBuildImageURL(ctx context.Context, ownerID, buildID string, img repository.BuildImage) (string, error) {
-	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, b.PresignTTL,
-		func() (string, error) { return b.Images.PresignGetBuildImage(ctx, img.Path) },
+	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, func() (string, time.Time, error) { return b.Images.PresignGetBuildImage(ctx, img.Path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := b.Repo.SetImageGetCache(ctx, ownerID, buildID, img.ImageID, img.Path, url, expiresAt)
 			return err
@@ -527,8 +525,7 @@ func (b Build) resolveBuildImageURL(ctx context.Context, ownerID, buildID string
 // Keyboard's own resolver, since Build resolves a referenced keyboard's
 // image via its own store/repo fields, not a repoapi.Keyboard value.
 func (b Build) resolveKeyboardImageURL(ctx context.Context, ownerID, keyboardID string, img repository.KeyboardImage) (string, error) {
-	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, b.PresignTTL,
-		func() (string, error) { return b.KeyboardImages.PresignGetKeyboardImage(ctx, img.Path) },
+	return resolveImageURL(img.GetURL, img.GetURLExpiresAt, func() (string, time.Time, error) { return b.KeyboardImages.PresignGetKeyboardImage(ctx, img.Path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := b.KeyboardRepo.SetImageGetCache(ctx, ownerID, keyboardID, img.ImageID, img.Path, url, expiresAt)
 			return err
@@ -541,8 +538,7 @@ func (b Build) resolveKeyboardImageURL(ctx context.Context, ownerID, keyboardID 
 func (b Build) resolveSwitchImageURL(ctx context.Context, sw repository.Switch) (string, error) {
 	path := *sw.ImagePath
 
-	return resolveImageURL(sw.GetURL, sw.GetURLExpiresAt, b.PresignTTL,
-		func() (string, error) { return b.SwitchImages.PresignGet(ctx, path) },
+	return resolveImageURL(sw.GetURL, sw.GetURLExpiresAt, func() (string, time.Time, error) { return b.SwitchImages.PresignGet(ctx, path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := b.SwitchRepo.SetImageGetCache(ctx, sw.UserID, sw.ID, path, url, expiresAt)
 			return err
@@ -555,8 +551,7 @@ func (b Build) resolveSwitchImageURL(ctx context.Context, sw repository.Switch) 
 func (b Build) resolveKeycapKitImageURL(ctx context.Context, ownerID, setID string, k repository.KeycapKit) (string, error) {
 	path := *k.ImagePath
 
-	return resolveImageURL(k.GetURL, k.GetURLExpiresAt, b.PresignTTL,
-		func() (string, error) { return b.KitImages.PresignGet(ctx, path) },
+	return resolveImageURL(k.GetURL, k.GetURLExpiresAt, func() (string, time.Time, error) { return b.KitImages.PresignGet(ctx, path) },
 		func(url string, expiresAt time.Time) error {
 			_, err := b.KeycapSetRepo.SetKitImageGetCache(ctx, ownerID, setID, k.KitID, path, url, expiresAt)
 			return err

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -662,7 +663,7 @@ func (s *ListProfilesSuite) TestAvatarPresigned_WhenSet() {
 		Return([]repository.Profile{
 			{OwnerID: "user-alice", Username: "alice", Discoverable: true, AvatarPath: &key},
 		}, "", nil)
-	s.mockImages.EXPECT().PresignGet(mock.Anything, key).Return("https://signed/avatar", nil)
+	s.mockImages.EXPECT().PresignGet(mock.Anything, key).Return("https://signed/avatar", time.Now().Add(time.Hour), nil)
 	s.mockRepo.EXPECT().
 		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Return(true, nil).Maybe()

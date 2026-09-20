@@ -5,6 +5,9 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/url"
+	"strconv"
+	"time"
 
 	"github.com/google/uuid"
 	. "github.com/onsi/ginkgo/v2"
@@ -13,6 +16,8 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
+
+const maxPresignGetTTL = time.Hour
 
 // imageIDs GETs the keyboard and returns its image ids in the order the API
 // presents them.
@@ -116,6 +121,15 @@ var _ = Describe("Adding an image to a keyboard", func() {
 						gotBytes, err := io.ReadAll(getImageResp.Body)
 						Expect(err).NotTo(HaveOccurred())
 						Expect(gotBytes).To(Equal(imageBytes))
+
+						By("advertising a lifetime the signing credentials can actually back")
+						signed, err := url.Parse(keyboard.Images[0].URL)
+						Expect(err).NotTo(HaveOccurred())
+						expiresSec, err := strconv.Atoi(signed.Query().Get("X-Amz-Expires"))
+						Expect(err).NotTo(HaveOccurred())
+						Expect(expiresSec).To(BeNumerically(">", 0))
+						Expect(expiresSec).To(BeNumerically("<=", int(maxPresignGetTTL.Seconds())),
+							"X-Amz-Expires must fit inside the signing session, not exceed it")
 					})
 				})
 			})

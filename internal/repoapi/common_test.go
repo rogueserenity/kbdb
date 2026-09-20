@@ -23,10 +23,10 @@ func (s *ResolveImageURLSuite) TestCacheHit_WithinFloor_ReusesCachedURLWithoutMi
 	mintCalled := false
 	writeBackCalled := false
 
-	url, err := resolveImageURL(&cachedURL, &expiresAt, time.Hour,
-		func() (string, error) {
+	url, err := resolveImageURL(&cachedURL, &expiresAt,
+		func() (string, time.Time, error) {
 			mintCalled = true
-			return "https://example.com/fresh", nil
+			return "https://example.com/fresh", time.Now().Add(time.Hour), nil
 		},
 		func(string, time.Time) error {
 			writeBackCalled = true
@@ -45,10 +45,12 @@ func (s *ResolveImageURLSuite) TestCacheMiss_NoCachedURL_MintsAndWritesBack() {
 	var writtenURL string
 	var writtenExpiresAt time.Time
 
-	url, err := resolveImageURL(nil, nil, time.Hour,
-		func() (string, error) {
+	mintedExpiresAt := time.Now().Add(37 * time.Minute)
+
+	url, err := resolveImageURL(nil, nil,
+		func() (string, time.Time, error) {
 			mintCalled = true
-			return "https://example.com/fresh", nil
+			return "https://example.com/fresh", mintedExpiresAt, nil
 		},
 		func(u string, e time.Time) error {
 			writtenURL = u
@@ -61,7 +63,8 @@ func (s *ResolveImageURLSuite) TestCacheMiss_NoCachedURL_MintsAndWritesBack() {
 	s.True(mintCalled)
 	s.Equal("https://example.com/fresh", url)
 	s.Equal("https://example.com/fresh", writtenURL)
-	s.WithinDuration(time.Now().Add(time.Hour), writtenExpiresAt, 5*time.Second)
+	s.Equal(mintedExpiresAt, writtenExpiresAt,
+		"the cached expiry must be the one the signer reported, not one computed here")
 }
 
 func (s *ResolveImageURLSuite) TestCacheExpired_BelowRefreshFloor_MintsFreshURL() {
@@ -71,10 +74,10 @@ func (s *ResolveImageURLSuite) TestCacheExpired_BelowRefreshFloor_MintsFreshURL(
 
 	mintCalled := false
 
-	url, err := resolveImageURL(&cachedURL, &expiresAt, time.Hour,
-		func() (string, error) {
+	url, err := resolveImageURL(&cachedURL, &expiresAt,
+		func() (string, time.Time, error) {
 			mintCalled = true
-			return "https://example.com/fresh", nil
+			return "https://example.com/fresh", time.Now().Add(time.Hour), nil
 		},
 		func(string, time.Time) error { return nil },
 	)
@@ -85,8 +88,8 @@ func (s *ResolveImageURLSuite) TestCacheExpired_BelowRefreshFloor_MintsFreshURL(
 }
 
 func (s *ResolveImageURLSuite) TestMintError_Propagates() {
-	_, err := resolveImageURL(nil, nil, time.Hour,
-		func() (string, error) { return "", errors.New("s3: access denied") },
+	_, err := resolveImageURL(nil, nil,
+		func() (string, time.Time, error) { return "", time.Time{}, errors.New("s3: access denied") },
 		func(string, time.Time) error { return nil },
 	)
 
@@ -94,11 +97,18 @@ func (s *ResolveImageURLSuite) TestMintError_Propagates() {
 }
 
 func (s *ResolveImageURLSuite) TestWriteBackError_IsNonFatal_StillReturnsFreshURL() {
-	url, err := resolveImageURL(nil, nil, time.Hour,
-		func() (string, error) { return "https://example.com/fresh", nil },
+	url, err := resolveImageURL(nil, nil,
+		func() (string, time.Time, error) { return "https://example.com/fresh", time.Now().Add(time.Hour), nil },
 		func(string, time.Time) error { return errors.New("conditional check failed") },
 	)
 	s.Require().NoError(err)
 
 	s.Equal("https://example.com/fresh", url)
+}
+
+// presignExpiry is a stand-in for the expiry a real image store reports
+// alongside a freshly signed URL. Far enough out that resolveImageURL treats
+// the URL as reusable rather than immediately re-signing it.
+func presignExpiry() time.Time {
+	return time.Now().Add(time.Hour)
 }

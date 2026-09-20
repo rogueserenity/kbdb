@@ -153,6 +153,55 @@ Resources:
             ExposedHeaders: [ETag]
             MaxAge: 3000
 
+  # ApiFunction assumes this role solely to sign presigned GET URLs. A
+  # presigned URL dies with the credentials that signed it, and Lambda's own
+  # execution-role credentials arrive via env vars that carry no expiry - the
+  # SDK reports CanExpire=false, so the signer can't bound the URL to them and
+  # was emitting URLs that outlived their token (S3 answers ExpiredToken).
+  # Assuming a role instead returns an explicit Expiration, so the URL's
+  # lifetime is one we set via DurationSeconds and can report accurately.
+  # GetObject only: this role signs reads, it never writes or deletes.
+  PresignSigningRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !GetAtt ApiFunctionRole.Arn
+            Action: sts:AssumeRole
+      # 3600, not higher: ApiFunction assumes this role from Lambda's own
+      # assumed execution role, which is role chaining - STS rejects any
+      # DurationSeconds over 1h for that, so a larger ceiling here would be
+      # misleading.
+      MaxSessionDuration: 3600
+      Policies:
+        - PolicyName: presign-get
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action: s3:GetObject
+                Resource: !Sub "${ImagesBucket.Arn}/*"
+
+  # Standalone rather than inline on ApiFunction: the function's role is
+  # PresignSigningRole's trusted principal, so an inline grant would make each
+  # role's definition depend on the other's ARN. A separate policy resource
+  # references both and is depended on by neither.
+  PresignAssumeRolePolicy:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: presign-assume-role
+      Roles:
+        - !Ref ApiFunctionRole
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRole
+            Resource: !GetAtt PresignSigningRole.Arn
+
   # User-owned switches. user_id (the owner's IdP subject claim) is the
   # partition key, id the sort key - every real access pattern is scoped to
   # an already-known user_id (see README's DynamoDB rationale), so no GSI is
@@ -360,7 +409,7 @@ Resources:
           IDP_CONSENT_PUBLIC_TOKEN: !Ref IdpConsentPublicToken
           LOGOUT_RETURN_ORIGINS: !Ref LogoutReturnOrigins
           IMAGES_BUCKET_NAME: !Ref ImagesBucket
-          GET_PRESIGN_TTL: 24h
+          PRESIGN_ROLE_ARN: !GetAtt PresignSigningRole.Arn
           SWITCH_TABLE_NAME: !Ref SwitchTable
           KEYBOARD_TABLE_NAME: !Ref KeyboardTable
           KEYCAP_SET_TABLE_NAME: !Ref KeycapSetTable

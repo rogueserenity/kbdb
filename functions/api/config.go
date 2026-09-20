@@ -14,16 +14,27 @@ type Config struct {
 	IDPConsentPublicToken string `env:"IDP_CONSENT_PUBLIC_TOKEN" required:""`
 	// Comma-separated origins GET /logout may redirect back to - see
 	// internal/consent.
-	LogoutReturnOrigins      string `env:"LOGOUT_RETURN_ORIGINS" required:""`
-	ImagesBucketName         string `env:"IMAGES_BUCKET_NAME" required:""`
-	SwitchTableName          string `env:"SWITCH_TABLE_NAME" required:""`
-	KeyboardTableName        string `env:"KEYBOARD_TABLE_NAME" required:""`
-	KeycapSetTableName       string `env:"KEYCAP_SET_TABLE_NAME" required:""`
-	BuildTableName           string `env:"BUILD_TABLE_NAME" required:""`
-	ProfileTableName         string `env:"PROFILE_TABLE_NAME" required:""`
-	ProfileUsernameTableName string `env:"PROFILE_USERNAME_TABLE_NAME" required:""`
+	LogoutReturnOrigins string `env:"LOGOUT_RETURN_ORIGINS" required:""`
+	ImagesBucketName    string `env:"IMAGES_BUCKET_NAME" required:""`
+	// Role assumed solely to sign presigned GET URLs. Lambda's own
+	// credentials carry no expiry the SDK can see, so a URL signed with them
+	// can't be bounded to their real lifetime; an assumed role returns an
+	// explicit Expiration. Optional: empty falls back to the ambient
+	// credentials (sam local, and any deploy without the role).
+	PresignRoleARN string `env:"PRESIGN_ROLE_ARN"`
 
-	GetPresignTTL time.Duration `env:"GET_PRESIGN_TTL" default:"24h" help:"How long a freshly-signed presigned GET image URL remains valid; presigned PUT URLs keep the AWS SDK's default (15m)."`
+	// Session length requested when assuming PresignRoleARN, and so the
+	// ceiling on a presigned GET URL's life. 1h is the hard maximum here:
+	// Lambda's execution role is itself assumed, so assuming another role
+	// from it is role chaining, which STS caps at 1h whatever the target
+	// role's MaxSessionDuration says.
+	PresignSessionDuration   time.Duration `env:"PRESIGN_SESSION_DURATION" default:"1h"`
+	SwitchTableName          string        `env:"SWITCH_TABLE_NAME" required:""`
+	KeyboardTableName        string        `env:"KEYBOARD_TABLE_NAME" required:""`
+	KeycapSetTableName       string        `env:"KEYCAP_SET_TABLE_NAME" required:""`
+	BuildTableName           string        `env:"BUILD_TABLE_NAME" required:""`
+	ProfileTableName         string        `env:"PROFILE_TABLE_NAME" required:""`
+	ProfileUsernameTableName string        `env:"PROFILE_USERNAME_TABLE_NAME" required:""`
 
 	// Empty in real deployments; set locally to point at LocalStack.
 	DynamoDBEndpointURL string `env:"DYNAMODB_ENDPOINT_URL"`

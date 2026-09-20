@@ -6,6 +6,7 @@ package mocks
 
 import (
 	"context"
+	"time"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 	mock "github.com/stretchr/testify/mock"
@@ -105,7 +106,7 @@ func (_c *MockProfileImageStore_Delete_Call) RunAndReturn(run func(ctx context.C
 }
 
 // PresignGet provides a mock function for the type MockProfileImageStore
-func (_mock *MockProfileImageStore) PresignGet(ctx context.Context, key repository.ProfileImageKey) (string, error) {
+func (_mock *MockProfileImageStore) PresignGet(ctx context.Context, key repository.ProfileImageKey) (string, time.Time, error) {
 	ret := _mock.Called(ctx, key)
 
 	if len(ret) == 0 {
@@ -113,8 +114,9 @@ func (_mock *MockProfileImageStore) PresignGet(ctx context.Context, key reposito
 	}
 
 	var r0 string
-	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.ProfileImageKey) (string, error)); ok {
+	var r1 time.Time
+	var r2 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.ProfileImageKey) (string, time.Time, error)); ok {
 		return returnFunc(ctx, key)
 	}
 	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.ProfileImageKey) string); ok {
@@ -122,12 +124,17 @@ func (_mock *MockProfileImageStore) PresignGet(ctx context.Context, key reposito
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.ProfileImageKey) error); ok {
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.ProfileImageKey) time.Time); ok {
 		r1 = returnFunc(ctx, key)
 	} else {
-		r1 = ret.Error(1)
+		r1 = ret.Get(1).(time.Time)
 	}
-	return r0, r1
+	if returnFunc, ok := ret.Get(2).(func(context.Context, repository.ProfileImageKey) error); ok {
+		r2 = returnFunc(ctx, key)
+	} else {
+		r2 = ret.Error(2)
+	}
+	return r0, r1, r2
 }
 
 // MockProfileImageStore_PresignGet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PresignGet'
@@ -160,12 +167,12 @@ func (_c *MockProfileImageStore_PresignGet_Call) Run(run func(ctx context.Contex
 	return _c
 }
 
-func (_c *MockProfileImageStore_PresignGet_Call) Return(url string, err error) *MockProfileImageStore_PresignGet_Call {
-	_c.Call.Return(url, err)
+func (_c *MockProfileImageStore_PresignGet_Call) Return(url string, expiresAt time.Time, err error) *MockProfileImageStore_PresignGet_Call {
+	_c.Call.Return(url, expiresAt, err)
 	return _c
 }
 
-func (_c *MockProfileImageStore_PresignGet_Call) RunAndReturn(run func(ctx context.Context, key repository.ProfileImageKey) (string, error)) *MockProfileImageStore_PresignGet_Call {
+func (_c *MockProfileImageStore_PresignGet_Call) RunAndReturn(run func(ctx context.Context, key repository.ProfileImageKey) (string, time.Time, error)) *MockProfileImageStore_PresignGet_Call {
 	_c.Call.Return(run)
 	return _c
 }

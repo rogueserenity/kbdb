@@ -206,7 +206,9 @@ func NewBuildImageKey(ctx context.Context, buildID, imageID string) (BuildImageK
 // shared, since a build's images are a growable array of server-generated
 // ids rather than a single optional slot.
 type BuildImageStore interface {
-	PresignGetBuildImage(ctx context.Context, key BuildImageKey) (url string, err error)
+	// PresignGetBuildImage returns a presigned GET URL for key, and when it
+	// stops working - bounded by the signing credentials, not configured.
+	PresignGetBuildImage(ctx context.Context, key BuildImageKey) (url string, expiresAt time.Time, err error)
 	PresignPutBuildImage(ctx context.Context, key BuildImageKey, contentType string) (url string, err error)
 
 	// DeleteBuildImage is idempotent, matching S3's own DeleteObject.

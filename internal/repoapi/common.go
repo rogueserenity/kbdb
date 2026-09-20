@@ -29,23 +29,26 @@ const getPresignRefreshFloor = 60 * time.Second
 // cachedExpiresAt, and otherwise minting a fresh one via mint and
 // persisting it via writeBack. writeBack's own failure isn't fatal - the
 // freshly minted url is still valid and returned regardless.
+//
+// mint reports its own expiry rather than taking a lifetime: only the signer
+// knows when the URL dies, and caching any other value serves URLs S3 has
+// already started rejecting.
 func resolveImageURL(
 	cachedURL *string,
 	cachedExpiresAt *time.Time,
-	presignTTL time.Duration,
-	mint func() (url string, err error),
+	mint func() (url string, expiresAt time.Time, err error),
 	writeBack func(url string, expiresAt time.Time) error,
 ) (string, error) {
 	if cachedURL != nil && cachedExpiresAt != nil && time.Until(*cachedExpiresAt) > getPresignRefreshFloor {
 		return *cachedURL, nil
 	}
 
-	url, err := mint()
+	url, expiresAt, err := mint()
 	if err != nil {
 		return "", err
 	}
 
-	_ = writeBack(url, time.Now().Add(presignTTL))
+	_ = writeBack(url, expiresAt)
 
 	return url, nil
 }

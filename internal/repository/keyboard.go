@@ -204,9 +204,9 @@ func NewKeyboardImageKey(ctx context.Context, keyboardID, imageID string) (Keybo
 // shared, since a keyboard's images are a growable array of
 // server-generated ids rather than a single optional slot.
 type KeyboardImageStore interface {
-	// PresignGetKeyboardImage returns a short-lived presigned GET URL for
-	// key.
-	PresignGetKeyboardImage(ctx context.Context, key KeyboardImageKey) (url string, err error)
+	// PresignGetKeyboardImage returns a presigned GET URL for key, and when
+	// it stops working - bounded by the signing credentials, not configured.
+	PresignGetKeyboardImage(ctx context.Context, key KeyboardImageKey) (url string, expiresAt time.Time, err error)
 
 	// PresignPutKeyboardImage returns a short-lived presigned PUT URL for
 	// key, locked to contentType via the Content-Type header the upload

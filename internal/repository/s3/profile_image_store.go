@@ -13,40 +13,27 @@ import (
 
 // ProfileImageStore is the S3-backed repository.ProfileImageStore.
 type ProfileImageStore struct {
-	client    s3API
-	presign   s3PresignAPI
-	bucket    string
-	getExpiry time.Duration
+	client  s3API
+	presign s3PresignAPI
+	bucket  string
+	creds   credentialsProvider
 }
 
 var _ repository.ProfileImageStore = (*ProfileImageStore)(nil)
 
 // NewProfileImageStore returns a ProfileImageStore backed by client.
-func NewProfileImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, getExpiry time.Duration) *ProfileImageStore {
+func NewProfileImageStore(client *s3.Client, presign *s3.PresignClient, bucket string, creds aws.CredentialsProvider) *ProfileImageStore {
 	return &ProfileImageStore{
-		client:    client,
-		presign:   presign,
-		bucket:    bucket,
-		getExpiry: getExpiry,
+		client:  client,
+		presign: presign,
+		bucket:  bucket,
+		creds:   creds,
 	}
 }
 
 // PresignGet implements repository.ProfileImageStore.
-func (s *ProfileImageStore) PresignGet(ctx context.Context, key repository.ProfileImageKey) (string, error) {
-	req, err := s.presign.PresignGetObject(ctx, &s3.GetObjectInput{
-		Bucket: aws.String(s.bucket),
-		Key:    aws.String(string(key)),
-	}, func(o *s3.PresignOptions) {
-		// Zero getExpiry falls through to the SDK's own default (15m).
-		if s.getExpiry > 0 {
-			o.Expires = s.getExpiry
-		}
-	})
-	if err != nil {
-		return "", fmt.Errorf("presigning GET s3://%s/%s: %w", s.bucket, key, err)
-	}
-
-	return req.URL, nil
+func (s *ProfileImageStore) PresignGet(ctx context.Context, key repository.ProfileImageKey) (url string, expiresAt time.Time, err error) {
+	return presignGet(ctx, s.creds, s.presign, s.bucket, string(key))
 }
 
 // PresignPut implements repository.ProfileImageStore.
