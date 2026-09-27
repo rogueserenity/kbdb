@@ -11,9 +11,9 @@ import (
 type Profile struct{}
 
 // ToMCP maps a repository.Profile to its MCP tool shape: avatar as a bool.
-func (p Profile) ToMCP(prof repository.Profile) schema.Profile {
-	prefs := p.preferencesToMCP(prof.Preferences)
-	return schema.Profile{
+// Preferences are the owner's alone.
+func (p Profile) ToMCP(prof repository.Profile, isOwner bool) schema.Profile {
+	out := schema.Profile{
 		Username:        prof.Username,
 		UserID:          prof.OwnerID,
 		Discoverable:    prof.Discoverable,
@@ -21,8 +21,13 @@ func (p Profile) ToMCP(prof repository.Profile) schema.Profile {
 		Bio:             prof.Bio,
 		Links:           p.linksToMCP(prof.Links),
 		HasAvatar:       prof.AvatarPath != nil,
-		Preferences:     prefs,
 	}
+	if isOwner {
+		prefs := p.preferencesToMCP(prof.Preferences)
+		out.Preferences = &prefs
+	}
+
+	return out
 }
 
 // ToMCPSummary maps a repository.Profile to a list_profiles row - no bio

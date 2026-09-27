@@ -16,9 +16,8 @@ type Profile struct {
 }
 
 // ToAPI maps a repository.Profile to its wire shape, presigning the avatar
-// if set. Errors only if presigning fails.
-func (p Profile) ToAPI(ctx context.Context, prof repository.Profile) (api.Profile, error) {
-	prefs := p.preferencesToAPI(prof.Preferences)
+// if set. Preferences are the owner's alone. Errors only if presigning fails.
+func (p Profile) ToAPI(ctx context.Context, prof repository.Profile, isOwner bool) (api.Profile, error) {
 	out := api.Profile{
 		Username:        prof.Username,
 		UserId:          &prof.OwnerID,
@@ -26,7 +25,10 @@ func (p Profile) ToAPI(ctx context.Context, prof repository.Profile) (api.Profil
 		DiscordUsername: prof.DiscordUsername,
 		Bio:             prof.Bio,
 		Links:           p.linksToAPI(prof.Links),
-		Preferences:     &prefs,
+	}
+	if isOwner {
+		prefs := p.preferencesToAPI(prof.Preferences)
+		out.Preferences = &prefs
 	}
 
 	if prof.AvatarPath != nil {

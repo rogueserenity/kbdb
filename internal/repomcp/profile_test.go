@@ -31,7 +31,7 @@ func (s *ProfileMapperSuite) TestProfileToMCP_FullProfile() {
 		},
 	}
 
-	out := Profile{}.ToMCP(p)
+	out := Profile{}.ToMCP(p, true)
 
 	s.Equal("alice", out.Username)
 	s.Equal("user-alice", out.UserID)
@@ -48,13 +48,13 @@ func (s *ProfileMapperSuite) TestProfileToMCP_FullProfile() {
 
 func (s *ProfileMapperSuite) TestProfileToMCP_AvatarReportedAsBool() {
 	key := repository.ProfileImageKey("profiles/user-alice/avatar")
-	out := Profile{}.ToMCP(repository.Profile{Username: "alice", AvatarPath: &key})
+	out := Profile{}.ToMCP(repository.Profile{Username: "alice", AvatarPath: &key}, true)
 
 	s.True(out.HasAvatar)
 }
 
 func (s *ProfileMapperSuite) TestProfileToMCP_EmptyLinks_Nil() {
-	out := Profile{}.ToMCP(repository.Profile{Username: "alice"})
+	out := Profile{}.ToMCP(repository.Profile{Username: "alice"}, true)
 
 	s.Nil(out.Links)
 }
@@ -113,7 +113,17 @@ func (s *ProfileMapperSuite) TestProfileToMCP_MapsPreferences() {
 		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true},
 	}
 
-	out := Profile{}.ToMCP(p)
+	out := Profile{}.ToMCP(p, true)
 
-	s.Equal(schema.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, out.Preferences)
+	s.Require().NotNil(out.Preferences)
+	s.Equal(schema.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, *out.Preferences)
+}
+
+func (s *ProfileMapperSuite) TestProfileToMCP_NonOwner_OmitsPreferences() {
+	out := Profile{}.ToMCP(repository.Profile{
+		Username:    "alice",
+		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true},
+	}, false)
+
+	s.Nil(out.Preferences)
 }

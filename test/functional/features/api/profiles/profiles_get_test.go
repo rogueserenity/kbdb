@@ -116,6 +116,9 @@ var _ = Describe("Getting a profile", func() {
 					var got profileBody
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.Username).To(Equal(username))
+
+					By("omitting preferences, which only the owner sees")
+					Expect(got.Preferences).To(BeNil())
 				})
 			})
 		})
@@ -133,22 +136,24 @@ var _ = Describe("Getting a profile", func() {
 			Expect(db.DeleteProfile(ctx, ownerID, username)).To(Succeed())
 		})
 
-		When("getting the profile", func() {
-			BeforeEach(func(ctx SpecContext) {
-				var err error
-				resp, err = client.Get(ctx, ownerID, "")
-				Expect(err).NotTo(HaveOccurred())
-			})
+		Context("given the caller is the owner", func() {
+			When("getting the profile", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Get(ctx, ownerID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+				})
 
-			It("returns default preferences rather than empty/false values", func() {
-				Expect(resp.StatusCode).To(Equal(http.StatusOK))
+				It("returns default preferences rather than empty/false values", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-				var got profileBody
-				Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
-				Expect(got.Preferences).NotTo(BeNil())
-				Expect(got.Preferences.Currency).To(Equal("USD"))
-				Expect(got.Preferences.ShowPriceToMe).To(BeTrue())
-				Expect(got.Preferences.ShowPriceToOthers).To(BeFalse())
+					var got profileBody
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.Preferences).NotTo(BeNil())
+					Expect(got.Preferences.Currency).To(Equal("USD"))
+					Expect(got.Preferences.ShowPriceToMe).To(BeTrue())
+					Expect(got.Preferences.ShowPriceToOthers).To(BeFalse())
+				})
 			})
 		})
 	})

@@ -54,7 +54,7 @@ func GetProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.Hand
 			return
 		}
 
-		out, err := pr.ToAPI(r.Context(), *p)
+		out, err := pr.ToAPI(r.Context(), *p, authz.IsOwner(r.Context(), p.OwnerID))
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err, log.ProfileID, identifier)
 			problem.Internal(w, "failed to get profile")
@@ -174,7 +174,7 @@ func CreateProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.H
 			return
 		}
 
-		out, err := pr.ToAPI(r.Context(), *created)
+		out, err := pr.ToAPI(r.Context(), *created, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err)
 			problem.Internal(w, "failed to create profile")
@@ -222,7 +222,7 @@ func UpdateProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.H
 			return
 		}
 
-		out, err := pr.ToAPI(r.Context(), *updated)
+		out, err := pr.ToAPI(r.Context(), *updated, true)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping profile to API", log.Error, err)
 			problem.Internal(w, "failed to update profile")

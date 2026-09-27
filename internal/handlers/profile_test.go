@@ -60,6 +60,7 @@ func (s *GetProfileSuite) TestDiscoverableByID_200() {
 	s.Equal("user-alice", *body.UserId) // needed to address the {userId} collection routes
 	s.Require().NotNil(body.Bio)
 	s.Equal("keebs", *body.Bio)
+	s.Nil(body.Preferences)
 }
 
 func (s *GetProfileSuite) TestDiscoverableByUsername_200() {
@@ -77,12 +78,19 @@ func (s *GetProfileSuite) TestDiscoverableByUsername_200() {
 func (s *GetProfileSuite) TestNonDiscoverable_Owner_200() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-alice")
 	s.mockRepo.EXPECT().Get(ctx, "user-alice").
-		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{
+			OwnerID: "user-alice", Username: "alice", Discoverable: false,
+			Preferences: repository.ProfilePreferences{Currency: "EUR"},
+		}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "user-alice"))
 
 	s.Equal(http.StatusOK, rec.Code)
+	var body api.Profile
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
+	s.Require().NotNil(body.Preferences)
+	s.Equal("EUR", body.Preferences.Currency)
 }
 
 func (s *GetProfileSuite) TestNonDiscoverable_OtherCaller_404() {

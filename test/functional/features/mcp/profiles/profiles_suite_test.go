@@ -27,7 +27,7 @@ type getProfileOutput struct {
 			URL  string `json:"url"`
 		} `json:"links"`
 		HasAvatar   bool `json:"has_avatar"`
-		Preferences struct {
+		Preferences *struct {
 			Currency          string `json:"currency"`
 			ShowPriceToMe     bool   `json:"show_price_to_me"`
 			ShowPriceToOthers bool   `json:"show_price_to_others"`
