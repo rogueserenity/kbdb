@@ -14,6 +14,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -62,7 +63,7 @@ func handleListSwitches(
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListSwitchesInput, schema.ListSwitchesOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListSwitchesInput) (*mcp.CallToolResult, schema.ListSwitchesOutput, error) {
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
 		if err != nil {
 			return nil, schema.ListSwitchesOutput{}, err
 		}
@@ -78,7 +79,7 @@ func handleListSwitches(
 			return nil, schema.ListSwitchesOutput{}, errors.New("failed to list switches")
 		}
 
-		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		ownerPrefs, err := ownerprefs.Get(ctx)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
 			return nil, schema.ListSwitchesOutput{}, errors.New("failed to list switches")
@@ -103,7 +104,7 @@ func handleGetSwitch(
 			return nil, schema.GetSwitchOutput{}, errors.New("switch_id must not be blank")
 		}
 
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
 		if err != nil {
 			return nil, schema.GetSwitchOutput{}, err
 		}
@@ -117,7 +118,7 @@ func handleGetSwitch(
 		isOwner := authz.IsOwner(ctx, ownerID)
 		var ownerPrefs repository.ProfilePreferences
 		if !isOwner {
-			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			ownerPrefs, err = ownerprefs.Get(ctx)
 			if err != nil {
 				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.SwitchID, in.SwitchID)
 				return nil, schema.GetSwitchOutput{}, errors.New("failed to get switch")

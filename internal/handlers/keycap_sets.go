@@ -15,6 +15,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -29,7 +30,7 @@ import (
 // [repoapi.KeycapSet.ToAPI]'s per-kit fan-out. total_cost visibility is
 // gated by the owner's Profile preferences - see
 // [repoapi.KeycapSet.ToAPISummary].
-func ListKeycapSets(repo repository.KeycapSetRepository, kr repoapi.KeycapSet, prefs repository.PreferencesReader) http.HandlerFunc {
+func ListKeycapSets(repo repository.KeycapSetRepository, kr repoapi.KeycapSet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -49,7 +50,7 @@ func ListKeycapSets(repo repository.KeycapSetRepository, kr repoapi.KeycapSet, p
 			return
 		}
 
-		ownerPrefs, err := prefs.GetPreferences(r.Context(), ownerID)
+		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
 			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
 			problem.Internal(w, "failed to list keycap sets")
@@ -99,7 +100,7 @@ func ListKeycapSets(repo repository.KeycapSetRepository, kr repoapi.KeycapSet, p
 // returns 404, not 403, to avoid revealing it exists. The owner always
 // sees each kit's price; a non-owner's visibility is gated by the owner's
 // Profile preferences - see [repoapi.KeycapSet.ToAPI].
-func GetKeycapSet(repo repository.KeycapSetRepository, kr repoapi.KeycapSet, prefs repository.PreferencesReader) http.HandlerFunc {
+func GetKeycapSet(repo repository.KeycapSetRepository, kr repoapi.KeycapSet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("keycapSetId")
@@ -124,7 +125,7 @@ func GetKeycapSet(repo repository.KeycapSetRepository, kr repoapi.KeycapSet, pre
 		isOwner := authz.IsOwner(r.Context(), ownerID)
 		var ownerPrefs repository.ProfilePreferences
 		if !isOwner {
-			ownerPrefs, err = prefs.GetPreferences(r.Context(), ownerID)
+			ownerPrefs, err = ownerprefs.Get(r.Context())
 			if err != nil {
 				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeycapSetID, id)
 				problem.Internal(w, "failed to get keycap set")

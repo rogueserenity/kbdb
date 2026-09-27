@@ -14,6 +14,7 @@ import (
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -37,10 +38,11 @@ func (s *ListSwitchesSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListSwitches(s.mockRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
+	s.handler = ListSwitches(s.mockRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *ListSwitchesSuite) newRequest(ctx context.Context, query string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/switches?"+query, nil)
 	req.SetPathValue("userId", "alice")
 	return req
@@ -257,10 +259,11 @@ func (s *GetSwitchSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetSwitch(s.mockRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
+	s.handler = GetSwitch(s.mockRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/switches/sw1", nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("switchId", "sw1")

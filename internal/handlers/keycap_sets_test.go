@@ -15,6 +15,7 @@ import (
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -38,10 +39,11 @@ func (s *ListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListKeycapSets(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
+	s.handler = ListKeycapSets(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keycap-sets?"+query, nil)
 	req.SetPathValue("userId", "alice")
 	return req
@@ -303,10 +305,11 @@ func (s *GetKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetKeycapSet(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
+	s.handler = GetKeycapSet(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keycap-sets/ks1", nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keycapSetId", "ks1")

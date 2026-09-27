@@ -14,6 +14,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -77,7 +78,7 @@ func handleListKeycapSets(
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListKeycapSetsInput, schema.ListKeycapSetsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeycapSetsInput) (*mcp.CallToolResult, schema.ListKeycapSetsOutput, error) {
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
 		if err != nil {
 			return nil, schema.ListKeycapSetsOutput{}, err
 		}
@@ -93,7 +94,7 @@ func handleListKeycapSets(
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
 		}
 
-		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		ownerPrefs, err := ownerprefs.Get(ctx)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
@@ -118,7 +119,7 @@ func handleGetKeycapSet(
 			return nil, schema.GetKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
 		if err != nil {
 			return nil, schema.GetKeycapSetOutput{}, err
 		}
@@ -132,7 +133,7 @@ func handleGetKeycapSet(
 		isOwner := authz.IsOwner(ctx, ownerID)
 		var ownerPrefs repository.ProfilePreferences
 		if !isOwner {
-			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			ownerPrefs, err = ownerprefs.Get(ctx)
 			if err != nil {
 				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID)
 				return nil, schema.GetKeycapSetOutput{}, errors.New("failed to get keycap set")

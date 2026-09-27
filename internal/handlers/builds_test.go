@@ -14,6 +14,7 @@ import (
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -613,10 +614,11 @@ func (s *ListBuildsSuite) SetupTest() {
 		SwitchRepo:    s.mockSwitchRepo,
 		KeycapSetRepo: s.mockKeycapSetRepo,
 	}
-	s.handler = ListBuilds(s.mockBuildRepo, br, s.mockPrefs)
+	s.handler = ListBuilds(s.mockBuildRepo, br)
 }
 
 func (s *ListBuildsSuite) newRequest(ctx context.Context, query string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/builds?"+query, nil)
 	req.SetPathValue("userId", "alice")
 	return req
@@ -998,7 +1000,7 @@ func (s *GetBuildSuite) SetupTest() {
 		SwitchRepo:     s.mockSwitchRepo,
 		KeycapSetRepo:  s.mockKeycapSetRepo,
 	}
-	s.handler = GetBuild(s.mockBuildRepo, br, s.mockPrefs)
+	s.handler = GetBuild(s.mockBuildRepo, br)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb1" as existing -
@@ -1013,6 +1015,7 @@ func (s *GetBuildSuite) stubOwnedKeyboard() {
 }
 
 func (s *GetBuildSuite) newRequest(ctx context.Context, buildID string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/builds/"+buildID, nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("buildId", buildID)

@@ -16,6 +16,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -35,7 +36,7 @@ func parseListLimit(r *http.Request) int {
 // caller (if any) may read, per [authz.ReadableVisibilities]. Price
 // visibility is gated by the owner's Profile preferences - see
 // [repoapi.Switch.ToAPISummary].
-func ListSwitches(repo repository.SwitchRepository, sr repoapi.Switch, prefs repository.PreferencesReader) http.HandlerFunc {
+func ListSwitches(repo repository.SwitchRepository, sr repoapi.Switch) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 
@@ -55,7 +56,7 @@ func ListSwitches(repo repository.SwitchRepository, sr repoapi.Switch, prefs rep
 			return
 		}
 
-		ownerPrefs, err := prefs.GetPreferences(r.Context(), ownerID)
+		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
 			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
 			problem.Internal(w, "failed to list switches")
@@ -105,7 +106,7 @@ func ListSwitches(repo repository.SwitchRepository, sr repoapi.Switch, prefs rep
 // 404, not 403, to avoid revealing it exists. The owner always sees their
 // own price; a non-owner's visibility is gated by the owner's Profile
 // preferences - see [repoapi.Switch.ToAPI].
-func GetSwitch(repo repository.SwitchRepository, sr repoapi.Switch, prefs repository.PreferencesReader) http.HandlerFunc {
+func GetSwitch(repo repository.SwitchRepository, sr repoapi.Switch) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
 		id := r.PathValue("switchId")
@@ -130,7 +131,7 @@ func GetSwitch(repo repository.SwitchRepository, sr repoapi.Switch, prefs reposi
 		isOwner := authz.IsOwner(r.Context(), ownerID)
 		var ownerPrefs repository.ProfilePreferences
 		if !isOwner {
-			ownerPrefs, err = prefs.GetPreferences(r.Context(), ownerID)
+			ownerPrefs, err = ownerprefs.Get(r.Context())
 			if err != nil {
 				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.SwitchID, id)
 				problem.Internal(w, "failed to get switch")

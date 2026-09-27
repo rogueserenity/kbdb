@@ -15,6 +15,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -69,7 +70,6 @@ func validateBuildReferences(
 func ListBuilds(
 	repo repository.BuildRepository,
 	br repoapi.Build,
-	prefs repository.PreferencesReader,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -91,7 +91,7 @@ func ListBuilds(
 			return
 		}
 
-		ownerPrefs, err := prefs.GetPreferences(r.Context(), ownerID)
+		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
 			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
 			problem.Internal(w, "failed to list builds")
@@ -143,7 +143,6 @@ func ListBuilds(
 func GetBuild(
 	repo repository.BuildRepository,
 	br repoapi.Build,
-	prefs repository.PreferencesReader,
 ) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -169,7 +168,7 @@ func GetBuild(
 		isOwner := authz.IsOwner(r.Context(), ownerID)
 		var ownerPrefs repository.ProfilePreferences
 		if !isOwner {
-			ownerPrefs, err = prefs.GetPreferences(r.Context(), ownerID)
+			ownerPrefs, err = ownerprefs.Get(r.Context())
 			if err != nil {
 				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.BuildID, id)
 				problem.Internal(w, "failed to get build")
