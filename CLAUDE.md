@@ -27,6 +27,7 @@ Identity and request plumbing:
 - `authz/` — authorization: what an already-identified caller may read or write. Does not verify tokens.
 - `ctx/` — request-scoped identity values on `context.Context`. Independent of logging and of any transport; business logic needing the caller's user ID depends on this directly.
 - `log/` — request-scoped `*slog.Logger`-in-context plumbing. Knows nothing about where field values come from; callers pass them in.
+- `ownerprefs/` — the item owner's profile preferences on `context.Context`, loaded on first read. REST installs the loader with `middleware.OwnerPreferences`, MCP with `resolveOwner`; handlers read it with `ownerprefs.Get` rather than calling `GetPreferences` themselves.
 
 Transports (each maps to shared logic rather than holding its own):
 - `middleware/` — `net/http` middleware: `Auth`, `Logging`, `Recover`, authorizer context.

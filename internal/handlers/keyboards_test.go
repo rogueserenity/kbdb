@@ -14,6 +14,7 @@ import (
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/problem"
 	"github.com/rogueserenity/kbdb/internal/repoapi"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -37,10 +38,11 @@ func (s *ListKeyboardsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = ListKeyboards(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
+	s.handler = ListKeyboards(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *ListKeyboardsSuite) newRequest(ctx context.Context, query string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keyboards?"+query, nil)
 	req.SetPathValue("userId", "alice")
 	return req
@@ -259,10 +261,11 @@ func (s *GetKeyboardSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.handler = GetKeyboard(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo}, s.mockPrefs)
+	s.handler = GetKeyboard(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keyboards/kb1", nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keyboardId", "kb1")

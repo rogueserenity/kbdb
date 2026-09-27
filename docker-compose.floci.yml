@@ -2,9 +2,7 @@
 # publishes the discovery doc + JWKS to floci S3 for the deployed authorizer.
 services:
   floci:
-    # nightly tracks upstream/main; switch to a pinned version tag once
-    # floci-io/floci cuts a release containing #2146 and #2150.
-    image: floci/floci:nightly
+    image: floci/floci:2.1.0
     environment:
       # Both the host-side test process and the Lambda container must reach
       # the issuer at the same name. floci's embedded DNS resolves this to

@@ -66,6 +66,8 @@ func New(
 	}
 	pr := repoapi.Profile{Images: profileImageStore, Repo: profileRepo}
 
+	ownerPrefs := middleware.OwnerPreferences(profileRepo)
+
 	mux := http.NewServeMux()
 
 	// Not part of api/openapi.yaml, so not wrapped in validate - see
@@ -82,9 +84,9 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public switches (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/switches",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListSwitches(switchRepo, sr, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.ListSwitches(switchRepo, sr)))))
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetSwitch(switchRepo, sr, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetSwitch(switchRepo, sr)))))
 	mux.Handle("POST /v1/users/{userId}/switches",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo, sr))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
@@ -99,9 +101,9 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keyboards (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keyboards",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeyboards(keyboardRepo, kr, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.ListKeyboards(keyboardRepo, kr)))))
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeyboard(keyboardRepo, kr, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetKeyboard(keyboardRepo, kr)))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo, kr))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
@@ -116,9 +118,9 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public keycap sets (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/keycap-sets",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListKeycapSets(keycapSetRepo, kcr, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.ListKeycapSets(keycapSetRepo, kcr)))))
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetKeycapSet(keycapSetRepo, kcr, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetKeycapSet(keycapSetRepo, kcr)))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapSet(keycapSetRepo, kcr))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
@@ -139,11 +141,11 @@ func New(
 	// security: [{}, BearerAuth] in api/openapi.yaml - anonymous callers see
 	// only public builds (see [github.com/rogueserenity/kbdb/internal/authz.ReadableVisibilities]).
 	mux.Handle("GET /v1/users/{userId}/builds",
-		middleware.OptionalAuth(verifier)(validate(handlers.ListBuilds(buildRepo, br, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.ListBuilds(buildRepo, br)))))
 	mux.Handle("POST /v1/users/{userId}/builds",
 		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
-		middleware.OptionalAuth(verifier)(validate(handlers.GetBuild(buildRepo, br, profileRepo))))
+		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetBuild(buildRepo, br)))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",

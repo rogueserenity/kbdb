@@ -15,6 +15,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
+	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -68,7 +69,7 @@ func handleListKeyboards(
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListKeyboardsInput, schema.ListKeyboardsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeyboardsInput) (*mcp.CallToolResult, schema.ListKeyboardsOutput, error) {
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
 		if err != nil {
 			return nil, schema.ListKeyboardsOutput{}, err
 		}
@@ -84,7 +85,7 @@ func handleListKeyboards(
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
 		}
 
-		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
+		ownerPrefs, err := ownerprefs.Get(ctx)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
@@ -109,7 +110,7 @@ func handleGetKeyboard(
 			return nil, schema.GetKeyboardOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
-		ownerID, err := resolveOwnerID(ctx, in.UserID)
+		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
 		if err != nil {
 			return nil, schema.GetKeyboardOutput{}, err
 		}
@@ -123,7 +124,7 @@ func handleGetKeyboard(
 		isOwner := authz.IsOwner(ctx, ownerID)
 		var ownerPrefs repository.ProfilePreferences
 		if !isOwner {
-			ownerPrefs, err = prefs.GetPreferences(ctx, ownerID)
+			ownerPrefs, err = ownerprefs.Get(ctx)
 			if err != nil {
 				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, in.KeyboardID)
 				return nil, schema.GetKeyboardOutput{}, errors.New("failed to get keyboard")
