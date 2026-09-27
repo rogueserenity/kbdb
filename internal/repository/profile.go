@@ -42,6 +42,16 @@ func (p ProfilePreferences) ShowPriceSummary(isOwner bool) bool {
 	return p.ShowPriceToOthers
 }
 
+// CurrencyFor returns p.Currency when price is set and nil otherwise, so a
+// price is never shown without its currency.
+func (p ProfilePreferences) CurrencyFor(price *float64) *string {
+	if price == nil {
+		return nil
+	}
+
+	return &p.Currency
+}
+
 // DefaultProfilePreferences mirrors ProfilePreferences' OpenAPI schema
 // defaults - the Go zero value isn't usable directly, since ShowPriceToMe
 // defaults true but its zero value is false.

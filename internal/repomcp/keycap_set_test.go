@@ -294,7 +294,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NonOwnerShowPriceToOther
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NoPurchaseFields_OmitsPurchase() {
-	out := KeycapSet{}.KitToMCP(repository.KeycapKit{KitID: "kit-1", Name: "Base"}, true, "EUR")
+	out := KeycapSet{}.KitToMCP(repository.KeycapKit{KitID: "kit-1", Name: "Base"}, true, repository.ProfilePreferences{Currency: "EUR"})
 
 	s.Equal("kit-1", out.KitID)
 	s.False(out.HasImage)
@@ -309,7 +309,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceFalse_OmitsPriceKeepsR
 		KitID:    "kit-1",
 		Name:     "Base",
 		Purchase: repository.KeycapKitPurchase{Vendor: &vendor, Price: &price},
-	}, false, "EUR")
+	}, false, repository.ProfilePreferences{Currency: "EUR"})
 
 	s.Require().NotNil(out.Purchase)
 	s.Nil(out.Purchase.Price)
@@ -324,7 +324,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceTrue_IncludesPrice() {
 		KitID:    "kit-1",
 		Name:     "Base",
 		Purchase: repository.KeycapKitPurchase{Price: &price},
-	}, true, "EUR")
+	}, true, repository.ProfilePreferences{Currency: "EUR"})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)

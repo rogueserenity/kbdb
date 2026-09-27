@@ -300,7 +300,7 @@ func handleCreateKeycapKit(
 		}
 
 		// isOwner: true - a kit is always added to the caller's own set.
-		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*created, true, ownerPrefs.Currency)}, nil
+		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*created, true, ownerPrefs)}, nil
 	}
 }
 
@@ -335,7 +335,7 @@ func handleUpdateKeycapKit(
 		}
 
 		// isOwner: true - a kit is always updated on the caller's own set.
-		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*updated, true, ownerPrefs.Currency)}, nil
+		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*updated, true, ownerPrefs)}, nil
 	}
 }
 
