@@ -166,14 +166,11 @@ func GetBuild(
 		}
 
 		isOwner := authz.IsOwner(r.Context(), ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(r.Context())
-			if err != nil {
-				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.BuildID, id)
-				problem.Internal(w, "failed to get build")
-				return
-			}
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.BuildID, id)
+			problem.Internal(w, "failed to get build")
+			return
 		}
 
 		out, err := br.ToAPI(r.Context(), *b, isOwner, ownerPrefs)
@@ -224,6 +221,13 @@ func CreateBuild(
 
 		b.ID = uuid.NewString()
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to create build")
+			return
+		}
+
 		created, err := buildRepo.Create(r.Context(), b)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			// Practically unreachable - ID is a fresh UUID, not caller
@@ -244,7 +248,7 @@ func CreateBuild(
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := br.ToAPI(r.Context(), *created, true, repository.ProfilePreferences{})
+		out, err := br.ToAPI(r.Context(), *created, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, created.ID)
 			problem.Internal(w, "failed to create build")
@@ -295,13 +299,20 @@ func UpdateBuild(
 
 		b.ID = id
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to update build")
+			return
+		}
+
 		updated, err := buildRepo.Update(r.Context(), b)
 		if handleMutationError(w, r, err, log.BuildID, id) {
 			return
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := br.ToAPI(r.Context(), *updated, true, repository.ProfilePreferences{})
+		out, err := br.ToAPI(r.Context(), *updated, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping build to API", log.Error, err, log.BuildID, updated.ID)
 			problem.Internal(w, "failed to update build")

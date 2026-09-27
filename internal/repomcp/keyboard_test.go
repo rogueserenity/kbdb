@@ -140,6 +140,7 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 	s.Nil(out.Purchase.Price)
 	s.Equal(&vendor, out.Purchase.Vendor)
 	s.Equal(&status, out.Purchase.OrderStatus)
+	s.Nil(out.Purchase.Currency)
 }
 
 func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
@@ -149,11 +150,13 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
 	s.InDelta(price, *out.Purchase.Price, 0.0001)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *KeyboardToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
@@ -163,11 +166,13 @@ func (s *KeyboardToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceT
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
 	s.InDelta(price, *out.Purchase.Price, 0.0001)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 type KeyboardToMCPSummarySuite struct {
@@ -210,10 +215,12 @@ func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
-	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 
 	s.Require().NotNil(out.Price)
 	s.InDelta(price, *out.Price, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
@@ -225,6 +232,7 @@ func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Nil(out.Price)
+	s.Nil(out.Currency)
 }
 
 func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice() {
@@ -236,6 +244,7 @@ func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPric
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
 	s.Nil(out.Price)
+	s.Nil(out.Currency)
 }
 
 func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
@@ -244,10 +253,12 @@ func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPr
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: &price},
-	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
 	s.Require().NotNil(out.Price)
 	s.InDelta(price, *out.Price, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 type KeyboardFromMCPSuite struct {
@@ -273,7 +284,7 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 			Plates:  []string{"Brass"},
 		},
 		PCB:        &schema.KeyboardPCB{Firmware: &firmware},
-		Purchase:   &schema.KeyboardPurchase{Price: &price},
+		Purchase:   &schema.KeyboardPurchaseInput{Price: &price},
 		Visibility: "public",
 	})
 

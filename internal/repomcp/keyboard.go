@@ -23,7 +23,7 @@ func (k Keyboard) ToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs reposit
 		Layout:     kb.Layout,
 		Design:     k.designToMCP(kb.Design),
 		PCB:        k.pcbToMCP(kb.PCB),
-		Purchase:   k.purchaseToMCP(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
+		Purchase:   k.purchaseToMCP(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner), ownerPrefs.Currency),
 		Notes:      kb.Notes,
 		Visibility: ownerVisibility(kb.Visibility, isOwner),
 		HasImages:  len(kb.Images) > 0,
@@ -48,6 +48,7 @@ func (k Keyboard) ToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs 
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = kb.Purchase.Price
 	}
+	summary.Currency = currencyFor(summary.Price, ownerPrefs.Currency)
 	if isOwner {
 		v := string(kb.Visibility)
 		summary.Visibility = &v
@@ -99,7 +100,7 @@ func (k Keyboard) pcbToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
 
 // Dates pass through as strings, unlike [repoapi.Keyboard.ToAPI], so this
 // can't fail on a malformed one.
-func (k Keyboard) purchaseToMCP(p repository.KeyboardPurchase, showPrice bool) *schema.KeyboardPurchase {
+func (k Keyboard) purchaseToMCP(p repository.KeyboardPurchase, showPrice bool, currency string) *schema.KeyboardPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil
@@ -114,6 +115,7 @@ func (k Keyboard) purchaseToMCP(p repository.KeyboardPurchase, showPrice bool) *
 	if showPrice {
 		out.Price = p.Price
 	}
+	out.Currency = currencyFor(out.Price, currency)
 
 	return out
 }
@@ -172,7 +174,7 @@ func (k Keyboard) pcbFromMCP(p *schema.KeyboardPCB) repository.KeyboardPCB {
 	}
 }
 
-func (k Keyboard) purchaseFromMCP(p *schema.KeyboardPurchase) repository.KeyboardPurchase {
+func (k Keyboard) purchaseFromMCP(p *schema.KeyboardPurchaseInput) repository.KeyboardPurchase {
 	if p == nil {
 		return repository.KeyboardPurchase{}
 	}

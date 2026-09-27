@@ -127,7 +127,7 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 			Name:       full.Name,
 			Notes:      full.Notes,
 			Pcb:        full.Pcb,
-			Purchase:   full.Purchase,
+			Purchase:   purchaseInput(full.Purchase),
 			Size:       full.Size,
 			Visibility: visibility,
 		}
@@ -190,7 +190,7 @@ func restoreSwitches(ctx context.Context, client *apiClient, dumpDir string, m *
 			Name:         full.Name,
 			Notes:        full.Notes,
 			Pins:         full.Pins,
-			Purchase:     full.Purchase,
+			Purchase:     switchPurchaseInput(full.Purchase),
 			Spring:       full.Spring,
 			Type:         full.Type,
 			Visibility:   visibility,
@@ -276,7 +276,7 @@ func restoreKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m
 			}
 			kitInput := api.KeycapKitInput{
 				Name:     kit.Name,
-				Purchase: kit.Purchase,
+				Purchase: purchaseInput(kit.Purchase),
 			}
 			if kit.KitId == primaryKitID && primaryKitID != "" {
 				t := true
@@ -352,6 +352,46 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 	return nil
 }
 
+// purchaseInput, switchPurchaseInput and stabsInput drop the read-only
+// currency from a dumped read shape so it can be sent back as a write.
+func purchaseInput(p *api.Purchase) *api.PurchaseInput {
+	if p == nil {
+		return nil
+	}
+	return &api.PurchaseInput{
+		Vendor:       p.Vendor,
+		Price:        p.Price,
+		OrderDate:    p.OrderDate,
+		DeliveryDate: p.DeliveryDate,
+		OrderStatus:  p.OrderStatus,
+	}
+}
+
+func switchPurchaseInput(p *api.SwitchPurchase) *api.SwitchPurchaseInput {
+	if p == nil {
+		return nil
+	}
+	return &api.SwitchPurchaseInput{
+		Vendor:       p.Vendor,
+		Price:        p.Price,
+		OrderDate:    p.OrderDate,
+		DeliveryDate: p.DeliveryDate,
+		OrderStatus:  p.OrderStatus,
+		Quantity:     p.Quantity,
+	}
+}
+
+func stabsInput(s *api.BuildStabs) *api.BuildStabsInput {
+	if s == nil {
+		return nil
+	}
+	return &api.BuildStabsInput{
+		Name:      s.Name,
+		MountType: s.MountType,
+		Price:     s.Price,
+	}
+}
+
 // dumpedVisibility unwraps a dumped item's visibility. The API returns it
 // only to the item's owner, and a dump reads the caller's own collection, so
 // it's missing only if the dump was taken as a different user.
@@ -385,7 +425,7 @@ func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
 		Keyboard:      kb.NewID,
 		Notes:         full.Notes,
 		Plate:         full.Plate,
-		Stabs:         full.Stabs,
+		Stabs:         stabsInput(full.Stabs),
 		Visibility:    visibility,
 	}
 

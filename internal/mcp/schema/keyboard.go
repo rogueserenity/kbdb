@@ -23,6 +23,7 @@ type KeyboardSummary struct {
 	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImages   bool     `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
 	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Currency    *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
 	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; only ever present for the keyboard's owner"`
 }
 
@@ -79,15 +80,15 @@ type DeleteKeyboardOutput struct {
 // KeyboardInput is the writable half of a keyboard, shared by
 // create_keyboard and update_keyboard.
 type KeyboardInput struct {
-	Brand      string            `json:"brand" jsonschema:"the keyboard's brand"`
-	Name       string            `json:"name" jsonschema:"the keyboard's name"`
-	Size       *string           `json:"size,omitempty" jsonschema:"the keyboard's size; must be an approved keyboard_size lookup value"`
-	Layout     *string           `json:"layout,omitempty" jsonschema:"the keyboard's layout; must be an approved keyboard_layout value whose sizes include this keyboard's size"`
-	Design     *KeyboardDesign   `json:"design,omitempty" jsonschema:"the case and plate makeup"`
-	PCB        *KeyboardPCB      `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
-	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
-	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
+	Brand      string                 `json:"brand" jsonschema:"the keyboard's brand"`
+	Name       string                 `json:"name" jsonschema:"the keyboard's name"`
+	Size       *string                `json:"size,omitempty" jsonschema:"the keyboard's size; must be an approved keyboard_size lookup value"`
+	Layout     *string                `json:"layout,omitempty" jsonschema:"the keyboard's layout; must be an approved keyboard_layout value whose sizes include this keyboard's size"`
+	Design     *KeyboardDesign        `json:"design,omitempty" jsonschema:"the case and plate makeup"`
+	PCB        *KeyboardPCB           `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
+	Purchase   *KeyboardPurchaseInput `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Notes      *string                `json:"notes,omitempty" jsonschema:"free-form notes"`
+	Visibility string                 `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
 }
 
 // Keyboard reports HasImages rather than the image list itself - call
@@ -135,6 +136,16 @@ type KeyboardPCB struct {
 // are strings, not a date type - see
 // [github.com/rogueserenity/kbdb/internal/repomcp.KeyboardToMCP].
 type KeyboardPurchase struct {
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the keyboard was bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	Currency     *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+}
+
+// KeyboardPurchaseInput is the writable form of KeyboardPurchase.
+type KeyboardPurchaseInput struct {
 	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the keyboard was bought"`
 	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`

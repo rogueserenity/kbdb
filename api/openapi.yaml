@@ -1409,6 +1409,14 @@ components:
       maximum: 100000000000000
       example: 123.45
 
+    Currency:
+      type: string
+      example: USD
+      description: >
+        An ISO 4217 currency code, from the item owner's
+        preferences.currency. Display-only: kbdb stores no currency with a
+        price and does no conversion.
+
     Visibility:
       type: string
       enum: [public, authenticated, private]
@@ -1421,7 +1429,7 @@ components:
         is no per-user allowlist/sharing mechanism beyond these three
         tiers — visibility is not scoped to specific other users.
 
-    Purchase:
+    PurchaseInput:
       type: object
       description: >
         Full purchase-lifecycle tracking, used by keyboards and keycap set
@@ -1442,6 +1450,29 @@ components:
         order_status:
           type: string
           description: Open vocabulary — validated against the "order_status" lookup at request time.
+
+    Purchase:
+      type: object
+      description: >
+        The read form of PurchaseInput.
+      properties:
+        vendor:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling price.
+            Present exactly when price is.
+        order_date:
+          type: string
+          format: date
+        delivery_date:
+          type: string
+          format: date
+        order_status:
+          type: string
 
     MaterialColor:
       type: object
@@ -1516,7 +1547,7 @@ components:
         pcb:
           $ref: "#/components/schemas/KeyboardPCB"
         purchase:
-          $ref: "#/components/schemas/Purchase"
+          $ref: "#/components/schemas/PurchaseInput"
         notes:
           type: string
         visibility:
@@ -1627,6 +1658,11 @@ components:
             What the keyboard cost. Present for the owner only if their
             show_price_to_me preference is set, and for any other caller
             only if the owner's show_price_to_others is.
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling price.
+            Present exactly when price is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
@@ -1687,10 +1723,10 @@ components:
           format: double
           description: Total travel distance in mm.
 
-    SwitchPurchase:
+    SwitchPurchaseInput:
       type: object
       description: >
-        Same purchase-lifecycle tracking as Purchase, plus a quantity
+        Same purchase-lifecycle tracking as PurchaseInput, plus a quantity
         field since switches are bought in bulk.
       additionalProperties: false
       properties:
@@ -1708,6 +1744,31 @@ components:
         order_status:
           type: string
           description: Open vocabulary — validated against the "order_status" lookup at request time.
+        quantity:
+          type: integer
+
+    SwitchPurchase:
+      type: object
+      description: >
+        The read form of SwitchPurchaseInput.
+      properties:
+        vendor:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling price.
+            Present exactly when price is.
+        order_date:
+          type: string
+          format: date
+        delivery_date:
+          type: string
+          format: date
+        order_status:
+          type: string
         quantity:
           type: integer
 
@@ -1742,7 +1803,7 @@ components:
         spring:
           $ref: "#/components/schemas/SwitchSpring"
         purchase:
-          $ref: "#/components/schemas/SwitchPurchase"
+          $ref: "#/components/schemas/SwitchPurchaseInput"
         notes:
           type: string
         visibility:
@@ -1837,6 +1898,11 @@ components:
             What the switch cost. Present for the owner only if their
             show_price_to_me preference is set, and for any other caller
             only if the owner's show_price_to_others is.
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling price.
+            Present exactly when price is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
@@ -2032,7 +2098,7 @@ components:
           pattern: "\\S"
           description: e.g. "Base", "Extension", "Accents".
         purchase:
-          $ref: "#/components/schemas/Purchase"
+          $ref: "#/components/schemas/PurchaseInput"
         primary:
           type: boolean
           description: >
@@ -2067,20 +2133,22 @@ components:
             Presigned S3 PUT URL. Short-lived — upload promptly.
 
     KeycapKit:
-      allOf:
-        - $ref: "#/components/schemas/KeycapKitInput"
-        - type: object
-          required: [kit_id]
-          properties:
-            kit_id:
-              type: string
-              description: Server-generated identifier for this kit, unique within the keycap set.
-            image:
-              $ref: "#/components/schemas/KeycapKitImage"
-              description: >
-                Managed via the dedicated image endpoint, not via PUT on
-                the kit itself — see POST/DELETE
-                .../keycap-sets/{keycapSetId}/kits/{kitId}/image.
+      type: object
+      required: [kit_id, name]
+      properties:
+        kit_id:
+          type: string
+          description: Server-generated identifier for this kit, unique within the keycap set.
+        name:
+          type: string
+        purchase:
+          $ref: "#/components/schemas/Purchase"
+        image:
+          $ref: "#/components/schemas/KeycapKitImage"
+          description: >
+            Managed via the dedicated image endpoint, not via PUT on
+            the kit itself — see POST/DELETE
+            .../keycap-sets/{keycapSetId}/kits/{kitId}/image.
 
     KeycapSetInput:
       type: object
@@ -2185,6 +2253,11 @@ components:
             zero, so this may undercount. Present for the owner only if
             their show_price_to_me preference is set, and for any other
             caller only if the owner's show_price_to_others is.
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling total_cost.
+            Present exactly when total_cost is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >
@@ -2333,7 +2406,7 @@ components:
             fetch of the build — do not cache or persist this value, it
             expires.
 
-    BuildStabs:
+    BuildStabsInput:
       type: object
       additionalProperties: false
       properties:
@@ -2345,6 +2418,23 @@ components:
           description: Open vocabulary — validated against the "build_stabilizer_mount_type" lookup at request time.
         price:
           $ref: "#/components/schemas/Money"
+
+    BuildStabs:
+      type: object
+      description: >
+        The read form of BuildStabsInput.
+      properties:
+        name:
+          type: string
+        mount_type:
+          type: string
+        price:
+          $ref: "#/components/schemas/Money"
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling price.
+            Present exactly when price is.
 
     BuildCaseMountType:
       type: object
@@ -2377,7 +2467,7 @@ components:
         case_mount_type:
           $ref: "#/components/schemas/BuildCaseMountType"
         stabs:
-          $ref: "#/components/schemas/BuildStabs"
+          $ref: "#/components/schemas/BuildStabsInput"
         foam:
           type: boolean
         switches:
@@ -2491,6 +2581,11 @@ components:
             switches, keycap kits, stabs). Components with no known price
             are excluded rather than treated as zero, so this may
             undercount.
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling total_cost.
+            Present exactly when total_cost is.
 
     BuildSummary:
       type: object
@@ -2523,6 +2618,11 @@ components:
             undercount. Present for the owner only if their
             show_price_to_me preference is set, and for any other caller
             only if the owner's show_price_to_others is.
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling total_cost.
+            Present exactly when total_cost is.
         visibility:
           $ref: "#/components/schemas/Visibility"
           description: >

@@ -51,6 +51,7 @@ type getOutput struct {
 		Purchase *struct {
 			Vendor      *string  `json:"vendor"`
 			Price       *float64 `json:"price"`
+			Currency    *string  `json:"currency"`
 			OrderStatus *string  `json:"order_status"`
 		} `json:"purchase"`
 	} `json:"keyboard"`

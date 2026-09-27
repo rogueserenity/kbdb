@@ -24,6 +24,7 @@ func validBuildInput() schema.BuildInput {
 type HandleCreateBuildSuite struct {
 	suite.Suite
 
+	mockPrefs     *mocks.MockPreferencesReader
 	mockBuilds    *mocks.MockBuildRepository
 	mockKeyboards *mocks.MockKeyboardRepository
 	mockSwitches  *mocks.MockSwitchRepository
@@ -35,6 +36,9 @@ func TestHandleCreateBuildSuite(t *testing.T) {
 }
 
 func (s *HandleCreateBuildSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
@@ -42,7 +46,7 @@ func (s *HandleCreateBuildSuite) SetupTest() {
 }
 
 func (s *HandleCreateBuildSuite) handler() mcp.ToolHandlerFor[schema.CreateBuildInput, schema.CreateBuildOutput] {
-	return handleCreateBuild(s.mockBuilds, s.mockKeyboards, s.mockSwitches, s.mockKeycaps)
+	return handleCreateBuild(s.mockBuilds, s.mockKeyboards, s.mockSwitches, s.mockKeycaps, s.mockPrefs)
 }
 
 // stubOwnedKeyboard arranges keyboardRepo.Get to report "kb-1" as existing
@@ -115,7 +119,7 @@ func (s *HandleCreateBuildSuite) TestNonPositiveSwitchCount_ReturnsError() {
 
 func (s *HandleCreateBuildSuite) TestUnapprovedStabsName_ReturnsError() {
 	in := validBuildInput()
-	in.Stabs = &schema.BuildStabs{Name: strPtrMCP("NotApproved")}
+	in.Stabs = &schema.BuildStabsInput{Name: strPtrMCP("NotApproved")}
 
 	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: in})
@@ -266,6 +270,7 @@ func (s *HandleCreateBuildSuite) TestReferenceCheckRepositoryError_ReturnsError(
 type HandleUpdateBuildSuite struct {
 	suite.Suite
 
+	mockPrefs     *mocks.MockPreferencesReader
 	mockBuilds    *mocks.MockBuildRepository
 	mockKeyboards *mocks.MockKeyboardRepository
 	mockSwitches  *mocks.MockSwitchRepository
@@ -277,6 +282,9 @@ func TestHandleUpdateBuildSuite(t *testing.T) {
 }
 
 func (s *HandleUpdateBuildSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
@@ -284,7 +292,7 @@ func (s *HandleUpdateBuildSuite) SetupTest() {
 }
 
 func (s *HandleUpdateBuildSuite) handler() mcp.ToolHandlerFor[schema.UpdateBuildInput, schema.UpdateBuildOutput] {
-	return handleUpdateBuild(s.mockBuilds, s.mockKeyboards, s.mockSwitches, s.mockKeycaps)
+	return handleUpdateBuild(s.mockBuilds, s.mockKeyboards, s.mockSwitches, s.mockKeycaps, s.mockPrefs)
 }
 
 func (s *HandleUpdateBuildSuite) stubOwnedKeyboard() {
@@ -552,7 +560,7 @@ func (s *HandleGetBuildSuite) TestSucceeds() {
 			Keyboard:   "kb-1",
 			Visibility: repository.VisibilityPrivate,
 		}, nil)
-	// Owner path: no GetPreferences call expected.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
 
 	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
@@ -644,7 +652,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersFalse_Om
 	s.Nil(out.Build.Stabs.Price)
 }
 
-func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceNoPreferencesLookup() {
+func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceAndCurrency() {
 	price := 12.5
 	s.mockBuilds.EXPECT().
 		Get(mock.Anything, callerID, "build-1").
@@ -652,7 +660,8 @@ func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceNoPreferencesLoo
 			ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate,
 			Stabs: &repository.BuildStabs{Price: &price},
 		}, nil)
-	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
 	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
@@ -661,6 +670,8 @@ func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceNoPreferencesLoo
 	s.Require().NotNil(out.Build.Stabs)
 	s.Require().NotNil(out.Build.Stabs.Price)
 	s.InDelta(price, *out.Build.Stabs.Price, 0.0001)
+	s.Require().NotNil(out.Build.Stabs.Currency)
+	s.Equal("EUR", *out.Build.Stabs.Currency)
 }
 
 func (s *HandleGetBuildSuite) TestOtherUsersPreferencesError_ReturnsError() {
@@ -1057,4 +1068,54 @@ func (s *HandleListBuildsSuite) TestOtherUsersCollection_OmitsVisibility() {
 	s.Require().NoError(err)
 	s.Require().Len(out.Builds, 1)
 	s.Nil(out.Builds[0].Visibility)
+}
+
+func (s *HandleCreateBuildSuite) TestReturnsOwnersCurrencyWithPrice() {
+	s.stubOwnedKeyboard()
+	price := 99.5
+	s.mockBuilds.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(&repository.Build{ID: "b-1", Keyboard: "kb-1", Stabs: &repository.BuildStabs{Price: &price}}, nil)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: validBuildInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Build.Stabs.Currency)
+	s.Equal("EUR", *out.Build.Stabs.Currency)
+}
+
+func (s *HandleCreateBuildSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.stubOwnedKeyboard()
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: validBuildInput()})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleUpdateBuildSuite) TestReturnsOwnersCurrencyWithPrice() {
+	s.stubOwnedKeyboard()
+	price := 99.5
+	s.mockBuilds.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&repository.Build{ID: "b-1", Keyboard: "kb-1", Stabs: &repository.BuildStabs{Price: &price}}, nil)
+
+	handler := s.handler()
+	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{BuildID: "b-1", BuildInput: validBuildInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Build.Stabs.Currency)
+	s.Equal("EUR", *out.Build.Stabs.Currency)
+}
+
+func (s *HandleUpdateBuildSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.stubOwnedKeyboard()
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{BuildID: "b-1", BuildInput: validBuildInput()})
+
+	s.Require().Error(err)
 }

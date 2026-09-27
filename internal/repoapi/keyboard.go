@@ -23,7 +23,7 @@ type Keyboard struct {
 // an error if a stored Purchase date doesn't match dateLayout, or an image
 // fails to presign.
 func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Keyboard, error) {
-	purchase, err := k.purchaseToAPI(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner))
+	purchase, err := k.purchaseToAPI(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner), ownerPrefs.Currency)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -129,6 +129,7 @@ func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOw
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = kb.Purchase.Price
 	}
+	summary.Currency = currencyFor(summary.Price, ownerPrefs.Currency)
 	if isOwner {
 		v := api.Visibility(kb.Visibility)
 		summary.Visibility = &v
@@ -235,7 +236,7 @@ func (k Keyboard) pcbToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
 	}
 }
 
-func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (*api.Purchase, error) {
+func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, showPrice bool, currency string) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
@@ -247,6 +248,7 @@ func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (
 	if showPrice {
 		out.Price = p.Price
 	}
+	out.Currency = currencyFor(out.Price, currency)
 	if p.OrderDate != nil {
 		d, err := parseAPIDate(*p.OrderDate)
 		if err != nil {
@@ -265,7 +267,7 @@ func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, showPrice bool) (
 	return out, nil
 }
 
-func (k Keyboard) purchaseToRepo(p *api.Purchase) repository.KeyboardPurchase {
+func (k Keyboard) purchaseToRepo(p *api.PurchaseInput) repository.KeyboardPurchase {
 	if p == nil {
 		return repository.KeyboardPurchase{}
 	}

@@ -100,6 +100,7 @@ func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPrice() {
 	s.Require().NotNil(out.Stabs)
 	s.Nil(out.Stabs.Price)
 	s.Equal(strPtr("Durock v3"), out.Stabs.Name)
+	s.Nil(out.Stabs.Currency)
 }
 
 func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPrice() {
@@ -111,11 +112,13 @@ func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPrice()
 			Price: floatPtr(12.5),
 		},
 		Visibility: repository.VisibilityPublic,
-	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
 	s.Require().NotNil(out.Stabs)
 	s.Require().NotNil(out.Stabs.Price)
 	s.InDelta(12.5, *out.Stabs.Price, 0.0001)
+	s.Require().NotNil(out.Stabs.Currency)
+	s.Equal("EUR", *out.Stabs.Currency)
 }
 
 func (s *BuildToMCPSuite) TestOwner_AlwaysIncludesStabsPriceRegardlessOfShowPriceToMe() {
@@ -127,11 +130,13 @@ func (s *BuildToMCPSuite) TestOwner_AlwaysIncludesStabsPriceRegardlessOfShowPric
 			Price: floatPtr(12.5),
 		},
 		Visibility: repository.VisibilityPublic,
-	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
 
 	s.Require().NotNil(out.Stabs)
 	s.Require().NotNil(out.Stabs.Price)
 	s.InDelta(12.5, *out.Stabs.Price, 0.0001)
+	s.Require().NotNil(out.Stabs.Currency)
+	s.Equal("EUR", *out.Stabs.Currency)
 }
 
 func (s *BuildToMCPSuite) TestNoImages_HasImagesFalse() {
@@ -154,7 +159,7 @@ func (s *BuildToMCPSuite) TestBuildFromMCP_MapsAllFields() {
 			Type:      strPtr("Top Mount"),
 			Durometer: strPtr("70A"),
 		},
-		Stabs: &schema.BuildStabs{
+		Stabs: &schema.BuildStabsInput{
 			Name:      strPtr("Durock v3"),
 			MountType: strPtr("Screw-in"),
 			Price:     floatPtr(12.5),
@@ -351,11 +356,13 @@ func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
 		}, nil)
 
 	out, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches, KeycapSetRepo: sets}.ToMCPSummary(
-		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+		context.Background(), b, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(340.0, *out.TotalCost, 0.001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *BuildToMCPSummarySuite) TestPriceHidden_SkipsComponentLookupsEntirely() {
@@ -375,6 +382,7 @@ func (s *BuildToMCPSummarySuite) TestPriceHidden_SkipsComponentLookupsEntirely()
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *BuildToMCPSummarySuite) TestSwitchWithoutQuantity_ExcludedFromTotalRatherThanGuessed() {

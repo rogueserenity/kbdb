@@ -231,7 +231,7 @@ func (s *HandleGetSwitchSuite) TestSucceeds() {
 			Type:       "linear",
 			Visibility: repository.VisibilityPrivate,
 		}, nil)
-	// Owner path: no GetPreferences call expected.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
 
 	handler := handleGetSwitch(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetSwitchInput{SwitchID: "sw-1"})
@@ -332,7 +332,7 @@ func (s *HandleGetSwitchSuite) TestOtherUsersPublicSwitchShowPriceToOthersFalse_
 	s.Nil(out.Switch.Purchase.Price)
 }
 
-func (s *HandleGetSwitchSuite) TestOwner_AlwaysIncludesPriceNoPreferencesLookup() {
+func (s *HandleGetSwitchSuite) TestOwner_AlwaysIncludesPriceAndCurrency() {
 	price := 8.50
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, callerID, "sw-1").
@@ -340,7 +340,8 @@ func (s *HandleGetSwitchSuite) TestOwner_AlwaysIncludesPriceNoPreferencesLookup(
 			ID: "sw-1", Visibility: repository.VisibilityPrivate,
 			Purchase: repository.SwitchPurchase{Price: &price},
 		}, nil)
-	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
 	handler := handleGetSwitch(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetSwitchInput{SwitchID: "sw-1"})
@@ -349,6 +350,8 @@ func (s *HandleGetSwitchSuite) TestOwner_AlwaysIncludesPriceNoPreferencesLookup(
 	s.Require().NotNil(out.Switch.Purchase)
 	s.Require().NotNil(out.Switch.Purchase.Price)
 	s.InDelta(price, *out.Switch.Purchase.Price, 0.0001)
+	s.Require().NotNil(out.Switch.Purchase.Currency)
+	s.Equal("EUR", *out.Switch.Purchase.Currency)
 }
 
 func (s *HandleGetSwitchSuite) TestRepositoryError_ReturnsError() {
@@ -376,6 +379,7 @@ func validInput() schema.SwitchInput {
 type HandleCreateSwitchSuite struct {
 	suite.Suite
 
+	mockPrefs    *mocks.MockPreferencesReader
 	mockSwitches *mocks.MockSwitchRepository
 }
 
@@ -384,6 +388,9 @@ func TestHandleCreateSwitchSuite(t *testing.T) {
 }
 
 func (s *HandleCreateSwitchSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
 }
 
@@ -394,7 +401,7 @@ func (s *HandleCreateSwitchSuite) TestSucceeds() {
 			return &sw, nil
 		})
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
 	s.Require().NoError(err)
@@ -406,7 +413,7 @@ func (s *HandleCreateSwitchSuite) TestBlankBrand_ReturnsError() {
 	in := validInput()
 	in.Brand = ""
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "brand must not be blank")
@@ -418,7 +425,7 @@ func (s *HandleCreateSwitchSuite) TestWhitespaceOnlyBrand_ReturnsError() {
 	in := validInput()
 	in.Brand = "   "
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "brand must not be blank")
@@ -428,7 +435,7 @@ func (s *HandleCreateSwitchSuite) TestInvalidVisibility_ReturnsError() {
 	in := validInput()
 	in.Visibility = "everyone"
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "visibility")
@@ -438,7 +445,7 @@ func (s *HandleCreateSwitchSuite) TestUnapprovedLookupValue_ReturnsError() {
 	in := validInput()
 	in.Type = "NotAType"
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "not an approved")
@@ -450,7 +457,7 @@ func (s *HandleCreateSwitchSuite) TestAlreadyExists_ReturnsAlreadyExists() {
 		Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrAlreadyExists)
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
 	s.Require().ErrorIs(err, errSwitchAlreadyExists)
@@ -461,7 +468,7 @@ func (s *HandleCreateSwitchSuite) TestRepositoryError_ReturnsError() {
 		Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("put failed"))
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
 	s.Require().ErrorContains(err, "failed to create switch")
@@ -474,9 +481,9 @@ func (s *HandleCreateSwitchSuite) TestRepositoryError_ReturnsError() {
 func (s *HandleCreateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
 	bad := "next tuesday"
 	in := validInput()
-	in.Purchase = &schema.SwitchPurchase{OrderDate: &bad}
+	in.Purchase = &schema.SwitchPurchaseInput{OrderDate: &bad}
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "purchase.order_date")
@@ -486,9 +493,9 @@ func (s *HandleCreateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
 func (s *HandleCreateSwitchSuite) TestMalformedDeliveryDate_ReturnsError() {
 	bad := "2026-13-45"
 	in := validInput()
-	in.Purchase = &schema.SwitchPurchase{DeliveryDate: &bad}
+	in.Purchase = &schema.SwitchPurchaseInput{DeliveryDate: &bad}
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().ErrorContains(err, "purchase.delivery_date")
@@ -497,7 +504,7 @@ func (s *HandleCreateSwitchSuite) TestMalformedDeliveryDate_ReturnsError() {
 func (s *HandleCreateSwitchSuite) TestWellFormedDates_Succeed() {
 	ordered, delivered := "2026-01-15", "2026-02-01"
 	in := validInput()
-	in.Purchase = &schema.SwitchPurchase{OrderDate: &ordered, DeliveryDate: &delivered}
+	in.Purchase = &schema.SwitchPurchaseInput{OrderDate: &ordered, DeliveryDate: &delivered}
 
 	s.mockSwitches.EXPECT().
 		Create(mock.Anything, mock.Anything).
@@ -505,7 +512,7 @@ func (s *HandleCreateSwitchSuite) TestWellFormedDates_Succeed() {
 			return &sw, nil
 		})
 
-	handler := handleCreateSwitch(s.mockSwitches)
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: in})
 
 	s.Require().NoError(err)
@@ -514,6 +521,7 @@ func (s *HandleCreateSwitchSuite) TestWellFormedDates_Succeed() {
 type HandleUpdateSwitchSuite struct {
 	suite.Suite
 
+	mockPrefs    *mocks.MockPreferencesReader
 	mockSwitches *mocks.MockSwitchRepository
 }
 
@@ -522,6 +530,9 @@ func TestHandleUpdateSwitchSuite(t *testing.T) {
 }
 
 func (s *HandleUpdateSwitchSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockSwitches = mocks.NewMockSwitchRepository(s.T())
 }
 
@@ -532,7 +543,7 @@ func (s *HandleUpdateSwitchSuite) TestSucceeds() {
 			return &sw, nil
 		})
 
-	handler := handleUpdateSwitch(s.mockSwitches)
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "sw-1",
 		SwitchInput: validInput(),
@@ -546,7 +557,7 @@ func (s *HandleUpdateSwitchSuite) TestBlankName_ReturnsError() {
 	in := validInput()
 	in.Name = ""
 
-	handler := handleUpdateSwitch(s.mockSwitches)
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "sw-1",
 		SwitchInput: in,
@@ -556,7 +567,7 @@ func (s *HandleUpdateSwitchSuite) TestBlankName_ReturnsError() {
 }
 
 func (s *HandleUpdateSwitchSuite) TestBlankSwitchID_ReturnsError() {
-	handler := handleUpdateSwitch(s.mockSwitches)
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "  ",
 		SwitchInput: validInput(),
@@ -568,9 +579,9 @@ func (s *HandleUpdateSwitchSuite) TestBlankSwitchID_ReturnsError() {
 func (s *HandleUpdateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
 	bad := "01/15/2026"
 	in := validInput()
-	in.Purchase = &schema.SwitchPurchase{OrderDate: &bad}
+	in.Purchase = &schema.SwitchPurchaseInput{OrderDate: &bad}
 
-	handler := handleUpdateSwitch(s.mockSwitches)
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "sw-1",
 		SwitchInput: in,
@@ -582,9 +593,9 @@ func (s *HandleUpdateSwitchSuite) TestMalformedOrderDate_ReturnsError() {
 func (s *HandleUpdateSwitchSuite) TestMalformedDeliveryDate_ReturnsError() {
 	bad := "2026-13-45"
 	in := validInput()
-	in.Purchase = &schema.SwitchPurchase{DeliveryDate: &bad}
+	in.Purchase = &schema.SwitchPurchaseInput{DeliveryDate: &bad}
 
-	handler := handleUpdateSwitch(s.mockSwitches)
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "sw-1",
 		SwitchInput: in,
@@ -598,7 +609,7 @@ func (s *HandleUpdateSwitchSuite) TestNotFound_ReturnsNotFound() {
 		Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleUpdateSwitch(s.mockSwitches)
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{
 		SwitchID:    "missing",
 		SwitchInput: validInput(),
@@ -953,4 +964,50 @@ func (s *HandleDeleteSwitchImageSuite) TestS3DeleteError_ReturnsError_DoesNotCle
 	s.Require().ErrorContains(err, "failed to delete switch image")
 	// mockSwitches has no .EXPECT() for ClearImagePath - verifies the DB
 	// record was never touched.
+}
+
+func (s *HandleCreateSwitchSuite) TestReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockSwitches.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(&repository.Switch{ID: "sw-1", Purchase: repository.SwitchPurchase{Price: &price}}, nil)
+
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Switch.Purchase.Currency)
+	s.Equal("EUR", *out.Switch.Purchase.Currency)
+}
+
+func (s *HandleCreateSwitchSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleUpdateSwitchSuite) TestReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockSwitches.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&repository.Switch{ID: "sw-1", Purchase: repository.SwitchPurchase{Price: &price}}, nil)
+
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{SwitchID: "sw-1", SwitchInput: validInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.Switch.Purchase.Currency)
+	s.Equal("EUR", *out.Switch.Purchase.Currency)
+}
+
+func (s *HandleUpdateSwitchSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{SwitchID: "sw-1", SwitchInput: validInput()})
+
+	s.Require().Error(err)
 }

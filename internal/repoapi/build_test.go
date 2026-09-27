@@ -665,6 +665,7 @@ func (s *BuildToAPISuite) TestTotalCost_NoPricedComponents_OmitsField() {
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *BuildToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPriceAndTotalCost() {
@@ -698,6 +699,8 @@ func (s *BuildToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPriceAndT
 	s.Equal(b.Stabs.Name, out.Stabs.Name)
 	s.Equal(b.Stabs.MountType, out.Stabs.MountType)
 	s.Nil(out.TotalCost)
+	s.Nil(out.Stabs.Currency)
+	s.Nil(out.Currency)
 }
 
 func (s *BuildToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPriceAndTotalCost() {
@@ -723,13 +726,17 @@ func (s *BuildToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesStabsPriceAn
 			}},
 		}, nil)
 
-	out, err := d.callWithPrefs(context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	out, err := d.callWithPrefs(context.Background(), b, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Stabs)
 	s.Equal(b.Stabs.Price, out.Stabs.Price)
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Stabs.Currency)
+	s.Equal("EUR", *out.Stabs.Currency)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *BuildToAPISuite) TestOwner_AlwaysIncludesStabsPriceAndTotalCostRegardlessOfShowPriceToMe() {
@@ -755,13 +762,17 @@ func (s *BuildToAPISuite) TestOwner_AlwaysIncludesStabsPriceAndTotalCostRegardle
 			}},
 		}, nil)
 
-	out, err := d.callWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	out, err := d.callWithPrefs(context.Background(), b, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Stabs)
 	s.Equal(b.Stabs.Price, out.Stabs.Price)
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Stabs.Currency)
+	s.Equal("EUR", *out.Stabs.Currency)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func fullAPIBuildInput() api.BuildInput {
@@ -772,7 +783,7 @@ func fullAPIBuildInput() api.BuildInput {
 			Type:      strPtr("Top Mount"),
 			Durometer: strPtr("70A"),
 		},
-		Stabs: &api.BuildStabs{
+		Stabs: &api.BuildStabsInput{
 			Name:      strPtr("Durock v3"),
 			MountType: strPtr("Screw-in"),
 			Price:     floatPtr(12.5),
@@ -965,11 +976,13 @@ func (s *BuildToAPISummarySuite) TestOwnerShowPriceToMeTrue_IncludesTotalCost() 
 			}},
 		}, nil)
 
-	out, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	out, err := d.callSummaryWithPrefs(context.Background(), b, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *BuildToAPISummarySuite) TestOwnerShowPriceToMeFalse_OmitsTotalCost() {
@@ -986,6 +999,7 @@ func (s *BuildToAPISummarySuite) TestOwnerShowPriceToMeFalse_OmitsTotalCost() {
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *BuildToAPISummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
@@ -1011,11 +1025,13 @@ func (s *BuildToAPISummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesTotal
 			}},
 		}, nil)
 
-	out, err := d.callSummaryWithPrefs(context.Background(), b, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	out, err := d.callSummaryWithPrefs(context.Background(), b, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 // TestTotalCost_MatchesBuildToAPI asserts the invariant the two functions'
@@ -1069,6 +1085,7 @@ func (s *BuildToAPISummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsTotalCo
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *BuildToAPISummarySuite) TestNoPricedComponents_OmitsTotalCost() {
@@ -1082,6 +1099,7 @@ func (s *BuildToAPISummarySuite) TestNoPricedComponents_OmitsTotalCost() {
 	s.Require().NoError(err)
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *BuildToAPISummarySuite) TestDoesNotResolveKitImages() {

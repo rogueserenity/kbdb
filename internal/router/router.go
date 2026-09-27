@@ -88,9 +88,9 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/switches/{switchId}",
 		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetSwitch(switchRepo, sr)))))
 	mux.Handle("POST /v1/users/{userId}/switches",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateSwitch(switchRepo, sr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateSwitch(switchRepo, sr)))))
 	mux.Handle("PUT /v1/users/{userId}/switches/{switchId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateSwitch(switchRepo, sr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateSwitch(switchRepo, sr)))))
 	mux.Handle("DELETE /v1/users/{userId}/switches/{switchId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteSwitch(switchRepo, buildRepo, buildImageStore, switchImageStore))))
 	mux.Handle("POST /v1/users/{userId}/switches/{switchId}/image",
@@ -105,9 +105,9 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetKeyboard(keyboardRepo, kr)))))
 	mux.Handle("POST /v1/users/{userId}/keyboards",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeyboard(keyboardRepo, kr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateKeyboard(keyboardRepo, kr)))))
 	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeyboard(keyboardRepo, kr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateKeyboard(keyboardRepo, kr)))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore, keyboardImageStore))))
 	mux.Handle("POST /v1/users/{userId}/keyboards/{keyboardId}/images",
@@ -122,15 +122,15 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetKeycapSet(keycapSetRepo, kcr)))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapSet(keycapSetRepo, kcr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateKeycapSet(keycapSetRepo, kcr)))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapSet(keycapSetRepo, kcr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateKeycapSet(keycapSetRepo, kcr)))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapSet(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateKeycapKit(keycapSetRepo, kcr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateKeycapKit(keycapSetRepo, kcr)))))
 	mux.Handle("PUT /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateKeycapKit(keycapSetRepo, kcr))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateKeycapKit(keycapSetRepo, kcr)))))
 	mux.Handle("DELETE /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeycapKit(keycapSetRepo, buildRepo, buildImageStore, imageStore))))
 	mux.Handle("POST /v1/users/{userId}/keycap-sets/{keycapSetId}/kits/{kitId}/image",
@@ -143,11 +143,11 @@ func New(
 	mux.Handle("GET /v1/users/{userId}/builds",
 		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.ListBuilds(buildRepo, br)))))
 	mux.Handle("POST /v1/users/{userId}/builds",
-		middleware.RequireAuthorizerIdentity(validate(handlers.CreateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo)))))
 	mux.Handle("GET /v1/users/{userId}/builds/{buildId}",
 		middleware.OptionalAuth(verifier)(ownerPrefs(validate(handlers.GetBuild(buildRepo, br)))))
 	mux.Handle("PUT /v1/users/{userId}/builds/{buildId}",
-		middleware.RequireAuthorizerIdentity(validate(handlers.UpdateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo))))
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateBuild(buildRepo, br, keyboardRepo, switchRepo, keycapSetRepo)))))
 	mux.Handle("DELETE /v1/users/{userId}/builds/{buildId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteBuild(buildRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/builds/{buildId}/images",

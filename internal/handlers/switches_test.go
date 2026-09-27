@@ -272,6 +272,7 @@ func (s *GetSwitchSuite) newRequest(ctx context.Context) *http.Request {
 
 func (s *GetSwitchSuite) TestGetSwitch_Owner_Succeeds() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.DefaultProfilePreferences(), nil)
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
@@ -375,7 +376,7 @@ func (s *GetSwitchSuite) TestGetSwitch_NonOwnerShowPriceToOthersFalse_OmitsPrice
 	s.Nil(got.Purchase.Price)
 }
 
-func (s *GetSwitchSuite) TestGetSwitch_Owner_AlwaysIncludesPriceNoPreferencesLookup() {
+func (s *GetSwitchSuite) TestGetSwitch_Owner_AlwaysIncludesPriceAndCurrency() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	price := 8.50
 
@@ -385,7 +386,8 @@ func (s *GetSwitchSuite) TestGetSwitch_Owner_AlwaysIncludesPriceNoPreferencesLoo
 			ID: "sw1", Visibility: repository.VisibilityPrivate,
 			Purchase: repository.SwitchPurchase{Price: &price},
 		}, nil)
-	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -395,6 +397,8 @@ func (s *GetSwitchSuite) TestGetSwitch_Owner_AlwaysIncludesPriceNoPreferencesLoo
 	s.Require().NotNil(got.Purchase)
 	s.Require().NotNil(got.Purchase.Price)
 	s.InDelta(price, *got.Purchase.Price, 0.0001)
+	s.Require().NotNil(got.Purchase.Currency)
+	s.Equal("EUR", *got.Purchase.Currency)
 }
 
 func (s *GetSwitchSuite) TestGetSwitch_NonOwnerPreferencesError_Returns500() {
@@ -471,6 +475,7 @@ func (s *GetSwitchSuite) TestGetSwitch_MalformedStoredDate_Returns500NotPanic() 
 type CreateSwitchSuite struct {
 	suite.Suite
 
+	mockPrefs      *mocks.MockPreferencesReader
 	mockSwitchRepo *mocks.MockSwitchRepository
 	mockImages     *mocks.MockSwitchImageStore
 	handler        http.HandlerFunc
@@ -481,12 +486,16 @@ func TestCreateSwitchSuite(t *testing.T) {
 }
 
 func (s *CreateSwitchSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
 	s.handler = CreateSwitch(s.mockSwitchRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockSwitchRepo})
 }
 
 func (s *CreateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/switches", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	return req
@@ -682,6 +691,7 @@ func (s *CreateSwitchSuite) TestCreateSwitch_MalformedStoredDate_Returns500NotPa
 type UpdateSwitchSuite struct {
 	suite.Suite
 
+	mockPrefs      *mocks.MockPreferencesReader
 	mockSwitchRepo *mocks.MockSwitchRepository
 	mockImages     *mocks.MockSwitchImageStore
 	handler        http.HandlerFunc
@@ -692,12 +702,16 @@ func TestUpdateSwitchSuite(t *testing.T) {
 }
 
 func (s *UpdateSwitchSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockSwitchRepo = mocks.NewMockSwitchRepository(s.T())
 	s.mockImages = mocks.NewMockSwitchImageStore(s.T())
 	s.handler = UpdateSwitch(s.mockSwitchRepo, repoapi.Switch{Images: s.mockImages, Repo: s.mockSwitchRepo})
 }
 
 func (s *UpdateSwitchSuite) newRequest(ctx context.Context, body string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/switches/sw1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("switchId", "sw1")
@@ -1407,4 +1421,54 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_S3DeleteError_Returns500_
 	// mockRepo has no .EXPECT() for ClearImagePath - verifies the DB
 	// record was never touched, so a retry can safely re-attempt the S3
 	// delete.
+}
+
+func (s *CreateSwitchSuite) TestCreateSwitch_ReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockSwitchRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price}}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`))
+
+	s.Equal(http.StatusCreated, rec.Code)
+	var got api.Switch
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Purchase.Currency)
+	s.Equal("EUR", *got.Purchase.Currency)
+}
+
+func (s *CreateSwitchSuite) TestCreateSwitch_PreferencesError_Returns500BeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_ReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockSwitchRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&repository.Switch{UserID: "alice", ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price}}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`))
+
+	s.Equal(http.StatusOK, rec.Code)
+	var got api.Switch
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Purchase.Currency)
+	s.Equal("EUR", *got.Purchase.Currency)
+}
+
+func (s *UpdateSwitchSuite) TestUpdateSwitch_PreferencesError_Returns500BeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear","visibility":"private"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
 }

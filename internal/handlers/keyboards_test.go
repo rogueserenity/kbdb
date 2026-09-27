@@ -274,6 +274,7 @@ func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
 
 func (s *GetKeyboardSuite) TestGetKeyboard_Owner_Succeeds() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.DefaultProfilePreferences(), nil)
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -377,7 +378,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_NonOwnerShowPriceToOthersFalse_OmitsP
 	s.Nil(got.Purchase.Price)
 }
 
-func (s *GetKeyboardSuite) TestGetKeyboard_Owner_AlwaysIncludesPriceNoPreferencesLookup() {
+func (s *GetKeyboardSuite) TestGetKeyboard_Owner_AlwaysIncludesPriceAndCurrency() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	price := 199.99
 
@@ -387,7 +388,8 @@ func (s *GetKeyboardSuite) TestGetKeyboard_Owner_AlwaysIncludesPriceNoPreference
 			ID: "kb1", Visibility: repository.VisibilityPrivate,
 			Purchase: repository.KeyboardPurchase{Price: &price},
 		}, nil)
-	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -397,6 +399,8 @@ func (s *GetKeyboardSuite) TestGetKeyboard_Owner_AlwaysIncludesPriceNoPreference
 	s.Require().NotNil(got.Purchase)
 	s.Require().NotNil(got.Purchase.Price)
 	s.InDelta(price, *got.Purchase.Price, 0.0001)
+	s.Require().NotNil(got.Purchase.Currency)
+	s.Equal("EUR", *got.Purchase.Currency)
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_NonOwnerPreferencesError_Returns500() {
@@ -473,6 +477,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_MalformedStoredDate_Returns500NotPani
 type CreateKeyboardSuite struct {
 	suite.Suite
 
+	mockPrefs        *mocks.MockPreferencesReader
 	mockKeyboardRepo *mocks.MockKeyboardRepository
 	mockImages       *mocks.MockKeyboardImageStore
 	handler          http.HandlerFunc
@@ -483,12 +488,16 @@ func TestCreateKeyboardSuite(t *testing.T) {
 }
 
 func (s *CreateKeyboardSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.handler = CreateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
 }
 
 func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keyboards", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	return req
@@ -749,6 +758,7 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_MalformedStoredDate_Returns500N
 type UpdateKeyboardSuite struct {
 	suite.Suite
 
+	mockPrefs        *mocks.MockPreferencesReader
 	mockKeyboardRepo *mocks.MockKeyboardRepository
 	mockImages       *mocks.MockKeyboardImageStore
 	handler          http.HandlerFunc
@@ -759,12 +769,16 @@ func TestUpdateKeyboardSuite(t *testing.T) {
 }
 
 func (s *UpdateKeyboardSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.handler = UpdateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keyboards/kb1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keyboardId", "kb1")
@@ -1529,4 +1543,54 @@ func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_S3DeleteError_Returns
 	// mockKeyboardRepo has no .EXPECT() for DeleteImage - verifies the DB
 	// record was never touched, so a retry can safely re-attempt the S3
 	// delete.
+}
+
+func (s *CreateKeyboardSuite) TestCreateKeyboard_ReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockKeyboardRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`))
+
+	s.Equal(http.StatusCreated, rec.Code)
+	var got api.Keyboard
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Purchase.Currency)
+	s.Equal("EUR", *got.Purchase.Currency)
+}
+
+func (s *CreateKeyboardSuite) TestCreateKeyboard_PreferencesError_Returns500BeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockKeyboardRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`))
+
+	s.Equal(http.StatusOK, rec.Code)
+	var got api.Keyboard
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Purchase.Currency)
+	s.Equal("EUR", *got.Purchase.Currency)
+}
+
+func (s *UpdateKeyboardSuite) TestUpdateKeyboard_PreferencesError_Returns500BeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
 }

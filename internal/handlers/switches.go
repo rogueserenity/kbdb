@@ -129,14 +129,11 @@ func GetSwitch(repo repository.SwitchRepository, sr repoapi.Switch) http.Handler
 		}
 
 		isOwner := authz.IsOwner(r.Context(), ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(r.Context())
-			if err != nil {
-				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.SwitchID, id)
-				problem.Internal(w, "failed to get switch")
-				return
-			}
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.SwitchID, id)
+			problem.Internal(w, "failed to get switch")
+			return
 		}
 
 		out, err := sr.ToAPI(r.Context(), *sw, isOwner, ownerPrefs)
@@ -206,6 +203,13 @@ func CreateSwitch(switchRepo repository.SwitchRepository, sr repoapi.Switch) htt
 
 		sw.ID = uuid.NewString()
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to create switch")
+			return
+		}
+
 		created, err := switchRepo.Create(r.Context(), sw)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			// Practically unreachable - ID is a fresh UUID, not caller
@@ -221,7 +225,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository, sr repoapi.Switch) htt
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := sr.ToAPI(r.Context(), *created, true, repository.ProfilePreferences{})
+		out, err := sr.ToAPI(r.Context(), *created, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, created.ID)
 			problem.Internal(w, "failed to create switch")
@@ -259,13 +263,20 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, sr repoapi.Switch) htt
 
 		sw.ID = id
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to update switch")
+			return
+		}
+
 		updated, err := switchRepo.Update(r.Context(), sw)
 		if handleMutationError(w, r, err, log.SwitchID, id) {
 			return
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := sr.ToAPI(r.Context(), *updated, true, repository.ProfilePreferences{})
+		out, err := sr.ToAPI(r.Context(), *updated, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping switch to API", log.Error, err, log.SwitchID, updated.ID)
 			problem.Internal(w, "failed to update switch")

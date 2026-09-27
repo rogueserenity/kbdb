@@ -119,14 +119,11 @@ func GetKeyboard(repo repository.KeyboardRepository, kr repoapi.Keyboard) http.H
 		}
 
 		isOwner := authz.IsOwner(r.Context(), ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(r.Context())
-			if err != nil {
-				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeyboardID, id)
-				problem.Internal(w, "failed to get keyboard")
-				return
-			}
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeyboardID, id)
+			problem.Internal(w, "failed to get keyboard")
+			return
 		}
 
 		out, err := kr.ToAPI(r.Context(), *kb, isOwner, ownerPrefs)
@@ -210,6 +207,13 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 
 		kb.ID = uuid.NewString()
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to create keyboard")
+			return
+		}
+
 		created, err := keyboardRepo.Create(r.Context(), kb)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			// Practically unreachable - ID is a fresh UUID, not caller
@@ -225,7 +229,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := kr.ToAPI(r.Context(), *created, true, repository.ProfilePreferences{})
+		out, err := kr.ToAPI(r.Context(), *created, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, created.ID)
 			problem.Internal(w, "failed to create keyboard")
@@ -263,13 +267,20 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 
 		kb.ID = id
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to update keyboard")
+			return
+		}
+
 		updated, err := keyboardRepo.Update(r.Context(), kb)
 		if handleMutationError(w, r, err, log.KeyboardID, id) {
 			return
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := kr.ToAPI(r.Context(), *updated, true, repository.ProfilePreferences{})
+		out, err := kr.ToAPI(r.Context(), *updated, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keyboard to API", log.Error, err, log.KeyboardID, updated.ID)
 			problem.Internal(w, "failed to update keyboard")

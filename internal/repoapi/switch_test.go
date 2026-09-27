@@ -184,28 +184,33 @@ func (s *SwitchToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRes
 	s.Equal(*sw.Purchase.OrderDate, out.Purchase.OrderDate.Format(dateLayout))
 	s.Require().NotNil(out.Purchase.DeliveryDate)
 	s.Equal(*sw.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
+	s.Nil(out.Purchase.Currency)
 }
 
 func (s *SwitchToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	sw := fullRepoSwitch()
 
 	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
-	out, err := sr.ToAPI(s.T().Context(), sw, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	out, err := sr.ToAPI(s.T().Context(), sw, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
 	s.Equal(sw.Purchase.Price, out.Purchase.Price)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *SwitchToAPISuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
 	sw := fullRepoSwitch()
 
 	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
-	out, err := sr.ToAPI(s.T().Context(), sw, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	out, err := sr.ToAPI(s.T().Context(), sw, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
 	s.Equal(sw.Purchase.Price, out.Purchase.Price)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_MapsOnlySummaryFields() {
@@ -227,10 +232,12 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_OwnerShowPriceToMeTrue_Include
 	sw := fullRepoSwitch()
 	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
 
-	summary, err := sr.ToAPISummary(s.T().Context(), sw, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	summary, err := sr.ToAPISummary(s.T().Context(), sw, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Equal(sw.Purchase.Price, summary.Price)
+	s.Require().NotNil(summary.Currency)
+	s.Equal("EUR", *summary.Currency)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_OwnerShowPriceToMeFalse_OmitsPrice() {
@@ -241,6 +248,7 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_OwnerShowPriceToMeFalse_OmitsP
 	s.Require().NoError(err)
 
 	s.Nil(summary.Price)
+	s.Nil(summary.Currency)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwnerShowPriceToOthersFalse_OmitsPrice() {
@@ -251,16 +259,19 @@ func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwnerShowPriceToOthersFalse
 	s.Require().NoError(err)
 
 	s.Nil(summary.Price)
+	s.Nil(summary.Currency)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	sw := fullRepoSwitch()
 	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
 
-	summary, err := sr.ToAPISummary(s.T().Context(), sw, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	summary, err := sr.ToAPISummary(s.T().Context(), sw, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Equal(sw.Purchase.Price, summary.Price)
+	s.Require().NotNil(summary.Currency)
+	s.Equal("EUR", *summary.Currency)
 }
 
 func (s *SwitchToAPISuite) TestSwitchToAPISummary_ImagePresent_ReturnsPresignedURL() {
@@ -369,7 +380,7 @@ func (s *SwitchToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 			PreTravel:   floatPtr(2),
 			TotalTravel: floatPtr(4),
 		},
-		Purchase: &api.SwitchPurchase{
+		Purchase: &api.SwitchPurchaseInput{
 			Vendor:       strPtr("CannonKeys"),
 			Price:        floatPtr(0.35),
 			OrderDate:    &orderDate,

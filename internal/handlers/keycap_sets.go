@@ -123,14 +123,11 @@ func GetKeycapSet(repo repository.KeycapSetRepository, kr repoapi.KeycapSet) htt
 		}
 
 		isOwner := authz.IsOwner(r.Context(), ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(r.Context())
-			if err != nil {
-				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeycapSetID, id)
-				problem.Internal(w, "failed to get keycap set")
-				return
-			}
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeycapSetID, id)
+			problem.Internal(w, "failed to get keycap set")
+			return
 		}
 
 		out, err := kr.ToAPI(r.Context(), *ks, isOwner, ownerPrefs)
@@ -218,6 +215,13 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, kr repoapi.Ke
 
 		ks.ID = uuid.NewString()
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to create keycap set")
+			return
+		}
+
 		created, err := keycapSetRepo.Create(r.Context(), ks)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			// Practically unreachable - ID is a fresh UUID, not caller
@@ -233,7 +237,7 @@ func CreateKeycapSet(keycapSetRepo repository.KeycapSetRepository, kr repoapi.Ke
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := kr.ToAPI(r.Context(), *created, true, repository.ProfilePreferences{})
+		out, err := kr.ToAPI(r.Context(), *created, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, created.ID)
 			problem.Internal(w, "failed to create keycap set")
@@ -271,13 +275,20 @@ func UpdateKeycapSet(keycapSetRepo repository.KeycapSetRepository, kr repoapi.Ke
 
 		ks.ID = id
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to update keycap set")
+			return
+		}
+
 		updated, err := keycapSetRepo.Update(r.Context(), ks)
 		if handleMutationError(w, r, err, log.KeycapSetID, id) {
 			return
 		}
 
 		// isOwner: true, already gated above - owner sees price unconditionally.
-		out, err := kr.ToAPI(r.Context(), *updated, true, repository.ProfilePreferences{})
+		out, err := kr.ToAPI(r.Context(), *updated, true, ownerPrefs)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap set to API", log.Error, err, log.KeycapSetID, updated.ID)
 			problem.Internal(w, "failed to update keycap set")
@@ -370,13 +381,20 @@ func CreateKeycapKit(keycapSetRepo repository.KeycapSetRepository, kr repoapi.Ke
 
 		kit.KitID = uuid.NewString()
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to add kit")
+			return
+		}
+
 		created, err := keycapSetRepo.AddKit(r.Context(), setID, kit, in.Primary)
 		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kit.KitID) {
 			return
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := kr.KitToAPI(r.Context(), ownerID, setID, *created, true)
+		out, err := kr.KitToAPI(r.Context(), ownerID, setID, *created, true, ownerPrefs.Currency)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, created.KitID)
 			problem.Internal(w, "failed to add kit")
@@ -420,13 +438,20 @@ func UpdateKeycapKit(keycapSetRepo repository.KeycapSetRepository, kr repoapi.Ke
 
 		kit.KitID = kitID
 
+		ownerPrefs, err := ownerprefs.Get(r.Context())
+		if err != nil {
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			problem.Internal(w, "failed to update kit")
+			return
+		}
+
 		updated, err := keycapSetRepo.UpdateKit(r.Context(), setID, kit, in.Primary)
 		if handleMutationError(w, r, err, log.KeycapSetID, setID, log.KeycapKitID, kitID) {
 			return
 		}
 
 		// isOwner: true - already gated by authz.IsOwner above.
-		out, err := kr.KitToAPI(r.Context(), ownerID, setID, *updated, true)
+		out, err := kr.KitToAPI(r.Context(), ownerID, setID, *updated, true, ownerPrefs.Currency)
 		if err != nil {
 			log.FromContext(r.Context()).Error("mapping keycap kit to API", log.Error, err, log.KeycapSetID, setID, log.KeycapKitID, updated.KitID)
 			problem.Internal(w, "failed to update kit")

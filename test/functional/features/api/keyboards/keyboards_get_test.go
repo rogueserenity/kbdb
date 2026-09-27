@@ -111,7 +111,7 @@ var _ = Describe("Getting a keyboard", func() {
 		})
 	})
 
-	Context("given a public keyboard and the owner has show_price_to_others true", func() {
+	Context("given a public keyboard and the owner has show_price_to_others true and a non-discoverable profile", func() {
 		var keyboardID, profileUsername string
 
 		BeforeEach(func(ctx SpecContext) {
@@ -120,7 +120,7 @@ var _ = Describe("Getting a keyboard", func() {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
 				Username: profileUsername,
 				Preferences: map[string]any{
-					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					"currency": "EUR", "show_price_to_me": true, "show_price_to_others": true,
 				},
 			})).To(Succeed())
 		})
@@ -146,18 +146,23 @@ var _ = Describe("Getting a keyboard", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the keyboard with purchase.price", func() {
+				It("returns the keyboard with purchase.price and the owner's currency", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got struct {
 						Purchase struct {
-							Price *float64 `json:"price"`
+							Price    *float64 `json:"price"`
+							Currency *string  `json:"currency"`
 						} `json:"purchase"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 
 					Expect(got.Purchase.Price).NotTo(BeNil())
 					Expect(*got.Purchase.Price).To(Equal(329.99))
+
+					By("including the owner's currency, which their non-discoverable profile can't provide")
+					Expect(got.Purchase.Currency).NotTo(BeNil())
+					Expect(*got.Purchase.Currency).To(Equal("EUR"))
 				})
 			})
 		})

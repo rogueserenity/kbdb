@@ -239,7 +239,7 @@ func (s *HandleGetKeycapSetSuite) TestSucceeds() {
 			Name:       "Olivia",
 			Visibility: repository.VisibilityPrivate,
 		}, nil)
-	// Owner path: no GetPreferences call expected.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
 
 	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1"})
@@ -252,6 +252,7 @@ func (s *HandleGetKeycapSetSuite) TestSucceeds() {
 }
 
 func (s *HandleGetKeycapSetSuite) TestKitsMapWithHasImage() {
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
 	imagePath := repository.KeycapKitImageKey("keycap-sets/caller-0001/ks-1/kits/kit-1/image")
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, callerID, "ks-1").
@@ -357,7 +358,7 @@ func (s *HandleGetKeycapSetSuite) TestOtherUsersPublicKeycapSetShowPriceToOthers
 	s.Nil(out.KeycapSet.Kits[0].Purchase.Price)
 }
 
-func (s *HandleGetKeycapSetSuite) TestOwner_AlwaysIncludesKitPriceNoPreferencesLookup() {
+func (s *HandleGetKeycapSetSuite) TestOwner_AlwaysIncludesKitPriceAndCurrency() {
 	price := 120.00
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, callerID, "ks-1").
@@ -365,7 +366,8 @@ func (s *HandleGetKeycapSetSuite) TestOwner_AlwaysIncludesKitPriceNoPreferencesL
 			ID: "ks-1", Visibility: repository.VisibilityPrivate,
 			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}, nil)
-	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
 	handler := handleGetKeycapSet(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetKeycapSetInput{KeycapSetID: "ks-1"})
@@ -375,6 +377,8 @@ func (s *HandleGetKeycapSetSuite) TestOwner_AlwaysIncludesKitPriceNoPreferencesL
 	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase)
 	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase.Price)
 	s.InDelta(price, *out.KeycapSet.Kits[0].Purchase.Price, 0.0001)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase.Currency)
+	s.Equal("EUR", *out.KeycapSet.Kits[0].Purchase.Currency)
 }
 
 func (s *HandleGetKeycapSetSuite) TestRepositoryError_ReturnsError() {
@@ -399,6 +403,7 @@ func validKeycapSetInput() schema.KeycapSetInput {
 type HandleCreateKeycapSetSuite struct {
 	suite.Suite
 
+	mockPrefs      *mocks.MockPreferencesReader
 	mockKeycapSets *mocks.MockKeycapSetRepository
 }
 
@@ -407,6 +412,9 @@ func TestHandleCreateKeycapSetSuite(t *testing.T) {
 }
 
 func (s *HandleCreateKeycapSetSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockKeycapSets = mocks.NewMockKeycapSetRepository(s.T())
 }
 
@@ -417,7 +425,7 @@ func (s *HandleCreateKeycapSetSuite) TestSucceeds() {
 			return &ks, nil
 		})
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: validKeycapSetInput()})
 
 	s.Require().NoError(err)
@@ -429,7 +437,7 @@ func (s *HandleCreateKeycapSetSuite) TestBlankBrand_ReturnsError() {
 	in := validKeycapSetInput()
 	in.Brand = "   "
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: in})
 
 	s.Require().ErrorContains(err, "brand must not be blank")
@@ -439,7 +447,7 @@ func (s *HandleCreateKeycapSetSuite) TestBlankName_ReturnsError() {
 	in := validKeycapSetInput()
 	in.Name = "  "
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: in})
 
 	s.Require().ErrorContains(err, "name must not be blank")
@@ -449,7 +457,7 @@ func (s *HandleCreateKeycapSetSuite) TestInvalidVisibility_ReturnsError() {
 	in := validKeycapSetInput()
 	in.Visibility = "everyone"
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: in})
 
 	s.Require().ErrorContains(err, "visibility")
@@ -460,7 +468,7 @@ func (s *HandleCreateKeycapSetSuite) TestUnapprovedProfile_ReturnsError() {
 	in := validKeycapSetInput()
 	in.Profile = &profile
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: in})
 
 	s.Require().ErrorContains(err, "profile")
@@ -472,7 +480,7 @@ func (s *HandleCreateKeycapSetSuite) TestUnapprovedMaterial_ReturnsError() {
 	in := validKeycapSetInput()
 	in.Material = &material
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: in})
 
 	s.Require().ErrorContains(err, "material")
@@ -484,7 +492,7 @@ func (s *HandleCreateKeycapSetSuite) TestAlreadyExists_ReturnsAlreadyExists() {
 		Create(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrAlreadyExists)
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: validKeycapSetInput()})
 
 	s.Require().ErrorIs(err, errKeycapSetAlreadyExists)
@@ -495,7 +503,7 @@ func (s *HandleCreateKeycapSetSuite) TestRepositoryError_ReturnsError() {
 		Create(mock.Anything, mock.Anything).
 		Return(nil, errors.New("create failed"))
 
-	handler := handleCreateKeycapSet(s.mockKeycapSets)
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: validKeycapSetInput()})
 
 	s.Require().ErrorContains(err, "failed to create keycap set")
@@ -504,6 +512,7 @@ func (s *HandleCreateKeycapSetSuite) TestRepositoryError_ReturnsError() {
 type HandleUpdateKeycapSetSuite struct {
 	suite.Suite
 
+	mockPrefs      *mocks.MockPreferencesReader
 	mockKeycapSets *mocks.MockKeycapSetRepository
 }
 
@@ -512,6 +521,9 @@ func TestHandleUpdateKeycapSetSuite(t *testing.T) {
 }
 
 func (s *HandleUpdateKeycapSetSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockKeycapSets = mocks.NewMockKeycapSetRepository(s.T())
 }
 
@@ -522,7 +534,7 @@ func (s *HandleUpdateKeycapSetSuite) TestSucceeds() {
 			return &ks, nil
 		})
 
-	handler := handleUpdateKeycapSet(s.mockKeycapSets)
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{
 		KeycapSetID:    "ks-1",
 		KeycapSetInput: validKeycapSetInput(),
@@ -533,7 +545,7 @@ func (s *HandleUpdateKeycapSetSuite) TestSucceeds() {
 }
 
 func (s *HandleUpdateKeycapSetSuite) TestBlankKeycapSetID_ReturnsError() {
-	handler := handleUpdateKeycapSet(s.mockKeycapSets)
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{
 		KeycapSetID:    "  ",
 		KeycapSetInput: validKeycapSetInput(),
@@ -547,7 +559,7 @@ func (s *HandleUpdateKeycapSetSuite) TestNotFound_ReturnsNotFound() {
 		Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleUpdateKeycapSet(s.mockKeycapSets)
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{
 		KeycapSetID:    "missing",
 		KeycapSetInput: validKeycapSetInput(),
@@ -561,7 +573,7 @@ func (s *HandleUpdateKeycapSetSuite) TestMutationConflict_ReturnsConflictError()
 		Update(mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
-	handler := handleUpdateKeycapSet(s.mockKeycapSets)
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{
 		KeycapSetID:    "ks-1",
 		KeycapSetInput: validKeycapSetInput(),
@@ -575,7 +587,7 @@ func (s *HandleUpdateKeycapSetSuite) TestRepositoryError_ReturnsError() {
 		Update(mock.Anything, mock.Anything).
 		Return(nil, errors.New("update failed"))
 
-	handler := handleUpdateKeycapSet(s.mockKeycapSets)
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{
 		KeycapSetID:    "ks-1",
 		KeycapSetInput: validKeycapSetInput(),
@@ -744,7 +756,8 @@ func validKeycapKitInput() schema.KeycapKitInput {
 type HandleCreateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
+	mockPrefs *mocks.MockPreferencesReader
+	mockRepo  *mocks.MockKeycapSetRepository
 }
 
 func TestHandleCreateKeycapKitSuite(t *testing.T) {
@@ -752,6 +765,9 @@ func TestHandleCreateKeycapKitSuite(t *testing.T) {
 }
 
 func (s *HandleCreateKeycapKitSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 }
 
@@ -762,7 +778,7 @@ func (s *HandleCreateKeycapKitSuite) TestSucceeds() {
 			return &kit, nil
 		})
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: validKeycapKitInput(),
@@ -786,7 +802,7 @@ func (s *HandleCreateKeycapKitSuite) TestPrimaryTrue_PassesPrimaryToRepo() {
 	primary := true
 	in.Primary = &primary
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: in,
@@ -804,7 +820,7 @@ func (s *HandleCreateKeycapKitSuite) TestPrimaryOmitted_PassesNilToRepo() {
 			return &kit, nil
 		})
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: validKeycapKitInput(),
@@ -814,7 +830,7 @@ func (s *HandleCreateKeycapKitSuite) TestPrimaryOmitted_PassesNilToRepo() {
 }
 
 func (s *HandleCreateKeycapKitSuite) TestBlankKeycapSetID_ReturnsError() {
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "  ",
 		KeycapKitInput: validKeycapKitInput(),
@@ -827,7 +843,7 @@ func (s *HandleCreateKeycapKitSuite) TestBlankName_ReturnsError() {
 	in := validKeycapKitInput()
 	in.Name = " "
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: in,
@@ -839,9 +855,9 @@ func (s *HandleCreateKeycapKitSuite) TestBlankName_ReturnsError() {
 func (s *HandleCreateKeycapKitSuite) TestMalformedOrderDate_ReturnsError() {
 	bad := "not-a-date"
 	in := validKeycapKitInput()
-	in.Purchase = &schema.KeycapKitPurchase{OrderDate: &bad}
+	in.Purchase = &schema.KeycapKitPurchaseInput{OrderDate: &bad}
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: in,
@@ -853,9 +869,9 @@ func (s *HandleCreateKeycapKitSuite) TestMalformedOrderDate_ReturnsError() {
 func (s *HandleCreateKeycapKitSuite) TestUnapprovedVendor_ReturnsError() {
 	vendor := "NotARealVendor"
 	in := validKeycapKitInput()
-	in.Purchase = &schema.KeycapKitPurchase{Vendor: &vendor}
+	in.Purchase = &schema.KeycapKitPurchaseInput{Vendor: &vendor}
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: in,
@@ -868,9 +884,9 @@ func (s *HandleCreateKeycapKitSuite) TestUnapprovedVendor_ReturnsError() {
 func (s *HandleCreateKeycapKitSuite) TestUnapprovedOrderStatus_ReturnsError() {
 	status := "Bogus"
 	in := validKeycapKitInput()
-	in.Purchase = &schema.KeycapKitPurchase{OrderStatus: &status}
+	in.Purchase = &schema.KeycapKitPurchaseInput{OrderStatus: &status}
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: in,
@@ -885,7 +901,7 @@ func (s *HandleCreateKeycapKitSuite) TestKeycapSetNotFound_ReturnsNotFound() {
 		AddKit(mock.Anything, "missing", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "missing",
 		KeycapKitInput: validKeycapKitInput(),
@@ -899,7 +915,7 @@ func (s *HandleCreateKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 		AddKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: validKeycapKitInput(),
@@ -913,7 +929,7 @@ func (s *HandleCreateKeycapKitSuite) TestRepositoryError_ReturnsError() {
 		AddKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
 		Return(nil, errors.New("add kit failed"))
 
-	handler := handleCreateKeycapKit(s.mockRepo)
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KeycapKitInput: validKeycapKitInput(),
@@ -925,7 +941,8 @@ func (s *HandleCreateKeycapKitSuite) TestRepositoryError_ReturnsError() {
 type HandleUpdateKeycapKitSuite struct {
 	suite.Suite
 
-	mockRepo *mocks.MockKeycapSetRepository
+	mockPrefs *mocks.MockPreferencesReader
+	mockRepo  *mocks.MockKeycapSetRepository
 }
 
 func TestHandleUpdateKeycapKitSuite(t *testing.T) {
@@ -933,6 +950,9 @@ func TestHandleUpdateKeycapKitSuite(t *testing.T) {
 }
 
 func (s *HandleUpdateKeycapKitSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 }
 
@@ -943,7 +963,7 @@ func (s *HandleUpdateKeycapKitSuite) TestSucceeds() {
 			return &kit, nil
 		})
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "kit-1",
@@ -967,7 +987,7 @@ func (s *HandleUpdateKeycapKitSuite) TestPrimaryFalse_PassesPrimaryToRepo() {
 	primary := false
 	in.Primary = &primary
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "kit-1",
@@ -986,7 +1006,7 @@ func (s *HandleUpdateKeycapKitSuite) TestPrimaryOmitted_PassesNilToRepo() {
 			return &kit, nil
 		})
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "kit-1",
@@ -997,7 +1017,7 @@ func (s *HandleUpdateKeycapKitSuite) TestPrimaryOmitted_PassesNilToRepo() {
 }
 
 func (s *HandleUpdateKeycapKitSuite) TestBlankKeycapSetID_ReturnsError() {
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    " ",
 		KitID:          "kit-1",
@@ -1008,7 +1028,7 @@ func (s *HandleUpdateKeycapKitSuite) TestBlankKeycapSetID_ReturnsError() {
 }
 
 func (s *HandleUpdateKeycapKitSuite) TestBlankKitID_ReturnsError() {
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          " ",
@@ -1021,9 +1041,9 @@ func (s *HandleUpdateKeycapKitSuite) TestBlankKitID_ReturnsError() {
 func (s *HandleUpdateKeycapKitSuite) TestUnapprovedVendor_ReturnsError() {
 	vendor := "NotARealVendor"
 	in := validKeycapKitInput()
-	in.Purchase = &schema.KeycapKitPurchase{Vendor: &vendor}
+	in.Purchase = &schema.KeycapKitPurchaseInput{Vendor: &vendor}
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "kit-1",
@@ -1039,7 +1059,7 @@ func (s *HandleUpdateKeycapKitSuite) TestKitNotFound_ReturnsNotFound() {
 		UpdateKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "missing-kit",
@@ -1054,7 +1074,7 @@ func (s *HandleUpdateKeycapKitSuite) TestMutationConflict_ReturnsConflictError()
 		UpdateKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
 		Return(nil, repository.ErrMutationConflict)
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "kit-1",
@@ -1069,7 +1089,7 @@ func (s *HandleUpdateKeycapKitSuite) TestRepositoryError_ReturnsError() {
 		UpdateKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
 		Return(nil, errors.New("update kit failed"))
 
-	handler := handleUpdateKeycapKit(s.mockRepo)
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{
 		KeycapSetID:    "ks-1",
 		KitID:          "kit-1",
@@ -1512,4 +1532,96 @@ func (s *HandleDeleteKeycapKitImageSuite) TestImageDeleteFailure_ReturnsError_Do
 	s.Require().ErrorContains(err, "failed to delete kit image")
 	// mockRepo has no .EXPECT() for ClearKitImagePath - verifies the DB
 	// record was never touched.
+}
+
+func (s *HandleCreateKeycapSetSuite) TestReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockKeycapSets.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}}}, nil)
+
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: validKeycapSetInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase.Currency)
+	s.Equal("EUR", *out.KeycapSet.Kits[0].Purchase.Currency)
+}
+
+func (s *HandleCreateKeycapSetSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: validKeycapSetInput()})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleUpdateKeycapSetSuite) TestReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockKeycapSets.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}}}, nil)
+
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{KeycapSetID: "ks-1", KeycapSetInput: validKeycapSetInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.KeycapSet.Kits[0].Purchase.Currency)
+	s.Equal("EUR", *out.KeycapSet.Kits[0].Purchase.Currency)
+}
+
+func (s *HandleUpdateKeycapSetSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{KeycapSetID: "ks-1", KeycapSetInput: validKeycapSetInput()})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleCreateKeycapKitSuite) TestReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockRepo.EXPECT().AddKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
+		Return(&repository.KeycapKit{KitID: "kit-1", Name: "Base", Purchase: repository.KeycapKitPurchase{Price: &price}}, nil)
+
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{KeycapSetID: "ks-1", KeycapKitInput: validKeycapKitInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.KeycapKit.Purchase.Currency)
+	s.Equal("EUR", *out.KeycapKit.Purchase.Currency)
+}
+
+func (s *HandleCreateKeycapKitSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{KeycapSetID: "ks-1", KeycapKitInput: validKeycapKitInput()})
+
+	s.Require().Error(err)
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestReturnsOwnersCurrencyWithPrice() {
+	price := 99.5
+	s.mockRepo.EXPECT().UpdateKit(mock.Anything, "ks-1", mock.Anything, mock.Anything).
+		Return(&repository.KeycapKit{KitID: "kit-1", Name: "Base", Purchase: repository.KeycapKitPurchase{Price: &price}}, nil)
+
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
+	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1", KeycapKitInput: validKeycapKitInput()})
+
+	s.Require().NoError(err)
+	s.Require().NotNil(out.KeycapKit.Purchase.Currency)
+	s.Equal("EUR", *out.KeycapKit.Purchase.Currency)
+}
+
+func (s *HandleUpdateKeycapKitSuite) TestPreferencesError_ReturnsErrorBeforeWrite() {
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
+	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1", KeycapKitInput: validKeycapKitInput()})
+
+	s.Require().Error(err)
 }

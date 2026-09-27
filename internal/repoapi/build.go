@@ -73,7 +73,7 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		Keyboard:      keyboardRef,
 		Plate:         build.Plate,
 		CaseMountType: b.caseMountTypeToAPI(build.CaseMountType),
-		Stabs:         b.stabsToAPI(build.Stabs, showPrice),
+		Stabs:         b.stabsToAPI(build.Stabs, showPrice, ownerPrefs.Currency),
 		Foam:          build.Foam,
 		Switches:      switches,
 		KeycapKits:    keycapKits,
@@ -90,6 +90,7 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		}
 		out.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
+	out.Currency = currencyFor(out.TotalCost, ownerPrefs.Currency)
 
 	return out, nil
 }
@@ -177,6 +178,7 @@ func (b Build) ToAPISummary(ctx context.Context, build repository.Build, isOwner
 		}
 		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
+	summary.Currency = currencyFor(summary.TotalCost, ownerPrefs.Currency)
 	if isOwner {
 		v := api.Visibility(build.Visibility)
 		summary.Visibility = &v
@@ -229,7 +231,7 @@ func (b Build) caseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.Buil
 	}
 }
 
-func (b Build) stabsToAPI(s *repository.BuildStabs, showPrice bool) *api.BuildStabs {
+func (b Build) stabsToAPI(s *repository.BuildStabs, showPrice bool, currency string) *api.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -241,11 +243,12 @@ func (b Build) stabsToAPI(s *repository.BuildStabs, showPrice bool) *api.BuildSt
 	if showPrice {
 		out.Price = s.Price
 	}
+	out.Currency = currencyFor(out.Price, currency)
 
 	return out
 }
 
-func (b Build) stabsToRepo(s *api.BuildStabs) *repository.BuildStabs {
+func (b Build) stabsToRepo(s *api.BuildStabsInput) *repository.BuildStabs {
 	if s == nil {
 		return nil
 	}
