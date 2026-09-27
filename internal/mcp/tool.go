@@ -39,9 +39,9 @@ func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 }
 
 func callerPreferences(ctx context.Context, prefs repository.PreferencesReader) (repository.ProfilePreferences, error) {
-	callerID, err := resolveOwnerID(ctx, "")
-	if err != nil {
-		return repository.ProfilePreferences{}, err
+	callerID, ok := ctxpkg.UserID(ctx)
+	if !ok || callerID == "" {
+		return repository.ProfilePreferences{}, errNoCallerIdentity
 	}
 
 	return prefs.GetPreferences(ctx, callerID)

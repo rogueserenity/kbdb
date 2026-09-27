@@ -15,9 +15,10 @@ import (
 func OwnerPreferences(reader repository.PreferencesReader) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			prefs, err := reader.GetPreferences(r.Context(), r.PathValue("userId"))
+			ownerID := r.PathValue("userId")
+			prefs, err := reader.GetPreferences(r.Context(), ownerID)
 			if err != nil {
-				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+				log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.OwnerID, ownerID)
 				problem.Internal(w, "failed to get owner preferences")
 				return
 			}
