@@ -1092,7 +1092,7 @@ func (s *HandleCreateBuildSuite) TestPreferencesError_ReturnsErrorBeforeWrite() 
 	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: validBuildInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to create build")
 }
 
 func (s *HandleUpdateBuildSuite) TestReturnsOwnersCurrencyWithPrice() {
@@ -1117,5 +1117,5 @@ func (s *HandleUpdateBuildSuite) TestPreferencesError_ReturnsErrorBeforeWrite() 
 	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateBuildInput{BuildID: "b-1", BuildInput: validBuildInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to update build")
 }

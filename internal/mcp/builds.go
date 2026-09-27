@@ -203,7 +203,7 @@ func handleCreateBuild(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.BuildID, b.ID)
 			return nil, schema.CreateBuildOutput{}, errors.New("failed to create build")
 		}
 
@@ -263,8 +263,8 @@ func handleUpdateBuild(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateBuildOutput{}, errors.New("failed to delete build")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.BuildID, b.ID)
+			return nil, schema.UpdateBuildOutput{}, errors.New("failed to update build")
 		}
 
 		updated, err := buildRepo.Update(ctx, b)

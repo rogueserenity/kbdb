@@ -140,7 +140,7 @@ func handleCreateSwitch(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.SwitchID, sw.ID)
 			return nil, schema.CreateSwitchOutput{}, errors.New("failed to create switch")
 		}
 
@@ -180,8 +180,8 @@ func handleUpdateSwitch(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateSwitchOutput{}, errors.New("failed to delete switch")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.SwitchID, sw.ID)
+			return nil, schema.UpdateSwitchOutput{}, errors.New("failed to update switch")
 		}
 
 		updated, err := switchRepo.Update(ctx, sw)

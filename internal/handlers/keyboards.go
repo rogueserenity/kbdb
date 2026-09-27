@@ -209,7 +209,7 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 
 		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeyboardID, kb.ID)
 			problem.Internal(w, "failed to create keyboard")
 			return
 		}
@@ -269,7 +269,7 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 
 		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.KeyboardID, kb.ID)
 			problem.Internal(w, "failed to update keyboard")
 			return
 		}

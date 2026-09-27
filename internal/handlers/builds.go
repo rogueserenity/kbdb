@@ -223,7 +223,7 @@ func CreateBuild(
 
 		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.BuildID, b.ID)
 			problem.Internal(w, "failed to create build")
 			return
 		}
@@ -301,7 +301,7 @@ func UpdateBuild(
 
 		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.BuildID, b.ID)
 			problem.Internal(w, "failed to update build")
 			return
 		}

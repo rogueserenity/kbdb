@@ -155,7 +155,7 @@ func handleCreateKeycapSet(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, ks.ID)
 			return nil, schema.CreateKeycapSetOutput{}, errors.New("failed to create keycap set")
 		}
 
@@ -191,8 +191,8 @@ func handleUpdateKeycapSet(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateKeycapSetOutput{}, errors.New("failed to delete keycap set")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, ks.ID)
+			return nil, schema.UpdateKeycapSetOutput{}, errors.New("failed to update keycap set")
 		}
 
 		updated, err := keycapSetRepo.Update(ctx, ks)
@@ -291,8 +291,8 @@ func handleCreateKeycapKit(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to set kit image")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID)
+			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to create keycap kit")
 		}
 
 		created, err := keycapSetRepo.AddKit(ctx, in.KeycapSetID, kit, in.Primary)
@@ -326,8 +326,8 @@ func handleUpdateKeycapKit(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to set kit image")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID)
+			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to update keycap kit")
 		}
 
 		updated, err := keycapSetRepo.UpdateKit(ctx, in.KeycapSetID, kit, in.Primary)

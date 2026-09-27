@@ -146,7 +146,7 @@ func handleCreateKeyboard(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, kb.ID)
 			return nil, schema.CreateKeyboardOutput{}, errors.New("failed to create keyboard")
 		}
 
@@ -182,8 +182,8 @@ func handleUpdateKeyboard(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to delete keyboard")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, kb.ID)
+			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to update keyboard")
 		}
 
 		updated, err := keyboardRepo.Update(ctx, kb)
