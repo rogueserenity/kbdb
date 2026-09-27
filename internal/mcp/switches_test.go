@@ -239,6 +239,8 @@ func (s *HandleGetSwitchSuite) TestSucceeds() {
 	s.Require().NoError(err)
 	s.Equal("sw-1", out.Switch.ID)
 	s.Equal("Gateron", out.Switch.Brand)
+	s.Require().NotNil(out.Switch.Visibility)
+	s.Equal("private", *out.Switch.Visibility)
 }
 
 func (s *HandleGetSwitchSuite) TestBlankSwitchID_ReturnsError() {
@@ -290,6 +292,7 @@ func (s *HandleGetSwitchSuite) TestOtherUsersPublicSwitch_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("sw-1", out.Switch.ID)
+	s.Nil(out.Switch.Visibility)
 }
 
 func (s *HandleGetSwitchSuite) TestOtherUsersPublicSwitchShowPriceToOthersTrue_IncludesPrice() {

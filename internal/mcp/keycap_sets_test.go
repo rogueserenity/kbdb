@@ -247,6 +247,8 @@ func (s *HandleGetKeycapSetSuite) TestSucceeds() {
 	s.Require().NoError(err)
 	s.Equal("ks-1", out.KeycapSet.ID)
 	s.Equal("GMK", out.KeycapSet.Brand)
+	s.Require().NotNil(out.KeycapSet.Visibility)
+	s.Equal("private", *out.KeycapSet.Visibility)
 }
 
 func (s *HandleGetKeycapSetSuite) TestKitsMapWithHasImage() {
@@ -313,6 +315,7 @@ func (s *HandleGetKeycapSetSuite) TestOtherUsersPublicKeycapSet_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("ks-1", out.KeycapSet.ID)
+	s.Nil(out.KeycapSet.Visibility)
 }
 
 func (s *HandleGetKeycapSetSuite) TestOtherUsersPublicKeycapSetShowPriceToOthersTrue_IncludesKitPrice() {

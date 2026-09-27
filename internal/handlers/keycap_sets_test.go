@@ -330,6 +330,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("ks1", got.ID)
 	s.Equal("GMK", got.Brand)
+	s.Equal(repository.VisibilityPrivate, got.Visibility)
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_KitWithImagePath_IncludesPresignedURL() {
@@ -399,6 +400,10 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_OtherUserReadingAuthenticatedKeycap
 	s.handler(rec, s.newRequest(ctx))
 
 	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.KeycapSet
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Nil(got.Visibility)
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_NonOwnerShowPriceToOthersTrue_IncludesKitPrice() {

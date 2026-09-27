@@ -286,6 +286,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_Owner_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("kb1", got.ID)
 	s.Equal("Keychron", got.Brand)
+	s.Equal(repository.VisibilityPrivate, got.Visibility)
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_AnonymousReadingPublicKeyboard_Succeeds() {
@@ -324,6 +325,10 @@ func (s *GetKeyboardSuite) TestGetKeyboard_OtherUserReadingAuthenticatedKeyboard
 	s.handler(rec, s.newRequest(ctx))
 
 	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.Keyboard
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Nil(got.Visibility)
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
