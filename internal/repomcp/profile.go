@@ -11,7 +11,6 @@ import (
 type Profile struct{}
 
 // ToMCP maps a repository.Profile to its MCP tool shape: avatar as a bool.
-// Preferences are the owner's alone.
 func (p Profile) ToMCP(prof repository.Profile, isOwner bool) schema.Profile {
 	out := schema.Profile{
 		Username:        prof.Username,

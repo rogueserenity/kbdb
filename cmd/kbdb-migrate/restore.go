@@ -352,8 +352,6 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 	return nil
 }
 
-// purchaseInput, switchPurchaseInput and stabsInput drop the read-only
-// currency from a dumped read shape so it can be sent back as a write.
 func purchaseInput(p *api.Purchase) *api.PurchaseInput {
 	if p == nil {
 		return nil

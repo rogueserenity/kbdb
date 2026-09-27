@@ -27,7 +27,7 @@ type ListKeycapSetsSuite struct {
 
 	mockRepo   *mocks.MockKeycapSetRepository
 	mockImages *mocks.MockKeycapKitImageStore
-	mockPrefs  *mocks.MockPreferencesReader
+	prefs      repository.ProfilePreferences
 	handler    http.HandlerFunc
 }
 
@@ -38,12 +38,12 @@ func TestListKeycapSetsSuite(t *testing.T) {
 func (s *ListKeycapSetsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.prefs = repository.ProfilePreferences{}
 	s.handler = ListKeycapSets(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *ListKeycapSetsSuite) newRequest(ctx context.Context, query string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keycap-sets?"+query, nil)
 	req.SetPathValue("userId", "alice")
 	return req
@@ -57,7 +57,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_Owner_RequestsAllVisibilities()
 			return len(vis) == 3
 		}), 20, "").
 		Return([]repository.KeycapSet{{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPrivate}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -77,7 +77,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_Anonymous_RequestsPublicOnly() 
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, 20, "").
 		Return([]repository.KeycapSet{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
@@ -93,7 +93,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OtherUser_RequestsPublicAndAuth
 			return len(vis) == 2
 		}), 20, "").
 		Return([]repository.KeycapSet{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -111,7 +111,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OwnerShowPriceToMeTrue_Includes
 			ID:   "ks1",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToMe: true}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToMe: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -134,7 +134,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OwnerShowPriceToMeFalse_OmitsTo
 			ID:   "ks1",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToMe: false}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToMe: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -156,7 +156,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersFalse_
 			ID:   "ks1",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -178,7 +178,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersTrue_I
 			ID:   "ks1",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -195,7 +195,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_PassesLimitAndCursor() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 5, "abc").
 		Return([]repository.KeycapSet{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=5&cursor=abc"))
@@ -207,7 +207,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_ReturnsNextCursor_WhenPresent()
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.KeycapSet{}, "next-page-token", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
@@ -231,7 +231,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPri
 			PrimaryKitID: &kitID,
 			Kits:         map[string]repository.KeycapKit{kitID: {KitID: kitID, ImagePath: &imagePath}},
 		}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	s.mockImages.EXPECT().PresignGet(mock.Anything, imagePath).Return("https://example.com/presigned-get", time.Now().Add(time.Hour), nil)
 	s.mockRepo.EXPECT().
@@ -275,25 +275,12 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_InvalidCursor_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *ListKeycapSetsSuite) TestListKeycapSets_PreferencesError_Returns500() {
-	s.mockRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
-		Return([]repository.KeycapSet{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type GetKeycapSetSuite struct {
 	suite.Suite
 
 	mockRepo   *mocks.MockKeycapSetRepository
 	mockImages *mocks.MockKeycapKitImageStore
-	mockPrefs  *mocks.MockPreferencesReader
+	prefs      repository.ProfilePreferences
 	handler    http.HandlerFunc
 }
 
@@ -304,12 +291,12 @@ func TestGetKeycapSetSuite(t *testing.T) {
 func (s *GetKeycapSetSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.prefs = repository.ProfilePreferences{}
 	s.handler = GetKeycapSet(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keycap-sets/ks1", nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keycapSetId", "ks1")
@@ -318,7 +305,7 @@ func (s *GetKeycapSetSuite) newRequest(ctx context.Context) *http.Request {
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_Succeeds() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.DefaultProfilePreferences(), nil)
+	s.prefs = repository.DefaultProfilePreferences()
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
@@ -339,7 +326,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_Succeeds() {
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_KitWithImagePath_IncludesPresignedURL() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.DefaultProfilePreferences(), nil)
+	s.prefs = repository.DefaultProfilePreferences()
 	imagePath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
 
 	s.mockRepo.EXPECT().
@@ -373,7 +360,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_AnonymousReadingPublicKeycapSet_Suc
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{ID: "ks1", Visibility: repository.VisibilityPublic}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context()))
@@ -399,7 +386,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_OtherUserReadingAuthenticatedKeycap
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{ID: "ks1", Visibility: repository.VisibilityAuthenticated}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -421,7 +408,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_NonOwnerShowPriceToOthersTrue_Inclu
 			ID: "ks1", Visibility: repository.VisibilityPublic,
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -445,7 +432,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_NonOwnerShowPriceToOthersFalse_Omit
 			ID: "ks1", Visibility: repository.VisibilityPublic,
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -468,8 +455,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_AlwaysIncludesKitPriceAndCurr
 			ID: "ks1", Visibility: repository.VisibilityPrivate,
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -483,21 +469,6 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_Owner_AlwaysIncludesKitPriceAndCurr
 	s.InDelta(price, *(*got.Kits)[0].Purchase.Price, 0.0001)
 	s.Require().NotNil((*got.Kits)[0].Purchase.Currency)
 	s.Equal("EUR", *(*got.Kits)[0].Purchase.Currency)
-}
-
-func (s *GetKeycapSetSuite) TestGetKeycapSet_NonOwnerPreferencesError_Returns500() {
-	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
-
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Visibility: repository.VisibilityPublic}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_OtherUserReadingPrivateKeycapSet_Returns404() {
@@ -540,7 +511,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_RepositoryError_Returns500() {
 
 func (s *GetKeycapSetSuite) TestGetKeycapSet_MalformedKitPurchaseDate_Returns500NotPanic() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.DefaultProfilePreferences(), nil)
+	s.prefs = repository.DefaultProfilePreferences()
 	malformedDate := "not-a-date"
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "ks1").
@@ -560,7 +531,7 @@ func (s *GetKeycapSetSuite) TestGetKeycapSet_MalformedKitPurchaseDate_Returns500
 type CreateKeycapSetSuite struct {
 	suite.Suite
 
-	mockPrefs         *mocks.MockPreferencesReader
+	prefs             repository.ProfilePreferences
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
 	mockImages        *mocks.MockKeycapKitImageStore
 	handler           http.HandlerFunc
@@ -571,16 +542,14 @@ func TestCreateKeycapSetSuite(t *testing.T) {
 }
 
 func (s *CreateKeycapSetSuite) SetupTest() {
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
+	s.prefs = repository.ProfilePreferences{Currency: "EUR"}
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.handler = CreateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockKeycapSetRepo})
 }
 
 func (s *CreateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keycap-sets", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	return req
@@ -734,7 +703,7 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_RepositoryError_Returns500() 
 type UpdateKeycapSetSuite struct {
 	suite.Suite
 
-	mockPrefs         *mocks.MockPreferencesReader
+	prefs             repository.ProfilePreferences
 	mockKeycapSetRepo *mocks.MockKeycapSetRepository
 	mockImages        *mocks.MockKeycapKitImageStore
 	handler           http.HandlerFunc
@@ -745,16 +714,14 @@ func TestUpdateKeycapSetSuite(t *testing.T) {
 }
 
 func (s *UpdateKeycapSetSuite) SetupTest() {
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
+	s.prefs = repository.ProfilePreferences{Currency: "EUR"}
 	s.mockKeycapSetRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.handler = UpdateKeycapSet(s.mockKeycapSetRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockKeycapSetRepo})
 }
 
 func (s *UpdateKeycapSetSuite) newRequest(ctx context.Context, body string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keycap-sets/ks1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keycapSetId", "ks1")
@@ -1148,7 +1115,7 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_InvalidOnDelete_Returns400() 
 type CreateKeycapKitSuite struct {
 	suite.Suite
 
-	mockPrefs  *mocks.MockPreferencesReader
+	prefs      repository.ProfilePreferences
 	mockRepo   *mocks.MockKeycapSetRepository
 	mockImages *mocks.MockKeycapKitImageStore
 	handler    http.HandlerFunc
@@ -1159,16 +1126,14 @@ func TestCreateKeycapKitSuite(t *testing.T) {
 }
 
 func (s *CreateKeycapKitSuite) SetupTest() {
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
+	s.prefs = repository.ProfilePreferences{Currency: "EUR"}
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.handler = CreateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *CreateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keycap-sets/ks1/kits", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keycapSetId", "ks1")
@@ -1328,7 +1293,7 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409()
 type UpdateKeycapKitSuite struct {
 	suite.Suite
 
-	mockPrefs  *mocks.MockPreferencesReader
+	prefs      repository.ProfilePreferences
 	mockRepo   *mocks.MockKeycapSetRepository
 	mockImages *mocks.MockKeycapKitImageStore
 	handler    http.HandlerFunc
@@ -1339,16 +1304,14 @@ func TestUpdateKeycapKitSuite(t *testing.T) {
 }
 
 func (s *UpdateKeycapKitSuite) SetupTest() {
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
+	s.prefs = repository.ProfilePreferences{Currency: "EUR"}
 	s.mockRepo = mocks.NewMockKeycapSetRepository(s.T())
 	s.mockImages = mocks.NewMockKeycapKitImageStore(s.T())
 	s.handler = UpdateKeycapKit(s.mockRepo, repoapi.KeycapSet{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *UpdateKeycapKitSuite) newRequest(ctx context.Context, body string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keycap-sets/ks1/kits/kit1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keycapSetId", "ks1")
@@ -2115,16 +2078,6 @@ func (s *CreateKeycapSetSuite) TestCreateKeycapSet_ReturnsOwnersCurrencyWithPric
 	s.Equal("EUR", *(*got.Kits)[0].Purchase.Currency)
 }
 
-func (s *CreateKeycapSetSuite) TestCreateKeycapSet_PreferencesError_Returns500BeforeWrite() {
-	s.mockPrefs.ExpectedCalls = nil
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-}
-
 func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_ReturnsOwnersCurrencyWithPrice() {
 	price := 99.5
 	s.mockKeycapSetRepo.EXPECT().Update(mock.Anything, mock.Anything).
@@ -2138,16 +2091,6 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_ReturnsOwnersCurrencyWithPric
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil((*got.Kits)[0].Purchase.Currency)
 	s.Equal("EUR", *(*got.Kits)[0].Purchase.Currency)
-}
-
-func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_PreferencesError_Returns500BeforeWrite() {
-	s.mockPrefs.ExpectedCalls = nil
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
 }
 
 func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ReturnsOwnersCurrencyWithPrice() {
@@ -2165,16 +2108,6 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_ReturnsOwnersCurrencyWithPric
 	s.Equal("EUR", *got.Purchase.Currency)
 }
 
-func (s *CreateKeycapKitSuite) TestCreateKeycapKit_PreferencesError_Returns500BeforeWrite() {
-	s.mockPrefs.ExpectedCalls = nil
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), `{"name":"Base"}`))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-}
-
 func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_ReturnsOwnersCurrencyWithPrice() {
 	price := 99.5
 	s.mockRepo.EXPECT().UpdateKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
@@ -2188,14 +2121,4 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_ReturnsOwnersCurrencyWithPric
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Purchase.Currency)
 	s.Equal("EUR", *got.Purchase.Currency)
-}
-
-func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_PreferencesError_Returns500BeforeWrite() {
-	s.mockPrefs.ExpectedCalls = nil
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), `{"name":"Base"}`))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
 }

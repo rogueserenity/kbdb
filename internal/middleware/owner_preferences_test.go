@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -21,6 +22,12 @@ func TestOwnerPreferencesSuite(t *testing.T) {
 	suite.Run(t, new(OwnerPreferencesSuite))
 }
 
+func (s *OwnerPreferencesSuite) newRequest() *http.Request {
+	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/users/alice/switches", nil)
+	req.SetPathValue("userId", "alice")
+	return req
+}
+
 func (s *OwnerPreferencesSuite) TestLoadsPathOwnersPreferences() {
 	reader := mocks.NewMockPreferencesReader(s.T())
 	want := repository.ProfilePreferences{Currency: "EUR"}
@@ -33,23 +40,22 @@ func (s *OwnerPreferencesSuite) TestLoadsPathOwnersPreferences() {
 		s.NoError(err)
 	})
 
-	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodGet, "/v1/users/alice/switches", nil)
-	req.SetPathValue("userId", "alice")
-	OwnerPreferences(reader)(next).ServeHTTP(httptest.NewRecorder(), req)
+	OwnerPreferences(reader)(next).ServeHTTP(httptest.NewRecorder(), s.newRequest())
 
 	s.Equal(want, got)
 }
 
-func (s *OwnerPreferencesSuite) TestNextNeverReadsPreferences_DoesNotFetch() {
+func (s *OwnerPreferencesSuite) TestLookupFails_Returns500WithoutCallingNext() {
 	reader := mocks.NewMockPreferencesReader(s.T())
+	reader.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
 	next := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusNoContent)
+		s.Fail("next must not run when the lookup fails")
 	})
 
-	req := httptest.NewRequestWithContext(s.T().Context(), http.MethodDelete, "/v1/users/alice/switches/sw1", nil)
-	req.SetPathValue("userId", "alice")
 	rec := httptest.NewRecorder()
-	OwnerPreferences(reader)(next).ServeHTTP(rec, req)
+	OwnerPreferences(reader)(next).ServeHTTP(rec, s.newRequest())
 
-	s.Equal(http.StatusNoContent, rec.Code)
+	s.Equal(http.StatusInternalServerError, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }

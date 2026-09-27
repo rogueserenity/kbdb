@@ -17,7 +17,6 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
-	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -80,7 +79,7 @@ func handleListBuilds(
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListBuildsInput, schema.ListBuildsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListBuildsInput) (*mcp.CallToolResult, schema.ListBuildsOutput, error) {
-		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
 			return nil, schema.ListBuildsOutput{}, err
 		}
@@ -96,7 +95,7 @@ func handleListBuilds(
 			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
 		}
 
-		ownerPrefs, err := ownerprefs.Get(ctx)
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
 			return nil, schema.ListBuildsOutput{}, errors.New("failed to list builds")
@@ -146,7 +145,7 @@ func handleGetBuild(
 			return nil, schema.GetBuildOutput{}, errors.New("build_id must not be blank")
 		}
 
-		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
 			return nil, schema.GetBuildOutput{}, err
 		}
@@ -158,7 +157,7 @@ func handleGetBuild(
 		}
 
 		isOwner := authz.IsOwner(ctx, ownerID)
-		ownerPrefs, err := ownerprefs.Get(ctx)
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.BuildID, in.BuildID)
 			return nil, schema.GetBuildOutput{}, errors.New("failed to get build")

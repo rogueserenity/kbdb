@@ -8,7 +8,6 @@ import (
 	"github.com/rogueserenity/kbdb/internal/authz"
 	ctxpkg "github.com/rogueserenity/kbdb/internal/ctx"
 	"github.com/rogueserenity/kbdb/internal/log"
-	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
@@ -39,26 +38,13 @@ func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 	return subject, nil
 }
 
-// resolveOwner resolves the owner as [resolveOwnerID] does and returns a
-// context carrying a loader for their preferences, for [ownerprefs.Get].
-func resolveOwner(ctx context.Context, prefs repository.PreferencesReader, userID string) (context.Context, string, error) {
-	ownerID, err := resolveOwnerID(ctx, userID)
-	if err != nil {
-		return ctx, "", err
-	}
-
-	return ownerprefs.WithLoader(ctx, prefs, ownerID), ownerID, nil
-}
-
-// callerPreferences loads the caller's own preferences, for a write tool's
-// response - writes always target the caller's collection.
 func callerPreferences(ctx context.Context, prefs repository.PreferencesReader) (repository.ProfilePreferences, error) {
-	ctx, _, err := resolveOwner(ctx, prefs, "")
+	callerID, err := resolveOwnerID(ctx, "")
 	if err != nil {
 		return repository.ProfilePreferences{}, err
 	}
 
-	return ownerprefs.Get(ctx)
+	return prefs.GetPreferences(ctx, callerID)
 }
 
 // ownedReadable resolves ownerID (defaulting to the caller when userID is

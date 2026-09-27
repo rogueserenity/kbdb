@@ -75,8 +75,6 @@ func sumKnownCosts(components ...*float64) *float64 {
 	return &total
 }
 
-// currencyFor returns currency when price is set and nil otherwise, so a
-// price and its currency always appear together.
 func currencyFor(price *float64, currency string) *string {
 	if price == nil {
 		return nil
