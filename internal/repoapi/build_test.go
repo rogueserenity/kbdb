@@ -183,7 +183,22 @@ func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Require().NotNil(out.BuildDate)
 	s.Equal(*b.BuildDate, out.BuildDate.Format(dateLayout))
 	s.Equal(b.Notes, out.Notes)
-	s.Equal(api.Visibility(b.Visibility), out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal(api.Visibility(b.Visibility), *out.Visibility)
+}
+
+func (s *BuildToAPISuite) TestNonOwner_OmitsVisibility() {
+	b := repository.Build{UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPublic}
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+
+	out, err := d.callWithPrefs(context.Background(), b, false, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Nil(out.Visibility)
 }
 
 func (s *BuildToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {

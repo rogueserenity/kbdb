@@ -5,6 +5,9 @@ import (
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
+
+	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
 // dateLayout matches how openapi_types.Date marshals/unmarshals.
@@ -70,4 +73,14 @@ func sumKnownCosts(components ...*float64) *float64 {
 	}
 
 	return &total
+}
+
+// ownerVisibility returns v for the item's owner and nil for anyone else.
+func ownerVisibility(v repository.Visibility, isOwner bool) *api.Visibility {
+	if !isOwner {
+		return nil
+	}
+	out := api.Visibility(v)
+
+	return &out
 }

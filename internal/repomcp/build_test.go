@@ -75,8 +75,15 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 	s.Equal("ks-1", out.KeycapKits[0].KeycapSet)
 	s.Equal("kit-1", out.KeycapKits[0].Kit)
 	s.Equal(&buildDate, out.BuildDate)
-	s.Equal("public", out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal("public", *out.Visibility)
 	s.True(out.HasImages)
+}
+
+func (s *BuildToMCPSuite) TestNonOwner_OmitsVisibility() {
+	out := Build{}.ToMCP(repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPublic}, false, repository.ProfilePreferences{})
+
+	s.Nil(out.Visibility)
 }
 
 func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsStabsPrice() {

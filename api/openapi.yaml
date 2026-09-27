@@ -1566,21 +1566,41 @@ components:
             Presigned S3 PUT URL. Short-lived — upload promptly.
 
     Keyboard:
-      allOf:
-        - $ref: "#/components/schemas/KeyboardInput"
-        - type: object
-          required: [id]
-          properties:
-            id:
-              type: string
-            images:
-              type: array
-              items:
-                $ref: "#/components/schemas/KeyboardImage"
-              description: >
-                Managed via the dedicated image endpoints below, not via
-                PUT on the keyboard itself — see POST/DELETE
-                .../keyboards/{keyboardId}/images[/{imageId}].
+      type: object
+      required: [id, brand, name]
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        size:
+          type: string
+        layout:
+          type: string
+        design:
+          $ref: "#/components/schemas/KeyboardDesign"
+        pcb:
+          $ref: "#/components/schemas/KeyboardPCB"
+        purchase:
+          $ref: "#/components/schemas/Purchase"
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Who can read this keyboard. Only ever present for the
+            keyboard's owner - no preference can expose it to another
+            caller.
+        images:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyboardImage"
+          description: >
+            Managed via the dedicated image endpoints below, not via
+            PUT on the keyboard itself — see POST/DELETE
+            .../keyboards/{keyboardId}/images[/{imageId}].
 
     KeyboardSummary:
       type: object
@@ -1752,19 +1772,47 @@ components:
             Presigned S3 PUT URL. Short-lived — upload promptly.
 
     Switch:
-      allOf:
-        - $ref: "#/components/schemas/SwitchInput"
-        - type: object
-          required: [id]
-          properties:
-            id:
-              type: string
-            image:
-              $ref: "#/components/schemas/SwitchImage"
-              description: >
-                Managed via the dedicated image endpoint, not via PUT on
-                the switch itself — see POST/DELETE
-                .../switches/{switchId}/image.
+      type: object
+      required: [id, brand, name, type]
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        manufacturer:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        pins:
+          type: integer
+          example: 5
+          description: PCB mount pin count.
+        factory_lubed:
+          type: boolean
+        material:
+          $ref: "#/components/schemas/SwitchMaterial"
+        force:
+          $ref: "#/components/schemas/SwitchForce"
+        spring:
+          $ref: "#/components/schemas/SwitchSpring"
+        purchase:
+          $ref: "#/components/schemas/SwitchPurchase"
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Who can read this switch. Only ever present for the
+            switch's owner - no preference can expose it to another
+            caller.
+        image:
+          $ref: "#/components/schemas/SwitchImage"
+          description: >
+            Managed via the dedicated image endpoint, not via PUT on
+            the switch itself — see POST/DELETE
+            .../switches/{switchId}/image.
 
     SwitchSummary:
       type: object
@@ -2059,39 +2107,53 @@ components:
           $ref: "#/components/schemas/Visibility"
 
     KeycapSet:
-      allOf:
-        - $ref: "#/components/schemas/KeycapSetInput"
-        - type: object
-          required: [id]
-          properties:
-            id:
-              type: string
-            kits:
-              type: array
-              items:
-                $ref: "#/components/schemas/KeycapKit"
-              description: >
-                Managed via the dedicated kit endpoints below, not via PUT
-                on the set itself — see POST/PUT/DELETE
-                .../keycap-sets/{keycapSetId}/kits[/{kitId}].
-            primary_kit_id:
-              type: [string, "null"]
-              description: >
-                The kit_id, among this set's kits, whose image represents
-                the set in a list view. Null if never set, or if the kit
-                it named no longer exists — match against kits[].kit_id
-                to find that kit's image.
-            order_status:
-              type: [string, "null"]
-              description: >
-                Derived, read-only summary of every kit's
-                purchase.order_status: the least-progressed status among
-                them wins (Planned < Ordered < Shipped < Delivered), so the
-                set isn't shown as Delivered while a kit is still en
-                route. A kit with status Cancelled is excluded from that
-                comparison unless every kit is Cancelled, in which case
-                this is Cancelled too. Null if no kit has an order_status
-                set, or the set has no kits.
+      type: object
+      required: [id, brand, name]
+      properties:
+        id:
+          type: string
+        brand:
+          type: string
+        name:
+          type: string
+        profile:
+          type: string
+        material:
+          type: string
+        notes:
+          type: string
+        visibility:
+          $ref: "#/components/schemas/Visibility"
+          description: >
+            Who can read this keycap set. Only ever present for the
+            set's owner - no preference can expose it to another
+            caller.
+        kits:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeycapKit"
+          description: >
+            Managed via the dedicated kit endpoints below, not via PUT
+            on the set itself — see POST/PUT/DELETE
+            .../keycap-sets/{keycapSetId}/kits[/{kitId}].
+        primary_kit_id:
+          type: [string, "null"]
+          description: >
+            The kit_id, among this set's kits, whose image represents
+            the set in a list view. Null if never set, or if the kit
+            it named no longer exists — match against kits[].kit_id
+            to find that kit's image.
+        order_status:
+          type: [string, "null"]
+          description: >
+            Derived, read-only summary of every kit's
+            purchase.order_status: the least-progressed status among
+            them wins (Planned < Ordered < Shipped < Delivered), so the
+            set isn't shown as Delivered while a kit is still en
+            route. A kit with status Cancelled is excluded from that
+            comparison unless every kit is Cancelled, in which case
+            this is Cancelled too. Null if no kit has an order_status
+            set, or the set has no kits.
 
     KeycapSetSummary:
       type: object
@@ -2378,7 +2440,7 @@ components:
         switches[].switch, and keycap_kits[].keycap_set are denormalized
         into resolved reference objects rather than bare ids, so a client
         can render a build without follow-up requests.
-      required: [id, visibility]
+      required: [id]
       properties:
         id:
           type: string
@@ -2411,6 +2473,9 @@ components:
           type: string
         visibility:
           $ref: "#/components/schemas/Visibility"
+          description: >
+            Who can read this build. Only ever present for the build's
+            owner - no preference can expose it to another caller.
         images:
           type: array
           items:

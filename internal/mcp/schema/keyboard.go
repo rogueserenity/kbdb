@@ -105,7 +105,7 @@ type Keyboard struct {
 	PCB        *KeyboardPCB      `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
 	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility string            `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
+	Visibility *string           `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; only ever present for the keyboard's owner"`
 	HasImages  bool              `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
 }
 

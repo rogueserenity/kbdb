@@ -47,7 +47,7 @@ type KeycapSet struct {
 	Profile      *string     `json:"profile,omitempty" jsonschema:"the keycap set's profile, e.g. Cherry or OEM"`
 	Material     *string     `json:"material,omitempty" jsonschema:"what the keycaps are made of"`
 	Notes        *string     `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility   string      `json:"visibility" jsonschema:"who can read this keycap set; one of \"public\", \"authenticated\", \"private\""`
+	Visibility   *string     `json:"visibility,omitempty" jsonschema:"who can read this keycap set; one of \"public\", \"authenticated\", \"private\"; only ever present for the set's owner"`
 	Kits         []KeycapKit `json:"kits,omitempty" jsonschema:"the kits purchased as part of this set"`
 	PrimaryKitID *string     `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit, among kits, whose image represents this set; match against kits[].kit_id to find its image"`
 	OrderStatus  *string     `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`

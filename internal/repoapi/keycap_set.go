@@ -64,7 +64,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 		Profile:      set.Profile,
 		Material:     set.Material,
 		Notes:        set.Notes,
-		Visibility:   api.Visibility(set.Visibility),
+		Visibility:   ownerVisibility(set.Visibility, isOwner),
 		Kits:         kits,
 		PrimaryKitId: validPrimaryKitID(set.PrimaryKitID, set.Kits),
 		OrderStatus:  repository.AggregateOrderStatus(set.Kits),

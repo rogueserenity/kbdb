@@ -47,7 +47,7 @@ func (s Switch) ToAPI(ctx context.Context, sw repository.Switch, isOwner bool, o
 		Spring:       s.springToAPI(sw.Spring),
 		Purchase:     purchase,
 		Notes:        sw.Notes,
-		Visibility:   api.Visibility(sw.Visibility),
+		Visibility:   ownerVisibility(sw.Visibility, isOwner),
 		Image:        image,
 	}, nil
 }

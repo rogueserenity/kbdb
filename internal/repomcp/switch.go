@@ -32,7 +32,7 @@ func (s Switch) ToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.
 		Spring:       s.springToMCP(sw.Spring),
 		Purchase:     s.purchaseToMCP(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
 		Notes:        sw.Notes,
-		Visibility:   string(sw.Visibility),
+		Visibility:   ownerVisibility(sw.Visibility, isOwner),
 		HasImage:     sw.ImagePath != nil,
 	}
 }

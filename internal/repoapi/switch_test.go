@@ -83,7 +83,8 @@ func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(sw.Pins, out.Pins)
 	s.Equal(sw.FactoryLubed, out.FactoryLubed)
 	s.Equal(sw.Notes, out.Notes)
-	s.Equal(api.Visibility(sw.Visibility), out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal(api.Visibility(sw.Visibility), *out.Visibility)
 
 	if s.NotNil(out.Material) {
 		s.Equal(sw.Material.TopHousing, out.Material.TopHousing)
@@ -109,6 +110,16 @@ func (s *SwitchToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 		s.Require().NotNil(out.Purchase.DeliveryDate)
 		s.Equal(*sw.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
 	}
+}
+
+func (s *SwitchToAPISuite) TestNonOwner_OmitsVisibility() {
+	sw := repository.Switch{ID: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: repository.VisibilityPublic}
+
+	sr := Switch{Images: mocks.NewMockSwitchImageStore(s.T())}
+	out, err := sr.ToAPI(s.T().Context(), sw, false, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Nil(out.Visibility)
 }
 
 func (s *SwitchToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {

@@ -63,6 +63,7 @@ var _ = Describe("Getting a keyboard", func() {
 							Vendor *string  `json:"vendor"`
 							Price  *float64 `json:"price"`
 						} `json:"purchase"`
+						Visibility *string `json:"visibility"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.ID).To(Equal(keyboardID))
@@ -73,6 +74,9 @@ var _ = Describe("Getting a keyboard", func() {
 
 					By("omitting price")
 					Expect(got.Purchase.Price).To(BeNil())
+
+					By("omitting visibility")
+					Expect(got.Visibility).To(BeNil())
 				})
 			})
 		})
@@ -85,18 +89,23 @@ var _ = Describe("Getting a keyboard", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("returns the keyboard with purchase.price", func() {
+				It("returns the keyboard with purchase.price and visibility", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var got struct {
 						Purchase struct {
 							Price *float64 `json:"price"`
 						} `json:"purchase"`
+						Visibility *string `json:"visibility"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 
 					Expect(got.Purchase.Price).NotTo(BeNil())
 					Expect(*got.Purchase.Price).To(Equal(329.99))
+
+					By("including visibility")
+					Expect(got.Visibility).NotTo(BeNil())
+					Expect(*got.Visibility).To(Equal("public"))
 				})
 			})
 		})

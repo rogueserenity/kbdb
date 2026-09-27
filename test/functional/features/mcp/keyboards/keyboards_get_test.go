@@ -53,7 +53,8 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 					out := decodeGetOutput(result)
 					Expect(out.Keyboard.ID).To(Equal(keyboardID))
 					Expect(out.Keyboard.Brand).To(Equal("Keychron"))
-					Expect(out.Keyboard.Visibility).To(Equal("private"))
+					Expect(out.Keyboard.Visibility).NotTo(BeNil())
+					Expect(*out.Keyboard.Visibility).To(Equal("private"))
 
 					By("round-tripping the nested groups out of DynamoDB")
 					Expect(out.Keyboard.Design).NotTo(BeNil())
@@ -171,7 +172,7 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 					})
 				})
 
-				It("returns the keyboard with purchase.price omitted", func() {
+				It("returns the keyboard with purchase.price and visibility omitted", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
@@ -184,6 +185,9 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 
 					By("omitting price")
 					Expect(out.Keyboard.Purchase.Price).To(BeNil())
+
+					By("omitting visibility")
+					Expect(out.Keyboard.Visibility).To(BeNil())
 				})
 			})
 		})

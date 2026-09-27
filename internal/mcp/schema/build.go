@@ -53,7 +53,7 @@ type Build struct {
 	KeycapKits    []BuildKeycapKitEntry `json:"keycap_kits,omitempty" jsonschema:"the keycap kits used"`
 	BuildDate     *string               `json:"build_date,omitempty" jsonschema:"when the build was assembled (YYYY-MM-DD)"`
 	Notes         *string               `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility    string                `json:"visibility" jsonschema:"who can read this build; one of \"public\", \"authenticated\", \"private\""`
+	Visibility    *string               `json:"visibility,omitempty" jsonschema:"who can read this build; one of \"public\", \"authenticated\", \"private\"; only ever present for the build's owner"`
 	HasImages     bool                  `json:"has_images" jsonschema:"whether this build has any images on file"`
 }
 

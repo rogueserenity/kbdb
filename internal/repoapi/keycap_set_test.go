@@ -47,7 +47,18 @@ func (s *KeycapSetToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(ks.Profile, out.Profile)
 	s.Equal(ks.Material, out.Material)
 	s.Equal(ks.Notes, out.Notes)
-	s.Equal(api.Visibility(ks.Visibility), out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal(api.Visibility(ks.Visibility), *out.Visibility)
+}
+
+func (s *KeycapSetToAPISuite) TestNonOwner_OmitsVisibility() {
+	ks := repository.KeycapSet{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPublic}
+
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.ToAPI(context.Background(), ks, false, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Nil(out.Visibility)
 }
 
 func (s *KeycapSetToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {

@@ -116,6 +116,10 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 		if err := readJSONFile(filepath.Join(itemDir, "item.json"), &full); err != nil {
 			return err
 		}
+		visibility, err := dumpedVisibility(full.Visibility)
+		if err != nil {
+			return fmt.Errorf("keyboard %s: %w", oldID, err)
+		}
 		input := api.KeyboardInput{
 			Brand:      full.Brand,
 			Design:     full.Design,
@@ -125,7 +129,7 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 			Pcb:        full.Pcb,
 			Purchase:   full.Purchase,
 			Size:       full.Size,
-			Visibility: full.Visibility,
+			Visibility: visibility,
 		}
 		var created api.Keyboard
 		if err := client.doJSON(ctx, http.MethodPost, client.userPath("keyboards"), input, &created); err != nil {
@@ -173,6 +177,10 @@ func restoreSwitches(ctx context.Context, client *apiClient, dumpDir string, m *
 		if err := readJSONFile(filepath.Join(itemDir, "item.json"), &full); err != nil {
 			return err
 		}
+		visibility, err := dumpedVisibility(full.Visibility)
+		if err != nil {
+			return fmt.Errorf("switch %s: %w", oldID, err)
+		}
 		input := api.SwitchInput{
 			Brand:        full.Brand,
 			FactoryLubed: full.FactoryLubed,
@@ -185,7 +193,7 @@ func restoreSwitches(ctx context.Context, client *apiClient, dumpDir string, m *
 			Purchase:     full.Purchase,
 			Spring:       full.Spring,
 			Type:         full.Type,
-			Visibility:   full.Visibility,
+			Visibility:   visibility,
 		}
 		var created api.Switch
 		if err := client.doJSON(ctx, http.MethodPost, client.userPath("switches"), input, &created); err != nil {
@@ -228,13 +236,17 @@ func restoreKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m
 		// created" and "all kits created" must still finish the kits.
 		mapped := m.KeycapSets[oldSetID]
 		if mapped == nil {
+			visibility, err := dumpedVisibility(full.Visibility)
+			if err != nil {
+				return fmt.Errorf("keycap set %s: %w", oldSetID, err)
+			}
 			input := api.KeycapSetInput{
 				Brand:      full.Brand,
 				Material:   full.Material,
 				Name:       full.Name,
 				Notes:      full.Notes,
 				Profile:    full.Profile,
-				Visibility: full.Visibility,
+				Visibility: visibility,
 			}
 			var createdSet api.KeycapSet
 			if err := client.doJSON(ctx, http.MethodPost, client.userPath("keycap-sets"), input, &createdSet); err != nil {
@@ -340,6 +352,16 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 	return nil
 }
 
+// dumpedVisibility unwraps a dumped item's visibility. The API returns it
+// only to the item's owner, and a dump reads the caller's own collection, so
+// it's missing only if the dump was taken as a different user.
+func dumpedVisibility(v *api.Visibility) (api.Visibility, error) {
+	if v == nil {
+		return "", errors.New("dumped item has no visibility (was the dump taken as a different user?)")
+	}
+	return *v, nil
+}
+
 // buildInputFromResolved collapses a resolved Build GET body to a BuildInput,
 // remapping every cross-entity reference through m. A reference with no
 // mapping is a hard error — we never POST a build with a dangling ref.
@@ -351,6 +373,10 @@ func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
 	if !ok {
 		return api.BuildInput{}, fmt.Errorf("keyboard %s is not in the id map; restore keyboards first", full.Keyboard.Id)
 	}
+	visibility, err := dumpedVisibility(full.Visibility)
+	if err != nil {
+		return api.BuildInput{}, err
+	}
 
 	input := api.BuildInput{
 		BuildDate:     full.BuildDate,
@@ -360,7 +386,7 @@ func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
 		Notes:         full.Notes,
 		Plate:         full.Plate,
 		Stabs:         full.Stabs,
-		Visibility:    full.Visibility,
+		Visibility:    visibility,
 	}
 
 	if full.Switches != nil {
