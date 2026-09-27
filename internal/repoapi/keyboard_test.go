@@ -198,28 +198,33 @@ func (s *KeyboardToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 	s.Equal(*kb.Purchase.OrderDate, out.Purchase.OrderDate.Format(dateLayout))
 	s.Require().NotNil(out.Purchase.DeliveryDate)
 	s.Equal(*kb.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
+	s.Nil(out.Purchase.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	kb := fullRepoKeyboard()
 
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-	out, err := kr.ToAPI(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	out, err := kr.ToAPI(s.T().Context(), kb, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
 	s.Equal(kb.Purchase.Price, out.Purchase.Price)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
 	kb := fullRepoKeyboard()
 
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-	out, err := kr.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	out, err := kr.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Purchase)
 	s.Equal(kb.Purchase.Price, out.Purchase.Price)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestImagesPresent_PresignsEachAndPreservesOrder() {
@@ -293,10 +298,12 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_OwnerShowPriceToMeTrue_Inc
 	kb := fullRepoKeyboard()
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
 
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Equal(kb.Purchase.Price, summary.Price)
+	s.Require().NotNil(summary.Currency)
+	s.Equal("EUR", *summary.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_OwnerShowPriceToMeFalse_OmitsPrice() {
@@ -307,6 +314,7 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_OwnerShowPriceToMeFalse_Om
 	s.Require().NoError(err)
 
 	s.Nil(summary.Price)
+	s.Nil(summary.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwnerShowPriceToOthersFalse_OmitsPrice() {
@@ -317,16 +325,19 @@ func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwnerShowPriceToOthersF
 	s.Require().NoError(err)
 
 	s.Nil(summary.Price)
+	s.Nil(summary.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	kb := fullRepoKeyboard()
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
 
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 	s.Require().NoError(err)
 
 	s.Equal(kb.Purchase.Price, summary.Price)
+	s.Require().NotNil(summary.Currency)
+	s.Equal("EUR", *summary.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirstImagePresigned() {
@@ -392,7 +403,7 @@ func (s *KeyboardToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 			Assembly:     strPtr("Hot-swap"),
 			Connectivity: strPtr("Wired"),
 		},
-		Purchase: &api.Purchase{
+		Purchase: &api.PurchaseInput{
 			Vendor:       strPtr("Keychron"),
 			Price:        floatPtr(199.99),
 			OrderDate:    &orderDate,

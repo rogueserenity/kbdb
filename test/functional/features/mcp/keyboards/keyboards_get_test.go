@@ -192,7 +192,7 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 			})
 		})
 
-		Context("given another user owns a public keyboard and has show_price_to_others true", func() {
+		Context("given another user owns a public keyboard, has show_price_to_others true and a non-discoverable profile", func() {
 			var (
 				otherID         string
 				profileUsername string
@@ -206,7 +206,7 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
 					Username: profileUsername,
 					Preferences: map[string]any{
-						"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+						"currency": "EUR", "show_price_to_me": true, "show_price_to_others": true,
 					},
 				})).To(Succeed())
 			})
@@ -224,7 +224,7 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 					})
 				})
 
-				It("returns the keyboard with purchase.price", func() {
+				It("returns the keyboard with purchase.price and the owner's currency", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
@@ -232,6 +232,10 @@ var _ = Describe("Getting a keyboard over MCP", func() {
 					Expect(out.Keyboard.Purchase).NotTo(BeNil())
 					Expect(out.Keyboard.Purchase.Price).NotTo(BeNil())
 					Expect(*out.Keyboard.Purchase.Price).To(Equal(329.99))
+
+					By("including the owner's currency, which their non-discoverable profile can't provide")
+					Expect(out.Keyboard.Purchase.Currency).NotTo(BeNil())
+					Expect(*out.Keyboard.Purchase.Currency).To(Equal("EUR"))
 				})
 			})
 		})

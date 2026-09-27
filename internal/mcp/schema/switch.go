@@ -23,6 +23,7 @@ type SwitchSummary struct {
 	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImage    bool     `json:"has_image" jsonschema:"whether this switch has an image on file"`
 	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Currency    *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
 	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\"; only ever present for the switch's owner"`
 }
 
@@ -83,18 +84,18 @@ type DeleteSwitchOutput struct {
 // update_switch. Optional fields are pointers so an omitted field stays
 // distinguishable from one explicitly set to zero.
 type SwitchInput struct {
-	Brand        string          `json:"brand" jsonschema:"the switch's brand"`
-	Manufacturer *string         `json:"manufacturer,omitempty" jsonschema:"who physically manufactures the switch, if different from the brand"`
-	Name         string          `json:"name" jsonschema:"the switch's name"`
-	Type         string          `json:"type" jsonschema:"the switch type; must be an approved switch_type lookup value"`
-	Pins         *int            `json:"pins,omitempty" jsonschema:"pin count, typically 3 or 5"`
-	FactoryLubed *bool           `json:"factory_lubed,omitempty" jsonschema:"whether the switch ships pre-lubed"`
-	Material     *SwitchMaterial `json:"material,omitempty" jsonschema:"housing and stem materials; each must be an approved switch_material lookup value"`
-	Force        *SwitchForce    `json:"force,omitempty" jsonschema:"actuation and bottom-out force, in grams"`
-	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
-	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
-	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
+	Brand        string               `json:"brand" jsonschema:"the switch's brand"`
+	Manufacturer *string              `json:"manufacturer,omitempty" jsonschema:"who physically manufactures the switch, if different from the brand"`
+	Name         string               `json:"name" jsonschema:"the switch's name"`
+	Type         string               `json:"type" jsonschema:"the switch type; must be an approved switch_type lookup value"`
+	Pins         *int                 `json:"pins,omitempty" jsonschema:"pin count, typically 3 or 5"`
+	FactoryLubed *bool                `json:"factory_lubed,omitempty" jsonschema:"whether the switch ships pre-lubed"`
+	Material     *SwitchMaterial      `json:"material,omitempty" jsonschema:"housing and stem materials; each must be an approved switch_material lookup value"`
+	Force        *SwitchForce         `json:"force,omitempty" jsonschema:"actuation and bottom-out force, in grams"`
+	Spring       *SwitchSpring        `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
+	Purchase     *SwitchPurchaseInput `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Notes        *string              `json:"notes,omitempty" jsonschema:"free-form notes"`
+	Visibility   string               `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
 }
 
 // Switch reports HasImage rather than the image bytes themselves - images
@@ -144,6 +145,17 @@ type SwitchSpring struct {
 // were bought. Dates are strings, not a date type - see
 // [github.com/rogueserenity/kbdb/internal/repomcp.SwitchToMCP].
 type SwitchPurchase struct {
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the switches were bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	Currency     *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+	Quantity     *int     `json:"quantity,omitempty" jsonschema:"how many were bought"`
+}
+
+// SwitchPurchaseInput is the writable form of SwitchPurchase.
+type SwitchPurchaseInput struct {
 	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the switches were bought"`
 	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`

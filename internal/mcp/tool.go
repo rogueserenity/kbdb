@@ -50,6 +50,17 @@ func resolveOwner(ctx context.Context, prefs repository.PreferencesReader, userI
 	return ownerprefs.WithLoader(ctx, prefs, ownerID), ownerID, nil
 }
 
+// callerPreferences loads the caller's own preferences, for a write tool's
+// response - writes always target the caller's collection.
+func callerPreferences(ctx context.Context, prefs repository.PreferencesReader) (repository.ProfilePreferences, error) {
+	ctx, _, err := resolveOwner(ctx, prefs, "")
+	if err != nil {
+		return repository.ProfilePreferences{}, err
+	}
+
+	return ownerprefs.Get(ctx)
+}
+
 // ownedReadable resolves ownerID (defaulting to the caller when userID is
 // blank), fetches the entity with id via get, and enforces the 404-not-403
 // convention shared by every get_* MCP tool: notFoundErr both when the

@@ -23,6 +23,7 @@ type KeycapSetSummary struct {
 	PrimaryKitHasImage bool     `json:"primary_kit_has_image" jsonschema:"whether the primary kit has an image on file"`
 	OrderStatus        *string  `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
 	TotalCost          *float64 `json:"total_cost,omitempty" jsonschema:"total cost of the set's kits with a known purchase price; kits with no known price are excluded rather than treated as zero, so this may undercount; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Currency           *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for total_cost; present exactly when total_cost is"`
 	Visibility         *string  `json:"visibility,omitempty" jsonschema:"who can read this keycap set, set on the keycap set itself rather than derived from its kits; one of \"public\", \"authenticated\", \"private\"; only ever present for the set's owner"`
 }
 
@@ -68,6 +69,16 @@ type KeycapKit struct {
 // Dates are strings, not a date type - see
 // [github.com/rogueserenity/kbdb/internal/repomcp.KeycapKitToMCP].
 type KeycapKitPurchase struct {
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the kit was bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	Currency     *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+}
+
+// KeycapKitPurchaseInput is the writable form of KeycapKitPurchase.
+type KeycapKitPurchaseInput struct {
 	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the kit was bought"`
 	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
 	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
@@ -135,9 +146,9 @@ type DeleteKeycapSetOutput struct {
 // Primary is a pointer, not a plain bool, so omitted can stay
 // distinguishable from explicit false - see the field's own doc.
 type KeycapKitInput struct {
-	Name     string             `json:"name" jsonschema:"the kit's name, e.g. Base or Novelties"`
-	Purchase *KeycapKitPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
-	Primary  *bool              `json:"primary,omitempty" jsonschema:"omit to leave the set's primary kit designation untouched; true makes this kit primary, replacing whichever kit held it before; false clears the designation, but only if this kit is the current primary"`
+	Name     string                  `json:"name" jsonschema:"the kit's name, e.g. Base or Novelties"`
+	Purchase *KeycapKitPurchaseInput `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Primary  *bool                   `json:"primary,omitempty" jsonschema:"omit to leave the set's primary kit designation untouched; true makes this kit primary, replacing whichever kit held it before; false clears the designation, but only if this kit is the current primary"`
 }
 
 // CreateKeycapKitInput is the create_keycap_kit tool input.

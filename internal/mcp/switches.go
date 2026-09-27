@@ -116,13 +116,10 @@ func handleGetSwitch(
 		}
 
 		isOwner := authz.IsOwner(ctx, ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(ctx)
-			if err != nil {
-				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.SwitchID, in.SwitchID)
-				return nil, schema.GetSwitchOutput{}, errors.New("failed to get switch")
-			}
+		ownerPrefs, err := ownerprefs.Get(ctx)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.SwitchID, in.SwitchID)
+			return nil, schema.GetSwitchOutput{}, errors.New("failed to get switch")
 		}
 
 		return nil, schema.GetSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*sw, isOwner, ownerPrefs)}, nil
@@ -131,6 +128,7 @@ func handleGetSwitch(
 
 func handleCreateSwitch(
 	switchRepo repository.SwitchRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.CreateSwitchInput, schema.CreateSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateSwitchInput) (*mcp.CallToolResult, schema.CreateSwitchOutput, error) {
 		sw, err := validatedSwitch(ctx, in.SwitchInput)
@@ -139,6 +137,12 @@ func handleCreateSwitch(
 		}
 
 		sw.ID = uuid.NewString()
+
+		ownerPrefs, err := callerPreferences(ctx, prefs)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.CreateSwitchOutput{}, errors.New("failed to create switch")
+		}
 
 		created, err := switchRepo.Create(ctx, sw)
 		if errors.Is(err, repository.ErrAlreadyExists) {
@@ -154,12 +158,13 @@ func handleCreateSwitch(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*created, true, ownerPrefs)}, nil
 	}
 }
 
 func handleUpdateSwitch(
 	switchRepo repository.SwitchRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.UpdateSwitchInput, schema.UpdateSwitchOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateSwitchInput) (*mcp.CallToolResult, schema.UpdateSwitchOutput, error) {
 		if strings.TrimSpace(in.SwitchID) == "" {
@@ -173,13 +178,19 @@ func handleUpdateSwitch(
 
 		sw.ID = in.SwitchID
 
+		ownerPrefs, err := callerPreferences(ctx, prefs)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.UpdateSwitchOutput{}, errors.New("failed to delete switch")
+		}
+
 		updated, err := switchRepo.Update(ctx, sw)
 		if mutErr := handleMutationError(ctx, err, log.SwitchID, sw.ID); mutErr != nil {
 			return nil, schema.UpdateSwitchOutput{}, mutErr
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateSwitchOutput{Switch: repomcp.Switch{}.ToMCP(*updated, true, ownerPrefs)}, nil
 	}
 }
 

@@ -40,7 +40,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 			go func(i int, k repository.KeycapKit) {
 				defer wg.Done()
 
-				apiKit, err := ks.KitToAPI(ctx, set.UserID, set.ID, k, showPrice)
+				apiKit, err := ks.KitToAPI(ctx, set.UserID, set.ID, k, showPrice, ownerPrefs.Currency)
 				if err != nil {
 					errs[i] = err
 					return
@@ -109,6 +109,7 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 		}
 		summary.TotalCost = sumKnownCosts(prices...)
 	}
+	summary.Currency = currencyFor(summary.TotalCost, ownerPrefs.Currency)
 	if isOwner {
 		v := api.Visibility(set.Visibility)
 		summary.Visibility = &v
@@ -133,8 +134,8 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 // rule differs between the full-set GET ([KeycapSet.ToAPI], owner
 // unconditional) and standalone kit create/update (always the caller's own
 // kit, so always true).
-func (ks KeycapSet) KitToAPI(ctx context.Context, ownerID, setID string, k repository.KeycapKit, showPrice bool) (api.KeycapKit, error) {
-	purchase, err := ks.kitPurchaseToAPI(k.Purchase, showPrice)
+func (ks KeycapSet) KitToAPI(ctx context.Context, ownerID, setID string, k repository.KeycapKit, showPrice bool, currency string) (api.KeycapKit, error) {
+	purchase, err := ks.kitPurchaseToAPI(k.Purchase, showPrice, currency)
 	if err != nil {
 		return api.KeycapKit{}, err
 	}
@@ -181,7 +182,7 @@ func (ks KeycapSet) KitToRepo(in api.KeycapKitInput) repository.KeycapKit {
 	}
 }
 
-func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice bool) (*api.Purchase, error) {
+func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice bool, currency string) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
@@ -193,6 +194,7 @@ func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice b
 	if showPrice {
 		out.Price = p.Price
 	}
+	out.Currency = currencyFor(out.Price, currency)
 	if p.OrderDate != nil {
 		d, err := parseAPIDate(*p.OrderDate)
 		if err != nil {
@@ -211,7 +213,7 @@ func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice b
 	return out, nil
 }
 
-func (ks KeycapSet) kitPurchaseToRepo(p *api.Purchase) repository.KeycapKitPurchase {
+func (ks KeycapSet) kitPurchaseToRepo(p *api.PurchaseInput) repository.KeycapKitPurchase {
 	if p == nil {
 		return repository.KeycapKitPurchase{}
 	}

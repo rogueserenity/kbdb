@@ -237,10 +237,12 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_OwnerShowPriceToMeTrue_S
 			"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price1}},
 			"kit-2": {KitID: "kit-2", Purchase: repository.KeycapKitPurchase{Price: &price2}},
 		},
-	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(155.00, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NoPricedKits_NilTotalCost() {
@@ -250,6 +252,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NoPricedKits_NilTotalCos
 	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_OwnerShowPriceToMeFalse_OmitsTotalCost() {
@@ -261,6 +264,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_OwnerShowPriceToMeFalse_
 	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
@@ -272,6 +276,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NonOwnerShowPriceToOther
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
 	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
@@ -280,14 +285,16 @@ func (s *KeycapSetToMCPSuite) TestKeycapSetToMCPSummary_NonOwnerShowPriceToOther
 	out := KeycapSet{}.ToMCPSummary(repository.KeycapSet{
 		ID:   "ks-1",
 		Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
-	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
 	s.Require().NotNil(out.TotalCost)
 	s.InDelta(price, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NoPurchaseFields_OmitsPurchase() {
-	out := KeycapSet{}.KitToMCP(repository.KeycapKit{KitID: "kit-1", Name: "Base"}, true)
+	out := KeycapSet{}.KitToMCP(repository.KeycapKit{KitID: "kit-1", Name: "Base"}, true, "EUR")
 
 	s.Equal("kit-1", out.KitID)
 	s.False(out.HasImage)
@@ -302,10 +309,11 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceFalse_OmitsPriceKeepsR
 		KitID:    "kit-1",
 		Name:     "Base",
 		Purchase: repository.KeycapKitPurchase{Vendor: &vendor, Price: &price},
-	}, false)
+	}, false, "EUR")
 
 	s.Require().NotNil(out.Purchase)
 	s.Nil(out.Purchase.Price)
+	s.Nil(out.Purchase.Currency)
 	s.Equal(&vendor, out.Purchase.Vendor)
 }
 
@@ -316,11 +324,13 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceTrue_IncludesPrice() {
 		KitID:    "kit-1",
 		Name:     "Base",
 		Purchase: repository.KeycapKitPurchase{Price: &price},
-	}, true)
+	}, true, "EUR")
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
 	s.InDelta(price, *out.Purchase.Price, 0.0001)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *KeycapSetToMCPSuite) TestKeycapSetFromMCP_MapsAllFields() {
@@ -353,7 +363,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitFromMCP_MapsAllFields() {
 
 	out := KeycapSet{}.KitFromMCP(schema.KeycapKitInput{
 		Name: "Base",
-		Purchase: &schema.KeycapKitPurchase{
+		Purchase: &schema.KeycapKitPurchaseInput{
 			Vendor:    &vendor,
 			Price:     &price,
 			OrderDate: &orderDate,

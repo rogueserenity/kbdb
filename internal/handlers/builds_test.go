@@ -27,6 +27,7 @@ func intPtr(i int) *int           { return &i }
 type CreateBuildSuite struct {
 	suite.Suite
 
+	mockPrefs          *mocks.MockPreferencesReader
 	mockBuildRepo      *mocks.MockBuildRepository
 	mockImages         *mocks.MockBuildImageStore
 	mockKitImages      *mocks.MockKeycapKitImageStore
@@ -43,6 +44,9 @@ func TestCreateBuildSuite(t *testing.T) {
 }
 
 func (s *CreateBuildSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
@@ -76,6 +80,7 @@ func (s *CreateBuildSuite) stubOwnedKeyboard() {
 }
 
 func (s *CreateBuildSuite) newRequest(ctx context.Context, body string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/builds", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	return req
@@ -374,6 +379,7 @@ func (s *CreateBuildSuite) TestCreateBuild_ReferenceCheckRepositoryError_Returns
 type UpdateBuildSuite struct {
 	suite.Suite
 
+	mockPrefs          *mocks.MockPreferencesReader
 	mockBuildRepo      *mocks.MockBuildRepository
 	mockImages         *mocks.MockBuildImageStore
 	mockKitImages      *mocks.MockKeycapKitImageStore
@@ -390,6 +396,9 @@ func TestUpdateBuildSuite(t *testing.T) {
 }
 
 func (s *UpdateBuildSuite) SetupTest() {
+	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockBuildRepo = mocks.NewMockBuildRepository(s.T())
 	s.mockImages = mocks.NewMockBuildImageStore(s.T())
 	s.mockKitImages = mocks.NewMockKeycapKitImageStore(s.T())
@@ -419,6 +428,7 @@ func (s *UpdateBuildSuite) stubOwnedKeyboard() {
 }
 
 func (s *UpdateBuildSuite) newRequest(ctx context.Context, body string) *http.Request {
+	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/builds/b1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("buildId", "b1")
@@ -1130,7 +1140,7 @@ func (s *GetBuildSuite) TestGetBuild_NonOwnerShowPriceToOthersFalse_OmitsStabsPr
 	s.Nil(got.Stabs.Price)
 }
 
-func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceNoPreferencesLookup() {
+func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceAndCurrency() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	s.stubOwnedKeyboard()
 	s.mockBuildRepo.EXPECT().
@@ -1139,7 +1149,8 @@ func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceNoPreferences
 			UserID: "alice", ID: "build1", Visibility: repository.VisibilityPrivate,
 			Stabs: &repository.BuildStabs{Price: floatPtr(12.5)},
 		}, nil)
-	// No mockPrefs.EXPECT() - the owner path must not call GetPreferences.
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
+		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
 	req := s.newRequest(ctx, "build1")
 	rec := httptest.NewRecorder()
@@ -1152,6 +1163,8 @@ func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceNoPreferences
 	s.InDelta(12.5, *got.Stabs.Price, 0.0001)
 	s.Require().NotNil(got.Visibility)
 	s.Equal(api.Private, *got.Visibility)
+	s.Require().NotNil(got.Stabs.Currency)
+	s.Equal("EUR", *got.Stabs.Currency)
 }
 
 func (s *GetBuildSuite) TestGetBuild_NonOwnerPreferencesError_Returns500() {
@@ -1637,4 +1650,58 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_S3DeleteError_Returns500_Do
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 	// mockBuildRepo has no .EXPECT() for DeleteImage - verifies the DB
 	// record was never touched.
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_ReturnsOwnersCurrencyWithPrice() {
+	s.stubOwnedKeyboard()
+	price := 99.5
+	s.mockBuildRepo.EXPECT().Create(mock.Anything, mock.Anything).
+		Return(&repository.Build{UserID: "alice", ID: "b1", Keyboard: "kb1", Stabs: &repository.BuildStabs{Price: &price}}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`))
+
+	s.Equal(http.StatusCreated, rec.Code)
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Stabs.Currency)
+	s.Equal("EUR", *got.Stabs.Currency)
+}
+
+func (s *CreateBuildSuite) TestCreateBuild_PreferencesError_Returns500BeforeWrite() {
+	s.stubOwnedKeyboard()
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
+}
+
+func (s *UpdateBuildSuite) TestUpdateBuild_ReturnsOwnersCurrencyWithPrice() {
+	s.stubOwnedKeyboard()
+	price := 99.5
+	s.mockBuildRepo.EXPECT().Update(mock.Anything, mock.Anything).
+		Return(&repository.Build{UserID: "alice", ID: "b1", Keyboard: "kb1", Stabs: &repository.BuildStabs{Price: &price}}, nil)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`))
+
+	s.Equal(http.StatusOK, rec.Code)
+	var got api.Build
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Stabs.Currency)
+	s.Equal("EUR", *got.Stabs.Currency)
+}
+
+func (s *UpdateBuildSuite) TestUpdateBuild_PreferencesError_Returns500BeforeWrite() {
+	s.stubOwnedKeyboard()
+	s.mockPrefs.ExpectedCalls = nil
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx(), `{"keyboard":"kb1","visibility":"private"}`))
+
+	s.Equal(http.StatusInternalServerError, rec.Code)
 }

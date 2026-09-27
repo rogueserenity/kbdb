@@ -122,13 +122,10 @@ func handleGetKeyboard(
 		}
 
 		isOwner := authz.IsOwner(ctx, ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(ctx)
-			if err != nil {
-				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, in.KeyboardID)
-				return nil, schema.GetKeyboardOutput{}, errors.New("failed to get keyboard")
-			}
+		ownerPrefs, err := ownerprefs.Get(ctx)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, in.KeyboardID)
+			return nil, schema.GetKeyboardOutput{}, errors.New("failed to get keyboard")
 		}
 
 		return nil, schema.GetKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*kb, isOwner, ownerPrefs)}, nil
@@ -137,6 +134,7 @@ func handleGetKeyboard(
 
 func handleCreateKeyboard(
 	keyboardRepo repository.KeyboardRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.CreateKeyboardInput, schema.CreateKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateKeyboardInput) (*mcp.CallToolResult, schema.CreateKeyboardOutput, error) {
 		kb, err := validatedKeyboard(ctx, in.KeyboardInput)
@@ -145,6 +143,12 @@ func handleCreateKeyboard(
 		}
 
 		kb.ID = uuid.NewString()
+
+		ownerPrefs, err := callerPreferences(ctx, prefs)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.CreateKeyboardOutput{}, errors.New("failed to create keyboard")
+		}
 
 		created, err := keyboardRepo.Create(ctx, kb)
 		if errors.Is(err, repository.ErrAlreadyExists) {
@@ -156,12 +160,13 @@ func handleCreateKeyboard(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*created, true, ownerPrefs)}, nil
 	}
 }
 
 func handleUpdateKeyboard(
 	keyboardRepo repository.KeyboardRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.UpdateKeyboardInput, schema.UpdateKeyboardOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateKeyboardInput) (*mcp.CallToolResult, schema.UpdateKeyboardOutput, error) {
 		if strings.TrimSpace(in.KeyboardID) == "" {
@@ -175,13 +180,19 @@ func handleUpdateKeyboard(
 
 		kb.ID = in.KeyboardID
 
+		ownerPrefs, err := callerPreferences(ctx, prefs)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to delete keyboard")
+		}
+
 		updated, err := keyboardRepo.Update(ctx, kb)
 		if mutErr := handleMutationError(ctx, err, log.KeyboardID, kb.ID); mutErr != nil {
 			return nil, schema.UpdateKeyboardOutput{}, mutErr
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateKeyboardOutput{Keyboard: repomcp.Keyboard{}.ToMCP(*updated, true, ownerPrefs)}, nil
 	}
 }
 

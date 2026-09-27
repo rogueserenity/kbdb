@@ -158,13 +158,10 @@ func handleGetBuild(
 		}
 
 		isOwner := authz.IsOwner(ctx, ownerID)
-		var ownerPrefs repository.ProfilePreferences
-		if !isOwner {
-			ownerPrefs, err = ownerprefs.Get(ctx)
-			if err != nil {
-				log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.BuildID, in.BuildID)
-				return nil, schema.GetBuildOutput{}, errors.New("failed to get build")
-			}
+		ownerPrefs, err := ownerprefs.Get(ctx)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.BuildID, in.BuildID)
+			return nil, schema.GetBuildOutput{}, errors.New("failed to get build")
 		}
 
 		return nil, schema.GetBuildOutput{Build: repomcp.Build{}.ToMCP(*b, isOwner, ownerPrefs)}, nil
@@ -176,6 +173,7 @@ func handleCreateBuild(
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.CreateBuildInput, schema.CreateBuildOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.CreateBuildInput) (*mcp.CallToolResult, schema.CreateBuildOutput, error) {
 		b, err := validatedBuild(ctx, in.BuildInput)
@@ -203,6 +201,12 @@ func handleCreateBuild(
 
 		b.ID = uuid.NewString()
 
+		ownerPrefs, err := callerPreferences(ctx, prefs)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.CreateBuildOutput{}, errors.New("failed to create build")
+		}
+
 		created, err := buildRepo.Create(ctx, b)
 		if errors.Is(err, repository.ErrAlreadyExists) {
 			return nil, schema.CreateBuildOutput{}, errBuildAlreadyExists
@@ -216,7 +220,7 @@ func handleCreateBuild(
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.CreateBuildOutput{Build: repomcp.Build{}.ToMCP(*created, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.CreateBuildOutput{Build: repomcp.Build{}.ToMCP(*created, true, ownerPrefs)}, nil
 	}
 }
 
@@ -225,6 +229,7 @@ func handleUpdateBuild(
 	keyboardRepo repository.KeyboardRepository,
 	switchRepo repository.SwitchRepository,
 	keycapSetRepo repository.KeycapSetRepository,
+	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.UpdateBuildInput, schema.UpdateBuildOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.UpdateBuildInput) (*mcp.CallToolResult, schema.UpdateBuildOutput, error) {
 		if strings.TrimSpace(in.BuildID) == "" {
@@ -256,13 +261,19 @@ func handleUpdateBuild(
 
 		b.ID = in.BuildID
 
+		ownerPrefs, err := callerPreferences(ctx, prefs)
+		if err != nil {
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			return nil, schema.UpdateBuildOutput{}, errors.New("failed to delete build")
+		}
+
 		updated, err := buildRepo.Update(ctx, b)
 		if mutErr := handleMutationError(ctx, err, log.BuildID, b.ID); mutErr != nil {
 			return nil, schema.UpdateBuildOutput{}, mutErr
 		}
 
 		// isOwner: true, this always targets the caller's own collection.
-		return nil, schema.UpdateBuildOutput{Build: repomcp.Build{}.ToMCP(*updated, true, repository.ProfilePreferences{})}, nil
+		return nil, schema.UpdateBuildOutput{Build: repomcp.Build{}.ToMCP(*updated, true, ownerPrefs)}, nil
 	}
 }
 

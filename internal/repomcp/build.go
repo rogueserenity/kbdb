@@ -27,7 +27,7 @@ func (b Build) ToMCP(build repository.Build, isOwner bool, ownerPrefs repository
 		Keyboard:      build.Keyboard,
 		Plate:         build.Plate,
 		CaseMountType: b.caseMountTypeToMCP(build.CaseMountType),
-		Stabs:         b.stabsToMCP(build.Stabs, ownerPrefs.ShowPriceSingle(isOwner)),
+		Stabs:         b.stabsToMCP(build.Stabs, ownerPrefs.ShowPriceSingle(isOwner), ownerPrefs.Currency),
 		Foam:          build.Foam,
 		Switches:      b.switchEntriesToMCP(build.Switches),
 		KeycapKits:    b.keycapKitEntriesToMCP(build.KeycapKits),
@@ -105,6 +105,7 @@ func (b Build) ToMCPSummary(
 		}
 		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
 	}
+	summary.Currency = currencyFor(summary.TotalCost, ownerPrefs.Currency)
 
 	return summary, nil
 }
@@ -184,7 +185,7 @@ func (b Build) caseMountTypeFromMCP(cmt *schema.BuildCaseMountType) *repository.
 	}
 }
 
-func (b Build) stabsToMCP(s *repository.BuildStabs, showPrice bool) *schema.BuildStabs {
+func (b Build) stabsToMCP(s *repository.BuildStabs, showPrice bool, currency string) *schema.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -196,11 +197,12 @@ func (b Build) stabsToMCP(s *repository.BuildStabs, showPrice bool) *schema.Buil
 	if showPrice {
 		out.Price = s.Price
 	}
+	out.Currency = currencyFor(out.Price, currency)
 
 	return out
 }
 
-func (b Build) stabsFromMCP(s *schema.BuildStabs) *repository.BuildStabs {
+func (b Build) stabsFromMCP(s *schema.BuildStabsInput) *repository.BuildStabs {
 	if s == nil {
 		return nil
 	}

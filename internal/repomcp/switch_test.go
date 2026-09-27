@@ -129,7 +129,7 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	out := Switch{}.ToMCP(repository.Switch{
 		Pins:     &pins,
 		Purchase: repository.SwitchPurchase{Price: &price, Quantity: &quantity},
-	}, true, repository.ProfilePreferences{})
+	}, true, repository.ProfilePreferences{Currency: "USD"})
 
 	s.Require().NotNil(out.Pins)
 	s.Zero(*out.Pins)
@@ -142,7 +142,7 @@ func (s *SwitchToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	raw, err := json.Marshal(out)
 	s.Require().NoError(err)
 	s.JSONEq(
-		`{"id":"","brand":"","name":"","type":"","pins":0,"purchase":{"price":0,"quantity":0},"visibility":"","has_image":false}`,
+		`{"id":"","brand":"","name":"","type":"","pins":0,"purchase":{"price":0,"currency":"USD","quantity":0},"visibility":"","has_image":false}`,
 		string(raw),
 	)
 }
@@ -176,6 +176,7 @@ func (s *SwitchToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRes
 	s.Nil(out.Purchase.Price)
 	s.Equal(&vendor, out.Purchase.Vendor)
 	s.Equal(&status, out.Purchase.OrderStatus)
+	s.Nil(out.Purchase.Currency)
 }
 
 func (s *SwitchToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
@@ -185,11 +186,13 @@ func (s *SwitchToMCPSuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 		ID:         "sw-1",
 		Purchase:   repository.SwitchPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
 	s.InDelta(price, *out.Purchase.Price, 0.0001)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 func (s *SwitchToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
@@ -199,11 +202,13 @@ func (s *SwitchToMCPSuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToM
 		ID:         "sw-1",
 		Purchase:   repository.SwitchPurchase{Price: &price},
 		Visibility: repository.VisibilityPublic,
-	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
+	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
 
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
 	s.InDelta(price, *out.Purchase.Price, 0.0001)
+	s.Require().NotNil(out.Purchase.Currency)
+	s.Equal("EUR", *out.Purchase.Currency)
 }
 
 type SwitchToMCPSummarySuite struct {
@@ -249,10 +254,12 @@ func (s *SwitchToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 	out := Switch{}.ToMCPSummary(repository.Switch{
 		ID:       "sw-1",
 		Purchase: repository.SwitchPurchase{Price: &price},
-	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 
 	s.Require().NotNil(out.Price)
 	s.InDelta(price, *out.Price, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 func (s *SwitchToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
@@ -264,6 +271,7 @@ func (s *SwitchToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
 	s.Nil(out.Price)
+	s.Nil(out.Currency)
 }
 
 func (s *SwitchToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice() {
@@ -275,6 +283,7 @@ func (s *SwitchToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice(
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
 	s.Nil(out.Price)
+	s.Nil(out.Currency)
 }
 
 func (s *SwitchToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
@@ -283,10 +292,12 @@ func (s *SwitchToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPric
 	out := Switch{}.ToMCPSummary(repository.Switch{
 		ID:       "sw-1",
 		Purchase: repository.SwitchPurchase{Price: &price},
-	}, false, repository.ProfilePreferences{ShowPriceToOthers: true})
+	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
 	s.Require().NotNil(out.Price)
 	s.InDelta(price, *out.Price, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
 }
 
 type SwitchFromMCPSuite struct {
@@ -312,7 +323,7 @@ func (s *SwitchFromMCPSuite) TestMapsAllFields() {
 		Type:     "linear",
 		Material: &schema.SwitchMaterial{Stem: &stem},
 		Force:    &schema.SwitchForce{Actuation: &actuation},
-		Purchase: &schema.SwitchPurchase{
+		Purchase: &schema.SwitchPurchaseInput{
 			Vendor: &vendor, Price: &price,
 			OrderDate: &orderDate, DeliveryDate: &deliveryDate, OrderStatus: &status,
 		},

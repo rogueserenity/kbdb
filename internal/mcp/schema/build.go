@@ -12,8 +12,16 @@ type BuildKeycapKitEntry struct {
 	Kit       string `json:"kit" jsonschema:"the kit_id of one of that keycap set's kits"`
 }
 
-// BuildStabs is BuildInput.Stabs.
+// BuildStabs is Build.Stabs.
 type BuildStabs struct {
+	Name      *string  `json:"name,omitempty" jsonschema:"the stabilizer's name; must be an approved build_stabilizer lookup value"`
+	MountType *string  `json:"mount_type,omitempty" jsonschema:"how the stabilizer is mounted; must be an approved build_stabilizer_mount_type lookup value"`
+	Price     *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	Currency  *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
+}
+
+// BuildStabsInput is the writable form of BuildStabs.
+type BuildStabsInput struct {
 	Name      *string  `json:"name,omitempty" jsonschema:"the stabilizer's name; must be an approved build_stabilizer lookup value"`
 	MountType *string  `json:"mount_type,omitempty" jsonschema:"how the stabilizer is mounted; must be an approved build_stabilizer_mount_type lookup value"`
 	Price     *float64 `json:"price,omitempty" jsonschema:"price paid"`
@@ -31,7 +39,7 @@ type BuildInput struct {
 	Keyboard      string                `json:"keyboard" jsonschema:"the id of a Keyboard resource in the caller's collection"`
 	Plate         *string               `json:"plate,omitempty" jsonschema:"which of the keyboard's design.plates options is installed"`
 	CaseMountType *BuildCaseMountType   `json:"case_mount_type,omitempty" jsonschema:"the case's mounting style"`
-	Stabs         *BuildStabs           `json:"stabs,omitempty" jsonschema:"the stabilizers used"`
+	Stabs         *BuildStabsInput      `json:"stabs,omitempty" jsonschema:"the stabilizers used"`
 	Foam          *bool                 `json:"foam,omitempty" jsonschema:"whether the build has case foam"`
 	Switches      []BuildSwitchEntry    `json:"switches,omitempty" jsonschema:"the switches used and how many of each"`
 	KeycapKits    []BuildKeycapKitEntry `json:"keycap_kits,omitempty" jsonschema:"the keycap kits used"`
@@ -120,6 +128,7 @@ type BuildSummary struct {
 	HasImage   bool                  `json:"has_image" jsonschema:"whether this build has any images on file"`
 	Keyboard   *BuildSummaryKeyboard `json:"keyboard,omitempty" jsonschema:"the build's keyboard, denormalized for display; omitted if the referenced keyboard no longer exists"`
 	TotalCost  *float64              `json:"total_cost,omitempty" jsonschema:"total cost of the build's priced components (keyboard, switches, keycap kits, stabs); components with no known price are excluded rather than treated as zero, so this may undercount; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Currency   *string               `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for total_cost; present exactly when total_cost is"`
 	Visibility *string               `json:"visibility,omitempty" jsonschema:"who can read this build; one of \"public\", \"authenticated\", \"private\"; only ever present for the build's owner"`
 }
 
