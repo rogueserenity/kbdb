@@ -66,7 +66,8 @@ func (s *KeyboardToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(kb.Size, out.Size)
 	s.Equal(kb.Layout, out.Layout)
 	s.Equal(kb.Notes, out.Notes)
-	s.Equal(api.Visibility(kb.Visibility), out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal(api.Visibility(kb.Visibility), *out.Visibility)
 
 	if s.NotNil(out.Design) {
 		s.Require().NotNil(out.Design.TopCase)
@@ -94,6 +95,16 @@ func (s *KeyboardToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 		s.Require().NotNil(out.Purchase.DeliveryDate)
 		s.Equal(*kb.Purchase.DeliveryDate, out.Purchase.DeliveryDate.Format(dateLayout))
 	}
+}
+
+func (s *KeyboardToAPISuite) TestNonOwner_OmitsVisibility() {
+	kb := repository.Keyboard{ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPublic}
+
+	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
+	out, err := kr.ToAPI(s.T().Context(), kb, false, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Nil(out.Visibility)
 }
 
 func (s *KeyboardToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {

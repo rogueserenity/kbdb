@@ -79,7 +79,7 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		KeycapKits:    keycapKits,
 		BuildDate:     buildDate,
 		Notes:         build.Notes,
-		Visibility:    api.Visibility(build.Visibility),
+		Visibility:    ownerVisibility(build.Visibility, isOwner),
 		Images:        imgs,
 	}
 

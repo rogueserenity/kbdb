@@ -35,7 +35,7 @@ type getOutput struct {
 		Brand      string  `json:"brand"`
 		Name       string  `json:"name"`
 		Size       *string `json:"size"`
-		Visibility string  `json:"visibility"`
+		Visibility *string `json:"visibility"`
 		HasImages  bool    `json:"has_images"`
 		Design     *struct {
 			TopCase *struct {

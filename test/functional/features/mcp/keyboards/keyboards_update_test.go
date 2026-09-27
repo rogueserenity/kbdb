@@ -58,7 +58,8 @@ var _ = Describe("Updating a keyboard over MCP", func() {
 					out := decodeGetOutput(result)
 					Expect(out.Keyboard.ID).To(Equal(keyboardID))
 					Expect(out.Keyboard.Brand).To(Equal("Cherry"))
-					Expect(out.Keyboard.Visibility).To(Equal("public"))
+					Expect(out.Keyboard.Visibility).NotTo(BeNil())
+					Expect(*out.Keyboard.Visibility).To(Equal("public"))
 
 					By("clearing an optional field that was omitted")
 					Expect(out.Keyboard.Design).To(BeNil())

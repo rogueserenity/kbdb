@@ -560,6 +560,8 @@ func (s *HandleGetBuildSuite) TestSucceeds() {
 	s.Require().NoError(err)
 	s.Equal("build-1", out.Build.ID)
 	s.Equal("kb-1", out.Build.Keyboard)
+	s.Require().NotNil(out.Build.Visibility)
+	s.Equal("private", *out.Build.Visibility)
 }
 
 func (s *HandleGetBuildSuite) TestBlankBuildID_ReturnsError() {
@@ -602,6 +604,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersSharedVisibilityBuild_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("build-1", out.Build.ID)
+	s.Nil(out.Build.Visibility)
 }
 
 func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersTrue_IncludesStabsPrice() {

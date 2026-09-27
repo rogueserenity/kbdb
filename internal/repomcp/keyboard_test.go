@@ -55,7 +55,14 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 	s.InDelta(1.6, *out.PCB.Thickness, 0.001)
 	s.Require().NotNil(out.Purchase)
 	s.Equal("Delivered", *out.Purchase.OrderStatus)
-	s.Equal("public", out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal("public", *out.Visibility)
+}
+
+func (s *KeyboardToMCPSuite) TestNonOwner_OmitsVisibility() {
+	out := Keyboard{}.ToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPublic}, false, repository.ProfilePreferences{})
+
+	s.Nil(out.Visibility)
 }
 
 func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {

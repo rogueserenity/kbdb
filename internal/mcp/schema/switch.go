@@ -116,7 +116,7 @@ type Switch struct {
 	Spring       *SwitchSpring   `json:"spring,omitempty" jsonschema:"spring material and travel distances, in mm"`
 	Purchase     *SwitchPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
 	Notes        *string         `json:"notes,omitempty" jsonschema:"free-form notes"`
-	Visibility   string          `json:"visibility" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\""`
+	Visibility   *string         `json:"visibility,omitempty" jsonschema:"who can read this switch; one of \"public\", \"authenticated\", \"private\"; only ever present for the switch's owner"`
 	HasImage     bool            `json:"has_image" jsonschema:"whether this switch has an image on file"`
 }
 

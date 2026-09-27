@@ -25,7 +25,7 @@ func (k Keyboard) ToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs reposit
 		PCB:        k.pcbToMCP(kb.PCB),
 		Purchase:   k.purchaseToMCP(kb.Purchase, ownerPrefs.ShowPriceSingle(isOwner)),
 		Notes:      kb.Notes,
-		Visibility: string(kb.Visibility),
+		Visibility: ownerVisibility(kb.Visibility, isOwner),
 		HasImages:  len(kb.Images) > 0,
 	}
 }

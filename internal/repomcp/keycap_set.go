@@ -33,7 +33,7 @@ func (ks KeycapSet) ToMCP(set repository.KeycapSet, isOwner bool, ownerPrefs rep
 		Profile:      set.Profile,
 		Material:     set.Material,
 		Notes:        set.Notes,
-		Visibility:   string(set.Visibility),
+		Visibility:   ownerVisibility(set.Visibility, isOwner),
 		Kits:         kits,
 		PrimaryKitID: validPrimaryKitID(set.PrimaryKitID, set.Kits),
 		OrderStatus:  repository.AggregateOrderStatus(set.Kits),

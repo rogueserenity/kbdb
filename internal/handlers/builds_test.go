@@ -1081,6 +1081,7 @@ func (s *GetBuildSuite) TestGetBuild_SharedVisibility_ReturnsBuild() {
 	var got api.Build
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("build1", got.Id)
+	s.Nil(got.Visibility)
 }
 
 func (s *GetBuildSuite) TestGetBuild_NonOwnerShowPriceToOthersTrue_IncludesStabsPrice() {
@@ -1146,6 +1147,8 @@ func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceNoPreferences
 	s.Require().NotNil(got.Stabs)
 	s.Require().NotNil(got.Stabs.Price)
 	s.InDelta(12.5, *got.Stabs.Price, 0.0001)
+	s.Require().NotNil(got.Visibility)
+	s.Equal(api.Private, *got.Visibility)
 }
 
 func (s *GetBuildSuite) TestGetBuild_NonOwnerPreferencesError_Returns500() {

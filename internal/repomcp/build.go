@@ -33,7 +33,7 @@ func (b Build) ToMCP(build repository.Build, isOwner bool, ownerPrefs repository
 		KeycapKits:    b.keycapKitEntriesToMCP(build.KeycapKits),
 		BuildDate:     build.BuildDate,
 		Notes:         build.Notes,
-		Visibility:    string(build.Visibility),
+		Visibility:    ownerVisibility(build.Visibility, isOwner),
 		HasImages:     len(build.Images) > 0,
 	}
 }

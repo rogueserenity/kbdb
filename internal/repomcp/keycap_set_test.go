@@ -47,7 +47,8 @@ func (s *KeycapSetToMCPSuite) TestMapsAllFields() {
 	s.Equal("GMK", out.Brand)
 	s.Require().NotNil(out.Profile)
 	s.Equal("Cherry", *out.Profile)
-	s.Equal("public", out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal("public", *out.Visibility)
 	s.Require().Len(out.Kits, 2)
 
 	s.Equal("kit-1", out.Kits[0].KitID)
@@ -58,6 +59,12 @@ func (s *KeycapSetToMCPSuite) TestMapsAllFields() {
 	s.Equal("kit-2", out.Kits[1].KitID)
 	s.False(out.Kits[1].HasImage)
 	s.Nil(out.Kits[1].Purchase)
+}
+
+func (s *KeycapSetToMCPSuite) TestNonOwner_OmitsVisibility() {
+	out := KeycapSet{}.ToMCP(repository.KeycapSet{ID: "ks-1", Visibility: repository.VisibilityPublic}, false, repository.ProfilePreferences{})
+
+	s.Nil(out.Visibility)
 }
 
 func (s *KeycapSetToMCPSuite) TestPrimaryKitID_StillExists_IsPreserved() {
@@ -368,7 +375,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitFromMCP_NoPurchase_MapsToZeroValue() 
 	s.Equal(repository.KeycapKitPurchase{}, out.Purchase)
 }
 
-func (s *KeycapSetToMCPSuite) TestOwner_IncludesSetsOwnVisibility() {
+func (s *KeycapSetToMCPSuite) TestToMCPSummary_Owner_IncludesSetsOwnVisibility() {
 	out := KeycapSet{}.ToMCPSummary(repository.KeycapSet{
 		ID:         "ks-1",
 		Visibility: repository.VisibilityPrivate,
@@ -378,7 +385,7 @@ func (s *KeycapSetToMCPSuite) TestOwner_IncludesSetsOwnVisibility() {
 	s.Equal("private", *out.Visibility)
 }
 
-func (s *KeycapSetToMCPSuite) TestNonOwner_OmitsVisibility() {
+func (s *KeycapSetToMCPSuite) TestToMCPSummary_NonOwner_OmitsVisibility() {
 	out := KeycapSet{}.ToMCPSummary(repository.KeycapSet{
 		ID:         "ks-1",
 		Visibility: repository.VisibilityPublic,

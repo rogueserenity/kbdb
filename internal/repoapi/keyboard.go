@@ -43,7 +43,7 @@ func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner boo
 		Pcb:        k.pcbToAPI(kb.PCB),
 		Purchase:   purchase,
 		Notes:      kb.Notes,
-		Visibility: api.Visibility(kb.Visibility),
+		Visibility: ownerVisibility(kb.Visibility, isOwner),
 		Images:     imgs,
 	}, nil
 }

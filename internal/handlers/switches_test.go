@@ -284,6 +284,7 @@ func (s *GetSwitchSuite) TestGetSwitch_Owner_Succeeds() {
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Equal("sw1", got.ID)
 	s.Equal("Gateron", got.Brand)
+	s.Equal(repository.VisibilityPrivate, got.Visibility)
 }
 
 func (s *GetSwitchSuite) TestGetSwitch_AnonymousReadingPublicSwitch_Succeeds() {
@@ -322,6 +323,10 @@ func (s *GetSwitchSuite) TestGetSwitch_OtherUserReadingAuthenticatedSwitch_Succe
 	s.handler(rec, s.newRequest(ctx))
 
 	s.Equal(http.StatusOK, rec.Code)
+
+	var got api.Switch
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Nil(got.Visibility)
 }
 
 func (s *GetSwitchSuite) TestGetSwitch_NonOwnerShowPriceToOthersTrue_IncludesPrice() {

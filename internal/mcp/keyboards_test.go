@@ -235,6 +235,8 @@ func (s *HandleGetKeyboardSuite) TestSucceeds() {
 	s.Require().NoError(err)
 	s.Equal("kb-1", out.Keyboard.ID)
 	s.Equal("Mode", out.Keyboard.Brand)
+	s.Require().NotNil(out.Keyboard.Visibility)
+	s.Equal("private", *out.Keyboard.Visibility)
 }
 
 func (s *HandleGetKeyboardSuite) TestBlankKeyboardID_ReturnsError() {
@@ -281,6 +283,7 @@ func (s *HandleGetKeyboardSuite) TestOtherUsersPublicKeyboard_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("kb-1", out.Keyboard.ID)
+	s.Nil(out.Keyboard.Visibility)
 }
 
 func (s *HandleGetKeyboardSuite) TestOtherUsersPublicKeyboardShowPriceToOthersTrue_IncludesPrice() {

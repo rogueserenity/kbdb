@@ -78,7 +78,14 @@ func (s *SwitchToMCPSuite) TestMapsAllFields() {
 	s.Equal("Delivered", *out.Purchase.OrderStatus)
 	s.Require().NotNil(out.Notes)
 	s.Equal("smooth", *out.Notes)
-	s.Equal("public", out.Visibility)
+	s.Require().NotNil(out.Visibility)
+	s.Equal("public", *out.Visibility)
+}
+
+func (s *SwitchToMCPSuite) TestNonOwner_OmitsVisibility() {
+	out := Switch{}.ToMCP(repository.Switch{ID: "sw-1", Visibility: repository.VisibilityPublic}, false, repository.ProfilePreferences{})
+
+	s.Nil(out.Visibility)
 }
 
 // An all-unset group collapses to nil so it's omitted from the tool result
