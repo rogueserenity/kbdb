@@ -30,7 +30,7 @@ Identity and request plumbing:
 - `ownerprefs/` — the item owner's profile preferences on a REST request's context, put there by `middleware.OwnerPreferences` from the `{userId}` path segment. MCP tools call `GetPreferences` directly.
 
 Transports (each maps to shared logic rather than holding its own):
-- `middleware/` — `net/http` middleware: `Auth`, `Logging`, `Recover`, authorizer context.
+- `middleware/` — `net/http` middleware: `Auth`, `Logging`, `Recover`, authorizer context, and `OwnerPreferences`, which every `{userId}` route whose handler returns a price must be wrapped in (`ownerPrefs(...)` in `router.go`).
 - `handlers/` — REST route handlers, one file per entity. Kept separate from middleware and router wiring.
 - `handlers/api/` — `api.gen.go`, generated from `api/openapi.yaml` by `oapi-codegen`; do not hand-edit (see `mise run gen`).
 - `router/` — wires handlers + middleware into the application's `http.Handler`. No logic of its own.
