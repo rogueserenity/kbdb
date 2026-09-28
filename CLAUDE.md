@@ -27,10 +27,10 @@ Identity and request plumbing:
 - `authz/` — authorization: what an already-identified caller may read or write. Does not verify tokens.
 - `ctx/` — request-scoped identity values on `context.Context`. Independent of logging and of any transport; business logic needing the caller's user ID depends on this directly.
 - `log/` — request-scoped `*slog.Logger`-in-context plumbing. Knows nothing about where field values come from; callers pass them in.
-- `ownerprefs/` — the item owner's profile preferences on `context.Context`, loaded on first read. REST installs the loader with `middleware.OwnerPreferences`, MCP with `resolveOwner`; handlers read it with `ownerprefs.Get` rather than calling `GetPreferences` themselves.
+- `ownerprefs/` — the item owner's profile preferences on a REST request's context, put there by `middleware.OwnerPreferences` from the `{userId}` path segment. MCP tools call `GetPreferences` directly.
 
 Transports (each maps to shared logic rather than holding its own):
-- `middleware/` — `net/http` middleware: `Auth`, `Logging`, `Recover`, authorizer context.
+- `middleware/` — `net/http` middleware: `Auth`, `Logging`, `Recover`, authorizer context, and `OwnerPreferences`, which every `{userId}` route whose handler returns a price must be wrapped in (`ownerPrefs(...)` in `router.go`).
 - `handlers/` — REST route handlers, one file per entity. Kept separate from middleware and router wiring.
 - `handlers/api/` — `api.gen.go`, generated from `api/openapi.yaml` by `oapi-codegen`; do not hand-edit (see `mise run gen`).
 - `router/` — wires handlers + middleware into the application's `http.Handler`. No logic of its own.

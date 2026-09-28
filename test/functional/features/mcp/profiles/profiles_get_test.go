@@ -110,6 +110,38 @@ var _ = Describe("Getting a profile over MCP", func() {
 			})
 		})
 
+		Context("given a discoverable profile owned by another user", func() {
+			var otherID string
+
+			BeforeEach(func(ctx SpecContext) {
+				otherID = api.NewOtherUserID(ctx)
+
+				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
+					Username:     username,
+					Discoverable: true,
+				})).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteProfile(ctx, otherID, username)).To(Succeed())
+			})
+
+			When("get_profile is called with that user's id", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "get_profile", map[string]any{"identifier": otherID})
+				})
+
+				It("returns the profile without its preferences", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeGetProfileOutput(result)
+					Expect(out.Profile.UserID).To(Equal(otherID))
+					Expect(out.Profile.Preferences).To(BeNil())
+				})
+			})
+		})
+
 		Context("given no profile matches the identifier", func() {
 			When("get_profile is called with a bogus username", func() {
 				BeforeEach(func(ctx SpecContext) {

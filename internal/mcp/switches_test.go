@@ -986,7 +986,7 @@ func (s *HandleCreateSwitchSuite) TestPreferencesError_ReturnsErrorBeforeWrite()
 	handler := handleCreateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateSwitchInput{SwitchInput: validInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to create switch")
 }
 
 func (s *HandleUpdateSwitchSuite) TestReturnsOwnersCurrencyWithPrice() {
@@ -1009,5 +1009,5 @@ func (s *HandleUpdateSwitchSuite) TestPreferencesError_ReturnsErrorBeforeWrite()
 	handler := handleUpdateSwitch(s.mockSwitches, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateSwitchInput{SwitchID: "sw-1", SwitchInput: validInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to update switch")
 }

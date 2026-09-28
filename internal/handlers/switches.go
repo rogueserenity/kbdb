@@ -205,7 +205,7 @@ func CreateSwitch(switchRepo repository.SwitchRepository, sr repoapi.Switch) htt
 
 		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.SwitchID, sw.ID)
 			problem.Internal(w, "failed to create switch")
 			return
 		}
@@ -265,7 +265,7 @@ func UpdateSwitch(switchRepo repository.SwitchRepository, sr repoapi.Switch) htt
 
 		ownerPrefs, err := ownerprefs.Get(r.Context())
 		if err != nil {
-			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err)
+			log.FromContext(r.Context()).Error("getting owner preferences", log.Error, err, log.SwitchID, sw.ID)
 			problem.Internal(w, "failed to update switch")
 			return
 		}

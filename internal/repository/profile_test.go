@@ -61,3 +61,16 @@ func (s *ProfilePreferencesSuite) TestShowPriceSummary_NonOwner_FollowsShowPrice
 	s.True(repository.ProfilePreferences{ShowPriceToOthers: true}.ShowPriceSummary(false))
 	s.False(repository.ProfilePreferences{ShowPriceToOthers: false}.ShowPriceSummary(false))
 }
+
+func (s *ProfilePreferencesSuite) TestCurrencyFor_PriceSet_ReturnsCurrency() {
+	price := 120.0
+
+	got := repository.ProfilePreferences{Currency: "EUR"}.CurrencyFor(&price)
+
+	s.Require().NotNil(got)
+	s.Equal("EUR", *got)
+}
+
+func (s *ProfilePreferencesSuite) TestCurrencyFor_NoPrice_ReturnsNil() {
+	s.Nil(repository.ProfilePreferences{Currency: "EUR"}.CurrencyFor(nil))
+}

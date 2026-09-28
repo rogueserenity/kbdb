@@ -27,7 +27,6 @@ type KeycapSet struct {
 // can have an unbounded number of kits, each potentially needing its own S3
 // presign.
 func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapSet, error) {
-	showPrice := ownerPrefs.ShowPriceSingle(isOwner)
 	var kits *[]api.KeycapKit
 	if len(set.Kits) > 0 {
 		ids := sortedKitIDs(set.Kits)
@@ -40,7 +39,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 			go func(i int, k repository.KeycapKit) {
 				defer wg.Done()
 
-				apiKit, err := ks.KitToAPI(ctx, set.UserID, set.ID, k, showPrice, ownerPrefs.Currency)
+				apiKit, err := ks.KitToAPI(ctx, set.UserID, set.ID, k, isOwner, ownerPrefs)
 				if err != nil {
 					errs[i] = err
 					return
@@ -89,8 +88,8 @@ func (ks KeycapSet) ToRepo(in api.KeycapSetInput) repository.KeycapSet {
 // ToAPISummary maps a repository.KeycapSet to the KeycapSetSummary schema
 // returned by the list endpoint. PrimaryKitImage is nil unless
 // PrimaryKitID names a kit still present in Kits and that kit has an
-// ImagePath set, in which case it's a freshly minted presigned GET URL -
-// never persisted, never cached, mirroring [KeycapSet.KitToAPI]. TotalCost
+// ImagePath set, in which case it's a presigned GET URL reused from cache
+// if still fresh, as in [KeycapSet.KitToAPI]. TotalCost
 // is shown per ownerPrefs.ShowPriceToMe (owner) or
 // ownerPrefs.ShowPriceToOthers (non-owner) - unlike [KeycapSet.ToAPI], the
 // owner isn't unconditionally shown price here.
@@ -109,7 +108,7 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 		}
 		summary.TotalCost = sumKnownCosts(prices...)
 	}
-	summary.Currency = currencyFor(summary.TotalCost, ownerPrefs.Currency)
+	summary.Currency = ownerPrefs.CurrencyFor(summary.TotalCost)
 	if isOwner {
 		v := api.Visibility(set.Visibility)
 		summary.Visibility = &v
@@ -129,13 +128,9 @@ func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, 
 
 // KitToAPI maps a repository.KeycapKit to its wire representation. Image
 // is nil unless k.ImagePath is set, in which case it's a presigned GET URL,
-// reused from cache if still fresh. showPrice gates Purchase.Price -
-// callers resolve it from isOwner/ownerPrefs themselves, since the right
-// rule differs between the full-set GET ([KeycapSet.ToAPI], owner
-// unconditional) and standalone kit create/update (always the caller's own
-// kit, so always true).
-func (ks KeycapSet) KitToAPI(ctx context.Context, ownerID, setID string, k repository.KeycapKit, showPrice bool, currency string) (api.KeycapKit, error) {
-	purchase, err := ks.kitPurchaseToAPI(k.Purchase, showPrice, currency)
+// reused from cache if still fresh.
+func (ks KeycapSet) KitToAPI(ctx context.Context, ownerID, setID string, k repository.KeycapKit, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapKit, error) {
+	purchase, err := ks.kitPurchaseToAPI(k.Purchase, isOwner, ownerPrefs)
 	if err != nil {
 		return api.KeycapKit{}, err
 	}
@@ -182,7 +177,7 @@ func (ks KeycapSet) KitToRepo(in api.KeycapKitInput) repository.KeycapKit {
 	}
 }
 
-func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice bool, currency string) (*api.Purchase, error) {
+func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) (*api.Purchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil && p.OrderStatus == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
 	}
@@ -191,10 +186,10 @@ func (ks KeycapSet) kitPurchaseToAPI(p repository.KeycapKitPurchase, showPrice b
 		Vendor:      p.Vendor,
 		OrderStatus: p.OrderStatus,
 	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSingle(isOwner) {
 		out.Price = p.Price
 	}
-	out.Currency = currencyFor(out.Price, currency)
+	out.Currency = ownerPrefs.CurrencyFor(out.Price)
 	if p.OrderDate != nil {
 		d, err := parseAPIDate(*p.OrderDate)
 		if err != nil {

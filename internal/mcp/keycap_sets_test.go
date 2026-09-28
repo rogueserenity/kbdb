@@ -1554,7 +1554,7 @@ func (s *HandleCreateKeycapSetSuite) TestPreferencesError_ReturnsErrorBeforeWrit
 	handler := handleCreateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapSetInput{KeycapSetInput: validKeycapSetInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to create keycap set")
 }
 
 func (s *HandleUpdateKeycapSetSuite) TestReturnsOwnersCurrencyWithPrice() {
@@ -1577,7 +1577,7 @@ func (s *HandleUpdateKeycapSetSuite) TestPreferencesError_ReturnsErrorBeforeWrit
 	handler := handleUpdateKeycapSet(s.mockKeycapSets, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapSetInput{KeycapSetID: "ks-1", KeycapSetInput: validKeycapSetInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to update keycap set")
 }
 
 func (s *HandleCreateKeycapKitSuite) TestReturnsOwnersCurrencyWithPrice() {
@@ -1600,7 +1600,7 @@ func (s *HandleCreateKeycapKitSuite) TestPreferencesError_ReturnsErrorBeforeWrit
 	handler := handleCreateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeycapKitInput{KeycapSetID: "ks-1", KeycapKitInput: validKeycapKitInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to create keycap kit")
 }
 
 func (s *HandleUpdateKeycapKitSuite) TestReturnsOwnersCurrencyWithPrice() {
@@ -1623,5 +1623,5 @@ func (s *HandleUpdateKeycapKitSuite) TestPreferencesError_ReturnsErrorBeforeWrit
 	handler := handleUpdateKeycapKit(s.mockRepo, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1", KeycapKitInput: validKeycapKitInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to update keycap kit")
 }

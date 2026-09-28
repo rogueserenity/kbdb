@@ -1032,7 +1032,7 @@ func (s *HandleCreateKeyboardSuite) TestPreferencesError_ReturnsErrorBeforeWrite
 	handler := handleCreateKeyboard(s.mockKeyboards, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: validKeyboardInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to create keyboard")
 }
 
 func (s *HandleUpdateKeyboardSuite) TestReturnsOwnersCurrencyWithPrice() {
@@ -1055,5 +1055,5 @@ func (s *HandleUpdateKeyboardSuite) TestPreferencesError_ReturnsErrorBeforeWrite
 	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockPrefs)
 	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{KeyboardID: "kb-1", KeyboardInput: validKeyboardInput()})
 
-	s.Require().Error(err)
+	s.Require().EqualError(err, "failed to update keyboard")
 }

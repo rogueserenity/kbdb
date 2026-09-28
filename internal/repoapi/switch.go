@@ -20,7 +20,7 @@ type Switch struct {
 // ownerPrefs.ShowPriceToOthers. Returns an error if a stored Purchase date
 // doesn't match dateLayout, or an image fails to presign.
 func (s Switch) ToAPI(ctx context.Context, sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Switch, error) {
-	purchase, err := s.purchaseToAPI(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner), ownerPrefs.Currency)
+	purchase, err := s.purchaseToAPI(sw.Purchase, isOwner, ownerPrefs)
 	if err != nil {
 		return api.Switch{}, err
 	}
@@ -89,7 +89,7 @@ func (s Switch) ToAPISummary(ctx context.Context, sw repository.Switch, isOwner 
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		summary.Price = sw.Purchase.Price
 	}
-	summary.Currency = currencyFor(summary.Price, ownerPrefs.Currency)
+	summary.Currency = ownerPrefs.CurrencyFor(summary.Price)
 	if isOwner {
 		v := api.Visibility(sw.Visibility)
 		summary.Visibility = &v
@@ -190,7 +190,7 @@ func (s Switch) springToRepo(sp *api.SwitchSpring) repository.SwitchSpring {
 	}
 }
 
-func (s Switch) purchaseToAPI(p repository.SwitchPurchase, showPrice bool, currency string) (*api.SwitchPurchase, error) {
+func (s Switch) purchaseToAPI(p repository.SwitchPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) (*api.SwitchPurchase, error) {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil && p.DeliveryDate == nil &&
 		p.OrderStatus == nil && p.Quantity == nil {
 		return nil, nil //nolint:nilnil // no purchase data is a valid, expected result
@@ -201,10 +201,10 @@ func (s Switch) purchaseToAPI(p repository.SwitchPurchase, showPrice bool, curre
 		OrderStatus: p.OrderStatus,
 		Quantity:    p.Quantity,
 	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSingle(isOwner) {
 		out.Price = p.Price
 	}
-	out.Currency = currencyFor(out.Price, currency)
+	out.Currency = ownerPrefs.CurrencyFor(out.Price)
 	if p.OrderDate != nil {
 		d, err := parseAPIDate(*p.OrderDate)
 		if err != nil {

@@ -15,7 +15,6 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
-	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -69,7 +68,7 @@ func handleListKeyboards(
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListKeyboardsInput, schema.ListKeyboardsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeyboardsInput) (*mcp.CallToolResult, schema.ListKeyboardsOutput, error) {
-		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
 			return nil, schema.ListKeyboardsOutput{}, err
 		}
@@ -85,7 +84,7 @@ func handleListKeyboards(
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
 		}
 
-		ownerPrefs, err := ownerprefs.Get(ctx)
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
 			return nil, schema.ListKeyboardsOutput{}, errors.New("failed to list keyboards")
@@ -110,7 +109,7 @@ func handleGetKeyboard(
 			return nil, schema.GetKeyboardOutput{}, errors.New("keyboard_id must not be blank")
 		}
 
-		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
 			return nil, schema.GetKeyboardOutput{}, err
 		}
@@ -122,7 +121,7 @@ func handleGetKeyboard(
 		}
 
 		isOwner := authz.IsOwner(ctx, ownerID)
-		ownerPrefs, err := ownerprefs.Get(ctx)
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, in.KeyboardID)
 			return nil, schema.GetKeyboardOutput{}, errors.New("failed to get keyboard")
@@ -146,7 +145,7 @@ func handleCreateKeyboard(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, kb.ID)
 			return nil, schema.CreateKeyboardOutput{}, errors.New("failed to create keyboard")
 		}
 
@@ -182,8 +181,8 @@ func handleUpdateKeyboard(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to delete keyboard")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeyboardID, kb.ID)
+			return nil, schema.UpdateKeyboardOutput{}, errors.New("failed to update keyboard")
 		}
 
 		updated, err := keyboardRepo.Update(ctx, kb)

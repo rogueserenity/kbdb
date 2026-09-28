@@ -42,6 +42,16 @@ func (p ProfilePreferences) ShowPriceSummary(isOwner bool) bool {
 	return p.ShowPriceToOthers
 }
 
+// CurrencyFor returns p.Currency when price is set and nil otherwise, so a
+// price is never shown without its currency.
+func (p ProfilePreferences) CurrencyFor(price *float64) *string {
+	if price == nil {
+		return nil
+	}
+
+	return &p.Currency
+}
+
 // DefaultProfilePreferences mirrors ProfilePreferences' OpenAPI schema
 // defaults - the Go zero value isn't usable directly, since ShowPriceToMe
 // defaults true but its zero value is false.
@@ -94,9 +104,8 @@ type Profile struct {
 }
 
 // PreferencesReader is the narrow slice of ProfileRepository that
-// price-gating code in other entities' handlers depends on, so they don't
-// need the full ProfileRepository surface (Create/Update/Delete/... are
-// irrelevant there). ProfileRepository satisfies it structurally.
+// price-gating code outside the profile handlers depends on.
+// ProfileRepository satisfies it structurally.
 type PreferencesReader interface {
 	GetPreferences(ctx context.Context, ownerID string) (ProfilePreferences, error)
 }

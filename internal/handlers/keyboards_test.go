@@ -26,7 +26,7 @@ type ListKeyboardsSuite struct {
 
 	mockRepo   *mocks.MockKeyboardRepository
 	mockImages *mocks.MockKeyboardImageStore
-	mockPrefs  *mocks.MockPreferencesReader
+	prefs      repository.ProfilePreferences
 	handler    http.HandlerFunc
 }
 
@@ -37,12 +37,12 @@ func TestListKeyboardsSuite(t *testing.T) {
 func (s *ListKeyboardsSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.prefs = repository.ProfilePreferences{}
 	s.handler = ListKeyboards(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *ListKeyboardsSuite) newRequest(ctx context.Context, query string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keyboards?"+query, nil)
 	req.SetPathValue("userId", "alice")
 	return req
@@ -58,7 +58,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_Owner_RequestsAllVisibilities() {
 		Return([]repository.Keyboard{
 			{ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPrivate},
 		}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -78,7 +78,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_Anonymous_RequestsPublicOnly() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", []repository.Visibility{repository.VisibilityPublic}, 20, "").
 		Return([]repository.Keyboard{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
@@ -94,7 +94,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OtherUser_RequestsPublicAndAuthen
 			return len(vis) == 2
 		}), 20, "").
 		Return([]repository.Keyboard{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -109,7 +109,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeTrue_IncludesPr
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToMe: true}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToMe: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -129,7 +129,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeFalse_OmitsPric
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToMe: false}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToMe: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -148,7 +148,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersFalse_Om
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -167,7 +167,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersTrue_Inc
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -184,7 +184,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_PassesLimitAndCursor() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 5, "abc").
 		Return([]repository.Keyboard{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=5&cursor=abc"))
@@ -196,7 +196,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_ReturnsNextCursor_WhenPresent() {
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{}, "next-page-token", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
@@ -231,25 +231,12 @@ func (s *ListKeyboardsSuite) TestListKeyboards_InvalidCursor_Returns400() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *ListKeyboardsSuite) TestListKeyboards_PreferencesError_Returns500() {
-	s.mockRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, 20, "").
-		Return([]repository.Keyboard{}, "", nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.T().Context(), "limit=20"))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type GetKeyboardSuite struct {
 	suite.Suite
 
 	mockRepo   *mocks.MockKeyboardRepository
 	mockImages *mocks.MockKeyboardImageStore
-	mockPrefs  *mocks.MockPreferencesReader
+	prefs      repository.ProfilePreferences
 	handler    http.HandlerFunc
 }
 
@@ -260,12 +247,12 @@ func TestGetKeyboardSuite(t *testing.T) {
 func (s *GetKeyboardSuite) SetupTest() {
 	s.mockRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+	s.prefs = repository.ProfilePreferences{}
 	s.handler = GetKeyboard(s.mockRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockRepo})
 }
 
 func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/users/alice/keyboards/kb1", nil)
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keyboardId", "kb1")
@@ -274,7 +261,7 @@ func (s *GetKeyboardSuite) newRequest(ctx context.Context) *http.Request {
 
 func (s *GetKeyboardSuite) TestGetKeyboard_Owner_Succeeds() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.DefaultProfilePreferences(), nil)
+	s.prefs = repository.DefaultProfilePreferences()
 
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
@@ -297,7 +284,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_AnonymousReadingPublicKeyboard_Succee
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{ID: "kb1", Visibility: repository.VisibilityPublic}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context()))
@@ -323,7 +310,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_OtherUserReadingAuthenticatedKeyboard
 	s.mockRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{ID: "kb1", Visibility: repository.VisibilityAuthenticated}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -345,7 +332,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_NonOwnerShowPriceToOthersTrue_Include
 			ID: "kb1", Visibility: repository.VisibilityPublic,
 			Purchase: repository.KeyboardPurchase{Price: &price},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -367,7 +354,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_NonOwnerShowPriceToOthersFalse_OmitsP
 			ID: "kb1", Visibility: repository.VisibilityPublic,
 			Purchase: repository.KeyboardPurchase{Price: &price},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
+	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -388,8 +375,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_Owner_AlwaysIncludesPriceAndCurrency(
 			ID: "kb1", Visibility: repository.VisibilityPrivate,
 			Purchase: repository.KeyboardPurchase{Price: &price},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx))
@@ -401,21 +387,6 @@ func (s *GetKeyboardSuite) TestGetKeyboard_Owner_AlwaysIncludesPriceAndCurrency(
 	s.InDelta(price, *got.Purchase.Price, 0.0001)
 	s.Require().NotNil(got.Purchase.Currency)
 	s.Equal("EUR", *got.Purchase.Currency)
-}
-
-func (s *GetKeyboardSuite) TestGetKeyboard_NonOwnerPreferencesError_Returns500() {
-	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
-
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Visibility: repository.VisibilityPublic}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *GetKeyboardSuite) TestGetKeyboard_OtherUserReadingPrivateKeyboard_Returns404() {
@@ -465,7 +436,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_MalformedStoredDate_Returns500NotPani
 			Visibility: repository.VisibilityPublic,
 			Purchase:   repository.KeyboardPurchase{OrderDate: &malformedDate},
 		}, nil)
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, nil)
+	s.prefs = repository.ProfilePreferences{}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(s.T().Context()))
@@ -477,7 +448,7 @@ func (s *GetKeyboardSuite) TestGetKeyboard_MalformedStoredDate_Returns500NotPani
 type CreateKeyboardSuite struct {
 	suite.Suite
 
-	mockPrefs        *mocks.MockPreferencesReader
+	prefs            repository.ProfilePreferences
 	mockKeyboardRepo *mocks.MockKeyboardRepository
 	mockImages       *mocks.MockKeyboardImageStore
 	handler          http.HandlerFunc
@@ -488,16 +459,14 @@ func TestCreateKeyboardSuite(t *testing.T) {
 }
 
 func (s *CreateKeyboardSuite) SetupTest() {
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
+	s.prefs = repository.ProfilePreferences{Currency: "EUR"}
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.handler = CreateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
 }
 
 func (s *CreateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/users/alice/keyboards", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	return req
@@ -758,7 +727,7 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_MalformedStoredDate_Returns500N
 type UpdateKeyboardSuite struct {
 	suite.Suite
 
-	mockPrefs        *mocks.MockPreferencesReader
+	prefs            repository.ProfilePreferences
 	mockKeyboardRepo *mocks.MockKeyboardRepository
 	mockImages       *mocks.MockKeyboardImageStore
 	handler          http.HandlerFunc
@@ -769,16 +738,14 @@ func TestUpdateKeyboardSuite(t *testing.T) {
 }
 
 func (s *UpdateKeyboardSuite) SetupTest() {
-	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").
-		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
+	s.prefs = repository.ProfilePreferences{Currency: "EUR"}
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.handler = UpdateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
-	ctx = ownerprefs.WithLoader(ctx, s.mockPrefs, "alice")
+	ctx = ownerprefs.WithPreferences(ctx, s.prefs)
 	req := httptest.NewRequestWithContext(ctx, http.MethodPut, "/users/alice/keyboards/kb1", strings.NewReader(body))
 	req.SetPathValue("userId", "alice")
 	req.SetPathValue("keyboardId", "kb1")
@@ -1560,16 +1527,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_ReturnsOwnersCurrencyWithPrice(
 	s.Equal("EUR", *got.Purchase.Currency)
 }
 
-func (s *CreateKeyboardSuite) TestCreateKeyboard_PreferencesError_Returns500BeforeWrite() {
-	s.mockPrefs.ExpectedCalls = nil
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
-}
-
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ReturnsOwnersCurrencyWithPrice() {
 	price := 99.5
 	s.mockKeyboardRepo.EXPECT().Update(mock.Anything, mock.Anything).
@@ -1583,14 +1540,4 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ReturnsOwnersCurrencyWithPrice(
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Purchase.Currency)
 	s.Equal("EUR", *got.Purchase.Currency)
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_PreferencesError_Returns500BeforeWrite() {
-	s.mockPrefs.ExpectedCalls = nil
-	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, "alice").Return(repository.ProfilePreferences{}, errors.New("boom"))
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`))
-
-	s.Equal(http.StatusInternalServerError, rec.Code)
 }

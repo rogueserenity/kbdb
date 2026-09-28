@@ -97,7 +97,24 @@ func jsonScalars(raw []byte, dropKeys ...string) (map[string]any, error) {
 	for _, k := range append([]string{"id", "user_id"}, dropKeys...) {
 		delete(v, k)
 	}
+	dropCurrency(v)
 	return v, nil
+}
+
+// dropCurrency removes every currency key: it comes from the owner's
+// profile, which restore doesn't carry over.
+func dropCurrency(v any) {
+	switch t := v.(type) {
+	case map[string]any:
+		delete(t, "currency")
+		for _, child := range t {
+			dropCurrency(child)
+		}
+	case []any:
+		for _, child := range t {
+			dropCurrency(child)
+		}
+	}
 }
 
 func compareScalars(dumpRaw, liveRaw []byte, dropKeys ...string) (bool, string) {

@@ -48,6 +48,7 @@ func (s *HandleGetProfileSuite) TestDiscoverableByID_Returned() {
 	s.Require().NotNil(out.Profile.Bio)
 	s.Equal("keebs", *out.Profile.Bio)
 	s.False(out.Profile.HasAvatar)
+	s.Nil(out.Profile.Preferences)
 }
 
 func (s *HandleGetProfileSuite) TestDiscoverableByUsername_Returned() {
@@ -66,13 +67,18 @@ func (s *HandleGetProfileSuite) TestDiscoverableByUsername_Returned() {
 func (s *HandleGetProfileSuite) TestNonDiscoverable_Owner_Returned() {
 	ctx := ctxpkg.WithUserID(s.T().Context(), "user-alice")
 	s.mockRepo.EXPECT().Get(ctx, "user-alice").
-		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", Discoverable: false}, nil)
+		Return(&repository.Profile{
+			OwnerID: "user-alice", Username: "alice", Discoverable: false,
+			Preferences: repository.ProfilePreferences{Currency: "EUR"},
+		}, nil)
 
 	handler := handleGetProfile(s.mockRepo)
 	_, out, err := handler(ctx, nil, schema.GetProfileInput{Identifier: "user-alice"})
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Profile.Username)
+	s.Require().NotNil(out.Profile.Preferences)
+	s.Equal("EUR", out.Profile.Preferences.Currency)
 }
 
 func (s *HandleGetProfileSuite) TestNonDiscoverable_OtherCaller_NotFoundError() {

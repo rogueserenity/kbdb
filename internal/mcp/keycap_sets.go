@@ -14,7 +14,6 @@ import (
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
-	"github.com/rogueserenity/kbdb/internal/ownerprefs"
 	"github.com/rogueserenity/kbdb/internal/repomcp"
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -78,7 +77,7 @@ func handleListKeycapSets(
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.ListKeycapSetsInput, schema.ListKeycapSetsOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.ListKeycapSetsInput) (*mcp.CallToolResult, schema.ListKeycapSetsOutput, error) {
-		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
 			return nil, schema.ListKeycapSetsOutput{}, err
 		}
@@ -94,7 +93,7 @@ func handleListKeycapSets(
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
 		}
 
-		ownerPrefs, err := ownerprefs.Get(ctx)
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
 			return nil, schema.ListKeycapSetsOutput{}, errors.New("failed to list keycap sets")
@@ -119,7 +118,7 @@ func handleGetKeycapSet(
 			return nil, schema.GetKeycapSetOutput{}, errors.New("keycap_set_id must not be blank")
 		}
 
-		ctx, ownerID, err := resolveOwner(ctx, prefs, in.UserID)
+		ownerID, err := resolveOwnerID(ctx, in.UserID)
 		if err != nil {
 			return nil, schema.GetKeycapSetOutput{}, err
 		}
@@ -131,7 +130,7 @@ func handleGetKeycapSet(
 		}
 
 		isOwner := authz.IsOwner(ctx, ownerID)
-		ownerPrefs, err := ownerprefs.Get(ctx)
+		ownerPrefs, err := prefs.GetPreferences(ctx, ownerID)
 		if err != nil {
 			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID)
 			return nil, schema.GetKeycapSetOutput{}, errors.New("failed to get keycap set")
@@ -155,7 +154,7 @@ func handleCreateKeycapSet(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, ks.ID)
 			return nil, schema.CreateKeycapSetOutput{}, errors.New("failed to create keycap set")
 		}
 
@@ -191,8 +190,8 @@ func handleUpdateKeycapSet(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateKeycapSetOutput{}, errors.New("failed to delete keycap set")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, ks.ID)
+			return nil, schema.UpdateKeycapSetOutput{}, errors.New("failed to update keycap set")
 		}
 
 		updated, err := keycapSetRepo.Update(ctx, ks)
@@ -291,8 +290,8 @@ func handleCreateKeycapKit(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to set kit image")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID)
+			return nil, schema.CreateKeycapKitOutput{}, errors.New("failed to create keycap kit")
 		}
 
 		created, err := keycapSetRepo.AddKit(ctx, in.KeycapSetID, kit, in.Primary)
@@ -301,7 +300,7 @@ func handleCreateKeycapKit(
 		}
 
 		// isOwner: true - a kit is always added to the caller's own set.
-		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*created, true, ownerPrefs.Currency)}, nil
+		return nil, schema.CreateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*created, true, ownerPrefs)}, nil
 	}
 }
 
@@ -326,8 +325,8 @@ func handleUpdateKeycapKit(
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
 		if err != nil {
-			log.FromContext(ctx).Error("getting owner preferences", log.Error, err)
-			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to set kit image")
+			log.FromContext(ctx).Error("getting owner preferences", log.Error, err, log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, kit.KitID)
+			return nil, schema.UpdateKeycapKitOutput{}, errors.New("failed to update keycap kit")
 		}
 
 		updated, err := keycapSetRepo.UpdateKit(ctx, in.KeycapSetID, kit, in.Primary)
@@ -336,7 +335,7 @@ func handleUpdateKeycapKit(
 		}
 
 		// isOwner: true - a kit is always updated on the caller's own set.
-		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*updated, true, ownerPrefs.Currency)}, nil
+		return nil, schema.UpdateKeycapKitOutput{KeycapKit: repomcp.KeycapSet{}.KitToMCP(*updated, true, ownerPrefs)}, nil
 	}
 }
 

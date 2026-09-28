@@ -2041,22 +2041,44 @@ components:
             $ref: "#/components/schemas/ProfileLink"
 
     Profile:
-      allOf:
-        - $ref: "#/components/schemas/ProfileInput"
-        - type: object
-          properties:
-            user_id:
-              type: string
-              description: >
-                The profile owner's IdP subject. Use it as the {userId} path
-                segment on the collection routes (GET /v1/keyboards/{userId},
-                /v1/builds/{userId}, etc.). Resolve a profile by username here
-                first, then read that user's collections by this id.
-            avatar:
-              $ref: "#/components/schemas/ProfileImage"
-              description: >
-                Managed via the dedicated image endpoints, not via a body
-                PUT — see POST/DELETE .../profile/{userId}/image.
+      type: object
+      required: [username]
+      properties:
+        user_id:
+          type: string
+          description: >
+            The profile owner's IdP subject. Use it as the {userId} path
+            segment on the collection routes (GET /v1/keyboards/{userId},
+            /v1/builds/{userId}, etc.). Resolve a profile by username here
+            first, then read that user's collections by this id.
+        username:
+          type: string
+          description: >
+            Used as /u/{username} in the frontend and as an identifier on
+            GET /v1/profile/{identifier}.
+        discoverable:
+          type: boolean
+          description: >
+            Whether this profile appears in GET /v1/profiles and is
+            resolvable by anyone at GET /v1/profile/{identifier}. When
+            false, only the owner can read it.
+        discord_username:
+          type: string
+        bio:
+          type: string
+        links:
+          type: array
+          items:
+            $ref: "#/components/schemas/ProfileLink"
+        preferences:
+          $ref: "#/components/schemas/ProfilePreferences"
+          description: >
+            Only ever present for the profile's owner.
+        avatar:
+          $ref: "#/components/schemas/ProfileImage"
+          description: >
+            Managed via the dedicated image endpoints, not via a body
+            PUT — see POST/DELETE .../profile/{userId}/image.
 
     ProfileSummary:
       type: object

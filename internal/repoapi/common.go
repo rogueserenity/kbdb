@@ -75,16 +75,6 @@ func sumKnownCosts(components ...*float64) *float64 {
 	return &total
 }
 
-// currencyFor returns currency when price is set and nil otherwise, so a
-// price and its currency always appear together.
-func currencyFor(price *float64, currency string) *string {
-	if price == nil {
-		return nil
-	}
-
-	return &currency
-}
-
 // ownerVisibility returns v for the item's owner and nil for anyone else.
 func ownerVisibility(v repository.Visibility, isOwner bool) *api.Visibility {
 	if !isOwner {

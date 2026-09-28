@@ -40,7 +40,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 	}
 
 	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
-	out, err := pr.ToAPI(s.T().Context(), p)
+	out, err := pr.ToAPI(s.T().Context(), p, true)
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
@@ -65,7 +65,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_ExposesSubjectAsUserID() {
 	out, err := pr.ToAPI(s.T().Context(), repository.Profile{
 		OwnerID:  "user-alice",
 		Username: "alice",
-	})
+	}, true)
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
@@ -89,7 +89,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
 	}
 
 	pr := Profile{Images: images, Repo: repo}
-	out, err := pr.ToAPI(s.T().Context(), p)
+	out, err := pr.ToAPI(s.T().Context(), p, true)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(out.Avatar)
@@ -104,14 +104,14 @@ func (s *ProfileMapperSuite) TestProfileToAPI_PresignError_Propagates() {
 	_, err := pr.ToAPI(s.T().Context(), repository.Profile{
 		Username:   "alice",
 		AvatarPath: profileImageKeyPtr("profiles/user-alice/avatar"),
-	})
+	}, true)
 
 	s.Require().Error(err)
 }
 
 func (s *ProfileMapperSuite) TestProfileToAPI_EmptyLinks_OmittedNotEmptySlice() {
 	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
-	out, err := pr.ToAPI(s.T().Context(), repository.Profile{Username: "alice"})
+	out, err := pr.ToAPI(s.T().Context(), repository.Profile{Username: "alice"}, true)
 
 	s.Require().NoError(err)
 	s.Nil(out.Links)
@@ -172,9 +172,22 @@ func (s *ProfileMapperSuite) TestProfileToAPI_MapsPreferences() {
 	}
 
 	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
-	out, err := pr.ToAPI(s.T().Context(), p)
+	out, err := pr.ToAPI(s.T().Context(), p, true)
 
 	s.Require().NoError(err)
 	s.Require().NotNil(out.Preferences)
 	s.Equal(api.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false, ShowPriceToOthers: true}, *out.Preferences)
+}
+
+func (s *ProfileMapperSuite) TestProfileToAPI_NonOwner_OmitsPreferences() {
+	p := repository.Profile{
+		Username:    "alice",
+		Preferences: repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true},
+	}
+
+	pr := Profile{Images: mocks.NewMockProfileImageStore(s.T())}
+	out, err := pr.ToAPI(s.T().Context(), p, false)
+
+	s.Require().NoError(err)
+	s.Nil(out.Preferences)
 }

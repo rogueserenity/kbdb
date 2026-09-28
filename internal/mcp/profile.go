@@ -8,6 +8,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -71,7 +72,7 @@ func handleGetProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[sche
 			return nil, schema.GetProfileOutput{}, errProfileNotFound
 		}
 
-		return nil, schema.GetProfileOutput{Profile: repomcp.Profile{}.ToMCP(*p)}, nil
+		return nil, schema.GetProfileOutput{Profile: repomcp.Profile{}.ToMCP(*p, authz.IsOwner(ctx, p.OwnerID))}, nil
 	}
 }
 
@@ -95,7 +96,7 @@ func handleCreateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 			return nil, schema.CreateProfileOutput{}, errors.New("failed to create profile")
 		}
 
-		return nil, schema.CreateProfileOutput{Profile: repomcp.Profile{}.ToMCP(*created)}, nil
+		return nil, schema.CreateProfileOutput{Profile: repomcp.Profile{}.ToMCP(*created, true)}, nil
 	}
 }
 
@@ -114,7 +115,7 @@ func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 			return nil, schema.UpdateProfileOutput{}, mutErr
 		}
 
-		return nil, schema.UpdateProfileOutput{Profile: repomcp.Profile{}.ToMCP(*updated)}, nil
+		return nil, schema.UpdateProfileOutput{Profile: repomcp.Profile{}.ToMCP(*updated, true)}, nil
 	}
 }
 
