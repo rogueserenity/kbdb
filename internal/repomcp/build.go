@@ -27,7 +27,7 @@ func (b Build) ToMCP(build repository.Build, isOwner bool, ownerPrefs repository
 		Keyboard:      build.Keyboard,
 		Plate:         build.Plate,
 		CaseMountType: b.caseMountTypeToMCP(build.CaseMountType),
-		Stabs:         b.stabsToMCP(build.Stabs, ownerPrefs.ShowPriceSingle(isOwner), ownerPrefs),
+		Stabs:         b.stabsToMCP(build.Stabs, isOwner, ownerPrefs),
 		Foam:          build.Foam,
 		Switches:      b.switchEntriesToMCP(build.Switches),
 		KeycapKits:    b.keycapKitEntriesToMCP(build.KeycapKits),
@@ -185,7 +185,7 @@ func (b Build) caseMountTypeFromMCP(cmt *schema.BuildCaseMountType) *repository.
 	}
 }
 
-func (b Build) stabsToMCP(s *repository.BuildStabs, showPrice bool, ownerPrefs repository.ProfilePreferences) *schema.BuildStabs {
+func (b Build) stabsToMCP(s *repository.BuildStabs, isOwner bool, ownerPrefs repository.ProfilePreferences) *schema.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -194,7 +194,7 @@ func (b Build) stabsToMCP(s *repository.BuildStabs, showPrice bool, ownerPrefs r
 		Name:      s.Name,
 		MountType: s.MountType,
 	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSingle(isOwner) {
 		out.Price = s.Price
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.Price)

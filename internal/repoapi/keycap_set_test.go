@@ -485,7 +485,7 @@ func (s *KeycapKitToAPISuite) TestMalformedStoredDate_ReturnsError() {
 	s.Require().Error(err)
 }
 
-func (s *KeycapKitToAPISuite) TestShowPriceFalse_OmitsPriceKeepsRestOfPurchase() {
+func (s *KeycapKitToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRestOfPurchase() {
 	k := fullRepoKeycapKit()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", presignExpiry(), nil)
@@ -505,7 +505,7 @@ func (s *KeycapKitToAPISuite) TestShowPriceFalse_OmitsPriceKeepsRestOfPurchase()
 	s.Equal(k.Purchase.OrderStatus, out.Purchase.OrderStatus)
 }
 
-func (s *KeycapKitToAPISuite) TestShowPriceTrue_IncludesPrice() {
+func (s *KeycapKitToAPISuite) TestOwner_IncludesPrice() {
 	k := fullRepoKeycapKit()
 	images := mocks.NewMockKeycapKitImageStore(s.T())
 	images.EXPECT().PresignGet(mock.Anything, *k.ImagePath).Return("https://example.com/presigned-get", presignExpiry(), nil)

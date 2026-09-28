@@ -301,7 +301,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NoPurchaseFields_OmitsPurchase(
 	s.Nil(out.Purchase)
 }
 
-func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceFalse_OmitsPriceKeepsRestOfPurchase() {
+func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_NonOwnerShowPriceToOthersFalse_OmitsPriceKeepsRestOfPurchase() {
 	vendor := "Amazon"
 	price := 120.0
 
@@ -317,7 +317,7 @@ func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceFalse_OmitsPriceKeepsR
 	s.Equal(&vendor, out.Purchase.Vendor)
 }
 
-func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_ShowPriceTrue_IncludesPrice() {
+func (s *KeycapSetToMCPSuite) TestKeycapKitToMCP_Owner_IncludesPrice() {
 	price := 120.0
 
 	out := KeycapSet{}.KitToMCP(repository.KeycapKit{

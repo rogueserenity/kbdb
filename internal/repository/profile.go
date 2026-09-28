@@ -104,9 +104,8 @@ type Profile struct {
 }
 
 // PreferencesReader is the narrow slice of ProfileRepository that
-// price-gating code in other entities' handlers depends on, so they don't
-// need the full ProfileRepository surface (Create/Update/Delete/... are
-// irrelevant there). ProfileRepository satisfies it structurally.
+// price-gating code outside the profile handlers depends on.
+// ProfileRepository satisfies it structurally.
 type PreferencesReader interface {
 	GetPreferences(ctx context.Context, ownerID string) (ProfilePreferences, error)
 }

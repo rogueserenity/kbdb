@@ -73,7 +73,7 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		Keyboard:      keyboardRef,
 		Plate:         build.Plate,
 		CaseMountType: b.caseMountTypeToAPI(build.CaseMountType),
-		Stabs:         b.stabsToAPI(build.Stabs, showPrice, ownerPrefs),
+		Stabs:         b.stabsToAPI(build.Stabs, isOwner, ownerPrefs),
 		Foam:          build.Foam,
 		Switches:      switches,
 		KeycapKits:    keycapKits,
@@ -231,7 +231,7 @@ func (b Build) caseMountTypeToRepo(cmt *api.BuildCaseMountType) *repository.Buil
 	}
 }
 
-func (b Build) stabsToAPI(s *repository.BuildStabs, showPrice bool, ownerPrefs repository.ProfilePreferences) *api.BuildStabs {
+func (b Build) stabsToAPI(s *repository.BuildStabs, isOwner bool, ownerPrefs repository.ProfilePreferences) *api.BuildStabs {
 	if s == nil {
 		return nil
 	}
@@ -240,7 +240,7 @@ func (b Build) stabsToAPI(s *repository.BuildStabs, showPrice bool, ownerPrefs r
 		Name:      s.Name,
 		MountType: s.MountType,
 	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSingle(isOwner) {
 		out.Price = s.Price
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.Price)

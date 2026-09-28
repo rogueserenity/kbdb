@@ -30,7 +30,7 @@ func (s Switch) ToMCP(sw repository.Switch, isOwner bool, ownerPrefs repository.
 		Material:     s.materialToMCP(sw.Material),
 		Force:        s.forceToMCP(sw.Force),
 		Spring:       s.springToMCP(sw.Spring),
-		Purchase:     s.purchaseToMCP(sw.Purchase, ownerPrefs.ShowPriceSingle(isOwner), ownerPrefs),
+		Purchase:     s.purchaseToMCP(sw.Purchase, isOwner, ownerPrefs),
 		Notes:        sw.Notes,
 		Visibility:   ownerVisibility(sw.Visibility, isOwner),
 		HasImage:     sw.ImagePath != nil,
@@ -101,7 +101,7 @@ func (s Switch) springToMCP(sp repository.SwitchSpring) *schema.SwitchSpring {
 
 // Dates pass through as strings, unlike [repoapi.Switch.ToAPI], so this
 // can't fail on a malformed one.
-func (s Switch) purchaseToMCP(p repository.SwitchPurchase, showPrice bool, ownerPrefs repository.ProfilePreferences) *schema.SwitchPurchase {
+func (s Switch) purchaseToMCP(p repository.SwitchPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) *schema.SwitchPurchase {
 	if p.Vendor == nil && p.Price == nil && p.OrderDate == nil &&
 		p.DeliveryDate == nil && p.OrderStatus == nil && p.Quantity == nil {
 		return nil
@@ -114,7 +114,7 @@ func (s Switch) purchaseToMCP(p repository.SwitchPurchase, showPrice bool, owner
 		OrderStatus:  p.OrderStatus,
 		Quantity:     p.Quantity,
 	}
-	if showPrice {
+	if ownerPrefs.ShowPriceSingle(isOwner) {
 		out.Price = p.Price
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.Price)

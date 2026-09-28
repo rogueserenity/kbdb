@@ -29,9 +29,18 @@ func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 		return id, nil
 	}
 
+	subject, err := callerSubject(ctx)
+	if err != nil {
+		log.FromContext(ctx).Error("MCP tool ran with no caller identity on context")
+		return "", err
+	}
+
+	return subject, nil
+}
+
+func callerSubject(ctx context.Context) (string, error) {
 	subject, ok := ctxpkg.UserID(ctx)
 	if !ok || subject == "" {
-		log.FromContext(ctx).Error("MCP tool ran with no caller identity on context")
 		return "", errNoCallerIdentity
 	}
 
@@ -39,12 +48,12 @@ func resolveOwnerID(ctx context.Context, userID string) (string, error) {
 }
 
 func callerPreferences(ctx context.Context, prefs repository.PreferencesReader) (repository.ProfilePreferences, error) {
-	callerID, ok := ctxpkg.UserID(ctx)
-	if !ok || callerID == "" {
-		return repository.ProfilePreferences{}, errNoCallerIdentity
+	subject, err := callerSubject(ctx)
+	if err != nil {
+		return repository.ProfilePreferences{}, err
 	}
 
-	return prefs.GetPreferences(ctx, callerID)
+	return prefs.GetPreferences(ctx, subject)
 }
 
 // ownedReadable resolves ownerID (defaulting to the caller when userID is
