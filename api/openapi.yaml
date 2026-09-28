@@ -1875,48 +1875,13 @@ components:
             the switch itself — see POST/DELETE
             .../switches/{switchId}/image.
 
-    SwitchSummary:
-      type: object
-      properties:
-        id:
-          type: string
-        brand:
-          type: string
-        name:
-          type: string
-        type:
-          type: string
-          description: Open vocabulary — validated against the "switch_type" lookup at request time.
-        order_status:
-          type: string
-        image:
-          $ref: "#/components/schemas/SwitchImage"
-          description: A freshly-minted presigned URL to the switch's image, if it has one set.
-        price:
-          $ref: "#/components/schemas/Money"
-          description: >
-            What the switch cost. Present for the owner only if their
-            show_price_to_me preference is set, and for any other caller
-            only if the owner's show_price_to_others is.
-        currency:
-          $ref: "#/components/schemas/Currency"
-          description: >
-            The owner's display currency, for labelling price.
-            Present exactly when price is.
-        visibility:
-          $ref: "#/components/schemas/Visibility"
-          description: >
-            Who can read this switch. Only ever present for the
-            switch's owner - no preference can expose it to another
-            caller.
-
     SwitchListPage:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/SwitchSummary"
+            $ref: "#/components/schemas/Switch"
         next_cursor:
           type: [string, "null"]
 

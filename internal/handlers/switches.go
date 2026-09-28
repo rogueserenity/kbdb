@@ -33,9 +33,9 @@ func parseListLimit(r *http.Request) int {
 
 // ListSwitches reads the {userId} path value and lists that owner's
 // switches. Anonymous callers are allowed; visibility is scoped to what the
-// caller (if any) may read, per [authz.ReadableVisibilities]. Price
-// visibility is gated by the owner's Profile preferences - see
-// [repoapi.Switch.ToAPISummary].
+// caller (if any) may read, per [authz.ReadableVisibilities]. Prices follow
+// [repository.ProfilePreferences.ShowPriceSummary], which only ever hides
+// prices [repoapi.Switch.ToAPI] shows.
 func ListSwitches(repo repository.SwitchRepository, sr repoapi.Switch) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -63,29 +63,33 @@ func ListSwitches(repo repository.SwitchRepository, sr repoapi.Switch) http.Hand
 			return
 		}
 
-		items := make([]api.SwitchSummary, len(switches))
+		items := make([]api.Switch, len(switches))
 		errs := make([]error, len(switches))
 
 		ctx := r.Context()
 		isOwner := authz.IsOwner(ctx, ownerID)
+		showPrice := ownerPrefs.ShowPriceSummary(isOwner)
 		var wg sync.WaitGroup
 		for i, sw := range switches {
 			wg.Add(1)
 			go func(i int, sw repository.Switch) {
 				defer wg.Done()
 
-				summary, err := sr.ToAPISummary(ctx, sw, isOwner, ownerPrefs)
+				item, err := sr.ToAPI(ctx, sw, isOwner, ownerPrefs)
 				if err != nil {
-					errs[i] = fmt.Errorf("mapping switch %q to API summary: %w", sw.ID, err)
+					errs[i] = fmt.Errorf("mapping switch %q to API: %w", sw.ID, err)
 					return
 				}
-				items[i] = summary
+				if !showPrice {
+					sr.StripPrices(&item)
+				}
+				items[i] = item
 			}(i, sw)
 		}
 		wg.Wait()
 
 		if err := errors.Join(errs...); err != nil {
-			log.FromContext(r.Context()).Error("mapping switches to API summaries", log.Error, err)
+			log.FromContext(r.Context()).Error("mapping switches to API", log.Error, err)
 			problem.Internal(w, "failed to list switches")
 			return
 		}

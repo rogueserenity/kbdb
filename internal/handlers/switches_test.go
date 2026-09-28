@@ -66,9 +66,8 @@ func (s *ListSwitchesSuite) TestListSwitches_Owner_RequestsAllVisibilities() {
 
 	var got api.SwitchListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	id, brand, name, typ := "sw1", "Gateron", "Yellow", "Linear"
 	visibility := api.Private
-	s.Equal(&[]api.SwitchSummary{{Id: &id, Brand: &brand, Name: &name, Type: &typ, Visibility: &visibility}}, got.Items)
+	s.Equal(&[]api.Switch{{Id: "sw1", Brand: "Gateron", Name: "Yellow", Type: "Linear", Visibility: &visibility}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 
@@ -107,7 +106,7 @@ func (s *ListSwitchesSuite) TestListSwitches_OwnerShowPriceToMeTrue_IncludesPric
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Switch{{ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price}}}, "", nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToMe: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -116,8 +115,12 @@ func (s *ListSwitchesSuite) TestListSwitches_OwnerShowPriceToMeTrue_IncludesPric
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].Price)
-	s.InDelta(price, *(*got.Items)[0].Price, 0.0001)
+	purchase := (*got.Items)[0].Purchase
+	s.Require().NotNil(purchase)
+	s.Require().NotNil(purchase.Price)
+	s.InDelta(price, *purchase.Price, 0.0001)
+	s.Require().NotNil(purchase.Currency)
+	s.Equal("EUR", *purchase.Currency)
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_OwnerShowPriceToMeFalse_OmitsPrice() {
@@ -136,7 +139,32 @@ func (s *ListSwitchesSuite) TestListSwitches_OwnerShowPriceToMeFalse_OmitsPrice(
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].Price)
+	s.Nil((*got.Items)[0].Purchase)
+}
+
+func (s *ListSwitchesSuite) TestListSwitches_OwnerShowPriceToMeFalse_KeepsRestOfPurchase() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	price := 8.50
+	vendor := "CannonKeys"
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Switch{{ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price, Vendor: &vendor}}}, "", nil)
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.SwitchListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	purchase := (*got.Items)[0].Purchase
+	s.Require().NotNil(purchase)
+	s.Nil(purchase.Price)
+	s.Nil(purchase.Currency)
+	s.Require().NotNil(purchase.Vendor)
+	s.Equal(vendor, *purchase.Vendor)
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_NonOwnerShowPriceToOthersFalse_OmitsPrice() {
@@ -155,7 +183,7 @@ func (s *ListSwitchesSuite) TestListSwitches_NonOwnerShowPriceToOthersFalse_Omit
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].Price)
+	s.Nil((*got.Items)[0].Purchase)
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
@@ -165,7 +193,7 @@ func (s *ListSwitchesSuite) TestListSwitches_NonOwnerShowPriceToOthersTrue_Inclu
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Switch{{ID: "sw1", Purchase: repository.SwitchPurchase{Price: &price}}}, "", nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -174,8 +202,12 @@ func (s *ListSwitchesSuite) TestListSwitches_NonOwnerShowPriceToOthersTrue_Inclu
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].Price)
-	s.InDelta(price, *(*got.Items)[0].Price, 0.0001)
+	purchase := (*got.Items)[0].Purchase
+	s.Require().NotNil(purchase)
+	s.Require().NotNil(purchase.Price)
+	s.InDelta(price, *purchase.Price, 0.0001)
+	s.Require().NotNil(purchase.Currency)
+	s.Equal("EUR", *purchase.Currency)
 }
 
 func (s *ListSwitchesSuite) TestListSwitches_PassesLimitAndCursor() {
