@@ -73,37 +73,17 @@ func (s Switch) ToRepo(in api.SwitchInput) repository.Switch {
 	}
 }
 
-// ToAPISummary maps a repository.Switch to the SwitchSummary schema
-// returned by the list endpoint, presigning its image if it has one. Price
-// is shown per ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
-// (non-owner) - unlike [Switch.ToAPI], the owner isn't unconditionally shown
-// price here.
-func (s Switch) ToAPISummary(ctx context.Context, sw repository.Switch, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.SwitchSummary, error) {
-	summary := api.SwitchSummary{
-		Id:          &sw.ID,
-		Brand:       &sw.Brand,
-		Name:        &sw.Name,
-		Type:        &sw.Type,
-		OrderStatus: sw.Purchase.OrderStatus,
+// StripPrices clears every price, and its currency, that [Switch.ToAPI]
+// sets on out, dropping purchase entirely if nothing else is left in it.
+func (s Switch) StripPrices(out *api.Switch) {
+	if out.Purchase == nil {
+		return
 	}
-	if ownerPrefs.ShowPriceSummary(isOwner) {
-		summary.Price = sw.Purchase.Price
+	out.Purchase.Price = nil
+	out.Purchase.Currency = nil
+	if *out.Purchase == (api.SwitchPurchase{}) {
+		out.Purchase = nil
 	}
-	summary.Currency = ownerPrefs.CurrencyFor(summary.Price)
-	if isOwner {
-		v := api.Visibility(sw.Visibility)
-		summary.Visibility = &v
-	}
-
-	if sw.ImagePath != nil {
-		url, err := s.resolveSwitchImageURL(ctx, sw)
-		if err != nil {
-			return api.SwitchSummary{}, fmt.Errorf("presigning switch image: %w", err)
-		}
-		summary.Image = &api.SwitchImage{Url: url}
-	}
-
-	return summary, nil
 }
 
 // resolveSwitchImageURL presigns sw.ImagePath, reusing its cached GET URL

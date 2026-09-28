@@ -14,9 +14,21 @@ import (
 )
 
 type listItem struct {
-	ID          string   `json:"id"`
-	OrderStatus *string  `json:"order_status"`
-	Price       *float64 `json:"price"`
+	ID       string `json:"id"`
+	Brand    string `json:"brand"`
+	Purchase *struct {
+		Vendor      *string  `json:"vendor"`
+		OrderStatus *string  `json:"order_status"`
+		Price       *float64 `json:"price"`
+	} `json:"purchase"`
+}
+
+func (i listItem) price() *float64 {
+	if i.Purchase == nil {
+		return nil
+	}
+
+	return i.Purchase.Price
 }
 
 func itemByID(items []listItem, id string) *listItem {
@@ -114,11 +126,14 @@ var _ = Describe("Listing switches", func() {
 					By("including all three seeded switches")
 					Expect(ids).To(ContainElements(publicID, authenticatedID, privateID))
 
-					By("carrying order_status, which the summary lifts out of purchase")
+					By("returning each switch in full, the same shape as a single-item GET")
 					publicItem := itemByID(page.Items, publicID)
 					Expect(publicItem).NotTo(BeNil())
-					Expect(publicItem.OrderStatus).NotTo(BeNil())
-					Expect(*publicItem.OrderStatus).To(Equal("Delivered"))
+					Expect(publicItem.Brand).NotTo(BeEmpty())
+					Expect(publicItem.Purchase).NotTo(BeNil())
+					Expect(publicItem.Purchase.Vendor).NotTo(BeNil())
+					Expect(publicItem.Purchase.OrderStatus).NotTo(BeNil())
+					Expect(*publicItem.Purchase.OrderStatus).To(Equal("Delivered"))
 
 					By("omitting the image key on image-less switches rather than emitting it as null")
 					var raw struct {
@@ -130,8 +145,8 @@ var _ = Describe("Listing switches", func() {
 					}
 
 					By("including the price, since the caller owns these switches")
-					Expect(publicItem.Price).NotTo(BeNil())
-					Expect(*publicItem.Price).To(BeNumerically("==", 0.35))
+					Expect(publicItem.price()).NotTo(BeNil())
+					Expect(*publicItem.price()).To(BeNumerically("==", 0.35))
 				})
 			})
 		})
@@ -187,7 +202,7 @@ var _ = Describe("Listing switches", func() {
 					By("omitting the price, since the caller doesn't own these switches")
 					item := itemByID(page.Items, publicID)
 					Expect(item).NotTo(BeNil())
-					Expect(item.Price).To(BeNil())
+					Expect(item.price()).To(BeNil())
 				})
 			})
 		})
@@ -230,7 +245,7 @@ var _ = Describe("Listing switches", func() {
 					Expect(json.NewDecoder(resp.Body).Decode(&page)).To(Succeed())
 					item := itemByID(page.Items, switchID)
 					Expect(item).NotTo(BeNil())
-					Expect(item.Price).To(BeNil())
+					Expect(item.price()).To(BeNil())
 				})
 			})
 		})
@@ -281,8 +296,8 @@ var _ = Describe("Listing switches", func() {
 					Expect(json.NewDecoder(resp.Body).Decode(&page)).To(Succeed())
 					item := itemByID(page.Items, switchID)
 					Expect(item).NotTo(BeNil())
-					Expect(item.Price).NotTo(BeNil())
-					Expect(*item.Price).To(BeNumerically("==", 0.35))
+					Expect(item.price()).NotTo(BeNil())
+					Expect(*item.price()).To(BeNumerically("==", 0.35))
 				})
 			})
 		})
