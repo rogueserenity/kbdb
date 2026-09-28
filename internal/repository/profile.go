@@ -15,26 +15,21 @@ type ProfileLink struct {
 	URL  string `dynamodbav:"url"  json:"url"`
 }
 
-// ProfilePreferences holds a user's display/visibility preferences.
-// Currency is display-only - kbdb stores no per-item currency and does no
-// conversion. ShowPriceToMe gates list-summary responses only; an owner's
-// single-item GET always shows their own price, since editing requires
-// knowing the current value. ShowPriceToOthers gates both.
+// ProfilePreferences holds a user's display preferences. Currency is
+// display-only: kbdb does no conversion. ShowPriceToMe applies to lists
+// only, since editing an item needs its current price.
 type ProfilePreferences struct {
 	Currency          string `dynamodbav:"currency"             json:"currency"`
 	ShowPriceToMe     bool   `dynamodbav:"show_price_to_me"     json:"show_price_to_me"`
 	ShowPriceToOthers bool   `dynamodbav:"show_price_to_others" json:"show_price_to_others"`
 }
 
-// ShowPriceSingle reports whether price should be shown on a single-item
-// GET: the owner always sees it; a non-owner only if ShowPriceToOthers.
+// ShowPriceSingle reports whether a single-item response shows prices.
 func (p ProfilePreferences) ShowPriceSingle(isOwner bool) bool {
 	return isOwner || p.ShowPriceToOthers
 }
 
-// ShowPriceSummary reports whether price should be shown on a list
-// summary: gated by ShowPriceToMe (owner) or ShowPriceToOthers (non-owner) -
-// unlike ShowPriceSingle, the owner isn't shown price unconditionally here.
+// ShowPriceSummary reports whether a list response shows prices.
 func (p ProfilePreferences) ShowPriceSummary(isOwner bool) bool {
 	if isOwner {
 		return p.ShowPriceToMe
@@ -42,8 +37,7 @@ func (p ProfilePreferences) ShowPriceSummary(isOwner bool) bool {
 	return p.ShowPriceToOthers
 }
 
-// CurrencyFor returns p.Currency when price is set and nil otherwise, so a
-// price is never shown without its currency.
+// CurrencyFor returns p.Currency when price is set.
 func (p ProfilePreferences) CurrencyFor(price *float64) *string {
 	if price == nil {
 		return nil

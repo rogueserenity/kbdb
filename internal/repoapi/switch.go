@@ -73,8 +73,7 @@ func (s Switch) ToRepo(in api.SwitchInput) repository.Switch {
 	}
 }
 
-// StripPrices clears every price, and its currency, that [Switch.ToAPI]
-// sets on out, dropping purchase entirely if nothing else is left in it.
+// StripPrices clears the prices [Switch.ToAPI] sets on out.
 func (s Switch) StripPrices(out *api.Switch) {
 	if out.Purchase == nil {
 		return
