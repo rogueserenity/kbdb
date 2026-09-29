@@ -27,11 +27,9 @@ Parameters:
     Type: String
     Description: >-
       This deployment's OIDC issuer base URL, scheme included - e.g. the
-      issuer base URL of your hosted IdP project, or a floci-local
-      http://... URL for local dev (see scripts/func-setup.sh). Not a bare
-      domain: a real IdP is always https, but floci's local S3 emulation
-      only serves plain http, so the scheme must be supplied by the caller
-      rather than hardcoded here.
+      issuer base URL of your hosted IdP project, or the floci-local
+      https://... URL for local dev (see scripts/func-setup.sh). A full URL
+      rather than a bare domain, so a caller is never tied to one scheme.
   OidcAudience:
     Type: String
     Description: >-
