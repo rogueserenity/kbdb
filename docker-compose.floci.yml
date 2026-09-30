@@ -2,7 +2,9 @@
 # publishes the discovery doc + JWKS to floci S3 for the deployed authorizer.
 services:
   floci:
-    image: floci/floci:2.1.0
+    # nightly until floci releases a version with floci-io/floci#3743, which
+    # the https issuer setup below is for; pin that version once it's out.
+    image: floci/floci:nightly
     environment:
       # Both the host-side test process and the Lambda container must reach
       # the issuer at the same name. floci's embedded DNS resolves this to
@@ -13,7 +15,31 @@ services:
       # sam deploy --image-repositories accepts as a valid ECR URI; the
       # default hostname style is rejected client-side.
       - FLOCI_SERVICES_ECR_URI_STYLE=path
+      # TLS with the certificate scripts/func-setup.sh generates, so the OIDC
+      # issuer can be https - floci's JWT authorizer rejects a plain-http
+      # issuer hostname.
+      - FLOCI_TLS_ENABLED=true
+      - FLOCI_TLS_CERT_PATH=/certs/server.crt
+      - FLOCI_TLS_KEY_PATH=/certs/server.key
+      # Inside floci, localhost.floci.io resolves to 127.0.0.1, which the JWT
+      # client refuses to connect to without this.
+      - FLOCI_SECURITY_ALLOW_PRIVATE_JWT_TARGETS=true
+      # Newer floci images need this consent to listen on 0.0.0.0. It's set
+      # here rather than as a -D in command because older images reject a -D
+      # they don't recognise but ignore an unknown environment variable.
+      - FLOCI_SECURITY_ALLOW_UNSAFE_NETWORK_EXPOSURE=true
+    # Replaces the image's default CMD (the image's entrypoint still runs it).
+    # The trust store holds the JDK's public roots plus func-setup's CA;
+    # floci's JWT client and the CA bundle it injects into Lambda containers
+    # both read it.
+    command:
+      - /app/application
+      - -Dquarkus.http.host=0.0.0.0
+      - -Djavax.net.ssl.trustStore=/certs/truststore.p12
+      - -Djavax.net.ssl.trustStorePassword=changeit
+      - -Djavax.net.ssl.trustStoreType=PKCS12
     ports:
       - "4566:4566"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
+      - ./.floci-certs:/certs:ro

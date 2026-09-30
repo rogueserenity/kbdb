@@ -18,9 +18,60 @@ ENDPOINT="${KBDB_FLOCI_ENDPOINT:-http://localhost.floci.io:4566}"
 OIDC_BUCKET="kbdb-floci-oidc"
 # The issuer is just where the discovery doc + JWKS are published; the same
 # string is threaded to --issuer, OidcIssuerBaseUrl, and KBDB_OIDC_ISSUER.
-ISSUER="$ENDPOINT/$OIDC_BUCKET"
+# It must be https: floci's JWT authorizer refuses a plain-http issuer
+# unless its host is a literal private IP. floci serves http and https on
+# the same port, so only the issuer changes scheme.
+ISSUER="${ENDPOINT/#http:/https:}/$OIDC_BUCKET"
 AUDIENCE="client_local_kbdb"
 OIDC_TESTKIT_VERSION="v1.0.0"
+
+# floci serves TLS with a certificate from our own CA, generated before floci
+# starts so its trust store (docker-compose.floci.yml) can already hold the
+# CA: floci's own CA doesn't exist until it has started. The trust store is
+# the JDK's public roots plus our CA, because floci also builds the CA bundle
+# it injects into Lambda containers from it. Reused across runs; delete the
+# directory to regenerate.
+CERT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)/.floci-certs"
+if [[ ! -f "$CERT_DIR/truststore.p12" ]] ||
+  ! openssl x509 -checkend 2592000 -noout -in "$CERT_DIR/server.leaf.crt" >/dev/null 2>&1; then
+  rm -rf "$CERT_DIR"
+  mkdir -p "$CERT_DIR"
+
+  openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+    -keyout "$CERT_DIR/ca.key" -out "$CERT_DIR/ca.crt" \
+    -subj "/CN=kbdb floci test CA" \
+    -addext "basicConstraints=critical,CA:TRUE" \
+    -addext "keyUsage=critical,keyCertSign,cRLSign"
+
+  # Go requires the name in the SAN, not the CN.
+  openssl req -newkey rsa:2048 -nodes \
+    -keyout "$CERT_DIR/server.key" -out "$CERT_DIR/server.csr" \
+    -subj "/CN=localhost.floci.io"
+  openssl x509 -req -in "$CERT_DIR/server.csr" -days 825 \
+    -CA "$CERT_DIR/ca.crt" -CAkey "$CERT_DIR/ca.key" \
+    -CAserial "$CERT_DIR/ca.srl" -CAcreateserial \
+    -out "$CERT_DIR/server.leaf.crt" \
+    -extfile <(printf '%s\n' \
+      "subjectAltName=DNS:localhost.floci.io,DNS:*.localhost.floci.io,DNS:localhost,IP:127.0.0.1" \
+      "basicConstraints=CA:FALSE" \
+      "keyUsage=critical,digitalSignature,keyEncipherment" \
+      "extendedKeyUsage=serverAuth")
+
+  # Leaf then CA: floci serves this as the chain and appends it to the
+  # container CA bundle.
+  cat "$CERT_DIR/server.leaf.crt" "$CERT_DIR/ca.crt" > "$CERT_DIR/server.crt"
+
+  # floci runs as uid 1001 and must read the key. Throwaway test material.
+  chmod 644 "$CERT_DIR/server.key"
+
+  docker run --rm --user "$(id -u):$(id -g)" -v "$CERT_DIR":/w eclipse-temurin:25-jre sh -c '
+    keytool -importkeystore -noprompt \
+      -srckeystore "$JAVA_HOME/lib/security/cacerts" -srcstorepass changeit \
+      -destkeystore /w/truststore.p12 -deststoretype PKCS12 -deststorepass changeit &&
+    keytool -importcert -noprompt -alias kbdb-floci-ca -file /w/ca.crt \
+      -keystore /w/truststore.p12 -storetype PKCS12 -storepass changeit' >/dev/null 2>&1 ||
+    { echo "func-setup: could not build $CERT_DIR/truststore.p12" >&2; exit 1; }
+fi
 
 docker compose -f docker-compose.floci.yml up -d floci
 
