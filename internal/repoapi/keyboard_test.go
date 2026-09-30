@@ -278,104 +278,6 @@ func (s *KeyboardToAPISuite) TestImagePresignError_Propagates() {
 	s.Require().Error(err)
 }
 
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_MapsOnlySummaryFields() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Equal(&kb.ID, summary.Id)
-	s.Equal(&kb.Brand, summary.Brand)
-	s.Equal(&kb.Name, summary.Name)
-	s.Equal(kb.Size, summary.Size)
-	s.Equal(kb.Layout, summary.Layout)
-	s.Equal(kb.Purchase.OrderStatus, summary.OrderStatus)
-	s.Nil(summary.Image, "no images on the keyboard must map to a nil Image")
-}
-
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_OwnerShowPriceToMeTrue_IncludesPrice() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
-	s.Require().NoError(err)
-
-	s.Equal(kb.Purchase.Price, summary.Price)
-	s.Require().NotNil(summary.Currency)
-	s.Equal("EUR", *summary.Currency)
-}
-
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_OwnerShowPriceToMeFalse_OmitsPrice() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{ShowPriceToMe: false})
-	s.Require().NoError(err)
-
-	s.Nil(summary.Price)
-	s.Nil(summary.Currency)
-}
-
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwnerShowPriceToOthersFalse_OmitsPrice() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: false})
-	s.Require().NoError(err)
-
-	s.Nil(summary.Price)
-	s.Nil(summary.Currency)
-}
-
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
-	s.Require().NoError(err)
-
-	s.Equal(kb.Purchase.Price, summary.Price)
-	s.Require().NotNil(summary.Currency)
-	s.Equal("EUR", *summary.Currency)
-}
-
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_ImagesPresent_ReturnsFirstImagePresigned() {
-	kb := fullRepoKeyboard()
-	img1 := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
-	kb.Images = map[string]repository.KeyboardImageEntry{
-		"img1": {Path: img1, Seq: 0},
-		"img2": {Path: "keyboards/alice/kb1/images/img2", Seq: 1},
-	}
-	images := mocks.NewMockKeyboardImageStore(s.T())
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, img1).Return("https://example.com/img1", presignExpiry(), nil)
-	repo := mocks.NewMockKeyboardRepository(s.T())
-	repo.EXPECT().
-		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(true, nil).Maybe()
-
-	kr := Keyboard{Images: images, Repo: repo}
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.Image)
-	s.Equal("img1", summary.Image.ImageId)
-	s.Equal("https://example.com/img1", summary.Image.Url)
-}
-
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_PresignError_Propagates() {
-	kb := fullRepoKeyboard()
-	imgPath := repository.KeyboardImageKey("keyboards/alice/kb1/images/img1")
-	kb.Images = map[string]repository.KeyboardImageEntry{"img1": {Path: imgPath}}
-	images := mocks.NewMockKeyboardImageStore(s.T())
-	images.EXPECT().PresignGetKeyboardImage(mock.Anything, imgPath).Return("", time.Time{}, errors.New("s3: access denied"))
-
-	kr := Keyboard{Images: images}
-	_, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{})
-
-	s.Require().Error(err)
-}
-
 type KeyboardToRepoSuite struct {
 	suite.Suite
 }
@@ -452,23 +354,31 @@ func (s *KeyboardToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {
 	s.Equal(repository.KeyboardPurchase{}, kb.Purchase)
 }
 
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_Owner_IncludesVisibility() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
+func (s *KeyboardToAPISuite) TestStripPrices_ClearsPriceAndCurrencyKeepsRest() {
+	price, currency, vendor := 199.99, "EUR", "Amazon"
+	out := api.Keyboard{Purchase: &api.Purchase{Price: &price, Currency: &currency, Vendor: &vendor}}
 
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
+	Keyboard{}.StripPrices(&out)
 
-	s.Require().NotNil(summary.Visibility)
-	s.Equal(api.Visibility(kb.Visibility), *summary.Visibility)
+	s.Require().NotNil(out.Purchase)
+	s.Nil(out.Purchase.Price)
+	s.Nil(out.Purchase.Currency)
+	s.Equal(&vendor, out.Purchase.Vendor)
 }
 
-func (s *KeyboardToAPISuite) TestKeyboardToAPISummary_NonOwner_OmitsVisibility() {
-	kb := fullRepoKeyboard()
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
+func (s *KeyboardToAPISuite) TestStripPrices_OnlyPriceSet_DropsPurchase() {
+	price, currency := 199.99, "EUR"
+	out := api.Keyboard{Purchase: &api.Purchase{Price: &price, Currency: &currency}}
 
-	summary, err := kr.ToAPISummary(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: true})
-	s.Require().NoError(err)
+	Keyboard{}.StripPrices(&out)
 
-	s.Nil(summary.Visibility)
+	s.Nil(out.Purchase)
+}
+
+func (s *KeyboardToAPISuite) TestStripPrices_NoPurchase_NoOp() {
+	out := api.Keyboard{Id: "kb1"}
+
+	Keyboard{}.StripPrices(&out)
+
+	s.Equal(api.Keyboard{Id: "kb1"}, out)
 }

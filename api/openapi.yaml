@@ -1633,50 +1633,13 @@ components:
             PUT on the keyboard itself — see POST/DELETE
             .../keyboards/{keyboardId}/images[/{imageId}].
 
-    KeyboardSummary:
-      type: object
-      description: Reduced shape returned in list responses.
-      properties:
-        id:
-          type: string
-        brand:
-          type: string
-        name:
-          type: string
-        size:
-          type: string
-        layout:
-          type: string
-        order_status:
-          type: string
-        image:
-          $ref: "#/components/schemas/KeyboardImage"
-          description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Keyboard resource).
-        price:
-          $ref: "#/components/schemas/Money"
-          description: >
-            What the keyboard cost. Present for the owner only if their
-            show_price_to_me preference is set, and for any other caller
-            only if the owner's show_price_to_others is.
-        currency:
-          $ref: "#/components/schemas/Currency"
-          description: >
-            The owner's display currency, for labelling price.
-            Present exactly when price is.
-        visibility:
-          $ref: "#/components/schemas/Visibility"
-          description: >
-            Who can read this keyboard. Only ever present for the
-            keyboard's owner - no preference can expose it to another
-            caller.
-
     KeyboardListPage:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/KeyboardSummary"
+            $ref: "#/components/schemas/Keyboard"
         next_cursor:
           type: [string, "null"]
 

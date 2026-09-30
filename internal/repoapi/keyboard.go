@@ -100,42 +100,16 @@ func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 	}
 }
 
-// ToAPISummary maps a repository.Keyboard to the KeyboardSummary schema
-// returned by the list endpoint. Image is the first entry of Images,
-// presigned, if any - mirrors [Build.ToAPISummary]'s handling of a build's
-// images. Price is shown per ownerPrefs.ShowPriceToMe (owner) or
-// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [Keyboard.ToAPI], the
-// owner isn't unconditionally shown price here.
-func (k Keyboard) ToAPISummary(ctx context.Context, kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardSummary, error) {
-	var image *api.KeyboardImage
-	if first := repository.SortedKeyboardImages(kb.Images); len(first) > 0 {
-		img := first[0]
-		url, err := k.resolveKeyboardImageURL(ctx, kb.UserID, kb.ID, img)
-		if err != nil {
-			return api.KeyboardSummary{}, fmt.Errorf("presigning keyboard image %q: %w", img.ImageID, err)
-		}
-		image = &api.KeyboardImage{ImageId: img.ImageID, Url: url}
+// StripPrices clears the prices [Keyboard.ToAPI] sets on out.
+func (k Keyboard) StripPrices(out *api.Keyboard) {
+	if out.Purchase == nil {
+		return
 	}
-
-	summary := api.KeyboardSummary{
-		Id:          &kb.ID,
-		Brand:       &kb.Brand,
-		Name:        &kb.Name,
-		Size:        kb.Size,
-		Layout:      kb.Layout,
-		OrderStatus: kb.Purchase.OrderStatus,
-		Image:       image,
+	out.Purchase.Price = nil
+	out.Purchase.Currency = nil
+	if *out.Purchase == (api.Purchase{}) {
+		out.Purchase = nil
 	}
-	if ownerPrefs.ShowPriceSummary(isOwner) {
-		summary.Price = kb.Purchase.Price
-	}
-	summary.Currency = ownerPrefs.CurrencyFor(summary.Price)
-	if isOwner {
-		v := api.Visibility(kb.Visibility)
-		summary.Visibility = &v
-	}
-
-	return summary, nil
 }
 
 // resolveKeyboardImageURL presigns img.Path, reusing its cached GET URL if
