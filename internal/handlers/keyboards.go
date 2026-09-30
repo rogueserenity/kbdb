@@ -23,9 +23,9 @@ import (
 
 // ListKeyboards reads the {userId} path value and lists that owner's
 // keyboards. Anonymous callers are allowed; visibility is scoped to what
-// the caller (if any) may read, per [authz.ReadableVisibilities]. Price
-// visibility is gated by the owner's Profile preferences - see
-// [repoapi.Keyboard.ToAPISummary].
+// the caller (if any) may read, per [authz.ReadableVisibilities]. Prices
+// follow [repository.ProfilePreferences.ShowPriceSummary], which only ever
+// hides prices [repoapi.Keyboard.ToAPI] shows.
 func ListKeyboards(repo repository.KeyboardRepository, kr repoapi.Keyboard) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -53,29 +53,33 @@ func ListKeyboards(repo repository.KeyboardRepository, kr repoapi.Keyboard) http
 			return
 		}
 
-		items := make([]api.KeyboardSummary, len(keyboards))
+		items := make([]api.Keyboard, len(keyboards))
 		errs := make([]error, len(keyboards))
 
 		ctx := r.Context()
 		isOwner := authz.IsOwner(ctx, ownerID)
+		showPrice := ownerPrefs.ShowPriceSummary(isOwner)
 		var wg sync.WaitGroup
 		for i, kb := range keyboards {
 			wg.Add(1)
 			go func(i int, kb repository.Keyboard) {
 				defer wg.Done()
 
-				summary, err := kr.ToAPISummary(ctx, kb, isOwner, ownerPrefs)
+				item, err := kr.ToAPI(ctx, kb, isOwner, ownerPrefs)
 				if err != nil {
-					errs[i] = fmt.Errorf("mapping keyboard %q to API summary: %w", kb.ID, err)
+					errs[i] = fmt.Errorf("mapping keyboard %q to API: %w", kb.ID, err)
 					return
 				}
-				items[i] = summary
+				if !showPrice {
+					kr.StripPrices(&item)
+				}
+				items[i] = item
 			}(i, kb)
 		}
 		wg.Wait()
 
 		if err := errors.Join(errs...); err != nil {
-			log.FromContext(r.Context()).Error("mapping keyboards to API summaries", log.Error, err)
+			log.FromContext(r.Context()).Error("mapping keyboards to API", log.Error, err)
 			problem.Internal(w, "failed to list keyboards")
 			return
 		}

@@ -61,6 +61,11 @@ var _ = Describe("Listing keyboards", func() {
 		return nil
 	}
 
+	purchaseOf := func(item map[string]any) map[string]any {
+		purchase, _ := item["purchase"].(map[string]any)
+		return purchase
+	}
+
 	Context("given the owner has keyboards at every visibility tier", func() {
 		var publicID, authenticatedID, privateID string
 
@@ -171,7 +176,13 @@ var _ = Describe("Listing keyboards", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 					item := itemByID(resp, keyboardID)
 					Expect(item).NotTo(BeNil())
-					Expect(item).To(HaveKeyWithValue("price", BeNumerically("==", 329.99)))
+					Expect(purchaseOf(item)).To(HaveKeyWithValue("price", BeNumerically("==", 329.99)))
+					Expect(purchaseOf(item)).To(HaveKeyWithValue("currency", "USD"))
+
+					By("returning the keyboard in full, the same shape as a single-item GET")
+					Expect(item).To(HaveKey("brand"))
+					Expect(item).To(HaveKey("design"))
+					Expect(purchaseOf(item)).To(HaveKey("vendor"))
 				})
 			})
 		})
@@ -192,11 +203,15 @@ var _ = Describe("Listing keyboards", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("omits the price", func() {
+				It("omits the price and currency but keeps the rest of purchase", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 					item := itemByID(resp, keyboardID)
 					Expect(item).NotTo(BeNil())
-					Expect(item).NotTo(HaveKey("price"))
+					purchase := purchaseOf(item)
+					Expect(purchase).NotTo(BeNil(), "stripping the price must keep the rest of purchase")
+					Expect(purchase).NotTo(HaveKey("price"))
+					Expect(purchase).NotTo(HaveKey("currency"))
+					Expect(purchase).To(HaveKey("vendor"))
 				})
 			})
 		})
@@ -285,11 +300,15 @@ var _ = Describe("Listing keyboards", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("omits the price", func() {
+				It("omits the price and currency but keeps the rest of purchase", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 					item := itemByID(resp, keyboardID)
 					Expect(item).NotTo(BeNil())
-					Expect(item).NotTo(HaveKey("price"))
+					purchase := purchaseOf(item)
+					Expect(purchase).NotTo(BeNil(), "stripping the price must keep the rest of purchase")
+					Expect(purchase).NotTo(HaveKey("price"))
+					Expect(purchase).NotTo(HaveKey("currency"))
+					Expect(purchase).To(HaveKey("vendor"))
 				})
 			})
 		})
@@ -305,7 +324,7 @@ var _ = Describe("Listing keyboards", func() {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
 				Username: profileUsername,
 				Preferences: map[string]any{
-					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					"currency": "EUR", "show_price_to_me": true, "show_price_to_others": true,
 				},
 			})).To(Succeed())
 		})
@@ -335,7 +354,8 @@ var _ = Describe("Listing keyboards", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 					item := itemByID(resp, keyboardID)
 					Expect(item).NotTo(BeNil())
-					Expect(item).To(HaveKeyWithValue("price", BeNumerically("==", 329.99)))
+					Expect(purchaseOf(item)).To(HaveKeyWithValue("price", BeNumerically("==", 329.99)))
+					Expect(purchaseOf(item)).To(HaveKeyWithValue("currency", "EUR"))
 				})
 			})
 		})

@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -68,9 +69,8 @@ func (s *ListKeyboardsSuite) TestListKeyboards_Owner_RequestsAllVisibilities() {
 
 	var got api.KeyboardListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	id, brand, name := "kb1", "Keychron", "Q1"
 	visibility := api.Private
-	s.Equal(&[]api.KeyboardSummary{{Id: &id, Brand: &brand, Name: &name, Visibility: &visibility}}, got.Items)
+	s.Equal(&[]api.Keyboard{{Id: "kb1", Brand: "Keychron", Name: "Q1", Visibility: &visibility}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 
@@ -109,7 +109,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeTrue_IncludesPr
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToMe: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -118,8 +118,12 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeTrue_IncludesPr
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].Price)
-	s.InDelta(price, *(*got.Items)[0].Price, 0.0001)
+	purchase := (*got.Items)[0].Purchase
+	s.Require().NotNil(purchase)
+	s.Require().NotNil(purchase.Price)
+	s.InDelta(price, *purchase.Price, 0.0001)
+	s.Require().NotNil(purchase.Currency)
+	s.Equal("EUR", *purchase.Currency)
 }
 
 func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeFalse_OmitsPrice() {
@@ -138,7 +142,32 @@ func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeFalse_OmitsPric
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].Price)
+	s.Nil((*got.Items)[0].Purchase)
+}
+
+func (s *ListKeyboardsSuite) TestListKeyboards_OwnerShowPriceToMeFalse_KeepsRestOfPurchase() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	price := 199.99
+	vendor := "Amazon"
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price, Vendor: &vendor}}}, "", nil)
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.KeyboardListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	purchase := (*got.Items)[0].Purchase
+	s.Require().NotNil(purchase)
+	s.Nil(purchase.Price)
+	s.Nil(purchase.Currency)
+	s.Require().NotNil(purchase.Vendor)
+	s.Equal(vendor, *purchase.Vendor)
 }
 
 func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersFalse_OmitsPrice() {
@@ -157,7 +186,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersFalse_Om
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].Price)
+	s.Nil((*got.Items)[0].Purchase)
 }
 
 func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersTrue_IncludesPrice() {
@@ -167,7 +196,7 @@ func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersTrue_Inc
 	s.mockRepo.EXPECT().
 		List(mock.Anything, "alice", mock.Anything, 20, "").
 		Return([]repository.Keyboard{{ID: "kb1", Purchase: repository.KeyboardPurchase{Price: &price}}}, "", nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -176,8 +205,40 @@ func (s *ListKeyboardsSuite) TestListKeyboards_NonOwnerShowPriceToOthersTrue_Inc
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].Price)
-	s.InDelta(price, *(*got.Items)[0].Price, 0.0001)
+	purchase := (*got.Items)[0].Purchase
+	s.Require().NotNil(purchase)
+	s.Require().NotNil(purchase.Price)
+	s.InDelta(price, *purchase.Price, 0.0001)
+	s.Require().NotNil(purchase.Currency)
+	s.Equal("EUR", *purchase.Currency)
+}
+
+func (s *ListKeyboardsSuite) TestListKeyboards_ReturnsEveryImage() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+
+	s.mockRepo.EXPECT().
+		List(mock.Anything, "alice", mock.Anything, 20, "").
+		Return([]repository.Keyboard{{UserID: "alice", ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
+			{ImageID: "img1", Path: "keyboards/alice/kb1/images/img1"},
+			{ImageID: "img2", Path: "keyboards/alice/kb1/images/img2"},
+		})}}, "", nil)
+	s.mockImages.EXPECT().PresignGetKeyboardImage(mock.Anything, mock.Anything).
+		RunAndReturn(func(_ context.Context, key repository.KeyboardImageKey) (string, time.Time, error) {
+			return "https://example.com/" + string(key), time.Now().Add(time.Hour), nil
+		})
+	s.mockRepo.EXPECT().
+		SetImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(true, nil).Maybe()
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(ctx, "limit=20"))
+
+	var got api.KeyboardListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 1)
+	s.Require().NotNil((*got.Items)[0].Images)
+	s.Len(*(*got.Items)[0].Images, 2)
 }
 
 func (s *ListKeyboardsSuite) TestListKeyboards_PassesLimitAndCursor() {
