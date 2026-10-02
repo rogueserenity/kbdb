@@ -60,12 +60,10 @@ func DefaultProfilePreferences() ProfilePreferences {
 // Profile is a user's public identity - one per user, partitioned by the
 // IdP subject (OwnerID), no sort key.
 //
-// OwnerID is never accepted in a request body, but it is returned on
-// every read - as user_id on the single-profile API/MCP response and as
-// ProfileSummary.user_id in the directory list - since callers need it to
-// address the {userId}-keyed collection routes. The json:"-" here is because
-// the wire mapping lives in internal/repoapi / internal/repomcp, not because
-// the value is withheld.
+// OwnerID is never accepted in a request body but is returned on every
+// read as user_id, which callers need for the {userId}-keyed collection
+// routes. The json:"-" is because the wire mapping lives in repoapi/repomcp,
+// not because the value is withheld.
 type Profile struct {
 	OwnerID string `dynamodbav:"user_id" json:"-"`
 

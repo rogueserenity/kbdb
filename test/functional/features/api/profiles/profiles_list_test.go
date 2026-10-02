@@ -22,9 +22,11 @@ type listRow struct {
 	Avatar          *struct {
 		URL string `json:"url"`
 	} `json:"avatar"`
-	// not in the summary shape - specs assert absent
-	Bio   *string `json:"bio"`
-	Links *[]any  `json:"links"`
+	Bio         *string `json:"bio"`
+	Links       *[]any  `json:"links"`
+	Preferences *struct {
+		Currency string `json:"currency"`
+	} `json:"preferences"`
 }
 
 type listPage struct {
@@ -76,7 +78,7 @@ var _ = Describe("Listing profiles", func() {
 				Username:        discoverableName,
 				Discoverable:    true,
 				DiscordUsername: "disc_handle",
-				Bio:             "should not appear in the directory row",
+				Bio:             "keebs enjoyer",
 				Links:           []map[string]string{{"name": "Site", "url": "https://example.com"}},
 			})).To(Succeed())
 
@@ -104,7 +106,7 @@ var _ = Describe("Listing profiles", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("returns only the discoverable profile, with user_id but no bio or links", func() {
+					It("returns only the discoverable profile, in full", func() {
 						Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 						page := decodePage(resp)
@@ -113,9 +115,11 @@ var _ = Describe("Listing profiles", func() {
 						row := page.Items[0]
 						By("carrying the owner's user id for the list -> detail chain")
 						Expect(row.UserID).To(Equal(ownerID))
-						By("omitting bio and links from the summary shape")
-						Expect(row.Bio).To(BeNil())
-						Expect(row.Links).To(BeNil())
+						By("returning bio and links, the same shape as a single-profile GET")
+						Expect(row.Bio).To(HaveValue(Equal("keebs enjoyer")))
+						Expect(row.Links).To(HaveValue(HaveLen(1)))
+						By("omitting preferences, which only the owner sees")
+						Expect(row.Preferences).To(BeNil())
 					})
 				})
 			})
