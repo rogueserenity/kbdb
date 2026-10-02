@@ -217,7 +217,7 @@ func verifyKeycapSets(ctx context.Context, client *apiClient, dumpDir string, m 
 			out = append(out, r)
 			continue
 		}
-		// kits[], primary_kit_id, and order_status are all
+		// kits[], primary_kit_id, order_status, and total_cost are all
 		// server-managed/derived relative to KeycapSetInput.
 		if ok, detail := compareScalars(dumpBody, liveBody, "kits", "primary_kit_id", "order_status", "total_cost"); !ok {
 			r.status, r.detail = statusFieldMismatch, detail

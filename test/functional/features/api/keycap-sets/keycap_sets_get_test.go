@@ -102,6 +102,8 @@ var _ = Describe("Getting a keycap set", func() {
 								Price  *float64 `json:"price"`
 							} `json:"purchase"`
 						} `json:"kits"`
+						TotalCost *float64 `json:"total_cost"`
+						Currency  *string  `json:"currency"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.Kits).To(HaveLen(1))
@@ -112,6 +114,10 @@ var _ = Describe("Getting a keycap set", func() {
 
 					By("omitting price")
 					Expect(got.Kits[0].Purchase.Price).To(BeNil())
+
+					By("omitting total_cost and its currency")
+					Expect(got.TotalCost).To(BeNil())
+					Expect(got.Currency).To(BeNil())
 				})
 			})
 		})
@@ -133,12 +139,18 @@ var _ = Describe("Getting a keycap set", func() {
 								Price *float64 `json:"price"`
 							} `json:"purchase"`
 						} `json:"kits"`
+						TotalCost *float64 `json:"total_cost"`
+						Currency  *string  `json:"currency"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.Kits).To(HaveLen(1))
 
 					Expect(got.Kits[0].Purchase.Price).NotTo(BeNil())
 					Expect(*got.Kits[0].Purchase.Price).To(Equal(85.0))
+
+					By("including total_cost and the owner's currency")
+					Expect(got.TotalCost).To(HaveValue(Equal(85.0)))
+					Expect(got.Currency).To(HaveValue(Equal("USD")))
 				})
 			})
 		})
@@ -242,11 +254,17 @@ var _ = Describe("Getting a keycap set", func() {
 								Price *float64 `json:"price"`
 							} `json:"purchase"`
 						} `json:"kits"`
+						TotalCost *float64 `json:"total_cost"`
+						Currency  *string  `json:"currency"`
 					}
 					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
 					Expect(got.Kits).To(HaveLen(1))
 					Expect(got.Kits[0].Purchase.Price).NotTo(BeNil())
 					Expect(*got.Kits[0].Purchase.Price).To(Equal(85.0))
+
+					By("including total_cost and the owner's currency")
+					Expect(got.TotalCost).To(HaveValue(Equal(85.0)))
+					Expect(got.Currency).To(HaveValue(Equal("USD")))
 				})
 			})
 		})
