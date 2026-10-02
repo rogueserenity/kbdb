@@ -25,7 +25,7 @@ func (ks KeycapSet) ToMCP(set repository.KeycapSet, isOwner bool, ownerPrefs rep
 		}
 	}
 
-	return schema.KeycapSet{
+	out := schema.KeycapSet{
 		ID:           set.ID,
 		Brand:        set.Brand,
 		Name:         set.Name,
@@ -37,6 +37,12 @@ func (ks KeycapSet) ToMCP(set repository.KeycapSet, isOwner bool, ownerPrefs rep
 		PrimaryKitID: validPrimaryKitID(set.PrimaryKitID, set.Kits),
 		OrderStatus:  repository.AggregateOrderStatus(set.Kits),
 	}
+	if ownerPrefs.ShowPriceSingle(isOwner) {
+		out.TotalCost = set.TotalCost()
+	}
+	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
+
+	return out
 }
 
 // ToMCPSummary lifts nothing extra out of the set beyond the summary
@@ -60,11 +66,7 @@ func (ks KeycapSet) ToMCPSummary(set repository.KeycapSet, isOwner bool, ownerPr
 		OrderStatus:        repository.AggregateOrderStatus(set.Kits),
 	}
 	if ownerPrefs.ShowPriceSummary(isOwner) {
-		prices := make([]*float64, 0, len(set.Kits))
-		for _, k := range set.Kits {
-			prices = append(prices, k.Purchase.Price)
-		}
-		summary.TotalCost = sumKnownCosts(prices...)
+		summary.TotalCost = set.TotalCost()
 	}
 	summary.Currency = ownerPrefs.CurrencyFor(summary.TotalCost)
 	if isOwner {

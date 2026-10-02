@@ -98,3 +98,42 @@ func (s *AggregateOrderStatusSuite) TestUnrecognizedStatus_ReturnsNil() {
 
 	s.Nil(repository.AggregateOrderStatus(kits))
 }
+
+type KeycapSetTotalCostSuite struct {
+	suite.Suite
+}
+
+func TestKeycapSetTotalCostSuite(t *testing.T) {
+	suite.Run(t, new(KeycapSetTotalCostSuite))
+}
+
+func pricedKit(price *float64) repository.KeycapKit {
+	return repository.KeycapKit{Purchase: repository.KeycapKitPurchase{Price: price}}
+}
+
+func (s *KeycapSetTotalCostSuite) TestSumsKnownPricesSkippingUnpriced() {
+	set := repository.KeycapSet{Kits: map[string]repository.KeycapKit{
+		"a": pricedKit(new(120.0)),
+		"b": pricedKit(new(35.5)),
+		"c": pricedKit(nil),
+	}}
+
+	s.Equal(new(155.5), set.TotalCost())
+}
+
+func (s *KeycapSetTotalCostSuite) TestRoundsToCents() {
+	set := repository.KeycapSet{Kits: map[string]repository.KeycapKit{
+		"a": pricedKit(new(0.1)),
+		"b": pricedKit(new(0.2)),
+		"c": pricedKit(new(0.3)),
+	}}
+
+	s.Equal(new(0.6), set.TotalCost())
+}
+
+func (s *KeycapSetTotalCostSuite) TestNoPricedKits_Nil() {
+	set := repository.KeycapSet{Kits: map[string]repository.KeycapKit{"a": pricedKit(nil)}}
+
+	s.Nil(set.TotalCost())
+	s.Nil(repository.KeycapSet{}.TotalCost())
+}

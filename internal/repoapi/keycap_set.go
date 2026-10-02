@@ -69,11 +69,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 		OrderStatus:  repository.AggregateOrderStatus(set.Kits),
 	}
 	if ownerPrefs.ShowPriceSingle(isOwner) {
-		prices := make([]*float64, 0, len(set.Kits))
-		for _, k := range set.Kits {
-			prices = append(prices, k.Purchase.Price)
-		}
-		out.TotalCost = sumKnownCosts(prices...)
+		out.TotalCost = set.TotalCost()
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
 

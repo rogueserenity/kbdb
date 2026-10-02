@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"math"
 	"time"
 
 	kbdbctx "github.com/rogueserenity/kbdb/internal/ctx"
@@ -112,6 +113,27 @@ func AggregateOrderStatus(kits map[string]KeycapKit) *string {
 	}
 
 	return nil
+}
+
+// TotalCost sums the kits with a known price, or returns nil if none has
+// one. It's rounded to cents so map iteration order can't change the
+// float result.
+func (s KeycapSet) TotalCost() *float64 {
+	var total float64
+	priced := false
+	for _, k := range s.Kits {
+		if k.Purchase.Price == nil {
+			continue
+		}
+		total += *k.Purchase.Price
+		priced = true
+	}
+	if !priced {
+		return nil
+	}
+
+	total = math.Round(total*100) / 100
+	return &total
 }
 
 // KeycapSetRepository provides access to keycap sets.

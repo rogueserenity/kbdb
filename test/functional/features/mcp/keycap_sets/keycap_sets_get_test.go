@@ -84,6 +84,10 @@ var _ = Describe("Getting a keycap set over MCP", func() {
 					Expect(out.KeycapSet.Kits[0].Purchase).NotTo(BeNil())
 					Expect(out.KeycapSet.Kits[0].Purchase.Price).NotTo(BeNil())
 					Expect(*out.KeycapSet.Kits[0].Purchase.Price).To(Equal(85.0))
+
+					By("including total_cost and the owner's currency")
+					Expect(out.KeycapSet.TotalCost).To(HaveValue(Equal(85.0)))
+					Expect(out.KeycapSet.Currency).To(HaveValue(Equal("USD")))
 				})
 			})
 		})
