@@ -190,185 +190,6 @@ func (s *KeycapSetToAPISuite) TestOwner_AlwaysIncludesKitPriceRegardlessOfShowPr
 	s.Equal(repoKit.Purchase.Price, (*out.Kits)[0].Purchase.Price)
 }
 
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_MapsOnlySummaryFields() {
-	ks := fullRepoKeycapSet()
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Equal(&ks.ID, summary.Id)
-	s.Equal(&ks.Brand, summary.Brand)
-	s.Equal(&ks.Name, summary.Name)
-	s.Equal(ks.Profile, summary.Profile)
-	s.Nil(summary.PrimaryKitImage)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_SetsAggregateOrderStatus() {
-	ks := fullRepoKeycapSet()
-	shipped := "Shipped"
-	ks.Kits = map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{OrderStatus: &shipped}}}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.OrderStatus)
-	s.Equal("Shipped", *summary.OrderStatus)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithImage_ResolvesImage() {
-	ks := fullRepoKeycapSet()
-	kit := fullRepoKeycapKit()
-	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
-	ks.PrimaryKitID = &kit.KitID
-
-	images := mocks.NewMockKeycapKitImageStore(s.T())
-	images.EXPECT().PresignGet(mock.Anything, *kit.ImagePath).Return("https://example.com/presigned-get", presignExpiry(), nil)
-	repo := mocks.NewMockKeycapSetRepository(s.T())
-	repo.EXPECT().
-		SetKitImageGetCache(mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
-		Return(true, nil).Maybe()
-
-	kr := KeycapSet{Images: images, Repo: repo}
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.PrimaryKitImage)
-	s.Equal("https://example.com/presigned-get", summary.PrimaryKitImage.Url)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitWithNoImage_NilImage() {
-	ks := fullRepoKeycapSet()
-	kit := fullRepoKeycapKit()
-	kit.ImagePath = nil
-	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
-	ks.PrimaryKitID = &kit.KitID
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-	s.Nil(summary.PrimaryKitImage)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_PrimaryKitDeleted_NilImage() {
-	ks := fullRepoKeycapSet()
-	danglingID := "no-longer-a-kit"
-	ks.PrimaryKitID = &danglingID
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-	s.Nil(summary.PrimaryKitImage)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_IsOwner_SumsKnownKitPrices() {
-	ks := fullRepoKeycapSet()
-	kit1 := fullRepoKeycapKit()
-	kit1.ImagePath = nil
-	kit2 := fullRepoKeycapKit()
-	kit2.KitID = "kit2"
-	kit2.ImagePath = nil
-	kit2.Purchase.Price = floatPtr(35.00)
-	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.TotalCost)
-	s.InDelta(155.00, *summary.TotalCost, 0.0001)
-	s.Require().NotNil(summary.Currency)
-	s.Equal("EUR", *summary.Currency)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_IsOwner_ExcludesUnpricedKits() {
-	ks := fullRepoKeycapSet()
-	kit1 := fullRepoKeycapKit()
-	kit1.ImagePath = nil
-	kit2 := fullRepoKeycapKit()
-	kit2.KitID = "kit2"
-	kit2.ImagePath = nil
-	kit2.Purchase.Price = nil
-	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: true})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.TotalCost)
-	s.InDelta(*kit1.Purchase.Price, *summary.TotalCost, 0.0001)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NoPricedKits_NilTotalCost() {
-	ks := fullRepoKeycapSet()
-	kit := fullRepoKeycapKit()
-	kit.ImagePath = nil
-	kit.Purchase.Price = nil
-	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: true})
-	s.Require().NoError(err)
-
-	s.Nil(summary.TotalCost)
-	s.Nil(summary.Currency)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_OwnerShowPriceToMeFalse_OmitsTotalCost() {
-	ks := fullRepoKeycapSet()
-	kit := fullRepoKeycapKit()
-	kit.ImagePath = nil
-	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{ShowPriceToMe: false})
-	s.Require().NoError(err)
-
-	s.Nil(summary.TotalCost)
-	s.Nil(summary.Currency)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
-	ks := fullRepoKeycapSet()
-	kit := fullRepoKeycapKit()
-	kit.ImagePath = nil
-	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: false})
-	s.Require().NoError(err)
-
-	s.Nil(summary.TotalCost)
-	s.Nil(summary.Currency)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
-	ks := fullRepoKeycapSet()
-	kit := fullRepoKeycapKit()
-	kit.ImagePath = nil
-	ks.Kits = map[string]repository.KeycapKit{kit.KitID: kit}
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.TotalCost)
-	s.InDelta(*kit.Purchase.Price, *summary.TotalCost, 0.0001)
-	s.Require().NotNil(summary.Currency)
-	s.Equal("EUR", *summary.Currency)
-}
-
 func fullAPIKeycapSetInput() api.KeycapSetInput {
 	return api.KeycapSetInput{
 		Brand:      "GMK",
@@ -378,6 +199,99 @@ func fullAPIKeycapSetInput() api.KeycapSetInput {
 		Notes:      strPtr("group buy"),
 		Visibility: api.Visibility(repository.VisibilityPrivate),
 	}
+}
+
+// pricedKeycapSet has two image-less kits priced 120 and 35, plus one with
+// no price.
+func pricedKeycapSet() repository.KeycapSet {
+	ks := fullRepoKeycapSet()
+	kit1 := fullRepoKeycapKit()
+	kit1.ImagePath = nil
+	kit2 := fullRepoKeycapKit()
+	kit2.KitID = "kit2"
+	kit2.ImagePath = nil
+	kit2.Purchase.Price = floatPtr(35.00)
+	kit3 := fullRepoKeycapKit()
+	kit3.KitID = "kit3"
+	kit3.ImagePath = nil
+	kit3.Purchase.Price = nil
+	ks.Kits = map[string]repository.KeycapKit{kit1.KitID: kit1, kit2.KitID: kit2, kit3.KitID: kit3}
+	return ks
+}
+
+func (s *KeycapSetToAPISuite) TestTotalCost_Owner_SumsKnownKitPricesRegardlessOfShowPriceToMe() {
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+
+	out, err := kr.ToAPI(context.Background(), pricedKeycapSet(), true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(155.00, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
+}
+
+func (s *KeycapSetToAPISuite) TestTotalCost_NonOwnerShowPriceToOthersTrue_Included() {
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+
+	out, err := kr.ToAPI(context.Background(), pricedKeycapSet(), false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(155.00, *out.TotalCost, 0.0001)
+	s.Require().NotNil(out.Currency)
+	s.Equal("EUR", *out.Currency)
+}
+
+func (s *KeycapSetToAPISuite) TestTotalCost_NonOwnerShowPriceToOthersFalse_Omitted() {
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+
+	out, err := kr.ToAPI(context.Background(), pricedKeycapSet(), false, repository.ProfilePreferences{Currency: "EUR"})
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+}
+
+func (s *KeycapSetToAPISuite) TestTotalCost_NoPricedKits_Omitted() {
+	ks := repository.KeycapSet{ID: "ks1", Brand: "GMK", Name: "Laser", Visibility: repository.VisibilityPrivate}
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{Currency: "EUR"})
+	s.Require().NoError(err)
+
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+}
+
+func (s *KeycapSetToAPISuite) TestStripPrices_ClearsKitPricesAndTotalCostKeepsRest() {
+	price, total, currency, vendor := 120.0, 155.0, "EUR", "NovelKeys"
+	kits := []api.KeycapKit{
+		{KitId: "kit1", Purchase: &api.Purchase{Price: &price, Currency: &currency, Vendor: &vendor}},
+		{KitId: "kit2", Purchase: &api.Purchase{Price: &price, Currency: &currency}},
+		{KitId: "kit3"},
+	}
+	out := api.KeycapSet{Id: "ks1", TotalCost: &total, Currency: &currency, Kits: &kits}
+
+	KeycapSet{}.StripPrices(&out)
+
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+	s.Require().NotNil((*out.Kits)[0].Purchase)
+	s.Nil((*out.Kits)[0].Purchase.Price)
+	s.Nil((*out.Kits)[0].Purchase.Currency)
+	s.Equal(&vendor, (*out.Kits)[0].Purchase.Vendor)
+	s.Nil((*out.Kits)[1].Purchase, "a purchase left with nothing is dropped")
+	s.Nil((*out.Kits)[2].Purchase)
+}
+
+func (s *KeycapSetToAPISuite) TestStripPrices_NoKits_ClearsTotalCost() {
+	total, currency := 155.0, "EUR"
+	out := api.KeycapSet{Id: "ks1", TotalCost: &total, Currency: &currency}
+
+	KeycapSet{}.StripPrices(&out)
+
+	s.Equal(api.KeycapSet{Id: "ks1"}, out)
 }
 
 type KeycapSetToRepoSuite struct {
@@ -572,28 +486,4 @@ func (s *KeycapKitToRepoSuite) TestPurchaseNil_MapsToZeroValue() {
 	out := KeycapSet{}.KitToRepo(in)
 
 	s.Equal(repository.KeycapKitPurchase{}, out.Purchase)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_Owner_IncludesSetsOwnVisibility() {
-	ks := fullRepoKeycapSet()
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(context.Background(), ks, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(summary.Visibility)
-	s.Equal(api.Visibility(ks.Visibility), *summary.Visibility)
-}
-
-func (s *KeycapSetToAPISuite) TestKeycapSetToAPISummary_NonOwner_OmitsVisibility() {
-	ks := fullRepoKeycapSet()
-
-	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
-
-	summary, err := kr.ToAPISummary(
-		context.Background(), ks, false, repository.ProfilePreferences{ShowPriceToOthers: true})
-	s.Require().NoError(err)
-
-	s.Nil(summary.Visibility)
 }

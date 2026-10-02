@@ -23,13 +23,9 @@ import (
 
 // ListKeycapSets reads the {userId} path value and lists that owner's
 // keycap sets. Anonymous callers are allowed; visibility is scoped to what
-// the caller (if any) may read, per [authz.ReadableVisibilities]. Sets are
-// mapped to their summary concurrently - each only touches its own slot in
-// items, and a page can have up to 100 sets, each potentially needing its
-// own S3 presign for its primary kit's image - mirrors
-// [repoapi.KeycapSet.ToAPI]'s per-kit fan-out. total_cost visibility is
-// gated by the owner's Profile preferences - see
-// [repoapi.KeycapSet.ToAPISummary].
+// the caller (if any) may read, per [authz.ReadableVisibilities]. Prices
+// follow [repository.ProfilePreferences.ShowPriceSummary], which only ever
+// hides prices [repoapi.KeycapSet.ToAPI] shows.
 func ListKeycapSets(repo repository.KeycapSetRepository, kr repoapi.KeycapSet) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ownerID := r.PathValue("userId")
@@ -57,29 +53,33 @@ func ListKeycapSets(repo repository.KeycapSetRepository, kr repoapi.KeycapSet) h
 			return
 		}
 
-		items := make([]api.KeycapSetSummary, len(sets))
+		items := make([]api.KeycapSet, len(sets))
 		errs := make([]error, len(sets))
 
 		ctx := r.Context()
 		isOwner := authz.IsOwner(ctx, ownerID)
+		showPrice := ownerPrefs.ShowPriceSummary(isOwner)
 		var wg sync.WaitGroup
 		for i, ks := range sets {
 			wg.Add(1)
 			go func(i int, ks repository.KeycapSet) {
 				defer wg.Done()
 
-				summary, err := kr.ToAPISummary(ctx, ks, isOwner, ownerPrefs)
+				item, err := kr.ToAPI(ctx, ks, isOwner, ownerPrefs)
 				if err != nil {
-					errs[i] = fmt.Errorf("mapping keycap set %q to API summary: %w", ks.ID, err)
+					errs[i] = fmt.Errorf("mapping keycap set %q to API: %w", ks.ID, err)
 					return
 				}
-				items[i] = summary
+				if !showPrice {
+					kr.StripPrices(&item)
+				}
+				items[i] = item
 			}(i, ks)
 		}
 		wg.Wait()
 
 		if err := errors.Join(errs...); err != nil {
-			log.FromContext(r.Context()).Error("mapping keycap sets to API summaries", log.Error, err)
+			log.FromContext(r.Context()).Error("mapping keycap sets to API", log.Error, err)
 			problem.Internal(w, "failed to list keycap sets")
 			return
 		}

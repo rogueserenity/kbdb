@@ -56,7 +56,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 		kits = &mapped
 	}
 
-	return api.KeycapSet{
+	out := api.KeycapSet{
 		Id:           set.ID,
 		Brand:        set.Brand,
 		Name:         set.Name,
@@ -67,7 +67,17 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 		Kits:         kits,
 		PrimaryKitId: validPrimaryKitID(set.PrimaryKitID, set.Kits),
 		OrderStatus:  repository.AggregateOrderStatus(set.Kits),
-	}, nil
+	}
+	if ownerPrefs.ShowPriceSingle(isOwner) {
+		prices := make([]*float64, 0, len(set.Kits))
+		for _, k := range set.Kits {
+			prices = append(prices, k.Purchase.Price)
+		}
+		out.TotalCost = sumKnownCosts(prices...)
+	}
+	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
+
+	return out, nil
 }
 
 // ToRepo maps a generated KeycapSetInput (already schema-validated by the
@@ -85,45 +95,24 @@ func (ks KeycapSet) ToRepo(in api.KeycapSetInput) repository.KeycapSet {
 	}
 }
 
-// ToAPISummary maps a repository.KeycapSet to the KeycapSetSummary schema
-// returned by the list endpoint. PrimaryKitImage is nil unless
-// PrimaryKitID names a kit still present in Kits and that kit has an
-// ImagePath set, in which case it's a presigned GET URL reused from cache
-// if still fresh, as in [KeycapSet.KitToAPI]. TotalCost
-// is shown per ownerPrefs.ShowPriceToMe (owner) or
-// ownerPrefs.ShowPriceToOthers (non-owner) - unlike [KeycapSet.ToAPI], the
-// owner isn't unconditionally shown price here.
-func (ks KeycapSet) ToAPISummary(ctx context.Context, set repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapSetSummary, error) {
-	summary := api.KeycapSetSummary{
-		Id:          &set.ID,
-		Brand:       &set.Brand,
-		Name:        &set.Name,
-		Profile:     set.Profile,
-		OrderStatus: repository.AggregateOrderStatus(set.Kits),
+// StripPrices clears the prices [KeycapSet.ToAPI] sets on out.
+func (ks KeycapSet) StripPrices(out *api.KeycapSet) {
+	out.TotalCost = nil
+	out.Currency = nil
+	if out.Kits == nil {
+		return
 	}
-	if ownerPrefs.ShowPriceSummary(isOwner) {
-		prices := make([]*float64, 0, len(set.Kits))
-		for _, k := range set.Kits {
-			prices = append(prices, k.Purchase.Price)
+	for i := range *out.Kits {
+		kit := &(*out.Kits)[i]
+		if kit.Purchase == nil {
+			continue
 		}
-		summary.TotalCost = sumKnownCosts(prices...)
-	}
-	summary.Currency = ownerPrefs.CurrencyFor(summary.TotalCost)
-	if isOwner {
-		v := api.Visibility(set.Visibility)
-		summary.Visibility = &v
-	}
-
-	primaryKit := findKit(validPrimaryKitID(set.PrimaryKitID, set.Kits), set.Kits)
-	if primaryKit != nil && primaryKit.ImagePath != nil {
-		url, err := ks.resolveKeycapKitImageURL(ctx, set.UserID, set.ID, *primaryKit)
-		if err != nil {
-			return api.KeycapSetSummary{}, fmt.Errorf("presigning primary kit image: %w", err)
+		kit.Purchase.Price = nil
+		kit.Purchase.Currency = nil
+		if *kit.Purchase == (api.Purchase{}) {
+			kit.Purchase = nil
 		}
-		summary.PrimaryKitImage = &api.KeycapKitImage{Url: url}
 	}
-
-	return summary, nil
 }
 
 // KitToAPI maps a repository.KeycapKit to its wire representation. Image
@@ -251,17 +240,4 @@ func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
 	}
 	slices.Sort(ids)
 	return ids
-}
-
-// findKit returns the kit in kits with the given kitID, or nil if kitID
-// is nil or names no kit in kits.
-func findKit(kitID *string, kits map[string]repository.KeycapKit) *repository.KeycapKit {
-	if kitID == nil {
-		return nil
-	}
-	kit, ok := kits[*kitID]
-	if !ok {
-		return nil
-	}
-	return &kit
 }
