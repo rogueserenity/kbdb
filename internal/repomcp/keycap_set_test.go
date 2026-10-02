@@ -403,3 +403,31 @@ func (s *KeycapSetToMCPSuite) TestToMCPSummary_NonOwner_OmitsVisibility() {
 
 	s.Nil(out.Visibility)
 }
+
+func pricedMCPKeycapSet() repository.KeycapSet {
+	return repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{
+		"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: new(120.0)}},
+		"kit-2": {KitID: "kit-2", Purchase: repository.KeycapKitPurchase{Price: new(35.0)}},
+	}}
+}
+
+func (s *KeycapSetToMCPSuite) TestToMCP_Owner_IncludesTotalCostRegardlessOfShowPriceToMe() {
+	out := KeycapSet{}.ToMCP(pricedMCPKeycapSet(), true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false})
+
+	s.Equal(new(155.0), out.TotalCost)
+	s.Equal(new("EUR"), out.Currency)
+}
+
+func (s *KeycapSetToMCPSuite) TestToMCP_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
+	out := KeycapSet{}.ToMCP(pricedMCPKeycapSet(), false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
+
+	s.Equal(new(155.0), out.TotalCost)
+	s.Equal(new("EUR"), out.Currency)
+}
+
+func (s *KeycapSetToMCPSuite) TestToMCP_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
+	out := KeycapSet{}.ToMCP(pricedMCPKeycapSet(), false, repository.ProfilePreferences{Currency: "EUR"})
+
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+}

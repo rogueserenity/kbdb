@@ -50,6 +50,8 @@ type keycapSet struct {
 	Visibility   string      `json:"visibility"`
 	Kits         []keycapKit `json:"kits"`
 	PrimaryKitID *string     `json:"primary_kit_id"`
+	TotalCost    *float64    `json:"total_cost"`
+	Currency     *string     `json:"currency"`
 }
 
 type getOutput struct {

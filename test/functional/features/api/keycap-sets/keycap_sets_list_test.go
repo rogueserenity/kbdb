@@ -13,6 +13,41 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
 
+func kitsOf(item map[string]any) []map[string]any {
+	raw, _ := item["kits"].([]any)
+	kits := make([]map[string]any, 0, len(raw))
+	for _, k := range raw {
+		if kit, ok := k.(map[string]any); ok {
+			kits = append(kits, kit)
+		}
+	}
+
+	return kits
+}
+
+type listedKit struct {
+	KitID string `json:"kit_id"`
+	Image *struct {
+		URL string `json:"url"`
+	} `json:"image"`
+}
+
+type listedKeycapSet struct {
+	ID           string      `json:"id"`
+	PrimaryKitID *string     `json:"primary_kit_id"`
+	Kits         []listedKit `json:"kits"`
+}
+
+func (s listedKeycapSet) kit(id string) *listedKit {
+	for i := range s.Kits {
+		if s.Kits[i].KitID == id {
+			return &s.Kits[i]
+		}
+	}
+
+	return nil
+}
+
 var _ = Describe("Listing keycap sets", func() {
 	var (
 		resp       *http.Response
@@ -173,16 +208,11 @@ var _ = Describe("Listing keycap sets", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("includes a working presigned primary_kit_image URL for that set", func(ctx SpecContext) {
+			It("returns the primary kit's id and a working presigned image URL on that kit", func(ctx SpecContext) {
 				Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 				var page struct {
-					Items []struct {
-						ID              string `json:"id"`
-						PrimaryKitImage *struct {
-							URL string `json:"url"`
-						} `json:"primary_kit_image"`
-					} `json:"items"`
+					Items []listedKeycapSet `json:"items"`
 				}
 				Expect(json.NewDecoder(resp.Body).Decode(&page)).To(Succeed())
 
@@ -192,10 +222,13 @@ var _ = Describe("Listing keycap sets", func() {
 						continue
 					}
 					found = true
-					Expect(item.PrimaryKitImage).NotTo(BeNil())
-					Expect(item.PrimaryKitImage.URL).NotTo(BeEmpty())
+					Expect(item.PrimaryKitID).To(HaveValue(Equal(kitID)))
+					kit := item.kit(kitID)
+					Expect(kit).NotTo(BeNil())
+					Expect(kit.Image).NotTo(BeNil())
+					Expect(kit.Image.URL).NotTo(BeEmpty())
 
-					getImageResp, err := api.DoPresigned(ctx, http.MethodGet, item.PrimaryKitImage.URL, "", nil)
+					getImageResp, err := api.DoPresigned(ctx, http.MethodGet, kit.Image.URL, "", nil)
 					Expect(err).NotTo(HaveOccurred())
 					Expect(getImageResp.StatusCode).To(Equal(http.StatusOK))
 				}
@@ -227,16 +260,11 @@ var _ = Describe("Listing keycap sets", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("reports a null primary_kit_image for that set", func() {
+			It("returns the primary kit's id, with no image on that kit", func() {
 				Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 				var page struct {
-					Items []struct {
-						ID              string `json:"id"`
-						PrimaryKitImage *struct {
-							URL string `json:"url"`
-						} `json:"primary_kit_image"`
-					} `json:"items"`
+					Items []listedKeycapSet `json:"items"`
 				}
 				Expect(json.NewDecoder(resp.Body).Decode(&page)).To(Succeed())
 
@@ -246,7 +274,10 @@ var _ = Describe("Listing keycap sets", func() {
 						continue
 					}
 					found = true
-					Expect(item.PrimaryKitImage).To(BeNil())
+					Expect(item.PrimaryKitID).To(HaveValue(Equal(kitID)))
+					kit := item.kit(kitID)
+					Expect(kit).NotTo(BeNil())
+					Expect(kit.Image).To(BeNil())
 				}
 				Expect(found).To(BeTrue(), "expected to find seeded keycap set %q in the list", keycapSetID)
 			})
@@ -272,16 +303,11 @@ var _ = Describe("Listing keycap sets", func() {
 				Expect(err).NotTo(HaveOccurred())
 			})
 
-			It("reports a null primary_kit_image for that set", func() {
+			It("reports a null primary_kit_id for that set", func() {
 				Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 				var page struct {
-					Items []struct {
-						ID              string `json:"id"`
-						PrimaryKitImage *struct {
-							URL string `json:"url"`
-						} `json:"primary_kit_image"`
-					} `json:"items"`
+					Items []listedKeycapSet `json:"items"`
 				}
 				Expect(json.NewDecoder(resp.Body).Decode(&page)).To(Succeed())
 
@@ -291,7 +317,7 @@ var _ = Describe("Listing keycap sets", func() {
 						continue
 					}
 					found = true
-					Expect(item.PrimaryKitImage).To(BeNil())
+					Expect(item.PrimaryKitID).To(BeNil())
 				}
 				Expect(found).To(BeTrue(), "expected to find seeded keycap set %q in the list", keycapSetID)
 			})
@@ -340,6 +366,7 @@ var _ = Describe("Listing keycap sets", func() {
 					item := itemTotalCost(resp, keycapSetID)
 					Expect(item).NotTo(BeNil())
 					Expect(item).To(HaveKeyWithValue("total_cost", BeNumerically("==", 85.0)))
+					Expect(item).To(HaveKeyWithValue("currency", "USD"))
 				})
 			})
 		})
@@ -360,11 +387,18 @@ var _ = Describe("Listing keycap sets", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("omits the total_cost", func() {
+				It("omits the total_cost, its currency and every kit price", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 					item := itemTotalCost(resp, keycapSetID)
 					Expect(item).NotTo(BeNil())
 					Expect(item).NotTo(HaveKey("total_cost"))
+					Expect(item).NotTo(HaveKey("currency"))
+					Expect(kitsOf(item)).NotTo(BeEmpty())
+					for _, kit := range kitsOf(item) {
+						Expect(kit["purchase"]).To(HaveKey("vendor"), "stripping the price must keep the rest of the kit's purchase")
+						Expect(kit["purchase"]).NotTo(HaveKey("price"))
+						Expect(kit["purchase"]).NotTo(HaveKey("currency"))
+					}
 				})
 			})
 		})
@@ -401,7 +435,7 @@ var _ = Describe("Listing keycap sets", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("omits the total_cost", func() {
+				It("omits the total_cost, its currency and every kit price", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					var page struct {
@@ -416,6 +450,13 @@ var _ = Describe("Listing keycap sets", func() {
 					}
 					Expect(item).NotTo(BeNil())
 					Expect(item).NotTo(HaveKey("total_cost"))
+					Expect(item).NotTo(HaveKey("currency"))
+					Expect(kitsOf(item)).NotTo(BeEmpty())
+					for _, kit := range kitsOf(item) {
+						Expect(kit["purchase"]).To(HaveKey("vendor"), "stripping the price must keep the rest of the kit's purchase")
+						Expect(kit["purchase"]).NotTo(HaveKey("price"))
+						Expect(kit["purchase"]).NotTo(HaveKey("currency"))
+					}
 				})
 			})
 		})
@@ -434,7 +475,7 @@ var _ = Describe("Listing keycap sets", func() {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
 				Username: profileUsername,
 				Preferences: map[string]any{
-					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					"currency": "EUR", "show_price_to_me": true, "show_price_to_others": true,
 				},
 			})).To(Succeed())
 		})
@@ -475,6 +516,7 @@ var _ = Describe("Listing keycap sets", func() {
 					}
 					Expect(item).NotTo(BeNil())
 					Expect(item).To(HaveKeyWithValue("total_cost", BeNumerically("==", 85.0)))
+					Expect(item).To(HaveKeyWithValue("currency", "EUR"))
 				})
 			})
 		})

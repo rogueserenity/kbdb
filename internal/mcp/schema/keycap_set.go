@@ -52,6 +52,8 @@ type KeycapSet struct {
 	Kits         []KeycapKit `json:"kits,omitempty" jsonschema:"the kits purchased as part of this set"`
 	PrimaryKitID *string     `json:"primary_kit_id,omitempty" jsonschema:"the id of the kit, among kits, whose image represents this set; match against kits[].kit_id to find its image"`
 	OrderStatus  *string     `json:"order_status,omitempty" jsonschema:"derived from every kit's purchase.order_status: the least-progressed status wins (Planned < Ordered < Shipped < Delivered), so the set isn't Delivered while a kit is still en route; a Cancelled kit is ignored unless every kit is Cancelled; omitted if no kit has a status set"`
+	TotalCost    *float64    `json:"total_cost,omitempty" jsonschema:"total cost of the set's kits with a known purchase price; kits with no known price are excluded rather than treated as zero, so this may undercount"`
+	Currency     *string     `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for total_cost; present exactly when total_cost is"`
 }
 
 // KeycapKit is one purchase within a keycap set. HasImage reports whether an

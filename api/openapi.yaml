@@ -2172,49 +2172,17 @@ components:
             comparison unless every kit is Cancelled, in which case
             this is Cancelled too. Null if no kit has an order_status
             set, or the set has no kits.
-
-    KeycapSetSummary:
-      type: object
-      properties:
-        id:
-          type: string
-        brand:
-          type: string
-        name:
-          type: string
-        profile:
-          type: string
-        order_status:
-          type: [string, "null"]
-          description: >
-            Same derived aggregate as KeycapSet.order_status - see there
-            for the bubble-up rule.
-        primary_kit_image:
-          $ref: "#/components/schemas/KeycapKitImage"
-          description: >
-            The primary kit's image, if the set has one designated and it
-            has an image set. Omitted otherwise — including when the
-            designated primary kit no longer exists.
         total_cost:
           $ref: "#/components/schemas/Money"
           description: >
-            Total cost of the set's kits with a known purchase price.
-            Kits with no known price are excluded rather than treated as
-            zero, so this may undercount. Present for the owner only if
-            their show_price_to_me preference is set, and for any other
-            caller only if the owner's show_price_to_others is.
+            Total cost of the set's kits with a known purchase price. Kits
+            with no known price are excluded rather than treated as zero,
+            so this may undercount.
         currency:
           $ref: "#/components/schemas/Currency"
           description: >
             The owner's display currency, for labelling total_cost.
             Present exactly when total_cost is.
-        visibility:
-          $ref: "#/components/schemas/Visibility"
-          description: >
-            Who can read this keycap set. Set on the keycap set itself,
-            not derived from its kits, which have no visibility of their
-            own. Only ever present for the set's owner - no preference
-            can expose it to another caller.
 
     KeycapSetListPage:
       type: object
@@ -2222,7 +2190,7 @@ components:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/KeycapSetSummary"
+            $ref: "#/components/schemas/KeycapSet"
         next_cursor:
           type: [string, "null"]
 

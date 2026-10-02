@@ -67,9 +67,8 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_Owner_RequestsAllVisibilities()
 
 	var got api.KeycapSetListPage
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	id, brand, name := "ks1", "GMK", "Laser"
 	visibility := api.Private
-	s.Equal(&[]api.KeycapSetSummary{{Id: &id, Brand: &brand, Name: &name, Visibility: &visibility}}, got.Items)
+	s.Equal(&[]api.KeycapSet{{Id: "ks1", Brand: "GMK", Name: "Laser", Visibility: &visibility}}, got.Items)
 	s.Nil(got.NextCursor)
 }
 
@@ -111,7 +110,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OwnerShowPriceToMeTrue_Includes
 			ID:   "ks1",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToMe: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -120,8 +119,15 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OwnerShowPriceToMeTrue_Includes
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].TotalCost)
-	s.InDelta(price, *(*got.Items)[0].TotalCost, 0.0001)
+	item := (*got.Items)[0]
+	s.Require().NotNil(item.TotalCost)
+	s.InDelta(price, *item.TotalCost, 0.0001)
+	s.Require().NotNil(item.Currency)
+	s.Equal("EUR", *item.Currency)
+	s.Require().NotNil(item.Kits)
+	s.Require().NotNil((*item.Kits)[0].Purchase)
+	s.Require().NotNil((*item.Kits)[0].Purchase.Price)
+	s.InDelta(price, *(*item.Kits)[0].Purchase.Price, 0.0001)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_OwnerShowPriceToMeFalse_OmitsTotalCost() {
@@ -143,7 +149,11 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_OwnerShowPriceToMeFalse_OmitsTo
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].TotalCost)
+	item := (*got.Items)[0]
+	s.Nil(item.TotalCost)
+	s.Nil(item.Currency)
+	s.Require().NotNil(item.Kits)
+	s.Nil((*item.Kits)[0].Purchase)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
@@ -165,7 +175,11 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersFalse_
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].TotalCost)
+	item := (*got.Items)[0]
+	s.Nil(item.TotalCost)
+	s.Nil(item.Currency)
+	s.Require().NotNil(item.Kits)
+	s.Nil((*item.Kits)[0].Purchase)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
@@ -178,7 +192,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersTrue_I
 			ID:   "ks1",
 			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Purchase: repository.KeycapKitPurchase{Price: &price}}},
 		}}, "", nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true}
 
 	rec := httptest.NewRecorder()
 	s.handler(rec, s.newRequest(ctx, "limit=20"))
@@ -187,8 +201,15 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_NonOwnerShowPriceToOthersTrue_I
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].TotalCost)
-	s.InDelta(price, *(*got.Items)[0].TotalCost, 0.0001)
+	item := (*got.Items)[0]
+	s.Require().NotNil(item.TotalCost)
+	s.InDelta(price, *item.TotalCost, 0.0001)
+	s.Require().NotNil(item.Currency)
+	s.Equal("EUR", *item.Currency)
+	s.Require().NotNil(item.Kits)
+	s.Require().NotNil((*item.Kits)[0].Purchase)
+	s.Require().NotNil((*item.Kits)[0].Purchase.Price)
+	s.InDelta(price, *(*item.Kits)[0].Purchase.Price, 0.0001)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_PassesLimitAndCursor() {
@@ -218,7 +239,7 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_ReturnsNextCursor_WhenPresent()
 	s.Equal("next-page-token", *got.NextCursor)
 }
 
-func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPrimaryKitImage() {
+func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_ReturnsPrimaryKitIDAndKitImage() {
 	imagePath := repository.KeycapKitImageKey("keycap-sets/alice/ks1/kits/kit1/image")
 	kitID := "kit1"
 
@@ -247,8 +268,12 @@ func (s *ListKeycapSetsSuite) TestListKeycapSets_PrimaryKitWithImage_IncludesPri
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Require().NotNil((*got.Items)[0].PrimaryKitImage)
-	s.Equal("https://example.com/presigned-get", (*got.Items)[0].PrimaryKitImage.Url)
+	item := (*got.Items)[0]
+	s.Require().NotNil(item.PrimaryKitId)
+	s.Equal(kitID, *item.PrimaryKitId)
+	s.Require().NotNil(item.Kits)
+	s.Require().NotNil((*item.Kits)[0].Image)
+	s.Equal("https://example.com/presigned-get", (*item.Kits)[0].Image.Url)
 }
 
 func (s *ListKeycapSetsSuite) TestListKeycapSets_RepositoryError_Returns500() {
