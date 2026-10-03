@@ -56,9 +56,8 @@ func (b Build) FromMCP(in schema.BuildInput) repository.Build {
 	}
 }
 
-// ToMCPSummary mirrors [github.com/rogueserenity/kbdb/internal/repoapi.Build.ToAPISummary]'s
-// KeyboardRepo.Get denormalization but reports HasImage rather than a
-// presigned URL. Unlike [Build.ToMCP], the owner isn't unconditionally
+// ToMCPSummary denormalizes the keyboard via KeyboardRepo.Get and reports
+// HasImage rather than a presigned URL. Unlike [Build.ToMCP], the owner isn't unconditionally
 // shown price here. Switches and keycap kits are only fetched when
 // TotalCost will be shown, since cost is all this uses them for.
 func (b Build) ToMCPSummary(

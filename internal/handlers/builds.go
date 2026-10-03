@@ -64,9 +64,9 @@ func validateBuildReferences(
 	return true
 }
 
-// ListBuilds handles GET /v1/users/{userId}/builds. total_cost visibility
-// is gated by the owner's Profile preferences - see
-// [repoapi.Build.ToAPISummary].
+// ListBuilds handles GET /v1/users/{userId}/builds. Prices follow
+// [repository.ProfilePreferences.ShowPriceSummary], which only ever hides
+// prices [repoapi.Build.ToAPI] shows.
 func ListBuilds(
 	repo repository.BuildRepository,
 	br repoapi.Build,
@@ -98,29 +98,33 @@ func ListBuilds(
 			return
 		}
 
-		items := make([]api.BuildSummary, len(builds))
+		items := make([]api.Build, len(builds))
 		errs := make([]error, len(builds))
 
 		ctx := r.Context()
 		isOwner := authz.IsOwner(ctx, ownerID)
+		showPrice := ownerPrefs.ShowPriceSummary(isOwner)
 		var wg sync.WaitGroup
 		for i, b := range builds {
 			wg.Add(1)
 			go func(i int, b repository.Build) {
 				defer wg.Done()
 
-				summary, err := br.ToAPISummary(ctx, b, isOwner, ownerPrefs)
+				item, err := br.ToAPI(ctx, b, isOwner, ownerPrefs)
 				if err != nil {
-					errs[i] = fmt.Errorf("mapping build %q to API summary: %w", b.ID, err)
+					errs[i] = fmt.Errorf("mapping build %q to API: %w", b.ID, err)
 					return
 				}
-				items[i] = summary
+				if !showPrice {
+					br.StripPrices(&item)
+				}
+				items[i] = item
 			}(i, b)
 		}
 		wg.Wait()
 
 		if err := errors.Join(errs...); err != nil {
-			log.FromContext(r.Context()).Error("mapping builds to API summaries", log.Error, err)
+			log.FromContext(r.Context()).Error("mapping builds to API", log.Error, err)
 			problem.Internal(w, "failed to list builds")
 			return
 		}

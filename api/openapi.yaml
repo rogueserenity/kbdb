@@ -2412,15 +2412,6 @@ components:
           description: >
             Presigned S3 PUT URL. Short-lived — upload promptly.
 
-    BuildSummaryKeyboard:
-      type: object
-      description: A build's denormalized keyboard brand/name, for display in a list view.
-      properties:
-        brand:
-          type: string
-        name:
-          type: string
-
     Build:
       type: object
       description: >
@@ -2428,10 +2419,16 @@ components:
         switches[].switch, and keycap_kits[].keycap_set are denormalized
         into resolved reference objects rather than bare ids, so a client
         can render a build without follow-up requests.
-      required: [id]
+      required: [id, keyboard_id]
       properties:
         id:
           type: string
+        keyboard_id:
+          type: string
+          description: >
+            The id of the referenced Keyboard resource - present even if
+            that keyboard no longer exists, in which case keyboard is
+            omitted.
         keyboard:
           $ref: "#/components/schemas/BuildKeyboardRef"
           description: >
@@ -2485,55 +2482,13 @@ components:
             The owner's display currency, for labelling total_cost.
             Present exactly when total_cost is.
 
-    BuildSummary:
-      type: object
-      description: >
-        Includes a denormalized keyboard brand/name so a build is
-        recognizable in a list view without a follow-up request.
-      properties:
-        id:
-          type: string
-        keyboard_id:
-          type: string
-          description: >
-            The id of the referenced Keyboard resource - always present,
-            even if that keyboard no longer exists (in which case `keyboard`
-            below is omitted). Useful for grouping builds by keyboard.
-        build_date:
-          type: string
-          format: date
-        image:
-          $ref: "#/components/schemas/BuildImage"
-          description: First entry of images, if any (a freshly-minted presigned URL, same as on the full Build resource).
-        keyboard:
-          $ref: "#/components/schemas/BuildSummaryKeyboard"
-        total_cost:
-          $ref: "#/components/schemas/Money"
-          description: >
-            Total cost of the build's priced components (keyboard,
-            switches, keycap kits, stabs). Components with no known price
-            are excluded rather than treated as zero, so this may
-            undercount. Present for the owner only if their
-            show_price_to_me preference is set, and for any other caller
-            only if the owner's show_price_to_others is.
-        currency:
-          $ref: "#/components/schemas/Currency"
-          description: >
-            The owner's display currency, for labelling total_cost.
-            Present exactly when total_cost is.
-        visibility:
-          $ref: "#/components/schemas/Visibility"
-          description: >
-            Who can read this build. Only ever present for the build's
-            owner - no preference can expose it to another caller.
-
     BuildListPage:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/BuildSummary"
+            $ref: "#/components/schemas/Build"
         next_cursor:
           type: [string, "null"]
 

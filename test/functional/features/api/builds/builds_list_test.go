@@ -46,6 +46,12 @@ var _ = Describe("Listing builds", func() {
 			Name  string `json:"name"`
 		} `json:"keyboard"`
 		TotalCost *float64 `json:"total_cost"`
+		Currency  *string  `json:"currency"`
+		Stabs     *struct {
+			Name     *string  `json:"name"`
+			Price    *float64 `json:"price"`
+			Currency *string  `json:"currency"`
+		} `json:"stabs"`
 	}
 
 	decodeItems := func(r *http.Response) []listItem {
@@ -197,6 +203,12 @@ var _ = Describe("Listing builds", func() {
 					Expect(idx).To(BeNumerically(">=", 0))
 					Expect(items[idx].TotalCost).NotTo(BeNil())
 					Expect(*items[idx].TotalCost).To(Equal(329.99 + 12.5))
+					Expect(items[idx].Currency).To(HaveValue(Equal("USD")))
+
+					By("returning the build in full, including its stabs")
+					Expect(items[idx].Stabs).NotTo(BeNil())
+					Expect(items[idx].Stabs.Name).To(HaveValue(Equal("Durock v3")))
+					Expect(items[idx].Stabs.Price).To(HaveValue(Equal(12.5)))
 				})
 			})
 		})
@@ -217,13 +229,18 @@ var _ = Describe("Listing builds", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("omits total_cost even though the build itself is visible", func() {
+				It("omits total_cost and the stabs price even though the build itself is visible", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					items := decodeItems(resp)
 					idx := slices.IndexFunc(items, func(i listItem) bool { return i.ID == buildID })
 					Expect(idx).To(BeNumerically(">=", 0))
 					Expect(items[idx].TotalCost).To(BeNil())
+					Expect(items[idx].Currency).To(BeNil())
+					Expect(items[idx].Stabs).NotTo(BeNil(), "stripping the price must keep the rest of stabs")
+					Expect(items[idx].Stabs.Price).To(BeNil())
+					Expect(items[idx].Stabs.Currency).To(BeNil())
+					Expect(items[idx].Stabs.Name).To(HaveValue(Equal("Durock v3")))
 				})
 			})
 		})
@@ -257,13 +274,18 @@ var _ = Describe("Listing builds", func() {
 					Expect(err).NotTo(HaveOccurred())
 				})
 
-				It("omits total_cost", func() {
+				It("omits total_cost and the stabs price", func() {
 					Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
 					items := decodeItems(resp)
 					idx := slices.IndexFunc(items, func(i listItem) bool { return i.ID == buildID })
 					Expect(idx).To(BeNumerically(">=", 0))
 					Expect(items[idx].TotalCost).To(BeNil())
+					Expect(items[idx].Currency).To(BeNil())
+					Expect(items[idx].Stabs).NotTo(BeNil(), "stripping the price must keep the rest of stabs")
+					Expect(items[idx].Stabs.Price).To(BeNil())
+					Expect(items[idx].Stabs.Currency).To(BeNil())
+					Expect(items[idx].Stabs.Name).To(HaveValue(Equal("Durock v3")))
 				})
 			})
 		})
@@ -279,7 +301,7 @@ var _ = Describe("Listing builds", func() {
 			Expect(db.SeedProfile(ctx, ownerID, db.SeedProfileOptions{
 				Username: profileUsername,
 				Preferences: map[string]any{
-					"currency": "USD", "show_price_to_me": true, "show_price_to_others": true,
+					"currency": "EUR", "show_price_to_me": true, "show_price_to_others": true,
 				},
 			})).To(Succeed())
 		})
@@ -313,6 +335,7 @@ var _ = Describe("Listing builds", func() {
 					Expect(idx).To(BeNumerically(">=", 0))
 					Expect(items[idx].TotalCost).NotTo(BeNil())
 					Expect(*items[idx].TotalCost).To(Equal(329.99 + 12.5))
+					Expect(items[idx].Currency).To(HaveValue(Equal("EUR")))
 				})
 			})
 		})

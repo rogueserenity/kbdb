@@ -668,11 +668,10 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
 	item := (*got.Items)[0]
+	s.Equal("kb1", item.KeyboardId)
 	s.Require().NotNil(item.Keyboard)
-	s.Require().NotNil(item.Keyboard.Brand)
-	s.Equal("Keychron", *item.Keyboard.Brand)
-	s.Require().NotNil(item.Keyboard.Name)
-	s.Equal("Q1", *item.Keyboard.Name)
+	s.Equal("Keychron", item.Keyboard.Brand)
+	s.Equal("Q1", item.Keyboard.Name)
 }
 
 func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeTrue_IncludesTotalCost() {
@@ -705,7 +704,7 @@ func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeTrue_IncludesTotalCos
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
 		}, nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToMe: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true}
 
 	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "alice"), "limit=20")
 	rec := httptest.NewRecorder()
@@ -720,6 +719,8 @@ func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeTrue_IncludesTotalCos
 	item := (*got.Items)[0]
 	s.Require().NotNil(item.TotalCost)
 	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
+	s.Require().NotNil(item.Currency)
+	s.Equal("EUR", *item.Currency)
 }
 
 func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeFalse_OmitsTotalCost() {
@@ -747,7 +748,10 @@ func (s *ListBuildsSuite) TestListBuilds_OwnerShowPriceToMeFalse_OmitsTotalCost(
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].TotalCost)
+	item := (*got.Items)[0]
+	s.Nil(item.TotalCost)
+	s.Nil(item.Currency)
+	s.Nil(item.Stabs, "stabs had only a price, so nothing is left")
 }
 
 func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
@@ -765,6 +769,21 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersFalse_OmitsTot
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
 			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
 		}, nil)
+	s.mockSwitchRepo.EXPECT().
+		Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(45), Quantity: intPtr(90)},
+		}, nil)
+	s.mockKeycapSetRepo.EXPECT().
+		Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: map[string]repository.KeycapKit{"kit1": {
+				KitID: "kit1", Name: "Base",
+				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
+			}},
+		}, nil)
 	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: false}
 
 	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "bob"), "limit=20")
@@ -777,7 +796,10 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersFalse_OmitsTot
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].TotalCost)
+	item := (*got.Items)[0]
+	s.Nil(item.TotalCost)
+	s.Nil(item.Currency)
+	s.Nil(item.Stabs, "stabs had only a price, so nothing is left")
 }
 
 func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
@@ -810,7 +832,7 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesT
 				Purchase: repository.KeycapKitPurchase{Price: floatPtr(150)},
 			}},
 		}, nil)
-	s.prefs = repository.ProfilePreferences{ShowPriceToOthers: true}
+	s.prefs = repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true}
 
 	req := s.newRequest(kbdbctx.WithUserID(s.T().Context(), "bob"), "limit=20")
 	rec := httptest.NewRecorder()
@@ -825,6 +847,8 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesT
 	item := (*got.Items)[0]
 	s.Require().NotNil(item.TotalCost)
 	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
+	s.Require().NotNil(item.Currency)
+	s.Equal("EUR", *item.Currency)
 }
 
 func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {
