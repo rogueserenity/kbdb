@@ -584,8 +584,8 @@ paths:
       description: >
         The public directory. Returns only profiles with discoverable set to
         true. Anonymous callers are allowed. Rows are ordered by username,
-        except that a
-        discord_username filter orders by the lowercased Discord handle.
+        except that a discord_username filter orders by the lowercased
+        Discord handle.
         username and discord_username are optional begins-with prefix
         filters and are mutually exclusive — supplying both returns 400. A
         next_cursor is bound to the filter it was returned under; reusing

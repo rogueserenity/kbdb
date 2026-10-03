@@ -64,7 +64,7 @@ var _ = Describe("Listing profiles", func() {
 		return out
 	}
 
-	Context("given a discoverable and a non-discoverable profile exist for the caller", func() {
+	Context("given a discoverable and a non-discoverable profile exist", func() {
 		// The directory GSIs use a constant PK, so all test users' rows
 		// share one index - specs filter by a unique prefix and assert
 		// membership, not counts.
@@ -99,27 +99,29 @@ var _ = Describe("Listing profiles", func() {
 
 		Context("given the username prefix filter matches only the discoverable one", func() {
 			Context("given the prefix is given verbatim", func() {
-				When("listing the directory", func() {
-					BeforeEach(func(ctx SpecContext) {
-						var err error
-						resp, err = client.List(ctx, "", api.ListProfilesQuery{Limit: -1, Username: discoverableName})
-						Expect(err).NotTo(HaveOccurred())
-					})
+				Context("given the caller is anonymous", func() {
+					When("listing the directory", func() {
+						BeforeEach(func(ctx SpecContext) {
+							var err error
+							resp, err = client.List(ctx, "", api.ListProfilesQuery{Limit: -1, Username: discoverableName})
+							Expect(err).NotTo(HaveOccurred())
+						})
 
-					It("returns only the discoverable profile, in full", func() {
-						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+						It("returns only the discoverable profile, in full", func() {
+							Expect(resp.StatusCode).To(Equal(http.StatusOK))
 
-						page := decodePage(resp)
-						Expect(usernames(page)).To(ConsistOf(discoverableName))
+							page := decodePage(resp)
+							Expect(usernames(page)).To(ConsistOf(discoverableName))
 
-						row := page.Items[0]
-						By("carrying the owner's user id for the list -> detail chain")
-						Expect(row.UserID).To(Equal(ownerID))
-						By("returning bio and links, the same shape as a single-profile GET")
-						Expect(row.Bio).To(HaveValue(Equal("keebs enjoyer")))
-						Expect(row.Links).To(HaveValue(HaveLen(1)))
-						By("omitting preferences, which only the owner sees")
-						Expect(row.Preferences).To(BeNil())
+							row := page.Items[0]
+							By("carrying the owner's user id for the list -> detail chain")
+							Expect(row.UserID).To(Equal(ownerID))
+							By("returning bio and links, the same shape as a single-profile GET")
+							Expect(row.Bio).To(HaveValue(Equal("keebs enjoyer")))
+							Expect(row.Links).To(HaveValue(HaveLen(1)))
+							By("omitting preferences, which only the owner sees")
+							Expect(row.Preferences).To(BeNil())
+						})
 					})
 				})
 			})
