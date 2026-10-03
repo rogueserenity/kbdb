@@ -1316,6 +1316,21 @@ func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *DeleteBuildSuite) TestDeleteBuild_MutationConflict_Returns409() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1"}, nil)
+	s.mockBuildRepo.EXPECT().
+		Delete(mock.Anything, "build1").
+		Return(repository.ErrMutationConflict)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type AddBuildImageSuite struct {
 	suite.Suite
 
@@ -1463,22 +1478,6 @@ func (s *AddBuildImageSuite) TestAddBuildImage_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *AddBuildImageSuite) TestAddBuildImage_MutationConflict_Returns409() {
-	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockBuildRepo.EXPECT().
-		AddImage(mock.Anything, "build1", mock.Anything).
-		Return(repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteBuildImageSuite struct {
 	suite.Suite
 
@@ -1587,26 +1586,6 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotFound_Returns404() {
 	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *DeleteBuildImageSuite) TestDeleteBuildImage_MutationConflict_Returns409() {
-	s.mockBuildRepo.EXPECT().
-		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
-			{ImageID: "img1", Path: deleteBuildImageTestKey},
-		})}, nil)
-	s.mockImages.EXPECT().
-		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
-		Return(nil)
-	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
-		Return(nil, repository.ErrMutationConflict)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

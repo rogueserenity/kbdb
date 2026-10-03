@@ -311,7 +311,7 @@ func UpdateBuild(
 		}
 
 		updated, err := buildRepo.Update(r.Context(), b)
-		if handleMutationError(w, r, err, log.BuildID, id) {
+		if handleTransactionError(w, r, err, log.BuildID, id) {
 			return
 		}
 
@@ -481,7 +481,13 @@ func DeleteBuild(buildRepo repository.BuildRepository, images repository.BuildIm
 			return
 		}
 
-		if err := buildRepo.Delete(ctx, id); err != nil && !errors.Is(err, repository.ErrNotFound) {
+		err = buildRepo.Delete(ctx, id)
+		if errors.Is(err, repository.ErrMutationConflict) {
+			log.FromContext(ctx).Warn("mutation conflict deleting build", log.BuildID, id)
+			problem.Conflict(w, "the resource is being modified concurrently, please retry")
+			return
+		}
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(ctx).Error("deleting build", log.Error, err, log.BuildID, id)
 			problem.Internal(w, "failed to delete build")
 			return

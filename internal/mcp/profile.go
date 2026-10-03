@@ -90,7 +90,7 @@ func handleCreateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 		case errors.Is(err, repository.ErrUsernameTaken):
 			return nil, schema.CreateProfileOutput{}, fmt.Errorf("username %q is already taken", p.Username)
 		case errors.Is(err, repository.ErrMutationConflict):
-			return nil, schema.CreateProfileOutput{}, handleMutationError(ctx, err)
+			return nil, schema.CreateProfileOutput{}, handleTransactionError(ctx, err)
 		case err != nil:
 			log.FromContext(ctx).Error("creating profile", log.Error, err)
 			return nil, schema.CreateProfileOutput{}, errors.New("failed to create profile")
@@ -111,7 +111,7 @@ func handleUpdateProfile(repo repository.ProfileRepository) mcp.ToolHandlerFor[s
 		if errors.Is(err, repository.ErrUsernameTaken) {
 			return nil, schema.UpdateProfileOutput{}, fmt.Errorf("username %q is already taken", p.Username)
 		}
-		if mutErr := handleMutationError(ctx, err); mutErr != nil {
+		if mutErr := handleTransactionError(ctx, err); mutErr != nil {
 			return nil, schema.UpdateProfileOutput{}, mutErr
 		}
 
@@ -142,7 +142,7 @@ func handleDeleteProfile(repo repository.ProfileRepository, images repository.Pr
 			}
 		}
 
-		if mutErr := handleMutationError(ctx, repo.Delete(ctx), log.ProfileID, ownerID); mutErr != nil {
+		if mutErr := handleTransactionError(ctx, repo.Delete(ctx), log.ProfileID, ownerID); mutErr != nil {
 			return nil, schema.DeleteProfileOutput{}, mutErr
 		}
 

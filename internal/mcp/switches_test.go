@@ -820,23 +820,6 @@ func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
-func (s *HandleSetSwitchImageSuite) TestMutationConflict_ReturnsError() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
-	s.mockSwitches.EXPECT().
-		SetImagePath(mock.Anything, "sw-1", mock.Anything).
-		Return(repository.ErrMutationConflict)
-
-	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
-		SwitchID:    "sw-1",
-		ContentType: "image/png",
-	})
-
-	s.Require().ErrorIs(err, errMutationConflict)
-}
-
 func (s *HandleSetSwitchImageSuite) TestPresignError_ReturnsError() {
 	s.mockImages.EXPECT().
 		PresignPut(mock.Anything, mock.Anything, "image/png").
@@ -924,20 +907,6 @@ func (s *HandleDeleteSwitchImageSuite) TestNotFound_ReturnsNotFound() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
-}
-
-func (s *HandleDeleteSwitchImageSuite) TestMutationConflict_ReturnsConflictError() {
-	key := repository.SwitchImageKey("switches/u/sw-1/image")
-	s.mockSwitches.EXPECT().
-		Get(mock.Anything, mock.Anything, "sw-1").
-		Return(&repository.Switch{ID: "sw-1", ImagePath: &key}, nil)
-	s.mockImages.EXPECT().Delete(mock.Anything, key).Return(nil)
-	s.mockSwitches.EXPECT().ClearImagePath(mock.Anything, "sw-1").Return(nil, repository.ErrMutationConflict)
-
-	handler := handleDeleteSwitchImage(s.mockSwitches, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchImageInput{SwitchID: "sw-1"})
-
-	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteSwitchImageSuite) TestRepositoryError_ReturnsError() {

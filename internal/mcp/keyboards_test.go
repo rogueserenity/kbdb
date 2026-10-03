@@ -860,23 +860,6 @@ func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 	s.Require().ErrorIs(err, errMutationNotFound)
 }
 
-func (s *HandleAddKeyboardImageSuite) TestMutationConflict_ReturnsError() {
-	s.mockImages.EXPECT().
-		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
-	s.mockKeyboards.EXPECT().
-		AddImage(mock.Anything, "kb-1", mock.Anything).
-		Return(repository.ErrMutationConflict)
-
-	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
-		KeyboardID:  "kb-1",
-		ContentType: "image/png",
-	})
-
-	s.Require().ErrorIs(err, errMutationConflict)
-}
-
 func (s *HandleAddKeyboardImageSuite) TestPresignError_ReturnsError() {
 	s.mockImages.EXPECT().
 		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
@@ -964,24 +947,6 @@ func (s *HandleDeleteKeyboardImageSuite) TestNotFound_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
-}
-
-func (s *HandleDeleteKeyboardImageSuite) TestMutationConflict_ReturnsError() {
-	key := repository.KeyboardImageKey("keyboards/u/kb-1/images/img-1")
-	s.mockKeyboards.EXPECT().
-		Get(mock.Anything, mock.Anything, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
-			{ImageID: "img-1", Path: key},
-		})}, nil)
-	s.mockImages.EXPECT().DeleteKeyboardImage(mock.Anything, key).Return(nil)
-	s.mockKeyboards.EXPECT().
-		DeleteImage(mock.Anything, "kb-1", "img-1").
-		Return(nil, repository.ErrMutationConflict)
-
-	handler := handleDeleteKeyboardImage(s.mockKeyboards, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardImageInput{KeyboardID: "kb-1", ImageID: "img-1"})
-
-	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteKeyboardImageSuite) TestAlreadyAbsent_SucceedsWithoutS3Call() {

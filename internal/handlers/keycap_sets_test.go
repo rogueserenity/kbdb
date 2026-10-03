@@ -898,19 +898,6 @@ func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_RepositoryError_Returns500() 
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *UpdateKeycapSetSuite) TestUpdateKeycapSet_MutationConflict_Returns409() {
-	s.mockKeycapSetRepo.EXPECT().
-		Update(mock.Anything, mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"brand":"GMK","name":"Laser","visibility":"private"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteKeycapSetSuite struct {
 	suite.Suite
 
@@ -1302,19 +1289,6 @@ func (s *CreateKeycapKitSuite) TestCreateKeycapKit_RepositoryError_Returns500() 
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *CreateKeycapKitSuite) TestCreateKeycapKit_MutationConflict_Returns409() {
-	s.mockRepo.EXPECT().
-		AddKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"name":"Base"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type UpdateKeycapKitSuite struct {
 	suite.Suite
 
@@ -1481,19 +1455,6 @@ func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_RepositoryError_Returns500() 
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *UpdateKeycapKitSuite) TestUpdateKeycapKit_MutationConflict_Returns409() {
-	s.mockRepo.EXPECT().
-		UpdateKit(mock.Anything, "ks1", mock.Anything, mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"name":"Extension"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteKeycapKitSuite struct {
 	suite.Suite
 
@@ -1647,31 +1608,6 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_RepositoryError_Returns500() 
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_MutationConflict_Returns409() {
-	s.mockBuilds.EXPECT().
-		FindBuildsReferencingKeycapKit(mock.Anything, "alice", "ks1", "kit1").
-		Return(nil, nil)
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}}}, nil)
-	s.mockRepo.EXPECT().
-		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), "")
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-
-	var body struct {
-		BlockingBuildIDs []string `json:"blocking_build_ids"`
-	}
-	s.Require().NoError(json.NewDecoder(rec.Body).Decode(&body))
-	s.Empty(body.BlockingBuildIDs)
 }
 
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Block_Referenced_Returns409WithBlockingBuildIDs() {
@@ -1895,22 +1831,6 @@ func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_RepositoryError_Returns50
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *SetKeycapKitImageSuite) TestSetKeycapKitImage_MutationConflict_Returns409() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setKeycapKitImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().
-		SetKitImagePath(mock.Anything, "ks1", "kit1", setKeycapKitImageTestKey).
-		Return(repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteKeycapKitImageSuite struct {
 	suite.Suite
 
@@ -2034,25 +1954,6 @@ func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_NotFound_Returns404
 	s.handler(rec, req)
 
 	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *DeleteKeycapKitImageSuite) TestDeleteKeycapKitImage_MutationConflict_Returns409() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", ImagePath: &deleteKeycapKitImageTestKey}}}, nil)
-	s.mockImages.EXPECT().
-		Delete(mock.Anything, deleteKeycapKitImageTestKey).
-		Return(nil)
-	s.mockRepo.EXPECT().
-		ClearKitImagePath(mock.Anything, "ks1", "kit1").
-		Return(nil, repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx())
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

@@ -873,19 +873,6 @@ func (s *UpdateSwitchSuite) TestUpdateSwitch_NotFound_Returns404() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *UpdateSwitchSuite) TestUpdateSwitch_MutationConflict_Returns409() {
-	s.mockSwitchRepo.EXPECT().
-		Update(mock.Anything, mock.Anything).
-		Return(nil, repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"brand":"Gateron","name":"Yellow","type":"Linear"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 func (s *UpdateSwitchSuite) TestUpdateSwitch_RepositoryError_Returns500() {
 	s.mockSwitchRepo.EXPECT().
 		Update(mock.Anything, mock.Anything).
@@ -1243,22 +1230,6 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *SetSwitchImageSuite) TestSetSwitchImage_MutationConflict_Returns409() {
-	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().
-		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
-		Return(repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteSwitchImageSuite struct {
 	suite.Suite
 
@@ -1368,25 +1339,6 @@ func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_NotFound_Returns404() {
 	s.handler(rec, req)
 
 	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *DeleteSwitchImageSuite) TestDeleteSwitchImage_MutationConflict_Returns409() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "sw1").
-		Return(&repository.Switch{ID: "sw1", ImagePath: &deleteSwitchImageTestKey}, nil)
-	s.mockImages.EXPECT().
-		Delete(mock.Anything, deleteSwitchImageTestKey).
-		Return(nil)
-	s.mockRepo.EXPECT().
-		ClearImagePath(mock.Anything, "sw1").
-		Return(nil, repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx())
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

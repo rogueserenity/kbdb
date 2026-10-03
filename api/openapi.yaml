@@ -4,9 +4,10 @@ info:
   description: >
     API for tracking a personal mechanical keyboard collection: keyboards,
     switches, keycap sets, and the builds that combine them. Routes are
-    nested under /v1/users/{userId}/... to support both a caller's own
-    collection and items other users have explicitly shared with them —
-    see the userId path parameter's description for the exact rules.
+    nested under /v1/users/{userId}/... for both the caller's own
+    collection and other users' items the caller can read under each
+    item's visibility — see the userId path parameter's description for
+    the exact rules.
   version: "1.0.0"
   contact:
     url: https://mykeebs.info
@@ -20,13 +21,13 @@ security:
 
 tags:
   - name: keyboards
-    description: Keyboards in a user's collection, or shared with the caller.
+    description: Keyboards in a user's collection.
   - name: switches
-    description: Switches in a user's collection, or shared with the caller.
+    description: Switches in a user's collection.
   - name: keycap-sets
-    description: Keycap sets (and their individual kits) in a user's collection, or shared with the caller.
+    description: Keycap sets (and their individual kits) in a user's collection.
   - name: builds
-    description: Builds combining a keyboard, switches, and keycap kits, in a user's collection or shared with the caller.
+    description: Builds combining a keyboard, switches, and keycap kits, in a user's collection.
   - name: lookups
     description: Approved value lists for enum-like fields (vendors, materials, profiles, etc.) — non-sensitive global reference data, not owned by any user. Reads require no authentication at all; there are no write routes.
   - name: profiles
@@ -44,7 +45,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        If userId is the caller's own subject, lists all of the caller's keyboards. Otherwise, lists only that user's keyboards explicitly shared with the caller (possibly empty).
+        Lists the keyboards in userId's collection that the caller can read: all of them for the owner, public and authenticated ones for any other signed-in caller, and only public ones for an anonymous caller (possibly empty).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
@@ -80,6 +81,8 @@ paths:
                 $ref: "#/components/schemas/Keyboard"
         "400":
           $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -95,7 +98,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        Returns the keyboard if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the keyboard does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+        Returns the keyboard if the caller can read it under its visibility. Returns 404 (not 403) if it doesn't exist or the caller can't read it, so an unreadable keyboard's existence isn't revealed.
       responses:
         "200":
           description: The requested keyboard.
@@ -126,6 +129,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Keyboard"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         default:
@@ -157,6 +162,8 @@ paths:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
           description: Deleted (block with no references, or detach).
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         "409":
@@ -246,7 +253,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        If userId is the caller's own subject, lists all of the caller's switches. Otherwise, lists only that user's switches explicitly shared with the caller (possibly empty).
+        Lists the switches in userId's collection that the caller can read: all of them for the owner, public and authenticated ones for any other signed-in caller, and only public ones for an anonymous caller (possibly empty).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
@@ -282,6 +289,8 @@ paths:
                 $ref: "#/components/schemas/Switch"
         "400":
           $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -297,7 +306,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        Returns the switch if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the switch does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+        Returns the switch if the caller can read it under its visibility. Returns 404 (not 403) if it doesn't exist or the caller can't read it, so an unreadable switch's existence isn't revealed.
       responses:
         "200":
           description: The requested switch.
@@ -328,6 +337,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Switch"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         default:
@@ -359,6 +370,8 @@ paths:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
           description: Deleted (block with no references, or detach).
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         "409":
@@ -408,8 +421,6 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -424,8 +435,6 @@ paths:
           description: Deleted.
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -510,7 +519,7 @@ paths:
         This is a full replace: a body-settable field that is omitted is
         cleared (e.g. omitting bio or links empties them). The avatar is not
         a body-settable field and is left untouched — manage it via
-        POST/DELETE .../profile/{userId}/image. If the requested username is
+        POST/DELETE .../profile/{identifier}/image. If the requested username is
         already claimed by a different user, the response is 409 with type
         .../errors/username-unavailable.
       requestBody:
@@ -657,8 +666,6 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -675,8 +682,6 @@ paths:
           description: Deleted, or the profile had no avatar.
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -691,7 +696,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        If userId is the caller's own subject, lists all of the caller's keycap sets. Otherwise, lists only that user's keycap sets explicitly shared with the caller (possibly empty).
+        Lists the keycap sets in userId's collection that the caller can read: all of them for the owner, public and authenticated ones for any other signed-in caller, and only public ones for an anonymous caller (possibly empty).
       parameters:
         - $ref: "#/components/parameters/Limit"
         - $ref: "#/components/parameters/Cursor"
@@ -727,6 +732,8 @@ paths:
                 $ref: "#/components/schemas/KeycapSet"
         "400":
           $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -742,7 +749,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        Returns the keycap set if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the keycap set does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+        Returns the keycap set if the caller can read it under its visibility. Returns 404 (not 403) if it doesn't exist or the caller can't read it, so an unreadable keycap set's existence isn't revealed.
       responses:
         "200":
           description: The requested keycap set.
@@ -773,10 +780,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KeycapSet"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -808,6 +815,8 @@ paths:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
           description: Deleted (block with no references, or detach).
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         "409":
@@ -849,8 +858,6 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -884,10 +891,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/KeycapKit"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -903,9 +910,7 @@ paths:
         and lists the blocking build ids; "cascade" deletes the kit and
         every build that references it, returning their ids; "detach"
         deletes the kit regardless, leaving referencing builds with a
-        dangling keycap_kits[] entry. A 409 can also mean the set is being
-        modified concurrently (unrelated to on_delete) — distinguish the
-        two by whether the Problem body has a blocking_build_ids field.
+        dangling keycap_kits[] entry.
       parameters:
         - name: on_delete
           in: query
@@ -923,13 +928,12 @@ paths:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
           description: Deleted (block with no references, or detach).
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         "409":
-          description: >
-            Either blocked by one or more referencing builds (on_delete=block, the default —
-            the Problem body has blocking_build_ids), or the set is being modified
-            concurrently (no blocking_build_ids; retry).
+          description: Blocked by one or more referencing builds (on_delete=block, the default).
           content:
             application/problem+json:
               schema:
@@ -981,8 +985,6 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
     delete:
@@ -997,8 +999,6 @@ paths:
           description: Deleted.
         "404":
           $ref: "#/components/responses/NotFoundResponse"
-        "409":
-          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -1013,7 +1013,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        If userId is the caller's own subject, lists all of the caller's builds. Otherwise, lists only that user's builds explicitly shared with the caller (possibly empty).
+        Lists the builds in userId's collection that the caller can read: all of them for the owner, public and authenticated ones for any other signed-in caller, and only public ones for an anonymous caller (possibly empty).
       parameters:
         - $ref: "#/components/parameters/BuildKeyboardIdFilter"
         - $ref: "#/components/parameters/Limit"
@@ -1050,6 +1050,10 @@ paths:
                 $ref: "#/components/schemas/Build"
         "400":
           $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -1065,7 +1069,7 @@ paths:
         - {}
         - BearerAuth: []
       description: >
-        Returns the build if it belongs to the caller, or if its owner has shared it with the caller. Returns 404 (not 403) if the build does not exist, is not owned by the caller, and is not shared with the caller — this avoids revealing that an unshared item exists.
+        Returns the build if the caller can read it under its visibility. Returns 404 (not 403) if it doesn't exist or the caller can't read it, so an unreadable build's existence isn't revealed.
       responses:
         "200":
           description: The requested build.
@@ -1096,6 +1100,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Build"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
         "409":
@@ -1113,6 +1119,8 @@ paths:
           description: Deleted.
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          $ref: "#/components/responses/ConflictResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -1191,7 +1199,7 @@ paths:
       security: []
       description: >
         Returns category names only, not their values - fetch
-        GET /lookups/{category} for a specific category's approved values.
+        GET /v1/lookups/{category} for a specific category's approved values.
       responses:
         "200":
           description: All lookup category names.
@@ -1202,8 +1210,6 @@ paths:
                 items:
                   type: string
                 example: [vendor, switch_material, keyboard_size, keyboard_layout]
-        "400":
-          $ref: "#/components/responses/ProblemResponse"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -1255,12 +1261,11 @@ components:
         token, and the `user_id` field of a profile. If this matches the
         authenticated caller's own subject, the request is against their own
         collection. If it names a different user, the request is against
-        that user's collection: reads return only items that user has
-        explicitly shared with the caller (or, for a specific item, only if
-        that item is shared with the caller — otherwise a 404, not a 403,
-        to avoid revealing that an item exists but isn't shared); writes
-        (create/update/delete) always fail with a 404 in this case, since a
-        caller can never modify another user's items. Not a PII/security
+        that user's collection: reads return only the items the caller can
+        read under each item's visibility (and a 404, not a 403, for a
+        specific item the caller can't read, so its existence isn't
+        revealed); writes (create/update/delete) always fail with a 404 in
+        this case, since a caller can never modify another user's items. Not a PII/security
         concern to expose in a URL — an IdP subject is an opaque identifier,
         not derived from email or any other identifying attribute.
     KeyboardId:
@@ -1339,9 +1344,9 @@ components:
             $ref: "#/components/schemas/Problem"
     ConflictResponse:
       description: >
-        The keycap set or build was modified by a concurrent request while
-        this one was in flight, and retries were exhausted. Safe to retry
-        the request as-is.
+        The resource was modified by a concurrent request while this one
+        was in flight, and retries were exhausted. Safe to retry the request
+        as-is.
       content:
         application/problem+json:
           schema:
@@ -1403,7 +1408,7 @@ components:
     Money:
       type: number
       format: double
-      description: A price in the collection's tracking currency.
+      description: A non-negative amount. Its currency is given by the sibling currency field.
       minimum: 0
       maximum: 100000000000000
       example: 123.45
@@ -1640,7 +1645,8 @@ components:
           items:
             $ref: "#/components/schemas/Keyboard"
         next_cursor:
-          type: [string, "null"]
+          type: string
+          description: Pass as cursor to fetch the next page. Omitted on the last page.
 
     SwitchMaterial:
       type: object
@@ -1697,6 +1703,8 @@ components:
           description: Open vocabulary — validated against the "vendor" lookup at request time.
         price:
           $ref: "#/components/schemas/Money"
+          description: >
+            The total paid for quantity switches, not the per-switch price.
         order_date:
           type: string
           format: date
@@ -1708,6 +1716,10 @@ components:
           description: Open vocabulary — validated against the "order_status" lookup at request time.
         quantity:
           type: integer
+          minimum: 1
+          description: >
+            How many switches price paid for. Needed for this switch's cost
+            to count toward a build's total_cost.
 
     SwitchPurchase:
       type: object
@@ -1718,6 +1730,8 @@ components:
           type: string
         price:
           $ref: "#/components/schemas/Money"
+          description: >
+            The total paid for quantity switches, not the per-switch price.
         currency:
           $ref: "#/components/schemas/Currency"
           description: >
@@ -1733,6 +1747,10 @@ components:
           type: string
         quantity:
           type: integer
+          minimum: 1
+          description: >
+            How many switches price paid for. Needed for this switch's cost
+            to count toward a build's total_cost.
 
     SwitchInput:
       type: object
@@ -1845,7 +1863,8 @@ components:
           items:
             $ref: "#/components/schemas/Switch"
         next_cursor:
-          type: [string, "null"]
+          type: string
+          description: Pass as cursor to fetch the next page. Omitted on the last page.
 
     ProfileLink:
       type: object
@@ -1876,7 +1895,7 @@ components:
             A freshly-minted, short-lived presigned S3 GET URL for the
             profile's avatar. Generated new on every fetch — do not cache
             or persist it. Managed via POST/DELETE
-            .../profile/{userId}/image, not via a body PUT.
+            .../profile/{identifier}/image, not via a body PUT.
 
     ProfileImageUpload:
       type: object
@@ -1908,7 +1927,7 @@ components:
           default: true
           description: >
             Whether the owner is shown price fields on their own items in
-            list responses (GET /v1/{resource}/{userId} and the
+            list responses (GET /v1/users/{userId}/{collection} and the
             equivalent MCP list tools). Does not affect single-item GET —
             an owner always sees their own item's price there, since
             editing requires knowing the current value.
@@ -1975,8 +1994,8 @@ components:
           type: string
           description: >
             The profile owner's IdP subject. Use it as the {userId} path
-            segment on the collection routes (GET /v1/keyboards/{userId},
-            /v1/builds/{userId}, etc.). Resolve a profile by username here
+            segment on the collection routes (GET /v1/users/{userId}/keyboards,
+            /v1/users/{userId}/builds, etc.). Resolve a profile by username here
             first, then read that user's collections by this id.
         username:
           type: string
@@ -2005,7 +2024,7 @@ components:
           $ref: "#/components/schemas/ProfileImage"
           description: >
             Managed via the dedicated image endpoints, not via a body
-            PUT — see POST/DELETE .../profile/{userId}/image.
+            PUT — see POST/DELETE .../profile/{identifier}/image.
 
     ProfileListPage:
       type: object
@@ -2015,7 +2034,8 @@ components:
           items:
             $ref: "#/components/schemas/Profile"
         next_cursor:
-          type: [string, "null"]
+          type: string
+          description: Pass as cursor to fetch the next page. Omitted on the last page.
 
     KeycapKitInput:
       type: object
@@ -2135,14 +2155,14 @@ components:
             on the set itself — see POST/PUT/DELETE
             .../keycap-sets/{keycapSetId}/kits[/{kitId}].
         primary_kit_id:
-          type: [string, "null"]
+          type: string
           description: >
             The kit_id, among this set's kits, whose image represents
-            the set in a list view. Null if never set, or if the kit
+            the set in a list view. Omitted if never set, or if the kit
             it named no longer exists — match against kits[].kit_id
             to find that kit's image.
         order_status:
-          type: [string, "null"]
+          type: string
           description: >
             Derived, read-only summary of every kit's
             purchase.order_status: the least-progressed status among
@@ -2150,7 +2170,7 @@ components:
             set isn't shown as Delivered while a kit is still en
             route. A kit with status Cancelled is excluded from that
             comparison unless every kit is Cancelled, in which case
-            this is Cancelled too. Null if no kit has an order_status
+            this is Cancelled too. Omitted if no kit has an order_status
             set, or the set has no kits.
         total_cost:
           $ref: "#/components/schemas/Money"
@@ -2172,7 +2192,8 @@ components:
           items:
             $ref: "#/components/schemas/KeycapSet"
         next_cursor:
-          type: [string, "null"]
+          type: string
+          description: Pass as cursor to fetch the next page. Omitted on the last page.
 
     BuildSwitchEntry:
       type: object
@@ -2418,7 +2439,10 @@ components:
         The read representation of a build. Unlike BuildInput, keyboard,
         switches[].switch, and keycap_kits[].keycap_set are denormalized
         into resolved reference objects rather than bare ids, so a client
-        can render a build without follow-up requests.
+        can render a build without follow-up requests. The build's
+        visibility governs everything shown in it: a caller who can read
+        the build sees its referenced parts' details even if they couldn't
+        read those parts directly.
       required: [id, keyboard_id]
       properties:
         id:
@@ -2490,7 +2514,8 @@ components:
           items:
             $ref: "#/components/schemas/Build"
         next_cursor:
-          type: [string, "null"]
+          type: string
+          description: Pass as cursor to fetch the next page. Omitted on the last page.
 
     Lookup:
       type: object
