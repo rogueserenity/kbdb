@@ -1137,22 +1137,6 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Block_Referenced_Returns4
 	s.ElementsMatch([]string{"build-1", "build-2"}, body.BlockingBuildIDs)
 }
 
-func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
-	s.mockKeyboards.EXPECT().
-		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1"}, nil)
-	s.mockKeyboards.EXPECT().
-		Delete(mock.Anything, "kb1").
-		Return(nil)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
-
-	s.Equal(http.StatusNoContent, rec.Code)
-	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingKeyboard
-	// was never called in detach mode.
-}
-
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Cascade_Referenced_Returns200WithDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(mock.Anything, "alice", "kb1").

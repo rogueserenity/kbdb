@@ -976,22 +976,6 @@ func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Block_Referenced_Returns409Wi
 	s.ElementsMatch([]string{"build-1", "build-2"}, body.BlockingBuildIDs)
 }
 
-func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
-	s.mockSwitches.EXPECT().
-		Get(mock.Anything, "alice", "sw1").
-		Return(&repository.Switch{ID: "sw1"}, nil)
-	s.mockSwitches.EXPECT().
-		Delete(mock.Anything, "sw1").
-		Return(nil)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
-
-	s.Equal(http.StatusNoContent, rec.Code)
-	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingSwitch
-	// was never called in detach mode.
-}
-
 func (s *DeleteSwitchSuite) TestDeleteSwitch_Owner_Cascade_Referenced_Returns200WithDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingSwitch(mock.Anything, "alice", "sw1").

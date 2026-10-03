@@ -52,9 +52,6 @@ func deleteKeycapSetImages(ctx context.Context, images repository.KeycapKitImage
 //     nothing and returns a *BlockedError listing those build ids.
 //   - OnDeleteCascade: deletes every build referencing any kit in setID
 //     first, then the set. Returns the deleted build ids.
-//   - OnDeleteDetach: deletes the set unconditionally, without even
-//     checking for references, leaving any referencing build's
-//     keycap_kits[] entry dangling.
 //
 // Every delete (the set's own kits', and any cascaded build's) removes
 // the item's S3 image object(s) before the DynamoDB record, not the
@@ -63,7 +60,7 @@ func deleteKeycapSetImages(ctx context.Context, images repository.KeycapKitImage
 // be retried to completion with nothing orphaned and no failure masked by
 // a false-success retry.
 //
-// onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
+// onDelete must be one of the two OnDeleteX values - see [ParseOnDelete].
 // DeleteKeycapSet does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
 func DeleteKeycapSet(
@@ -76,7 +73,7 @@ func DeleteKeycapSet(
 	onDelete OnDelete,
 ) (KeycapSetResult, error) {
 	switch onDelete {
-	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
+	case OnDeleteBlock, OnDeleteCascade:
 	default:
 		return KeycapSetResult{}, fmt.Errorf("deleting keycap set %q: unknown on_delete value %q", setID, onDelete)
 	}
@@ -96,10 +93,6 @@ func DeleteKeycapSet(
 			return KeycapSetResult{}, fmt.Errorf("deleting keycap set %q: %w", setID, err)
 		}
 		return KeycapSetResult{}, nil
-	}
-
-	if onDelete == OnDeleteDetach {
-		return deleteSet()
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingKeycapSet(ctx, ownerID, setID)

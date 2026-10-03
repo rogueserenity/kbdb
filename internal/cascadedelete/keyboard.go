@@ -67,9 +67,6 @@ func deleteKeyboardImages(ctx context.Context, images repository.KeyboardImageSt
 //     and returns a *BlockedError listing those build ids.
 //   - OnDeleteCascade: deletes every build referencing keyboardID first,
 //     then the keyboard. Returns the deleted build ids.
-//   - OnDeleteDetach: deletes the keyboard unconditionally, without even
-//     checking for references, leaving any referencing build's keyboard
-//     field dangling.
 //
 // Every delete (the keyboard's own, and any cascaded build's) removes the
 // item's S3 image object(s) before the DynamoDB record, not the reverse -
@@ -78,7 +75,7 @@ func deleteKeyboardImages(ctx context.Context, images repository.KeyboardImageSt
 // completion with nothing orphaned and no failure masked by a
 // false-success retry.
 //
-// onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
+// onDelete must be one of the two OnDeleteX values - see [ParseOnDelete].
 // DeleteKeyboard does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
 func DeleteKeyboard(
@@ -91,7 +88,7 @@ func DeleteKeyboard(
 	onDelete OnDelete,
 ) (KeyboardResult, error) {
 	switch onDelete {
-	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
+	case OnDeleteBlock, OnDeleteCascade:
 	default:
 		return KeyboardResult{}, fmt.Errorf("deleting keyboard %q: unknown on_delete value %q", keyboardID, onDelete)
 	}
@@ -111,10 +108,6 @@ func DeleteKeyboard(
 			return KeyboardResult{}, fmt.Errorf("deleting keyboard %q: %w", keyboardID, err)
 		}
 		return KeyboardResult{}, nil
-	}
-
-	if onDelete == OnDeleteDetach {
-		return deleteKeyboard()
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingKeyboard(ctx, ownerID, keyboardID)

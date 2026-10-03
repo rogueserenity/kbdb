@@ -600,21 +600,6 @@ func (s *HandleDeleteKeyboardSuite) TestBlock_Referenced_ReturnsError() {
 	s.Require().ErrorContains(err, "build-1")
 }
 
-func (s *HandleDeleteKeyboardSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
-	s.mockKeyboards.EXPECT().
-		Get(mock.Anything, mock.Anything, "kb-1").
-		Return(&repository.Keyboard{ID: "kb-1"}, nil)
-	s.mockKeyboards.EXPECT().
-		Delete(mock.Anything, "kb-1").
-		Return(nil)
-
-	handler := handleDeleteKeyboard(s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages)
-	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeyboardInput{KeyboardID: "kb-1", OnDelete: "detach"})
-
-	s.Require().NoError(err)
-	s.Empty(out.DeletedBuildIDs)
-}
-
 func (s *HandleDeleteKeyboardSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(mock.Anything, mock.Anything, "kb-1").

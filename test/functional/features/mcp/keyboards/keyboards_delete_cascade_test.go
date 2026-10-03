@@ -101,39 +101,4 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build, over 
 			})
 		})
 	})
-
-	Context("given on_delete is detach", func() {
-		When("the delete_keyboard tool is called", func() {
-			It("deletes the keyboard but leaves the build with a dangling keyboard reference", func(ctx SpecContext) {
-				result, err := client.CallTool(ctx, "delete_keyboard", map[string]any{
-					"keyboard_id": keyboardID,
-					"on_delete":   "detach",
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
-				keyboardGone = true
-
-				By("the keyboard no longer existing")
-				getKb, getErr := client.CallTool(ctx, "get_keyboard", map[string]any{"keyboard_id": keyboardID})
-				Expect(getErr).NotTo(HaveOccurred())
-				Expect(getKb.IsError).To(BeTrue())
-
-				By("the build still existing, still referencing the deleted keyboard id")
-				getBuild, getErr := client.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})
-				Expect(getErr).NotTo(HaveOccurred())
-				Expect(getBuild.IsError).To(BeFalse())
-
-				raw, marshalErr := json.Marshal(getBuild.StructuredContent)
-				Expect(marshalErr).NotTo(HaveOccurred())
-
-				var buildOut struct {
-					Build struct {
-						Keyboard string `json:"keyboard"`
-					} `json:"build"`
-				}
-				Expect(json.Unmarshal(raw, &buildOut)).To(Succeed())
-				Expect(buildOut.Build.Keyboard).To(Equal(keyboardID))
-			})
-		})
-	})
 })

@@ -1069,23 +1069,6 @@ func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Block_Referenced_Returns409Wi
 	// s.mockRepo has no Delete .EXPECT() - verifies nothing was deleted.
 }
 
-func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Detach_Referenced_Returns204_DoesNotCheckReferences() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1"}, nil)
-	s.mockRepo.EXPECT().
-		Delete(mock.Anything, "ks1").
-		Return(nil)
-
-	req := s.newRequest(s.ownerCtx(), "detach")
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusNoContent, rec.Code)
-	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingKeycapSet
-	// was never called in detach mode.
-}
-
 func (s *DeleteKeycapSetSuite) TestDeleteKeycapSet_Cascade_Referenced_Returns200WithDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeycapSet(mock.Anything, "alice", "ks1").
@@ -1628,23 +1611,6 @@ func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Block_Referenced_Returns409Wi
 	s.Require().NoError(json.NewDecoder(rec.Body).Decode(&body))
 	s.ElementsMatch([]string{"build-1", "build-2"}, body.BlockingBuildIDs)
 	// s.mockRepo has no DeleteKit .EXPECT() - verifies nothing was deleted.
-}
-
-func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Detach_Referenced_Returns204_DoesNotCheckReferences() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1"}}}, nil)
-	s.mockRepo.EXPECT().
-		DeleteKit(mock.Anything, "ks1", "kit1").
-		Return(nil)
-
-	req := s.newRequest(s.ownerCtx(), "detach")
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusNoContent, rec.Code)
-	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingKeycapKit
-	// was never called in detach mode.
 }
 
 func (s *DeleteKeycapKitSuite) TestDeleteKeycapKit_Cascade_Referenced_Returns200WithDeletedBuildIDs() {

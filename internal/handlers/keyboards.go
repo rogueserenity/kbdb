@@ -321,7 +321,7 @@ func DeleteKeyboard(
 
 		onDelete, ok := cascadedelete.ParseOnDelete(r.URL.Query().Get("on_delete"))
 		if !ok {
-			problem.BadRequest(w, "on_delete must be one of: block, cascade, detach")
+			problem.BadRequest(w, "on_delete must be block or cascade")
 			return
 		}
 

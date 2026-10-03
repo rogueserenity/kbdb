@@ -679,19 +679,6 @@ func (s *HandleDeleteSwitchSuite) TestBlock_Referenced_ReturnsError() {
 	s.Require().ErrorContains(err, "build-1")
 }
 
-func (s *HandleDeleteSwitchSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
-	s.mockSwitches.EXPECT().
-		Get(mock.Anything, mock.Anything, "sw-1").
-		Return(&repository.Switch{ID: "sw-1"}, nil)
-	s.mockSwitches.EXPECT().Delete(mock.Anything, "sw-1").Return(nil)
-
-	handler := handleDeleteSwitch(s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages)
-	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteSwitchInput{SwitchID: "sw-1", OnDelete: "detach"})
-
-	s.Require().NoError(err)
-	s.Empty(out.DeletedBuildIDs)
-}
-
 func (s *HandleDeleteSwitchSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingSwitch(mock.Anything, mock.Anything, "sw-1").

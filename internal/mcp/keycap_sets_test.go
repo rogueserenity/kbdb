@@ -700,19 +700,6 @@ func (s *HandleDeleteKeycapSetSuite) TestBlock_Referenced_ReturnsError() {
 	s.Require().ErrorContains(err, "build-1")
 }
 
-func (s *HandleDeleteKeycapSetSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1"}, nil)
-	s.mockRepo.EXPECT().Delete(mock.Anything, "ks-1").Return(nil)
-
-	handler := handleDeleteKeycapSet(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
-	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapSetInput{KeycapSetID: "ks-1", OnDelete: "detach"})
-
-	s.Require().NoError(err)
-	s.Empty(out.DeletedBuildIDs)
-}
-
 func (s *HandleDeleteKeycapSetSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeycapSet(mock.Anything, mock.Anything, "ks-1").
@@ -1188,19 +1175,6 @@ func (s *HandleDeleteKeycapKitSuite) TestBlock_Referenced_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1", OnDelete: "block"})
 
 	s.Require().ErrorContains(err, "build-1")
-}
-
-func (s *HandleDeleteKeycapKitSuite) TestDetach_Referenced_Succeeds_DoesNotCheckReferences() {
-	s.mockRepo.EXPECT().
-		Get(mock.Anything, mock.Anything, "ks-1").
-		Return(&repository.KeycapSet{ID: "ks-1", Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1"}}}, nil)
-	s.mockRepo.EXPECT().DeleteKit(mock.Anything, "ks-1", "kit-1").Return(nil)
-
-	handler := handleDeleteKeycapKit(s.mockRepo, s.mockBuilds, s.mockBuildImg, s.mockImages)
-	_, out, err := handler(callerContext(s.T()), nil, schema.DeleteKeycapKitInput{KeycapSetID: "ks-1", KitID: "kit-1", OnDelete: "detach"})
-
-	s.Require().NoError(err)
-	s.Empty(out.DeletedBuildIDs)
 }
 
 func (s *HandleDeleteKeycapKitSuite) TestCascade_Referenced_ReturnsDeletedBuildIDs() {

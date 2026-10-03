@@ -143,14 +143,13 @@ paths:
         userId must be the caller's own subject; deleting another user's keyboard always returns 404.
         on_delete controls what happens if the keyboard is still referenced by a build: "block" (the
         default) fails with 409 and lists the blocking build ids; "cascade" deletes the keyboard and
-        every build that references it, returning their ids; "detach" deletes the keyboard regardless,
-        leaving referencing builds with a dangling keyboard field.
+        every build that references it, returning their ids.
       parameters:
         - name: on_delete
           in: query
           schema:
             type: string
-            enum: [block, cascade, detach]
+            enum: [block, cascade]
             default: block
           description: How to handle a keyboard still referenced by one or more builds.
       responses:
@@ -161,7 +160,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted (block with no references, or detach).
+          description: Deleted (no builds referenced it).
         "400":
           $ref: "#/components/responses/ProblemResponse"
         "404":
@@ -351,14 +350,13 @@ paths:
         userId must be the caller's own subject; deleting another user's switch always returns 404.
         on_delete controls what happens if the switch is still referenced by a build: "block" (the
         default) fails with 409 and lists the blocking build ids; "cascade" deletes the switch and
-        every build that references it, returning their ids; "detach" deletes the switch regardless,
-        leaving referencing builds with a dangling switches[].switch id.
+        every build that references it, returning their ids.
       parameters:
         - name: on_delete
           in: query
           schema:
             type: string
-            enum: [block, cascade, detach]
+            enum: [block, cascade]
             default: block
           description: How to handle a switch still referenced by one or more builds.
       responses:
@@ -369,7 +367,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted (block with no references, or detach).
+          description: Deleted (no builds referenced it).
         "400":
           $ref: "#/components/responses/ProblemResponse"
         "404":
@@ -796,14 +794,13 @@ paths:
         any kit in the set is still referenced by a build: "block" (the
         default) fails with 409 and lists the blocking build ids;
         "cascade" deletes the set and every build that references any kit
-        in it, returning their ids; "detach" deletes the set regardless,
-        leaving referencing builds with a dangling keycap_kits[] entry.
+        in it, returning their ids.
       parameters:
         - name: on_delete
           in: query
           schema:
             type: string
-            enum: [block, cascade, detach]
+            enum: [block, cascade]
             default: block
           description: How to handle a set still referenced by one or more builds.
       responses:
@@ -814,7 +811,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted (block with no references, or detach).
+          description: Deleted (no builds referenced it).
         "400":
           $ref: "#/components/responses/ProblemResponse"
         "404":
@@ -908,15 +905,13 @@ paths:
         set is not an error. on_delete controls what happens if the kit is
         still referenced by a build: "block" (the default) fails with 409
         and lists the blocking build ids; "cascade" deletes the kit and
-        every build that references it, returning their ids; "detach"
-        deletes the kit regardless, leaving referencing builds with a
-        dangling keycap_kits[] entry.
+        every build that references it, returning their ids.
       parameters:
         - name: on_delete
           in: query
           schema:
             type: string
-            enum: [block, cascade, detach]
+            enum: [block, cascade]
             default: block
           description: How to handle a kit still referenced by one or more builds.
       responses:
@@ -927,7 +922,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/CascadeDeleteResult"
         "204":
-          description: Deleted (block with no references, or detach).
+          description: Deleted (no builds referenced it).
         "400":
           $ref: "#/components/responses/ProblemResponse"
         "404":

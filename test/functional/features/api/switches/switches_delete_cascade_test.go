@@ -137,44 +137,6 @@ var _ = Describe("Deleting a switch that is still referenced by a build", func()
 		})
 	})
 
-	Context("given on_delete=detach", func() {
-		When("deleting the switch", func() {
-			BeforeEach(func(ctx SpecContext) {
-				var err error
-				resp, err = switches.DeleteWithOnDelete(ctx, ownerID, switchID, ownerToken, "detach")
-				Expect(err).NotTo(HaveOccurred())
-				if resp.StatusCode == http.StatusNoContent {
-					switchGone = true
-				}
-			})
-
-			It("deletes the switch but leaves the build with a dangling switch reference", func(ctx SpecContext) {
-				By("returning 204")
-				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
-
-				By("the switch no longer existing")
-				getSw, err := switches.Get(ctx, ownerID, switchID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getSw.StatusCode).To(Equal(http.StatusNotFound))
-
-				By("the build still existing, still referencing the deleted switch id")
-				getBuild, err := builds.Get(ctx, ownerID, buildID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getBuild.StatusCode).To(Equal(http.StatusOK))
-
-				var buildBody struct {
-					Switches []struct {
-						Switch *struct{} `json:"switch"`
-						Count  int       `json:"count"`
-					} `json:"switches"`
-				}
-				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
-				Expect(buildBody.Switches).To(HaveLen(1))
-				Expect(buildBody.Switches[0].Switch).To(BeNil(), "the referenced switch was just deleted, so it can't resolve")
-			})
-		})
-	})
-
 	Context("given on_delete is an invalid value", func() {
 		When("deleting the switch", func() {
 			BeforeEach(func(ctx SpecContext) {

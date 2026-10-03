@@ -217,7 +217,7 @@ func handleDeleteKeycapSet(
 
 		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
 		if !ok {
-			return nil, schema.DeleteKeycapSetOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+			return nil, schema.DeleteKeycapSetOutput{}, errors.New("on_delete must be block or cascade")
 		}
 
 		ownerID, err := resolveOwnerID(ctx, "")
@@ -355,7 +355,7 @@ func handleDeleteKeycapKit(
 
 		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
 		if !ok {
-			return nil, schema.DeleteKeycapKitOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+			return nil, schema.DeleteKeycapKitOutput{}, errors.New("on_delete must be block or cascade")
 		}
 
 		ownerID, err := resolveOwnerID(ctx, "")

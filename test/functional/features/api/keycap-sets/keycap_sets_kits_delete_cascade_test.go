@@ -156,55 +156,6 @@ var _ = Describe("Deleting a keycap kit that is still referenced by a build", fu
 		})
 	})
 
-	Context("given on_delete=detach", func() {
-		When("deleting the kit", func() {
-			BeforeEach(func(ctx SpecContext) {
-				var err error
-				resp, err = keycapSets.DeleteKitWithOnDelete(ctx, ownerID, setID, kitID, ownerToken, "detach")
-				Expect(err).NotTo(HaveOccurred())
-				if resp.StatusCode == http.StatusNoContent {
-					kitGone = true
-				}
-			})
-
-			It("deletes the kit but leaves the build with a dangling keycap kit reference", func(ctx SpecContext) {
-				By("returning 204")
-				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
-
-				By("the kit no longer existing on the set")
-				getSet, err := keycapSets.Get(ctx, ownerID, setID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getSet.StatusCode).To(Equal(http.StatusOK))
-
-				var setBody struct {
-					Kits []struct {
-						KitID string `json:"kit_id"`
-					} `json:"kits"`
-				}
-				Expect(json.NewDecoder(getSet.Body).Decode(&setBody)).To(Succeed())
-				Expect(setBody.Kits).To(BeEmpty())
-
-				By("the build still existing, still referencing the deleted keycap kit")
-				getBuild, err := builds.Get(ctx, ownerID, buildID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getBuild.StatusCode).To(Equal(http.StatusOK))
-
-				var buildBody struct {
-					KeycapKits []struct {
-						KeycapSet *struct{} `json:"keycap_set"`
-						KitID     string    `json:"kit_id"`
-						KitName   *string   `json:"kit_name"`
-					} `json:"keycap_kits"`
-				}
-				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
-				Expect(buildBody.KeycapKits).To(HaveLen(1))
-				Expect(buildBody.KeycapKits[0].KeycapSet).To(BeNil(), "the kit no longer exists in the set, so the entry can't resolve")
-				Expect(buildBody.KeycapKits[0].KitID).To(Equal(kitID))
-				Expect(buildBody.KeycapKits[0].KitName).To(BeNil())
-			})
-		})
-	})
-
 	Context("given on_delete is an invalid value", func() {
 		When("deleting the kit", func() {
 			BeforeEach(func(ctx SpecContext) {

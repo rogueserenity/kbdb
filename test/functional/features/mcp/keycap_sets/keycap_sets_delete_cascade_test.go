@@ -103,39 +103,4 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 			})
 		})
 	})
-
-	Context("given on_delete is detach", func() {
-		When("the delete_keycap_set tool is called", func() {
-			It("deletes the set but leaves the build with a dangling keycap kit reference", func(ctx SpecContext) {
-				result, err := client.CallTool(ctx, "delete_keycap_set", map[string]any{
-					"keycap_set_id": setID,
-					"on_delete":     "detach",
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
-				setGone = true
-
-				By("the build still existing, still referencing the deleted keycap set/kit")
-				getBuild, getErr := client.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})
-				Expect(getErr).NotTo(HaveOccurred())
-				Expect(getBuild.IsError).To(BeFalse())
-
-				raw, marshalErr := json.Marshal(getBuild.StructuredContent)
-				Expect(marshalErr).NotTo(HaveOccurred())
-
-				var buildOut struct {
-					Build struct {
-						KeycapKits []struct {
-							KeycapSet string `json:"keycap_set"`
-							Kit       string `json:"kit"`
-						} `json:"keycap_kits"`
-					} `json:"build"`
-				}
-				Expect(json.Unmarshal(raw, &buildOut)).To(Succeed())
-				Expect(buildOut.Build.KeycapKits).To(HaveLen(1))
-				Expect(buildOut.Build.KeycapKits[0].KeycapSet).To(Equal(setID))
-				Expect(buildOut.Build.KeycapKits[0].Kit).To(Equal(kitID))
-			})
-		})
-	})
 })

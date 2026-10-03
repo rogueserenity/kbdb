@@ -63,11 +63,10 @@ type UpdateKeyboardOutput struct {
 // DeleteKeyboardInput is the delete_keyboard tool input. OnDelete controls
 // what happens if the keyboard is still referenced by a build: "block"
 // (the default when omitted) fails the call; "cascade" deletes the
-// keyboard and every referencing build; "detach" deletes the keyboard
-// regardless, leaving referencing builds with a dangling keyboard_id.
+// keyboard and every referencing build.
 type DeleteKeyboardInput struct {
 	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to delete"`
-	OnDelete   string `json:"on_delete,omitempty" jsonschema:"how to handle a keyboard still referenced by a build: block (default), cascade, or detach"`
+	OnDelete   string `json:"on_delete,omitempty" jsonschema:"how to handle a keyboard still referenced by a build: block (default) or cascade"`
 }
 
 // DeleteKeyboardOutput is the delete_keyboard tool output. DeletedBuildIDs
