@@ -20,8 +20,8 @@ type Profile struct {
 func (p Profile) ToAPI(ctx context.Context, prof repository.Profile, isOwner bool) (api.Profile, error) {
 	out := api.Profile{
 		Username:        prof.Username,
-		UserId:          &prof.OwnerID,
-		Discoverable:    &prof.Discoverable,
+		UserId:          prof.OwnerID,
+		Discoverable:    prof.Discoverable,
 		DiscordUsername: prof.DiscordUsername,
 		Bio:             prof.Bio,
 		Links:           p.linksToAPI(prof.Links),
