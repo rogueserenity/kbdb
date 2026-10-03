@@ -604,10 +604,38 @@ func (s *ListProfilesSuite) TestNoFilters_PassesEmptyPrefixes() {
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
 	row := (*got.Items)[0]
-	s.Require().NotNil(row.Username)
-	s.Equal("alice", *row.Username)
+	s.Equal("alice", row.Username)
 	s.Require().NotNil(row.UserId)
 	s.Equal("user-alice", *row.UserId)
+}
+
+func (s *ListProfilesSuite) TestFullProfiles_PreferencesOnlyOnCallersOwnRow() {
+	s.mockRepo.EXPECT().
+		ListPublic(mock.Anything, "", "", 20, "").
+		Return([]repository.Profile{
+			{OwnerID: "user-alice", Username: "alice", Discoverable: true, Bio: strp("alice's keebs"), Preferences: repository.ProfilePreferences{Currency: "EUR"}},
+			{OwnerID: "user-bob", Username: "bob", Discoverable: true, Bio: strp("bob's keebs"), Preferences: repository.ProfilePreferences{Currency: "GBP"}},
+		}, "", nil)
+
+	req := httptest.NewRequestWithContext(kbdbctx.WithUserID(s.T().Context(), "user-alice"), http.MethodGet, "/v1/profiles?limit=20", nil)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusOK, rec.Code)
+	var got api.ProfileListPage
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().NotNil(got.Items)
+	s.Require().Len(*got.Items, 2)
+	alice, bob := (*got.Items)[0], (*got.Items)[1]
+
+	s.Require().NotNil(alice.Bio)
+	s.Equal("alice's keebs", *alice.Bio)
+	s.Require().NotNil(alice.Preferences)
+	s.Equal("EUR", alice.Preferences.Currency)
+
+	s.Require().NotNil(bob.Bio)
+	s.Equal("bob's keebs", *bob.Bio)
+	s.Nil(bob.Preferences)
 }
 
 func (s *ListProfilesSuite) TestUsernameFilter_Forwarded() {

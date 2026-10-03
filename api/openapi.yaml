@@ -583,10 +583,9 @@ paths:
         - BearerAuth: []
       description: >
         The public directory. Returns only profiles with discoverable set to
-        true; a row carries user_id so a client can chain to
-        GET /v1/profile/{user_id}, but never bio or links. Anonymous callers
-        are allowed. Rows are ordered by username, except that a
-        discord_username filter orders by the lowercased Discord handle.
+        true. Anonymous callers are allowed. Rows are ordered by username,
+        except that a discord_username filter orders by the lowercased
+        Discord handle.
         username and discord_username are optional begins-with prefix
         filters and are mutually exclusive — supplying both returns 400. A
         next_cursor is bound to the filter it was returned under; reusing
@@ -2008,32 +2007,13 @@ components:
             Managed via the dedicated image endpoints, not via a body
             PUT — see POST/DELETE .../profile/{userId}/image.
 
-    ProfileSummary:
-      type: object
-      description: >
-        A directory-listing row. Deliberately omits bio and links — those
-        are only on the full GET /v1/profile/{identifier} response.
-      properties:
-        username:
-          type: string
-        user_id:
-          type: string
-          description: >
-            The profile owner's IdP subject, same value as Profile.user_id on
-            the single-profile response. Present so a client can chain to
-            GET /v1/profile/{user_id} or read the user's collections.
-        discord_username:
-          type: [string, "null"]
-        avatar:
-          $ref: "#/components/schemas/ProfileImage"
-
     ProfileListPage:
       type: object
       properties:
         items:
           type: array
           items:
-            $ref: "#/components/schemas/ProfileSummary"
+            $ref: "#/components/schemas/Profile"
         next_cursor:
           type: [string, "null"]
 

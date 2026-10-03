@@ -94,7 +94,7 @@ func ListProfiles(repo repository.ProfileRepository, pr repoapi.Profile) http.Ha
 			return
 		}
 
-		items := make([]api.ProfileSummary, len(profiles))
+		items := make([]api.Profile, len(profiles))
 		errs := make([]error, len(profiles))
 
 		ctx := r.Context()
@@ -104,18 +104,18 @@ func ListProfiles(repo repository.ProfileRepository, pr repoapi.Profile) http.Ha
 			go func(i int, p repository.Profile) {
 				defer wg.Done()
 
-				summary, err := pr.ToAPISummary(ctx, p)
+				item, err := pr.ToAPI(ctx, p, authz.IsOwner(ctx, p.OwnerID))
 				if err != nil {
-					errs[i] = fmt.Errorf("mapping profile %q to API summary: %w", p.Username, err)
+					errs[i] = fmt.Errorf("mapping profile %q to API: %w", p.Username, err)
 					return
 				}
-				items[i] = summary
+				items[i] = item
 			}(i, p)
 		}
 		wg.Wait()
 
 		if err := errors.Join(errs...); err != nil {
-			log.FromContext(r.Context()).Error("mapping profiles to API summaries", log.Error, err)
+			log.FromContext(r.Context()).Error("mapping profiles to API", log.Error, err)
 			problem.Internal(w, "failed to list profiles")
 			return
 		}

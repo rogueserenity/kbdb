@@ -42,26 +42,6 @@ func (p Profile) ToAPI(ctx context.Context, prof repository.Profile, isOwner boo
 	return out, nil
 }
 
-// ToAPISummary maps a repository.Profile to a directory row - no bio or
-// links, avatar presigned if set.
-func (p Profile) ToAPISummary(ctx context.Context, prof repository.Profile) (api.ProfileSummary, error) {
-	summary := api.ProfileSummary{
-		Username:        &prof.Username,
-		UserId:          &prof.OwnerID,
-		DiscordUsername: prof.DiscordUsername,
-	}
-
-	if prof.AvatarPath != nil {
-		url, err := p.resolveProfileImageURL(ctx, prof)
-		if err != nil {
-			return api.ProfileSummary{}, fmt.Errorf("presigning profile avatar: %w", err)
-		}
-		summary.Avatar = &api.ProfileImage{Url: url}
-	}
-
-	return summary, nil
-}
-
 // resolveProfileImageURL presigns prof.AvatarPath, reusing its cached GET
 // URL if still fresh enough. Callers must check prof.AvatarPath != nil
 // first.
