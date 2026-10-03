@@ -27,16 +27,23 @@ func validateBuildLookups(ctx context.Context, w http.ResponseWriter, b reposito
 	if len(fieldErrs) > 0 {
 		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
 		for i, fe := range fieldErrs {
-			invalidParams[i] = problem.InvalidParam{
-				Name:   fe.Field,
-				Reason: fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category),
-			}
+			invalidParams[i] = problem.InvalidParam{Name: fe.Field, Reason: buildFieldErrorReason(fe)}
 		}
 		problem.ValidationFailed(w, "one or more fields are not approved lookup values", invalidParams)
 		return false
 	}
 
 	return true
+}
+
+// buildFieldErrorReason special-cases the durometer/mount type cross-check
+// (lookup.ValidateBuild reports it as a FieldError with Field
+// "case_mount_type.durometer" and Category CategoryBuildCaseMountType).
+func buildFieldErrorReason(fe lookup.FieldError) string {
+	if fe.Field == "case_mount_type.durometer" && fe.Category == lookup.CategoryBuildCaseMountType {
+		return fmt.Sprintf("%q needs a case_mount_type.type that supports durometer", fe.Value)
+	}
+	return fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category)
 }
 
 // A repository error writes a 500 rather than a 400.

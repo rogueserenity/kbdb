@@ -96,6 +96,18 @@ func (s *HandleCreateBuildSuite) TestInvalidVisibility_ReturnsError() {
 	s.Require().ErrorContains(err, "visibility")
 }
 
+func (s *HandleCreateBuildSuite) TestDurometerWithoutDurometerSupport_ReturnsError() {
+	in := validBuildInput()
+	mountType, durometer := "Top Mount", "40A"
+	in.CaseMountType = &schema.BuildCaseMountType{Type: &mountType, Durometer: &durometer}
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: in})
+
+	s.Require().ErrorContains(err, "case_mount_type.durometer")
+	s.Require().ErrorContains(err, "supports durometer")
+}
+
 func (s *HandleCreateBuildSuite) TestMalformedBuildDate_ReturnsError() {
 	in := validBuildInput()
 	badDate := "not-a-date"

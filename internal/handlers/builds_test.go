@@ -179,6 +179,23 @@ func (s *CreateBuildSuite) TestCreateBuild_MultipleInvalidFields_NamesAll() {
 	s.Contains(names, "case_mount_type.type")
 }
 
+func (s *CreateBuildSuite) TestCreateBuild_DurometerWithoutDurometerSupport_Returns400() {
+	req := s.newRequest(s.ownerCtx(),
+		`{"keyboard":"kb1","visibility":"private","case_mount_type":{"type":"Top Mount","durometer":"40A"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("case_mount_type.durometer", got.InvalidParams[0].Name)
+	s.Contains(got.InvalidParams[0].Reason, "supports durometer")
+}
+
 func (s *CreateBuildSuite) TestCreateBuild_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 

@@ -307,7 +307,7 @@ func validatedBuild(ctx context.Context, in schema.BuildInput) (repository.Build
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {
-			reasons[i] = fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
+			reasons[i] = fe.Field + ": " + buildFieldErrorReason(fe)
 		}
 
 		return repository.Build{}, errors.New(strings.Join(reasons, "; "))
@@ -472,4 +472,13 @@ func handleDeleteBuildImage(
 
 		return nil, schema.DeleteBuildImageOutput{}, nil
 	}
+}
+
+// buildFieldErrorReason mirrors
+// [github.com/rogueserenity/kbdb/internal/handlers.buildFieldErrorReason].
+func buildFieldErrorReason(fe lookup.FieldError) string {
+	if fe.Field == "case_mount_type.durometer" && fe.Category == lookup.CategoryBuildCaseMountType {
+		return fmt.Sprintf("%q needs a case_mount_type.type that supports durometer", fe.Value)
+	}
+	return fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category)
 }

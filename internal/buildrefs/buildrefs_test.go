@@ -78,6 +78,32 @@ func (s *ValidateReferencesSuite) TestKeyboardRepositoryError_ReturnsError() {
 	s.Nil(fieldErrs)
 }
 
+func (s *ValidateReferencesSuite) TestPlateOfferedByKeyboard_Succeeds() {
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Design: repository.KeyboardDesign{Plates: []string{"Brass", "FR4"}}}, nil)
+
+	plate := "FR4"
+	fieldErrs, err := s.validate(repository.Build{Keyboard: "kb1", Plate: &plate})
+
+	s.Require().NoError(err)
+	s.Empty(fieldErrs)
+}
+
+func (s *ValidateReferencesSuite) TestPlateNotOfferedByKeyboard_ReturnsFieldError() {
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Design: repository.KeyboardDesign{Plates: []string{"Brass"}}}, nil)
+
+	plate := "PC"
+	fieldErrs, err := s.validate(repository.Build{Keyboard: "kb1", Plate: &plate})
+
+	s.Require().NoError(err)
+	s.Require().Len(fieldErrs, 1)
+	s.Equal("plate", fieldErrs[0].Field)
+	s.Equal("PC", fieldErrs[0].Value)
+}
+
 func (s *ValidateReferencesSuite) TestValidSwitch_Succeeds() {
 	s.mockKeyboards.EXPECT().Get(mock.Anything, "alice", "kb1").Return(&repository.Keyboard{ID: "kb1"}, nil)
 	s.mockSwitches.EXPECT().

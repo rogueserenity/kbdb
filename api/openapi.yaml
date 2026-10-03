@@ -2359,9 +2359,9 @@ components:
           type: string
           description: >
             Open vocabulary — validated against the "build_durometer" lookup
-            at request time. Only meaningful when the chosen mount type
-            supports it (see the build_case_mount_type lookup's
-            supports_durometer flag).
+            at request time. Allowed only with a type whose
+            build_case_mount_type lookup entry has supports_durometer set;
+            otherwise the request fails with 400.
 
     BuildInput:
       type: object
@@ -2375,7 +2375,9 @@ components:
           description: ID of a Keyboard resource.
         plate:
           type: string
-          description: Which of the keyboard's design.plates options is installed.
+          description: >
+            Which of the keyboard's design.plates options is installed. Must
+            be one of them, or the request fails with 400.
         case_mount_type:
           $ref: "#/components/schemas/BuildCaseMountType"
         stabs:

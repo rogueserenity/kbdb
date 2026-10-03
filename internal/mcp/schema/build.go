@@ -30,14 +30,14 @@ type BuildStabsInput struct {
 // BuildCaseMountType is BuildInput.CaseMountType.
 type BuildCaseMountType struct {
 	Type      *string `json:"type,omitempty" jsonschema:"the mount style; must be an approved build_case_mount_type lookup value"`
-	Durometer *string `json:"durometer,omitempty" jsonschema:"gasket/o-ring hardness, only meaningful for mount types that support it; must be an approved build_durometer lookup value"`
+	Durometer *string `json:"durometer,omitempty" jsonschema:"gasket/o-ring hardness; must be an approved build_durometer lookup value, and only allowed with a case mount type whose supports_durometer is set"`
 }
 
 // BuildInput has no Images field - a build's images are managed entirely
 // through their own tools, never carried in a build write.
 type BuildInput struct {
 	Keyboard      string                `json:"keyboard" jsonschema:"the id of a Keyboard resource in the caller's collection"`
-	Plate         *string               `json:"plate,omitempty" jsonschema:"which of the keyboard's design.plates options is installed"`
+	Plate         *string               `json:"plate,omitempty" jsonschema:"which of the keyboard's design.plates options is installed; must be one of them"`
 	CaseMountType *BuildCaseMountType   `json:"case_mount_type,omitempty" jsonschema:"the case's mounting style"`
 	Stabs         *BuildStabsInput      `json:"stabs,omitempty" jsonschema:"the stabilizers used"`
 	Foam          *bool                 `json:"foam,omitempty" jsonschema:"whether the build has case foam"`

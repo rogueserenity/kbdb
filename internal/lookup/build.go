@@ -39,27 +39,38 @@ func ValidateBuild(ctx context.Context, b repository.Build) []FieldError {
 // CategoryBuildCaseMountType's named-object entries (not a plain string
 // list, so it can't go through the generic fieldCheck/validateFields path -
 // mirrors [validateKeyboardLayout]'s handling of [CategoryKeyboardLayout]).
-// case_mount_type.durometer is still validated as a plain string against
-// CategoryBuildDurometer regardless of whether the chosen type's
-// supports_durometer is true - api/openapi.yaml documents durometer as
-// "only meaningful" when supported, not "rejected" otherwise, so an unused
-// durometer value is still checked for validity, just not cross-checked
-// against the type the way layout is cross-checked against size.
+// An approved case_mount_type.durometer is also cross-checked against the
+// type, the way layout is cross-checked against size: unless the type is
+// set and supports_durometer, it's reported as a FieldError on
+// "case_mount_type.durometer" carrying CategoryBuildCaseMountType. An
+// unapproved type skips the cross-check, having already been reported.
 func validateBuildCaseMountType(ctx context.Context, cmt repository.BuildCaseMountType) []FieldError {
 	var errs []FieldError
 
+	var mountType *CaseMountTypeValue
 	if cmt.Type != nil {
 		category := CategoryBuildCaseMountType
 		l, ok := GetCategory(ctx, category)
-		if !ok || !slices.ContainsFunc(l.CaseMountTypeValues(), func(v CaseMountTypeValue) bool { return v.Name == *cmt.Type }) {
+		var values []CaseMountTypeValue
+		if ok {
+			values = l.CaseMountTypeValues()
+		}
+		idx := slices.IndexFunc(values, func(v CaseMountTypeValue) bool { return v.Name == *cmt.Type })
+		if idx == -1 {
 			errs = append(errs, FieldError{Field: "case_mount_type.type", Value: *cmt.Type, Category: category})
+		} else {
+			mountType = &values[idx]
 		}
 	}
 
 	if cmt.Durometer != nil {
-		errs = append(errs, validateFields(ctx, []fieldCheck{
+		durometerErrs := validateFields(ctx, []fieldCheck{
 			{Field: "case_mount_type.durometer", Value: *cmt.Durometer, Category: CategoryBuildDurometer},
-		})...)
+		})
+		if len(durometerErrs) == 0 && (cmt.Type == nil || mountType != nil && !mountType.SupportsDurometer) {
+			durometerErrs = append(durometerErrs, FieldError{Field: "case_mount_type.durometer", Value: *cmt.Durometer, Category: CategoryBuildCaseMountType})
+		}
+		errs = append(errs, durometerErrs...)
 	}
 
 	return errs
