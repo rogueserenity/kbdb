@@ -57,9 +57,10 @@ func (b Build) FromMCP(in schema.BuildInput) repository.Build {
 }
 
 // ToMCPSummary denormalizes the keyboard via KeyboardRepo.Get and reports
-// HasImage rather than a presigned URL. Unlike [Build.ToMCP], the owner isn't unconditionally
-// shown price here. Switches and keycap kits are only fetched when
-// TotalCost will be shown, since cost is all this uses them for.
+// HasImage rather than a presigned URL. Unlike [Build.ToMCP], the owner
+// isn't unconditionally shown price here. Switches and keycap kits are only
+// fetched when TotalCost will be shown, since cost is all this uses them
+// for.
 func (b Build) ToMCPSummary(
 	ctx context.Context, build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences,
 ) (schema.BuildSummary, error) {

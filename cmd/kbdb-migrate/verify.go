@@ -277,15 +277,12 @@ func verifyBuilds(ctx context.Context, client *apiClient, dumpDir string, m *idM
 // compareBuildRefs checks that the live build's remapped references match what
 // the id map says they should be. Returns "" on match.
 func compareBuildRefs(dump, live api.Build, m *idMap) string {
-	if dump.Keyboard != nil {
+	if dumpKeyboardID := buildKeyboardID(dump); dumpKeyboardID != "" {
 		want := ""
-		if kb, ok := m.Keyboards[dump.Keyboard.Id]; ok {
+		if kb, ok := m.Keyboards[dumpKeyboardID]; ok {
 			want = kb.NewID
 		}
-		got := ""
-		if live.Keyboard != nil {
-			got = live.Keyboard.Id
-		}
+		got := buildKeyboardID(live)
 		if want == "" || got != want {
 			return fmt.Sprintf("keyboard ref: want %s, live has %s", want, got)
 		}

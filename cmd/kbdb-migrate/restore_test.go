@@ -106,3 +106,21 @@ func (s *RestoreSuite) TestBuildInputFromResolved_MissingKeyboardIsError() {
 	s.Require().Error(err)
 	s.ErrorContains(err, "no keyboard")
 }
+
+func (s *RestoreSuite) TestBuildInputFromResolved_UsesKeyboardIDWhenKeyboardMissing() {
+	full := api.Build{KeyboardId: "kb-old", Visibility: new(api.Visibility("public"))}
+
+	got, err := buildInputFromResolved(full, s.fullMap())
+
+	s.Require().NoError(err)
+	s.Equal("kb-new", got.Keyboard)
+}
+
+func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKeyboardIDIsError() {
+	full := api.Build{KeyboardId: "kb-deleted", Visibility: new(api.Visibility("public"))}
+
+	_, err := buildInputFromResolved(full, s.fullMap())
+
+	s.Require().Error(err)
+	s.ErrorContains(err, "kb-deleted")
+}

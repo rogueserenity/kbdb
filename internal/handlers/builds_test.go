@@ -1142,8 +1142,7 @@ func (s *GetBuildSuite) TestGetBuild_NonOwnerShowPriceToOthersFalse_OmitsStabsPr
 
 	var got api.Build
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Require().NotNil(got.Stabs)
-	s.Nil(got.Stabs.Price)
+	s.Nil(got.Stabs, "stabs had only a price, so nothing is left")
 }
 
 func (s *GetBuildSuite) TestGetBuild_Owner_AlwaysIncludesStabsPriceAndCurrency() {
