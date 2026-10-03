@@ -198,6 +198,9 @@ func (b Build) stabsToMCP(s *repository.BuildStabs, isOwner bool, ownerPrefs rep
 		out.Price = s.Price
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.Price)
+	if *out == (schema.BuildStabs{}) {
+		return nil
+	}
 
 	return out
 }
