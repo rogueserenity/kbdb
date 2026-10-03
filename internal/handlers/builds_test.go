@@ -668,8 +668,7 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
 	item := (*got.Items)[0]
-	s.Equal("kb1", item.KeyboardId)
-	s.Require().NotNil(item.Keyboard)
+	s.Equal("kb1", item.Keyboard.Id)
 	s.Equal("Keychron", item.Keyboard.Brand)
 	s.Equal("Q1", item.Keyboard.Name)
 }
@@ -849,28 +848,6 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesT
 	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
 	s.Require().NotNil(item.Currency)
 	s.Equal("EUR", *item.Currency)
-}
-
-func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {
-	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
-		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPublic}}, "", nil)
-	s.mockKeyboardRepo.EXPECT().
-		Get(mock.Anything, "alice", "deleted-kb").
-		Return(nil, repository.ErrNotFound)
-	s.prefs = repository.ProfilePreferences{}
-
-	req := s.newRequest(s.T().Context(), "limit=20")
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusOK, rec.Code)
-
-	var got api.BuildListPage
-	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Require().NotNil(got.Items)
-	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].Keyboard)
 }
 
 func (s *ListBuildsSuite) TestListBuilds_KeyboardRepositoryError_Returns500() {

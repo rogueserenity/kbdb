@@ -1,6 +1,7 @@
 package repomcp
 
 import (
+	"math"
 	"slices"
 
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -194,6 +195,15 @@ func sumKnownCosts(components ...*float64) *float64 {
 	}
 
 	return &total
+}
+
+// roundCents rounds a cost to whole cents.
+func roundCents(cost *float64) *float64 {
+	if cost == nil {
+		return nil
+	}
+	rounded := math.Round(*cost*100) / 100
+	return &rounded
 }
 
 // findKit returns the kit in kits with the given kitID, or nil if kitID

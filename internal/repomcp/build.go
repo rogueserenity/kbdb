@@ -2,7 +2,6 @@ package repomcp
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -75,18 +74,11 @@ func (b Build) ToMCPSummary(
 		summary.Visibility = &v
 	}
 
-	var keyboardPrice *float64
-
 	kb, err := b.KeyboardRepo.Get(ctx, build.UserID, build.Keyboard)
 	if err != nil {
-		if !errors.Is(err, repository.ErrNotFound) {
-			return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", build.Keyboard, build.ID, err)
-		}
-		// Leave summary.Keyboard nil.
-	} else {
-		summary.Keyboard = &schema.BuildSummaryKeyboard{Brand: kb.Brand, Name: kb.Name}
-		keyboardPrice = kb.Purchase.Price
+		return schema.BuildSummary{}, fmt.Errorf("getting keyboard %q for build %q: %w", build.Keyboard, build.ID, err)
 	}
+	summary.Keyboard = &schema.BuildSummaryKeyboard{Brand: kb.Brand, Name: kb.Name}
 
 	if ownerPrefs.ShowPriceSummary(isOwner) {
 		switchesCost, err := b.switchesCost(ctx, build.UserID, build.Switches)
@@ -103,7 +95,7 @@ func (b Build) ToMCPSummary(
 		if build.Stabs != nil {
 			stabsPrice = build.Stabs.Price
 		}
-		summary.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
+		summary.TotalCost = roundCents(sumKnownCosts(kb.Purchase.Price, switchesCost, keycapKitsCost, stabsPrice))
 	}
 	summary.Currency = ownerPrefs.CurrencyFor(summary.TotalCost)
 
@@ -122,10 +114,7 @@ func (b Build) switchesCost(ctx context.Context, ownerID string, entries []repos
 	for _, e := range entries {
 		sw, err := b.SwitchRepo.Get(ctx, ownerID, e.Switch)
 		if err != nil {
-			if !errors.Is(err, repository.ErrNotFound) {
-				return nil, fmt.Errorf("getting switch %q: %w", e.Switch, err)
-			}
-			continue
+			return nil, fmt.Errorf("getting switch %q: %w", e.Switch, err)
 		}
 
 		if sw.Purchase.Price != nil && sw.Purchase.Quantity != nil && *sw.Purchase.Quantity != 0 {
@@ -138,26 +127,30 @@ func (b Build) switchesCost(ctx context.Context, ownerID string, entries []repos
 }
 
 // keycapKitsCost mirrors
-// [github.com/rogueserenity/kbdb/internal/repoapi.Build.keycapKitEntriesResolvedToAPI]'s
-// calculation. A kit that no longer exists contributes nothing rather
-// than failing the whole summary.
+// [github.com/rogueserenity/kbdb/internal/repoapi.Build.keycapSetRefsToAPI]'s
+// calculation: a kit listed more than once is priced once.
 func (b Build) keycapKitsCost(
 	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
 ) (*float64, error) {
 	costs := make([]*float64, 0, len(entries))
+	seen := map[repository.BuildKeycapKitEntry]bool{}
 
 	for _, e := range entries {
-		ks, err := b.KeycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
-		if err != nil {
-			if !errors.Is(err, repository.ErrNotFound) {
-				return nil, fmt.Errorf("getting keycap set %q: %w", e.KeycapSet, err)
-			}
+		if seen[e] {
 			continue
 		}
+		seen[e] = true
 
-		if kit := findKit(&e.Kit, ks.Kits); kit != nil {
-			costs = append(costs, kit.Purchase.Price)
+		ks, err := b.KeycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
+		if err != nil {
+			return nil, fmt.Errorf("getting keycap set %q: %w", e.KeycapSet, err)
 		}
+
+		kit := findKit(&e.Kit, ks.Kits)
+		if kit == nil {
+			return nil, fmt.Errorf("getting kit %q of keycap set %q: %w", e.Kit, e.KeycapSet, repository.ErrNotFound)
+		}
+		costs = append(costs, kit.Purchase.Price)
 	}
 
 	return sumKnownCosts(costs...), nil

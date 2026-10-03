@@ -234,7 +234,7 @@ func (s *BuildToMCPSummarySuite) TestResolvableKeyboard_DenormalizesBrandAndName
 	s.Equal("Q1", out.Keyboard.Name)
 }
 
-func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFailing() {
+func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_ReturnsError() {
 	b := repository.Build{UserID: "alice", ID: "build-1", Keyboard: "kb-1"}
 
 	keyboards := mocks.NewMockKeyboardRepository(s.T())
@@ -242,11 +242,8 @@ func (s *BuildToMCPSummarySuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFai
 		Get(mock.Anything, "alice", "kb-1").
 		Return(nil, repository.ErrNotFound)
 
-	out, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b, false, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Nil(out.Keyboard)
-	s.Equal("kb-1", out.KeyboardID)
+	_, err := Build{KeyboardRepo: keyboards}.ToMCPSummary(context.Background(), b, false, repository.ProfilePreferences{})
+	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
 func (s *BuildToMCPSummarySuite) TestKeyboardRepositoryError_ReturnsError() {
@@ -413,39 +410,78 @@ func (s *BuildToMCPSummarySuite) TestSwitchWithoutQuantity_ExcludedFromTotalRath
 	s.Nil(out.TotalCost)
 }
 
-func (s *BuildToMCPSummarySuite) TestDeletedComponent_ExcludedFromTotalRatherThanFailing() {
-	price := 180.0
-
+func (s *BuildToMCPSummarySuite) TestSwitchNotFound_ReturnsError() {
 	b := repository.Build{
 		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
-		Switches:   []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
-		KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}},
+		Switches: []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
 	}
 
 	keyboards := mocks.NewMockKeyboardRepository(s.T())
 	keyboards.EXPECT().
 		Get(mock.Anything, "alice", "kb-1").
-		Return(&repository.Keyboard{
-			UserID: "alice", ID: "kb-1",
-			Purchase: repository.KeyboardPurchase{Price: &price},
-		}, nil)
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
 
 	switches := mocks.NewMockSwitchRepository(s.T())
 	switches.EXPECT().
 		Get(mock.Anything, "alice", "sw-1").
 		Return(nil, repository.ErrNotFound)
 
+	_, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *BuildToMCPSummarySuite) TestKitNotFound_ReturnsError() {
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
 	sets := mocks.NewMockKeycapSetRepository(s.T())
 	sets.EXPECT().
 		Get(mock.Anything, "alice", "ks-1").
-		Return(nil, repository.ErrNotFound)
+		Return(&repository.KeycapSet{UserID: "alice", ID: "ks-1"}, nil)
 
-	out, err := Build{KeyboardRepo: keyboards, SwitchRepo: switches, KeycapSetRepo: sets}.ToMCPSummary(
+	_, err := Build{KeyboardRepo: keyboards, KeycapSetRepo: sets}.ToMCPSummary(
+		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *BuildToMCPSummarySuite) TestDuplicateKit_PricedOnceAndRoundedToCents() {
+	kitPrice := 100.005
+
+	b := repository.Build{
+		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		KeycapKits: []repository.BuildKeycapKitEntry{
+			{KeycapSet: "ks-1", Kit: "kit-1"},
+			{KeycapSet: "ks-1", Kit: "kit-1"},
+		},
+	}
+
+	keyboards := mocks.NewMockKeyboardRepository(s.T())
+	keyboards.EXPECT().
+		Get(mock.Anything, "alice", "kb-1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb-1"}, nil)
+
+	sets := mocks.NewMockKeycapSetRepository(s.T())
+	sets.EXPECT().
+		Get(mock.Anything, "alice", "ks-1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks-1",
+			Kits: map[string]repository.KeycapKit{"kit-1": {KitID: "kit-1", Purchase: repository.KeycapKitPurchase{Price: &kitPrice}}},
+		}, nil).Once()
+
+	out, err := Build{KeyboardRepo: keyboards, KeycapSetRepo: sets}.ToMCPSummary(
 		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
-	s.InDelta(180.0, *out.TotalCost, 0.001)
+	s.InDelta(100.01, *out.TotalCost, 0.0001)
 }
 
 func (s *BuildToMCPSummarySuite) TestSwitchRepositoryError_ReturnsError() {

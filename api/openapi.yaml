@@ -2270,21 +2270,20 @@ components:
 
     BuildSwitchEntryResolved:
       type: object
-      required: [count]
+      required: [switch, count]
       properties:
         switch:
           $ref: "#/components/schemas/BuildSwitchRef"
-          description: >
-            Omitted if the referenced Switch no longer exists (e.g. deleted
-            after the build referenced it).
         count:
           type: integer
           minimum: 1
 
     BuildKeycapSetRef:
       type: object
-      description: A build's denormalized KeycapSet reference.
-      required: [id, brand, name]
+      description: >
+        A build's denormalized KeycapSet reference, holding the kits of
+        that set the build uses.
+      required: [id, brand, name, kits]
       properties:
         id:
           type: string
@@ -2294,24 +2293,23 @@ components:
           type: string
         profile:
           type: string
+        kits:
+          type: array
+          minItems: 1
+          items:
+            $ref: "#/components/schemas/BuildKeycapKitRef"
 
-    BuildKeycapKitEntryResolved:
+    BuildKeycapKitRef:
       type: object
-      required: [kit_id]
+      description: A build's denormalized KeycapKit reference.
+      required: [kit_id, name]
       properties:
-        keycap_set:
-          $ref: "#/components/schemas/BuildKeycapSetRef"
-          description: >
-            Omitted if the referenced KeycapSet (or the kit within it) no
-            longer exists (e.g. deleted after the build referenced it) - in
-            that case kit_name and kit_image_url are omitted too.
         kit_id:
           type: string
-          description: kit_id of the referenced keycap set's kit (see KeycapKit.kit_id).
-        kit_name:
+          description: kit_id of the referenced kit (see KeycapKit.kit_id).
+        name:
           type: string
-          description: Denormalized name of the referenced kit.
-        kit_image_url:
+        image_url:
           type: string
           format: uri
           description: >
@@ -2431,28 +2429,20 @@ components:
     Build:
       type: object
       description: >
-        The read representation of a build. Unlike BuildInput, keyboard,
-        switches[].switch, and keycap_kits[].keycap_set are denormalized
-        into resolved reference objects rather than bare ids, so a client
-        can render a build without follow-up requests. The build's
+        The read representation of a build. Unlike BuildInput, keyboard
+        and switches[].switch are denormalized into resolved reference
+        objects rather than bare ids, and BuildInput's keycap_kits are
+        grouped by set into keycap_sets, so a client can render a build
+        without follow-up requests. The build's
         visibility governs everything shown in it: a caller who can read
         the build sees its referenced parts' details even if they couldn't
         read those parts directly.
-      required: [id, keyboard_id]
+      required: [id, keyboard]
       properties:
         id:
           type: string
-        keyboard_id:
-          type: string
-          description: >
-            The id of the referenced Keyboard resource - present even if
-            that keyboard no longer exists, in which case keyboard is
-            omitted.
         keyboard:
           $ref: "#/components/schemas/BuildKeyboardRef"
-          description: >
-            Omitted if the referenced Keyboard no longer exists (e.g.
-            deleted after the build referenced it).
         plate:
           type: string
           description: Which of the keyboard's design.plates options is installed.
@@ -2466,10 +2456,13 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/BuildSwitchEntryResolved"
-        keycap_kits:
+        keycap_sets:
           type: array
           items:
-            $ref: "#/components/schemas/BuildKeycapKitEntryResolved"
+            $ref: "#/components/schemas/BuildKeycapSetRef"
+          description: >
+            The keycap sets whose kits the build uses, in the order each set
+            first appears in the build's keycap_kits.
         build_date:
           type: string
           format: date

@@ -277,15 +277,12 @@ func verifyBuilds(ctx context.Context, client *apiClient, dumpDir string, m *idM
 // compareBuildRefs checks that the live build's remapped references match what
 // the id map says they should be. Returns "" on match.
 func compareBuildRefs(dump, live api.Build, m *idMap) string {
-	if dumpKeyboardID := buildKeyboardID(dump); dumpKeyboardID != "" {
-		want := ""
-		if kb, ok := m.Keyboards[dumpKeyboardID]; ok {
-			want = kb.NewID
-		}
-		got := buildKeyboardID(live)
-		if want == "" || got != want {
-			return fmt.Sprintf("keyboard ref: want %s, live has %s", want, got)
-		}
+	wantKeyboard := ""
+	if kb, ok := m.Keyboards[dump.Keyboard.Id]; ok {
+		wantKeyboard = kb.NewID
+	}
+	if wantKeyboard == "" || live.Keyboard.Id != wantKeyboard {
+		return fmt.Sprintf("keyboard ref: want %s, live has %s", wantKeyboard, live.Keyboard.Id)
 	}
 
 	dumpSwitches := derefSwitches(dump.Switches)
@@ -295,15 +292,10 @@ func compareBuildRefs(dump, live api.Build, m *idMap) string {
 	}
 	for i := range dumpSwitches {
 		want := ""
-		if dumpSwitches[i].Switch != nil {
-			if sw, ok := m.Switches[dumpSwitches[i].Switch.Id]; ok {
-				want = sw.NewID
-			}
+		if sw, ok := m.Switches[dumpSwitches[i].Switch.Id]; ok {
+			want = sw.NewID
 		}
-		got := ""
-		if liveSwitches[i].Switch != nil {
-			got = liveSwitches[i].Switch.Id
-		}
+		got := liveSwitches[i].Switch.Id
 		if want == "" || got != want {
 			return fmt.Sprintf("switch[%d] ref: want %s, live has %s", i, want, got)
 		}
@@ -312,25 +304,19 @@ func compareBuildRefs(dump, live api.Build, m *idMap) string {
 		}
 	}
 
-	dumpKits := derefKits(dump.KeycapKits)
-	liveKits := derefKits(live.KeycapKits)
+	dumpKits := flattenKits(dump.KeycapSets)
+	liveKits := flattenKits(live.KeycapSets)
 	if len(dumpKits) != len(liveKits) {
-		return fmt.Sprintf("keycap kit entry count: dump %d, live %d", len(dumpKits), len(liveKits))
+		return fmt.Sprintf("keycap kit count: dump %d, live %d", len(dumpKits), len(liveKits))
 	}
 	for i := range dumpKits {
 		wantSet, wantKit := "", ""
-		if dumpKits[i].KeycapSet != nil {
-			if set, ok := m.KeycapSets[dumpKits[i].KeycapSet.Id]; ok {
-				wantSet = set.NewID
-				wantKit = set.Kits[dumpKits[i].KitId]
-			}
+		if set, ok := m.KeycapSets[dumpKits[i].KeycapSet]; ok {
+			wantSet = set.NewID
+			wantKit = set.Kits[dumpKits[i].Kit]
 		}
-		gotSet := ""
-		if liveKits[i].KeycapSet != nil {
-			gotSet = liveKits[i].KeycapSet.Id
-		}
-		if wantSet == "" || gotSet != wantSet || wantKit == "" || liveKits[i].KitId != wantKit {
-			return fmt.Sprintf("keycap_kit[%d] ref: want set %s kit %s, live has set %s kit %s", i, wantSet, wantKit, gotSet, liveKits[i].KitId)
+		if wantSet == "" || liveKits[i].KeycapSet != wantSet || wantKit == "" || liveKits[i].Kit != wantKit {
+			return fmt.Sprintf("keycap kit %d ref: want set %s kit %s, live has set %s kit %s", i, wantSet, wantKit, liveKits[i].KeycapSet, liveKits[i].Kit)
 		}
 	}
 	return ""
@@ -343,11 +329,17 @@ func derefSwitches(p *[]api.BuildSwitchEntryResolved) []api.BuildSwitchEntryReso
 	return *p
 }
 
-func derefKits(p *[]api.BuildKeycapKitEntryResolved) []api.BuildKeycapKitEntryResolved {
+func flattenKits(p *[]api.BuildKeycapSetRef) []api.BuildKeycapKitEntry {
 	if p == nil {
 		return nil
 	}
-	return *p
+	var out []api.BuildKeycapKitEntry
+	for _, ks := range *p {
+		for _, kit := range ks.Kits {
+			out = append(out, api.BuildKeycapKitEntry{KeycapSet: ks.Id, Kit: kit.KitId})
+		}
+	}
+	return out
 }
 
 // ---- image verification ----

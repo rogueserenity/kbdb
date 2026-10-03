@@ -462,22 +462,6 @@ func (s *HandleListBuildsSuite) TestSingleBuild_ResolvableKeyboard_DenormalizesB
 	s.Equal("Q1", out.Builds[0].Keyboard.Name)
 }
 
-func (s *HandleListBuildsSuite) TestBuildWithKeyboardNotFound_OmitsKeyboard() {
-	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
-		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPrivate}}, "", nil)
-	s.mockKeyboards.EXPECT().
-		Get(mock.Anything, callerID, "deleted-kb").
-		Return(nil, repository.ErrNotFound)
-
-	handler := s.handler()
-	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
-
-	s.Require().NoError(err)
-	s.Require().Len(out.Builds, 1)
-	s.Nil(out.Builds[0].Keyboard)
-}
-
 func (s *HandleListBuildsSuite) TestKeyboardRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").

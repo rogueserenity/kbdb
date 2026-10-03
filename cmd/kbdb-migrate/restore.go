@@ -400,23 +400,11 @@ func dumpedVisibility(v *api.Visibility) (api.Visibility, error) {
 	return *v, nil
 }
 
-// buildKeyboardID falls back to keyboard.id for dumps taken before Build
-// had keyboard_id.
-func buildKeyboardID(b api.Build) string {
-	if b.KeyboardId != "" {
-		return b.KeyboardId
-	}
-	if b.Keyboard != nil {
-		return b.Keyboard.Id
-	}
-	return ""
-}
-
 // buildInputFromResolved collapses a resolved Build GET body to a BuildInput,
 // remapping every cross-entity reference through m. A reference with no
 // mapping is a hard error — we never POST a build with a dangling ref.
 func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
-	keyboardID := buildKeyboardID(full)
+	keyboardID := full.Keyboard.Id
 	if keyboardID == "" {
 		return api.BuildInput{}, errors.New("resolved build has no keyboard")
 	}
@@ -443,9 +431,6 @@ func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
 	if full.Switches != nil {
 		entries := make([]api.BuildSwitchEntry, 0, len(*full.Switches))
 		for _, e := range *full.Switches {
-			if e.Switch == nil {
-				return api.BuildInput{}, errors.New("resolved build has a switch entry with no switch (deleted before the dump?)")
-			}
 			sw, ok := m.Switches[e.Switch.Id]
 			if !ok {
 				return api.BuildInput{}, fmt.Errorf("switch %s is not in the id map; restore switches first", e.Switch.Id)
@@ -455,21 +440,20 @@ func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
 		input.Switches = &entries
 	}
 
-	if full.KeycapKits != nil {
-		entries := make([]api.BuildKeycapKitEntry, 0, len(*full.KeycapKits))
-		for _, e := range *full.KeycapKits {
-			if e.KeycapSet == nil {
-				return api.BuildInput{}, errors.New("resolved build has a keycap-kit entry with no keycap set (deleted before the dump?)")
-			}
-			set, ok := m.KeycapSets[e.KeycapSet.Id]
+	if full.KeycapSets != nil {
+		var entries []api.BuildKeycapKitEntry
+		for _, ks := range *full.KeycapSets {
+			set, ok := m.KeycapSets[ks.Id]
 			if !ok {
-				return api.BuildInput{}, fmt.Errorf("keycap set %s is not in the id map; restore keycap sets first", e.KeycapSet.Id)
+				return api.BuildInput{}, fmt.Errorf("keycap set %s is not in the id map; restore keycap sets first", ks.Id)
 			}
-			newKit, ok := set.Kits[e.KitId]
-			if !ok {
-				return api.BuildInput{}, fmt.Errorf("kit %s of keycap set %s is not in the id map", e.KitId, e.KeycapSet.Id)
+			for _, kit := range ks.Kits {
+				newKit, ok := set.Kits[kit.KitId]
+				if !ok {
+					return api.BuildInput{}, fmt.Errorf("kit %s of keycap set %s is not in the id map", kit.KitId, ks.Id)
+				}
+				entries = append(entries, api.BuildKeycapKitEntry{KeycapSet: set.NewID, Kit: newKit})
 			}
-			entries = append(entries, api.BuildKeycapKitEntry{KeycapSet: set.NewID, Kit: newKit})
 		}
 		input.KeycapKits = &entries
 	}

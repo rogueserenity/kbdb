@@ -39,9 +39,9 @@ var _ = Describe("Listing builds", func() {
 	})
 
 	type listItem struct {
-		ID         string `json:"id"`
-		KeyboardID string `json:"keyboard_id"`
-		Keyboard   *struct {
+		ID       string `json:"id"`
+		Keyboard *struct {
+			ID    string `json:"id"`
 			Brand string `json:"brand"`
 			Name  string `json:"name"`
 		} `json:"keyboard"`
@@ -122,8 +122,8 @@ var _ = Describe("Listing builds", func() {
 
 					By("denormalizing the referenced keyboard's brand/name onto every item")
 					for _, item := range items {
-						Expect(item.KeyboardID).To(Equal(keyboardID))
 						Expect(item.Keyboard).NotTo(BeNil())
+						Expect(item.Keyboard.ID).To(Equal(keyboardID))
 						Expect(item.Keyboard.Brand).To(Equal("Keychron"))
 						Expect(item.Keyboard.Name).To(Equal("Q1"))
 					}
