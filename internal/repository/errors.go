@@ -21,10 +21,10 @@ var ErrAlreadyExists = errors.New("already exists")
 // surface it against the username field.
 var ErrUsernameTaken = errors.New("username taken")
 
-// ErrMutationConflict is returned when a repository method that
-// read-modify-writes an item (e.g. KeycapSetRepository's kit/set mutations)
-// loses a bounded number of optimistic-concurrency retries in a row -
-// concurrent writers keep winning the race. Handlers check for it via
+// ErrMutationConflict is returned when a repository method that writes a
+// transaction (BuildRepository's and ProfileRepository's create, update and
+// delete) loses a bounded number of retries in a row - concurrent writers
+// keep winning the race. Handlers check for it via
 // errors.Is to return 409 instead of a generic 500: the client's fix is to
 // retry the whole request, not to change anything about it.
 var ErrMutationConflict = errors.New("mutation conflict: too many concurrent writers")

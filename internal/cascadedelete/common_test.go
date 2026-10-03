@@ -34,12 +34,6 @@ func (s *ParseOnDeleteSuite) TestCascade_Parses() {
 	s.Equal(cascadedelete.OnDeleteCascade, got)
 }
 
-func (s *ParseOnDeleteSuite) TestDetach_Parses() {
-	got, ok := cascadedelete.ParseOnDelete("detach")
-	s.True(ok)
-	s.Equal(cascadedelete.OnDeleteDetach, got)
-}
-
 func (s *ParseOnDeleteSuite) TestUnknown_ReturnsFalse() {
 	_, ok := cascadedelete.ParseOnDelete("bogus")
 	s.False(ok)

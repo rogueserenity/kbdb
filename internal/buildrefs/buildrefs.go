@@ -4,11 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
 
-// FieldError reports that Field's Value doesn't reference a real resource
+// FieldError reports that Field's Value doesn't match a real resource
 // owned by the caller. Shaped like
 // [github.com/rogueserenity/kbdb/internal/lookup.FieldError] (Field/Value,
 // no Category) so REST/MCP callers can render it the same way they
@@ -19,9 +20,10 @@ type FieldError struct {
 	Reason string
 }
 
-// ValidateReferences doesn't report an unset/empty Keyboard or empty
-// Switches/KeycapKits entry - required/minLength constraints upstream
-// already guard those.
+// ValidateReferences also checks that Plate is one of the referenced
+// keyboard's design.plates. It doesn't report an unset/empty Keyboard or
+// empty Switches/KeycapKits entry - required/minLength constraints
+// upstream already guard those.
 //
 // "Doesn't exist" and "exists but owned by someone else" are reported
 // identically (every Get's ErrNotFound is already scoped to ownerID's
@@ -38,7 +40,7 @@ func ValidateReferences(
 	var fieldErrs []FieldError
 
 	if b.Keyboard != "" {
-		_, err := keyboardRepo.Get(ctx, ownerID, b.Keyboard)
+		kb, err := keyboardRepo.Get(ctx, ownerID, b.Keyboard)
 		switch {
 		case errors.Is(err, repository.ErrNotFound):
 			fieldErrs = append(fieldErrs, FieldError{
@@ -47,6 +49,11 @@ func ValidateReferences(
 			})
 		case err != nil:
 			return nil, fmt.Errorf("checking keyboard %q: %w", b.Keyboard, err)
+		case b.Plate != nil && !slices.Contains(kb.Design.Plates, *b.Plate):
+			fieldErrs = append(fieldErrs, FieldError{
+				Field: "plate", Value: *b.Plate,
+				Reason: fmt.Sprintf("is not one of keyboard %q's design.plates", b.Keyboard),
+			})
 		}
 	}
 

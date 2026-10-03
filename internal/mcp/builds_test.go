@@ -96,6 +96,18 @@ func (s *HandleCreateBuildSuite) TestInvalidVisibility_ReturnsError() {
 	s.Require().ErrorContains(err, "visibility")
 }
 
+func (s *HandleCreateBuildSuite) TestDurometerWithoutDurometerSupport_ReturnsError() {
+	in := validBuildInput()
+	mountType, durometer := "Top Mount", "40A"
+	in.CaseMountType = &schema.BuildCaseMountType{Type: &mountType, Durometer: &durometer}
+
+	handler := s.handler()
+	_, _, err := handler(callerContext(s.T()), nil, schema.CreateBuildInput{BuildInput: in})
+
+	s.Require().ErrorContains(err, "case_mount_type.durometer")
+	s.Require().ErrorContains(err, "supports durometer")
+}
+
 func (s *HandleCreateBuildSuite) TestMalformedBuildDate_ReturnsError() {
 	in := validBuildInput()
 	badDate := "not-a-date"
@@ -462,22 +474,6 @@ func (s *HandleListBuildsSuite) TestSingleBuild_ResolvableKeyboard_DenormalizesB
 	s.Equal("Q1", out.Builds[0].Keyboard.Name)
 }
 
-func (s *HandleListBuildsSuite) TestBuildWithKeyboardNotFound_OmitsKeyboard() {
-	s.mockBuilds.EXPECT().
-		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
-		Return([]repository.Build{{UserID: callerID, ID: "build-1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPrivate}}, "", nil)
-	s.mockKeyboards.EXPECT().
-		Get(mock.Anything, callerID, "deleted-kb").
-		Return(nil, repository.ErrNotFound)
-
-	handler := s.handler()
-	_, out, err := handler(callerContext(s.T()), nil, schema.ListBuildsInput{})
-
-	s.Require().NoError(err)
-	s.Require().Len(out.Builds, 1)
-	s.Nil(out.Builds[0].Keyboard)
-}
-
 func (s *HandleListBuildsSuite) TestKeyboardRepositoryError_ReturnsError() {
 	s.mockBuilds.EXPECT().
 		List(mock.Anything, callerID, mock.Anything, mock.Anything, 20, "").
@@ -779,6 +775,18 @@ func (s *HandleDeleteBuildSuite) TestRepositoryError_ReturnsError() {
 	s.Require().ErrorContains(err, "failed to delete build")
 }
 
+func (s *HandleDeleteBuildSuite) TestMutationConflict_ReturnsConflictError() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, mock.Anything, "build-1").
+		Return(&repository.Build{ID: "build-1"}, nil)
+	s.mockBuilds.EXPECT().Delete(mock.Anything, mock.Anything).Return(repository.ErrMutationConflict)
+
+	handler := handleDeleteBuild(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildInput{BuildID: "build-1"})
+
+	s.Require().ErrorIs(err, errMutationConflict)
+}
+
 type HandleAddBuildImageSuite struct {
 	suite.Suite
 
@@ -852,23 +860,6 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
-}
-
-func (s *HandleAddBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
-	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/upload", nil)
-	s.mockBuilds.EXPECT().
-		AddImage(mock.Anything, "build-1", mock.Anything).
-		Return(repository.ErrMutationConflict)
-
-	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
-		BuildID:     "build-1",
-		ContentType: "image/png",
-	})
-
-	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
@@ -986,22 +977,6 @@ func (s *HandleDeleteBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "missing", ImageID: "img-1"})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
-}
-
-func (s *HandleDeleteBuildImageSuite) TestMutationConflict_ReturnsConflictError() {
-	key := repository.BuildImageKey("builds/u/build-1/images/img-1")
-	s.mockBuilds.EXPECT().
-		Get(mock.Anything, mock.Anything, "build-1").
-		Return(&repository.Build{ID: "build-1", Images: repository.BuildImagesMap([]repository.BuildImage{
-			{ImageID: "img-1", Path: key},
-		})}, nil)
-	s.mockImages.EXPECT().DeleteBuildImage(mock.Anything, key).Return(nil)
-	s.mockBuilds.EXPECT().DeleteImage(mock.Anything, "build-1", "img-1").Return(nil, repository.ErrMutationConflict)
-
-	handler := handleDeleteBuildImage(s.mockBuilds, s.mockImages)
-	_, _, err := handler(callerContext(s.T()), nil, schema.DeleteBuildImageInput{BuildID: "build-1", ImageID: "img-1"})
-
-	s.Require().ErrorIs(err, errMutationConflict)
 }
 
 func (s *HandleDeleteBuildImageSuite) TestRepositoryError_ReturnsError() {

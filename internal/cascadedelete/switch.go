@@ -25,9 +25,6 @@ type SwitchResult struct {
 //     returns a *BlockedError listing those build ids.
 //   - OnDeleteCascade: deletes every build referencing switchID first, then
 //     the switch. Returns the deleted build ids.
-//   - OnDeleteDetach: deletes the switch unconditionally, without even
-//     checking for references, leaving any referencing build's
-//     switches[].switch field dangling.
 //
 // Every delete (the switch's own, and any cascaded build's) removes the
 // item's S3 image object(s) before the DynamoDB record, not the reverse -
@@ -36,7 +33,7 @@ type SwitchResult struct {
 // completion with nothing orphaned and no failure masked by a
 // false-success retry.
 //
-// onDelete must be one of the three OnDeleteX values - see [ParseOnDelete].
+// onDelete must be one of the two OnDeleteX values - see [ParseOnDelete].
 // DeleteSwitch does no authorization itself; ownerID must already be the
 // caller's own resolved subject.
 func DeleteSwitch(
@@ -49,7 +46,7 @@ func DeleteSwitch(
 	onDelete OnDelete,
 ) (SwitchResult, error) {
 	switch onDelete {
-	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
+	case OnDeleteBlock, OnDeleteCascade:
 	default:
 		return SwitchResult{}, fmt.Errorf("deleting switch %q: unknown on_delete value %q", switchID, onDelete)
 	}
@@ -71,10 +68,6 @@ func DeleteSwitch(
 			return SwitchResult{}, fmt.Errorf("deleting switch %q: %w", switchID, err)
 		}
 		return SwitchResult{}, nil
-	}
-
-	if onDelete == OnDeleteDetach {
-		return deleteSwitch()
 	}
 
 	buildIDs, err := buildRepo.FindBuildsReferencingSwitch(ctx, ownerID, switchID)

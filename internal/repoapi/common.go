@@ -2,6 +2,7 @@ package repoapi
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	openapi_types "github.com/oapi-codegen/runtime/types"
@@ -73,6 +74,15 @@ func sumKnownCosts(components ...*float64) *float64 {
 	}
 
 	return &total
+}
+
+// roundCents rounds a cost to whole cents.
+func roundCents(cost *float64) *float64 {
+	if cost == nil {
+		return nil
+	}
+	rounded := math.Round(*cost*100) / 100
+	return &rounded
 }
 
 // ownerVisibility returns v for the item's owner and nil for anyone else.

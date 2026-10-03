@@ -122,25 +122,6 @@ func (s *DeleteKeyboardSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_De
 	// nothing was deleted.
 }
 
-func (s *DeleteKeyboardSuite) TestDetach_ReferencingBuilds_DeletesKeyboardAnyway() {
-	// detach must NOT call FindBuildsReferencingKeyboard at all - it
-	// doesn't care about references.
-	s.mockKeyboards.EXPECT().
-		Get(s.ctx, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1"}, nil)
-	s.mockKeyboards.EXPECT().
-		Delete(s.ctx, "kb1").
-		Return(nil)
-
-	result, err := cascadedelete.DeleteKeyboard(
-		s.ctx, s.mockKeyboards, s.mockBuilds, s.mockBuildImages, s.mockKeyboardImages,
-		"alice", "kb1", cascadedelete.OnDeleteDetach,
-	)
-
-	s.Require().NoError(err)
-	s.Empty(result.DeletedBuildIDs)
-}
-
 func (s *DeleteKeyboardSuite) TestCascade_NoReferencingBuilds_DeletesOnlyKeyboard() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(s.ctx, "alice", "kb1").

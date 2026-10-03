@@ -10,19 +10,13 @@ import (
 )
 
 // handleMutationError is the standard error tail for a mutating repository
-// call: repository.ErrNotFound -> 404, repository.ErrMutationConflict ->
-// 409 (logged as a warning), any other non-nil error -> 500 (logged as an
-// error). logFields are passed through to the log call for correlation
+// call: repository.ErrNotFound -> 404, any other non-nil error -> 500
+// (logged as an error). logFields are passed through to the log call for correlation
 // (e.g. log.SwitchID, id). Returns true if err was non-nil and a response
 // was written - callers should return immediately when true.
 func handleMutationError(w http.ResponseWriter, r *http.Request, err error, logFields ...any) bool {
 	if errors.Is(err, repository.ErrNotFound) {
 		problem.NotFound(w, "resource not found")
-		return true
-	}
-	if errors.Is(err, repository.ErrMutationConflict) {
-		log.FromContext(r.Context()).Warn("mutation conflict", logFields...)
-		problem.Conflict(w, "the resource is being modified concurrently, please retry")
 		return true
 	}
 	if err != nil {
@@ -33,13 +27,25 @@ func handleMutationError(w http.ResponseWriter, r *http.Request, err error, logF
 	return false
 }
 
+// handleTransactionError is handleMutationError for the repository calls
+// that write a transaction and can return repository.ErrMutationConflict,
+// which it maps to 409 (logged as a warning).
+func handleTransactionError(w http.ResponseWriter, r *http.Request, err error, logFields ...any) bool {
+	if errors.Is(err, repository.ErrMutationConflict) {
+		log.FromContext(r.Context()).Warn("mutation conflict", logFields...)
+		problem.Conflict(w, "the resource is being modified concurrently, please retry")
+		return true
+	}
+	return handleMutationError(w, r, err, logFields...)
+}
+
 // handleClearImageError is handleMutationError's counterpart for the
 // image-pointer clear that follows a successful S3 object delete in a
 // single-image delete handler. The S3 object is already gone by this
 // point, so repository.ErrNotFound (the entity was deleted concurrently)
 // is the documented idempotent-success state, not a 404: it's swallowed
-// rather than routed through handleMutationError. ErrMutationConflict and
-// other errors still go through handleMutationError unchanged. Returns
+// rather than routed through handleMutationError. Other errors still go
+// through handleMutationError unchanged. Returns
 // true if a response was written - callers should return immediately when
 // true.
 func handleClearImageError(w http.ResponseWriter, r *http.Request, err error, logFields ...any) bool {

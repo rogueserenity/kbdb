@@ -179,6 +179,23 @@ func (s *CreateBuildSuite) TestCreateBuild_MultipleInvalidFields_NamesAll() {
 	s.Contains(names, "case_mount_type.type")
 }
 
+func (s *CreateBuildSuite) TestCreateBuild_DurometerWithoutDurometerSupport_Returns400() {
+	req := s.newRequest(s.ownerCtx(),
+		`{"keyboard":"kb1","visibility":"private","case_mount_type":{"type":"Top Mount","durometer":"40A"}}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusBadRequest, rec.Code)
+
+	var got struct {
+		InvalidParams []problem.InvalidParam `json:"invalid_params"`
+	}
+	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
+	s.Require().Len(got.InvalidParams, 1)
+	s.Equal("case_mount_type.durometer", got.InvalidParams[0].Name)
+	s.Contains(got.InvalidParams[0].Reason, "supports durometer")
+}
+
 func (s *CreateBuildSuite) TestCreateBuild_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
@@ -668,8 +685,7 @@ func (s *ListBuildsSuite) TestListBuilds_SingleBuild_ResolvableKeyboard_Denormal
 	s.Require().NotNil(got.Items)
 	s.Require().Len(*got.Items, 1)
 	item := (*got.Items)[0]
-	s.Equal("kb1", item.KeyboardId)
-	s.Require().NotNil(item.Keyboard)
+	s.Equal("kb1", item.Keyboard.Id)
 	s.Equal("Keychron", item.Keyboard.Brand)
 	s.Equal("Q1", item.Keyboard.Name)
 }
@@ -849,28 +865,6 @@ func (s *ListBuildsSuite) TestListBuilds_NonOwnerShowPriceToOthersTrue_IncludesT
 	s.InDelta(200+35+150+12.5, *item.TotalCost, 0.0001)
 	s.Require().NotNil(item.Currency)
 	s.Equal("EUR", *item.Currency)
-}
-
-func (s *ListBuildsSuite) TestListBuilds_BuildWithKeyboardThatNotFound_OmitsKeyboardStillReturns200() {
-	s.mockBuildRepo.EXPECT().
-		List(mock.Anything, "alice", mock.Anything, mock.Anything, 20, "").
-		Return([]repository.Build{{UserID: "alice", ID: "build1", Keyboard: "deleted-kb", Visibility: repository.VisibilityPublic}}, "", nil)
-	s.mockKeyboardRepo.EXPECT().
-		Get(mock.Anything, "alice", "deleted-kb").
-		Return(nil, repository.ErrNotFound)
-	s.prefs = repository.ProfilePreferences{}
-
-	req := s.newRequest(s.T().Context(), "limit=20")
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusOK, rec.Code)
-
-	var got api.BuildListPage
-	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Require().NotNil(got.Items)
-	s.Require().Len(*got.Items, 1)
-	s.Nil((*got.Items)[0].Keyboard)
 }
 
 func (s *ListBuildsSuite) TestListBuilds_KeyboardRepositoryError_Returns500() {
@@ -1316,6 +1310,21 @@ func (s *DeleteBuildSuite) TestDeleteBuild_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *DeleteBuildSuite) TestDeleteBuild_MutationConflict_Returns409() {
+	s.mockBuildRepo.EXPECT().
+		Get(mock.Anything, "alice", "build1").
+		Return(&repository.Build{ID: "build1"}, nil)
+	s.mockBuildRepo.EXPECT().
+		Delete(mock.Anything, "build1").
+		Return(repository.ErrMutationConflict)
+
+	rec := httptest.NewRecorder()
+	s.handler(rec, s.newRequest(s.ownerCtx()))
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 type AddBuildImageSuite struct {
 	suite.Suite
 
@@ -1463,22 +1472,6 @@ func (s *AddBuildImageSuite) TestAddBuildImage_RepositoryError_Returns500() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *AddBuildImageSuite) TestAddBuildImage_MutationConflict_Returns409() {
-	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockBuildRepo.EXPECT().
-		AddImage(mock.Anything, "build1", mock.Anything).
-		Return(repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteBuildImageSuite struct {
 	suite.Suite
 
@@ -1587,26 +1580,6 @@ func (s *DeleteBuildImageSuite) TestDeleteBuildImage_NotFound_Returns404() {
 	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *DeleteBuildImageSuite) TestDeleteBuildImage_MutationConflict_Returns409() {
-	s.mockBuildRepo.EXPECT().
-		Get(mock.Anything, "alice", "build1").
-		Return(&repository.Build{ID: "build1", Images: repository.BuildImagesMap([]repository.BuildImage{
-			{ImageID: "img1", Path: deleteBuildImageTestKey},
-		})}, nil)
-	s.mockImages.EXPECT().
-		DeleteBuildImage(mock.Anything, deleteBuildImageTestKey).
-		Return(nil)
-	s.mockBuildRepo.EXPECT().
-		DeleteImage(mock.Anything, "build1", "img1").
-		Return(nil, repository.ErrMutationConflict)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

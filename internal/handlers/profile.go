@@ -218,7 +218,7 @@ func UpdateProfile(repo repository.ProfileRepository, pr repoapi.Profile) http.H
 		case errors.Is(err, repository.ErrUsernameTaken):
 			problem.UsernameUnavailable(w, fmt.Sprintf("the username %q is already taken", p.Username))
 			return
-		case handleMutationError(w, r, err, log.ProfileID, userID):
+		case handleTransactionError(w, r, err, log.ProfileID, userID):
 			return
 		}
 
@@ -268,7 +268,7 @@ func DeleteProfile(repo repository.ProfileRepository, images repository.ProfileI
 			}
 		}
 
-		if handleMutationError(w, r, repo.Delete(r.Context()), log.ProfileID, userID) {
+		if handleTransactionError(w, r, repo.Delete(r.Context()), log.ProfileID, userID) {
 			return
 		}
 

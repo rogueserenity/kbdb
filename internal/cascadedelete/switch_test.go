@@ -120,25 +120,6 @@ func (s *DeleteSwitchSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_Dele
 	// nothing was deleted.
 }
 
-func (s *DeleteSwitchSuite) TestDetach_ReferencingBuilds_DeletesSwitchAnyway() {
-	// detach must NOT call FindBuildsReferencingSwitch at all - it doesn't
-	// care about references.
-	s.mockSwitches.EXPECT().
-		Get(s.ctx, "alice", "sw1").
-		Return(&repository.Switch{ID: "sw1"}, nil)
-	s.mockSwitches.EXPECT().
-		Delete(s.ctx, "sw1").
-		Return(nil)
-
-	result, err := cascadedelete.DeleteSwitch(
-		s.ctx, s.mockSwitches, s.mockBuilds, s.mockBuildImages, s.mockSwitchImages,
-		"alice", "sw1", cascadedelete.OnDeleteDetach,
-	)
-
-	s.Require().NoError(err)
-	s.Empty(result.DeletedBuildIDs)
-}
-
 func (s *DeleteSwitchSuite) TestCascade_NoReferencingBuilds_DeletesOnlySwitch() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingSwitch(s.ctx, "alice", "sw1").

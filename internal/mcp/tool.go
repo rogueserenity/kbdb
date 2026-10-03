@@ -95,7 +95,7 @@ func ownedReadable[T any](
 }
 
 // errMutationNotFound, errMutationConflict, and errMutationFailed are
-// returned by handleMutationError. Generic rather than per-entity: the
+// returned by handleMutationError and handleTransactionError. Generic rather than per-entity: the
 // calling tool is already known to whatever invoked it (unlike REST, MCP
 // has no separate URL/status side channel, but the tool name itself serves
 // the same role), so an entity name in the message would be redundant.
@@ -106,18 +106,11 @@ var (
 )
 
 // handleMutationError is the standard error tail for a mutating repository
-// call: repository.ErrNotFound -> errMutationNotFound,
-// repository.ErrMutationConflict -> errMutationConflict (logged as a
-// warning), any other non-nil error -> errMutationFailed (logged as an
-// error). logFields are passed through to the log call for correlation
+// call: repository.ErrNotFound -> errMutationNotFound, any other non-nil error -> errMutationFailed (logged as an error). logFields are passed through to the log call for correlation
 // (e.g. log.SwitchID, id). Returns nil if err was nil.
 func handleMutationError(ctx context.Context, err error, logFields ...any) error {
 	if errors.Is(err, repository.ErrNotFound) {
 		return errMutationNotFound
-	}
-	if errors.Is(err, repository.ErrMutationConflict) {
-		log.FromContext(ctx).Warn("mutation conflict", logFields...)
-		return errMutationConflict
 	}
 	if err != nil {
 		log.FromContext(ctx).Error("mutation failed", append([]any{log.Error, err}, logFields...)...)
@@ -126,14 +119,24 @@ func handleMutationError(ctx context.Context, err error, logFields ...any) error
 	return nil
 }
 
+// handleTransactionError is handleMutationError for the repository calls
+// that write a transaction and can return repository.ErrMutationConflict,
+// which it maps to errMutationConflict (logged as a warning).
+func handleTransactionError(ctx context.Context, err error, logFields ...any) error {
+	if errors.Is(err, repository.ErrMutationConflict) {
+		log.FromContext(ctx).Warn("mutation conflict", logFields...)
+		return errMutationConflict
+	}
+	return handleMutationError(ctx, err, logFields...)
+}
+
 // handleClearImageError is handleMutationError's counterpart for the
 // image-pointer clear that follows a successful S3 object delete in a
 // single-image delete handler. The S3 object is already gone by this
 // point, so repository.ErrNotFound (the entity was deleted concurrently)
 // is the documented idempotent-success state, not errMutationNotFound: it's
-// swallowed rather than routed through handleMutationError.
-// ErrMutationConflict and other errors still go through handleMutationError
-// unchanged.
+// swallowed rather than routed through handleMutationError. Other errors
+// still go through handleMutationError unchanged.
 func handleClearImageError(ctx context.Context, err error, logFields ...any) error {
 	if errors.Is(err, repository.ErrNotFound) {
 		return nil

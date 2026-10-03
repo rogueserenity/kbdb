@@ -58,6 +58,38 @@ func (s *ValidateBuildSuite) TestInvalidDurometer_ReturnsFieldError() {
 	}, errs)
 }
 
+func (s *ValidateBuildSuite) TestDurometerWithMountTypeWithoutDurometerSupport_ReturnsFieldError() {
+	mountType := "Top Mount"
+	durometer := "40A"
+	b := repository.Build{CaseMountType: &repository.BuildCaseMountType{Type: &mountType, Durometer: &durometer}}
+
+	errs := lookup.ValidateBuild(s.T().Context(), b)
+	s.Equal([]lookup.FieldError{
+		{Field: "case_mount_type.durometer", Value: "40A", Category: lookup.CategoryBuildCaseMountType},
+	}, errs)
+}
+
+func (s *ValidateBuildSuite) TestDurometerWithoutMountType_ReturnsFieldError() {
+	durometer := "40A"
+	b := repository.Build{CaseMountType: &repository.BuildCaseMountType{Durometer: &durometer}}
+
+	errs := lookup.ValidateBuild(s.T().Context(), b)
+	s.Equal([]lookup.FieldError{
+		{Field: "case_mount_type.durometer", Value: "40A", Category: lookup.CategoryBuildCaseMountType},
+	}, errs)
+}
+
+func (s *ValidateBuildSuite) TestDurometerWithInvalidMountType_ReportsOnlyTheMountType() {
+	mountType := "NotAMountType"
+	durometer := "40A"
+	b := repository.Build{CaseMountType: &repository.BuildCaseMountType{Type: &mountType, Durometer: &durometer}}
+
+	errs := lookup.ValidateBuild(s.T().Context(), b)
+	s.Equal([]lookup.FieldError{
+		{Field: "case_mount_type.type", Value: "NotAMountType", Category: lookup.CategoryBuildCaseMountType},
+	}, errs)
+}
+
 func (s *ValidateBuildSuite) TestInvalidStabName_ReturnsFieldError() {
 	name := "NotAStab"
 	b := repository.Build{Stabs: &repository.BuildStabs{Name: &name}}

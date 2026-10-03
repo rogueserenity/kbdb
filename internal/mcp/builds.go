@@ -211,7 +211,7 @@ func handleCreateBuild(
 			return nil, schema.CreateBuildOutput{}, errBuildAlreadyExists
 		}
 		if errors.Is(err, repository.ErrMutationConflict) {
-			return nil, schema.CreateBuildOutput{}, handleMutationError(ctx, err, log.BuildID, b.ID)
+			return nil, schema.CreateBuildOutput{}, handleTransactionError(ctx, err, log.BuildID, b.ID)
 		}
 		if err != nil {
 			log.FromContext(ctx).Error("creating build", log.BuildID, b.ID, log.Error, err)
@@ -267,7 +267,7 @@ func handleUpdateBuild(
 		}
 
 		updated, err := buildRepo.Update(ctx, b)
-		if mutErr := handleMutationError(ctx, err, log.BuildID, b.ID); mutErr != nil {
+		if mutErr := handleTransactionError(ctx, err, log.BuildID, b.ID); mutErr != nil {
 			return nil, schema.UpdateBuildOutput{}, mutErr
 		}
 
@@ -307,7 +307,7 @@ func validatedBuild(ctx context.Context, in schema.BuildInput) (repository.Build
 	if len(fieldErrs) > 0 {
 		reasons := make([]string, len(fieldErrs))
 		for i, fe := range fieldErrs {
-			reasons[i] = fmt.Sprintf("%s: %q is not an approved %s value", fe.Field, fe.Value, fe.Category)
+			reasons[i] = fe.Field + ": " + buildFieldErrorReason(fe)
 		}
 
 		return repository.Build{}, errors.New(strings.Join(reasons, "; "))
@@ -360,7 +360,11 @@ func handleDeleteBuild(
 			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
 		}
 
-		if err := buildRepo.Delete(ctx, in.BuildID); err != nil && !errors.Is(err, repository.ErrNotFound) {
+		err = buildRepo.Delete(ctx, in.BuildID)
+		if errors.Is(err, repository.ErrMutationConflict) {
+			return nil, schema.DeleteBuildOutput{}, handleTransactionError(ctx, err, log.BuildID, in.BuildID)
+		}
+		if err != nil && !errors.Is(err, repository.ErrNotFound) {
 			log.FromContext(ctx).Error("deleting build", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.DeleteBuildOutput{}, errors.New("failed to delete build")
 		}
@@ -468,4 +472,13 @@ func handleDeleteBuildImage(
 
 		return nil, schema.DeleteBuildImageOutput{}, nil
 	}
+}
+
+// buildFieldErrorReason mirrors
+// [github.com/rogueserenity/kbdb/internal/handlers.buildFieldErrorReason].
+func buildFieldErrorReason(fe lookup.FieldError) string {
+	if fe.Field == "case_mount_type.durometer" && fe.Category == lookup.CategoryBuildCaseMountType {
+		return fmt.Sprintf("%q needs a case_mount_type.type that supports durometer", fe.Value)
+	}
+	return fmt.Sprintf("%q is not an approved %s value", fe.Value, fe.Category)
 }

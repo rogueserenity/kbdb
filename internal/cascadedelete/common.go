@@ -1,4 +1,4 @@
-// Package cascadedelete implements the block/cascade/detach on_delete
+// Package cascadedelete implements the block/cascade on_delete
 // policy for deleting an item that may still be referenced by one or more
 // Builds. Both the REST handlers
 // ([github.com/rogueserenity/kbdb/internal/handlers]) and the MCP tools
@@ -25,21 +25,18 @@ const (
 	// OnDeleteCascade deletes the item and every build that references it,
 	// in full.
 	OnDeleteCascade OnDelete = "cascade"
-	// OnDeleteDetach deletes the item regardless of references, leaving
-	// any referencing build with a dangling reference.
-	OnDeleteDetach OnDelete = "detach"
 )
 
 // ParseOnDelete maps a raw on_delete value (a REST query param or MCP tool
 // input field) to an OnDelete. Surrounding whitespace is trimmed first; an
 // empty result defaults to OnDeleteBlock. ok is false if raw is non-empty
-// and isn't one of block/cascade/detach.
+// and isn't block or cascade.
 func ParseOnDelete(raw string) (onDelete OnDelete, ok bool) {
 	trimmed := OnDelete(strings.TrimSpace(raw))
 	switch trimmed {
 	case "":
 		return OnDeleteBlock, true
-	case OnDeleteBlock, OnDeleteCascade, OnDeleteDetach:
+	case OnDeleteBlock, OnDeleteCascade:
 		return trimmed, true
 	default:
 		return "", false

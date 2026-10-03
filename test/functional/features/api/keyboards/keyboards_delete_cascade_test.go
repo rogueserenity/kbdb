@@ -133,40 +133,6 @@ var _ = Describe("Deleting a keyboard that is still referenced by a build", func
 		})
 	})
 
-	Context("given on_delete=detach", func() {
-		When("deleting the keyboard", func() {
-			BeforeEach(func(ctx SpecContext) {
-				var err error
-				resp, err = keyboards.DeleteWithOnDelete(ctx, ownerID, keyboardID, ownerToken, "detach")
-				Expect(err).NotTo(HaveOccurred())
-				if resp.StatusCode == http.StatusNoContent {
-					keyboardGone = true
-				}
-			})
-
-			It("deletes the keyboard but leaves the build with a dangling keyboard reference", func(ctx SpecContext) {
-				By("returning 204")
-				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
-
-				By("the keyboard no longer existing")
-				getKb, err := keyboards.Get(ctx, ownerID, keyboardID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getKb.StatusCode).To(Equal(http.StatusNotFound))
-
-				By("the build still existing, still referencing the deleted keyboard id")
-				getBuild, err := builds.Get(ctx, ownerID, buildID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getBuild.StatusCode).To(Equal(http.StatusOK))
-
-				var buildBody struct {
-					Keyboard *struct{} `json:"keyboard"`
-				}
-				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
-				Expect(buildBody.Keyboard).To(BeNil(), "the referenced keyboard was just deleted, so it can't resolve")
-			})
-		})
-	})
-
 	Context("given on_delete is an invalid value", func() {
 		When("deleting the keyboard", func() {
 			BeforeEach(func(ctx SpecContext) {

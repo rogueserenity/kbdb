@@ -126,25 +126,6 @@ func (s *DeleteKeycapSetSuite) TestBlock_ReferencingBuilds_ReturnsBlockedError_D
 	// nothing was deleted.
 }
 
-func (s *DeleteKeycapSetSuite) TestDetach_ReferencingBuilds_DeletesSetAnyway() {
-	// detach must NOT call FindBuildsReferencingKeycapSet at all - it
-	// doesn't care about references.
-	s.mockKeycapSets.EXPECT().
-		Get(s.ctx, "alice", "ks1").
-		Return(&repository.KeycapSet{ID: "ks1"}, nil)
-	s.mockKeycapSets.EXPECT().
-		Delete(s.ctx, "ks1").
-		Return(nil)
-
-	result, err := cascadedelete.DeleteKeycapSet(
-		s.ctx, s.mockKeycapSets, s.mockBuilds, s.mockBuildImages, s.mockKitImages,
-		"alice", "ks1", cascadedelete.OnDeleteDetach,
-	)
-
-	s.Require().NoError(err)
-	s.Empty(result.DeletedBuildIDs)
-}
-
 func (s *DeleteKeycapSetSuite) TestCascade_NoReferencingBuilds_DeletesOnlySet() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeycapSet(s.ctx, "alice", "ks1").

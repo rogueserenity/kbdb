@@ -1137,22 +1137,6 @@ func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Block_Referenced_Returns4
 	s.ElementsMatch([]string{"build-1", "build-2"}, body.BlockingBuildIDs)
 }
 
-func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Detach_Referenced_Returns204_DoesNotCheckReferences() {
-	s.mockKeyboards.EXPECT().
-		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1"}, nil)
-	s.mockKeyboards.EXPECT().
-		Delete(mock.Anything, "kb1").
-		Return(nil)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "detach"))
-
-	s.Equal(http.StatusNoContent, rec.Code)
-	// s.mockBuilds has no .EXPECT() - verifies FindBuildsReferencingKeyboard
-	// was never called in detach mode.
-}
-
 func (s *DeleteKeyboardSuite) TestDeleteKeyboard_Owner_Cascade_Referenced_Returns200WithDeletedBuildIDs() {
 	s.mockBuilds.EXPECT().
 		FindBuildsReferencingKeyboard(mock.Anything, "alice", "kb1").
@@ -1394,22 +1378,6 @@ func (s *AddKeyboardImageSuite) TestAddKeyboardImage_RepositoryError_Returns500(
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *AddKeyboardImageSuite) TestAddKeyboardImage_MutationConflict_Returns409() {
-	s.mockImages.EXPECT().
-		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockKeyboardRepo.EXPECT().
-		AddImage(mock.Anything, "kb1", mock.Anything).
-		Return(repository.ErrMutationConflict)
-
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusConflict, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
 type DeleteKeyboardImageSuite struct {
 	suite.Suite
 
@@ -1518,26 +1486,6 @@ func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_NotFound_Returns404()
 	s.handler(rec, s.newRequest(s.ownerCtx()))
 
 	s.Equal(http.StatusNotFound, rec.Code)
-	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *DeleteKeyboardImageSuite) TestDeleteKeyboardImage_MutationConflict_Returns409() {
-	s.mockKeyboardRepo.EXPECT().
-		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{ID: "kb1", Images: repository.KeyboardImagesMap([]repository.KeyboardImage{
-			{ImageID: "img1", Path: deleteKeyboardImageTestKey},
-		})}, nil)
-	s.mockImages.EXPECT().
-		DeleteKeyboardImage(mock.Anything, deleteKeyboardImageTestKey).
-		Return(nil)
-	s.mockKeyboardRepo.EXPECT().
-		DeleteImage(mock.Anything, "kb1", "img1").
-		Return(nil, repository.ErrMutationConflict)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusConflict, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 

@@ -146,7 +146,6 @@ func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Require().NoError(err)
 
 	s.Equal(b.ID, out.Id)
-	s.Require().NotNil(out.Keyboard)
 	s.Equal("kb1", out.Keyboard.Id)
 	s.Equal("Keychron", out.Keyboard.Brand)
 	s.Equal("Q1", out.Keyboard.Name)
@@ -161,17 +160,17 @@ func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(b.Foam, out.Foam)
 	s.Require().NotNil(out.Switches)
 	s.Require().Len(*out.Switches, 1)
-	s.Require().NotNil((*out.Switches)[0].Switch)
 	s.Equal("sw1", (*out.Switches)[0].Switch.Id)
 	s.Equal("Oil King", (*out.Switches)[0].Switch.Name)
 	s.Equal(70, (*out.Switches)[0].Count)
-	s.Require().NotNil(out.KeycapKits)
-	s.Require().Len(*out.KeycapKits, 1)
-	s.Require().NotNil((*out.KeycapKits)[0].KeycapSet)
-	s.Equal("ks1", (*out.KeycapKits)[0].KeycapSet.Id)
-	s.Equal("kit1", (*out.KeycapKits)[0].KitId)
-	s.Require().NotNil((*out.KeycapKits)[0].KitName)
-	s.Equal("Base", *(*out.KeycapKits)[0].KitName)
+	s.Require().NotNil(out.KeycapSets)
+	s.Require().Len(*out.KeycapSets, 1)
+	s.Equal("ks1", (*out.KeycapSets)[0].Id)
+	s.Equal("GMK", (*out.KeycapSets)[0].Brand)
+	s.Equal("Olivia", (*out.KeycapSets)[0].Name)
+	s.Require().Len((*out.KeycapSets)[0].Kits, 1)
+	s.Equal("kit1", (*out.KeycapSets)[0].Kits[0].KitId)
+	s.Equal("Base", (*out.KeycapSets)[0].Kits[0].Name)
 	s.Require().NotNil(out.BuildDate)
 	s.Equal(*b.BuildDate, out.BuildDate.Format(dateLayout))
 	s.Equal(b.Notes, out.Notes)
@@ -209,7 +208,7 @@ func (s *BuildToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	s.Nil(out.Stabs)
 	s.Nil(out.Foam)
 	s.Nil(out.Switches)
-	s.Nil(out.KeycapKits)
+	s.Nil(out.KeycapSets)
 	s.Nil(out.BuildDate)
 	s.Nil(out.Notes)
 	s.Nil(out.Images)
@@ -263,21 +262,14 @@ func (s *BuildToAPISuite) TestPresignFails_ReturnsError() {
 	s.Require().Error(err)
 }
 
-func (s *BuildToAPISuite) TestKeyboardNotFound_OmitsKeyboardRatherThanFailing() {
+func (s *BuildToAPISuite) TestKeyboardNotFound_ReturnsError() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
 	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").Return(nil, repository.ErrNotFound)
-	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
-		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
-	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 
-	out, err := d.call(context.Background(), b)
-	s.Require().NoError(err)
-
-	s.Nil(out.Keyboard)
-	s.Equal("kb1", out.KeyboardId, "keyboard_id survives the keyboard being deleted")
+	_, err := d.call(context.Background(), b)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
 func (s *BuildToAPISuite) TestKeyboardRepositoryError_ReturnsError() {
@@ -290,49 +282,37 @@ func (s *BuildToAPISuite) TestKeyboardRepositoryError_ReturnsError() {
 	s.Require().Error(err)
 }
 
-func (s *BuildToAPISuite) TestSwitchNotFound_KeepsCountOmitsSwitch() {
+func (s *BuildToAPISuite) TestSwitchNotFound_ReturnsError() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
 	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
 	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").Return(nil, repository.ErrNotFound)
-	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
 
-	out, err := d.call(context.Background(), b)
-	s.Require().NoError(err)
-
-	s.Require().NotNil(out.Switches)
-	s.Require().Len(*out.Switches, 1)
-	s.Nil((*out.Switches)[0].Switch)
-	s.Equal(70, (*out.Switches)[0].Count)
+	_, err := d.call(context.Background(), b)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
-func (s *BuildToAPISuite) TestMultipleSwitchEntries_ResolvesEachIndependently() {
+func (s *BuildToAPISuite) TestMultipleSwitchEntries_ResolvesEachInOrder() {
 	b := fullRepoBuild()
 	b.Switches = []repository.BuildSwitchEntry{
-		{Switch: "sw-missing", Count: 1},
+		{Switch: "sw2", Count: 1},
 		{Switch: "sw1", Count: 70},
 	}
 
 	d := newBuildToAPIDeps(s.T())
-	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
-	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw-missing").Return(nil, repository.ErrNotFound)
-	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
-		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
-	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
-		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}}}, nil)
+	d.expectFullyResolvable()
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw2").
+		Return(&repository.Switch{UserID: "alice", ID: "sw2", Brand: "Cherry", Name: "MX Black", Type: "Linear"}, nil)
 
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.Switches)
 	s.Require().Len(*out.Switches, 2)
-	s.Nil((*out.Switches)[0].Switch)
+	s.Equal("sw2", (*out.Switches)[0].Switch.Id)
 	s.Equal(1, (*out.Switches)[0].Count)
-	s.Require().NotNil((*out.Switches)[1].Switch)
 	s.Equal("sw1", (*out.Switches)[1].Switch.Id)
 	s.Equal(70, (*out.Switches)[1].Count)
 }
@@ -349,7 +329,7 @@ func (s *BuildToAPISuite) TestSwitchRepositoryError_ReturnsError() {
 	s.Require().Error(err)
 }
 
-func (s *BuildToAPISuite) TestKeycapSetNotFound_KeepsKitIDOmitsRest() {
+func (s *BuildToAPISuite) TestKeycapSetNotFound_ReturnsError() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
@@ -359,15 +339,8 @@ func (s *BuildToAPISuite) TestKeycapSetNotFound_KeepsKitIDOmitsRest() {
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").Return(nil, repository.ErrNotFound)
 
-	out, err := d.call(context.Background(), b)
-	s.Require().NoError(err)
-
-	s.Require().NotNil(out.KeycapKits)
-	s.Require().Len(*out.KeycapKits, 1)
-	s.Equal("kit1", (*out.KeycapKits)[0].KitId)
-	s.Nil((*out.KeycapKits)[0].KeycapSet)
-	s.Nil((*out.KeycapKits)[0].KitName)
-	s.Nil((*out.KeycapKits)[0].KitImageUrl)
+	_, err := d.call(context.Background(), b)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
 }
 
 func (s *BuildToAPISuite) TestKeycapSetRepositoryError_ReturnsError() {
@@ -384,7 +357,7 @@ func (s *BuildToAPISuite) TestKeycapSetRepositoryError_ReturnsError() {
 	s.Require().Error(err)
 }
 
-func (s *BuildToAPISuite) TestKitNotFoundInResolvedKeycapSet_KeepsKitIDOmitsRest() {
+func (s *BuildToAPISuite) TestKitNotFoundInResolvedKeycapSet_ReturnsError() {
 	b := fullRepoBuild()
 
 	d := newBuildToAPIDeps(s.T())
@@ -395,14 +368,43 @@ func (s *BuildToAPISuite) TestKitNotFoundInResolvedKeycapSet_KeepsKitIDOmitsRest
 	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
 		Return(&repository.KeycapSet{UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia", Kits: map[string]repository.KeycapKit{"other-kit": {KitID: "other-kit", Name: "Base"}}}, nil)
 
+	_, err := d.call(context.Background(), b)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *BuildToAPISuite) TestKitsGroupedBySetInFirstAppearanceOrder_DuplicatesCollapsed() {
+	b := fullRepoBuild()
+	b.KeycapKits = []repository.BuildKeycapKitEntry{
+		{KeycapSet: "ks2", Kit: "kitA"},
+		{KeycapSet: "ks1", Kit: "kit1"},
+		{KeycapSet: "ks2", Kit: "kitB"},
+		{KeycapSet: "ks2", Kit: "kitA"},
+	}
+
+	d := newBuildToAPIDeps(s.T())
+	d.expectFullyResolvable()
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks2").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks2", Brand: "ePBT", Name: "Kuro",
+			Kits: map[string]repository.KeycapKit{
+				"kitA": {KitID: "kitA", Name: "Base", Purchase: repository.KeycapKitPurchase{Price: floatPtr(100)}},
+				"kitB": {KitID: "kitB", Name: "Novelties", Purchase: repository.KeycapKitPurchase{Price: floatPtr(30)}},
+			},
+		}, nil)
+
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
-	s.Require().NotNil(out.KeycapKits)
-	s.Require().Len(*out.KeycapKits, 1)
-	s.Equal("kit1", (*out.KeycapKits)[0].KitId)
-	s.Nil((*out.KeycapKits)[0].KeycapSet)
-	s.Nil((*out.KeycapKits)[0].KitName)
+	s.Require().NotNil(out.KeycapSets)
+	s.Require().Len(*out.KeycapSets, 2)
+	s.Equal("ks2", (*out.KeycapSets)[0].Id)
+	s.Require().Len((*out.KeycapSets)[0].Kits, 2)
+	s.Equal("kitA", (*out.KeycapSets)[0].Kits[0].KitId)
+	s.Equal("kitB", (*out.KeycapSets)[0].Kits[1].KitId)
+	s.Equal("ks1", (*out.KeycapSets)[1].Id)
+	s.Require().Len((*out.KeycapSets)[1].Kits, 1)
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(142.5, *out.TotalCost, 0.0001, "kitA is priced once; stabs add 12.5")
 }
 
 func (s *BuildToAPISuite) TestKitWithImage_MintsFreshPresignedURL() {
@@ -424,10 +426,11 @@ func (s *BuildToAPISuite) TestKitWithImage_MintsFreshPresignedURL() {
 	out, err := d.call(context.Background(), b)
 	s.Require().NoError(err)
 
-	s.Require().NotNil(out.KeycapKits)
-	s.Require().Len(*out.KeycapKits, 1)
-	s.Require().NotNil((*out.KeycapKits)[0].KitImageUrl)
-	s.Equal("https://example.com/kit1.png", *(*out.KeycapKits)[0].KitImageUrl)
+	s.Require().NotNil(out.KeycapSets)
+	s.Require().Len(*out.KeycapSets, 1)
+	s.Require().Len((*out.KeycapSets)[0].Kits, 1)
+	s.Require().NotNil((*out.KeycapSets)[0].Kits[0].ImageUrl)
+	s.Equal("https://example.com/kit1.png", *(*out.KeycapSets)[0].Kits[0].ImageUrl)
 }
 
 func (s *BuildToAPISuite) TestKitImagePresignFails_ReturnsError() {
@@ -596,6 +599,31 @@ func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
 // for the whole bulk order (see SwitchPurchase.Quantity), so without a
 // quantity to divide by, the per-build cost can't be derived and must be
 // excluded rather than multiplied by the build's count directly.
+func (s *BuildToAPISuite) TestTotalCost_RoundedToCents() {
+	b := fullRepoBuild()
+	b.Stabs = nil
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1"}, nil)
+	d.switchRepo.EXPECT().Get(mock.Anything, "alice", "sw1").
+		Return(&repository.Switch{
+			UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear",
+			Purchase: repository.SwitchPurchase{Price: floatPtr(10), Quantity: intPtr(3)},
+		}, nil)
+	d.keycapSetRepo.EXPECT().Get(mock.Anything, "alice", "ks1").
+		Return(&repository.KeycapSet{
+			UserID: "alice", ID: "ks1", Brand: "GMK", Name: "Olivia",
+			Kits: map[string]repository.KeycapKit{"kit1": {KitID: "kit1", Name: "Base"}},
+		}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(233.33, *out.TotalCost, 1e-9, "70 of 3 switches bought for 10")
+}
+
 func (s *BuildToAPISuite) TestTotalCost_SwitchPriceWithoutQuantity_ExcludedFromSum() {
 	b := fullRepoBuild()
 	b.Stabs = nil

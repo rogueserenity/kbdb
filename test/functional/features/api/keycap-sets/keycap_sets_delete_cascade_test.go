@@ -139,45 +139,6 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 		})
 	})
 
-	Context("given on_delete=detach", func() {
-		When("deleting the set", func() {
-			BeforeEach(func(ctx SpecContext) {
-				var err error
-				resp, err = keycapSets.DeleteWithOnDelete(ctx, ownerID, setID, ownerToken, "detach")
-				Expect(err).NotTo(HaveOccurred())
-				if resp.StatusCode == http.StatusNoContent {
-					setGone = true
-				}
-			})
-
-			It("deletes the set but leaves the build with a dangling keycap kit reference", func(ctx SpecContext) {
-				By("returning 204")
-				Expect(resp.StatusCode).To(Equal(http.StatusNoContent))
-
-				By("the set no longer existing")
-				getSet, err := keycapSets.Get(ctx, ownerID, setID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getSet.StatusCode).To(Equal(http.StatusNotFound))
-
-				By("the build still existing, still referencing the deleted keycap set/kit")
-				getBuild, err := builds.Get(ctx, ownerID, buildID, ownerToken)
-				Expect(err).NotTo(HaveOccurred())
-				Expect(getBuild.StatusCode).To(Equal(http.StatusOK))
-
-				var buildBody struct {
-					KeycapKits []struct {
-						KeycapSet *struct{} `json:"keycap_set"`
-						KitID     string    `json:"kit_id"`
-					} `json:"keycap_kits"`
-				}
-				Expect(json.NewDecoder(getBuild.Body).Decode(&buildBody)).To(Succeed())
-				Expect(buildBody.KeycapKits).To(HaveLen(1))
-				Expect(buildBody.KeycapKits[0].KeycapSet).To(BeNil(), "the referenced set was just deleted, so it can't resolve")
-				Expect(buildBody.KeycapKits[0].KitID).To(Equal(kitID))
-			})
-		})
-	})
-
 	Context("given on_delete is an invalid value", func() {
 		When("deleting the set", func() {
 			BeforeEach(func(ctx SpecContext) {

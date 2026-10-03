@@ -127,12 +127,10 @@ type UpdateKeycapSetOutput struct {
 // DeleteKeycapSetInput is the delete_keycap_set tool input. OnDelete
 // controls what happens if any kit in the set is still referenced by a
 // build: "block" (the default when omitted) fails the call; "cascade"
-// deletes the set and every referencing build; "detach" deletes the set
-// regardless, leaving referencing builds with a dangling keycap_kits[]
-// entry.
+// deletes the set and every referencing build.
 type DeleteKeycapSetInput struct {
 	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set to delete"`
-	OnDelete    string `json:"on_delete,omitempty" jsonschema:"how to handle a set still referenced by a build: block (default), cascade, or detach"`
+	OnDelete    string `json:"on_delete,omitempty" jsonschema:"how to handle a set still referenced by a build: block (default) or cascade"`
 }
 
 // DeleteKeycapSetOutput is the delete_keycap_set tool output.
@@ -181,12 +179,11 @@ type UpdateKeycapKitOutput struct {
 // DeleteKeycapKitInput is the delete_keycap_kit tool input. OnDelete
 // controls what happens if the kit is still referenced by a build: "block"
 // (the default when omitted) fails the call; "cascade" deletes the kit and
-// every referencing build; "detach" deletes the kit regardless, leaving
-// referencing builds with a dangling keycap_kits[] entry.
+// every referencing build.
 type DeleteKeycapKitInput struct {
 	KeycapSetID string `json:"keycap_set_id" jsonschema:"the id of the keycap set the kit belongs to"`
 	KitID       string `json:"kit_id" jsonschema:"the id of the kit to delete"`
-	OnDelete    string `json:"on_delete,omitempty" jsonschema:"how to handle a kit still referenced by a build: block (default), cascade, or detach"`
+	OnDelete    string `json:"on_delete,omitempty" jsonschema:"how to handle a kit still referenced by a build: block (default) or cascade"`
 }
 
 // DeleteKeycapKitOutput is the delete_keycap_kit tool output.

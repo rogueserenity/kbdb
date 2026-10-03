@@ -101,42 +101,4 @@ var _ = Describe("Deleting a switch that is still referenced by a build, over MC
 			})
 		})
 	})
-
-	Context("given on_delete is detach", func() {
-		When("the delete_switch tool is called", func() {
-			It("deletes the switch but leaves the build with a dangling switch reference", func(ctx SpecContext) {
-				result, err := client.CallTool(ctx, "delete_switch", map[string]any{
-					"switch_id": switchID,
-					"on_delete": "detach",
-				})
-				Expect(err).NotTo(HaveOccurred())
-				Expect(result.IsError).To(BeFalse())
-				switchGone = true
-
-				By("the switch no longer existing")
-				getSw, getErr := client.CallTool(ctx, "get_switch", map[string]any{"switch_id": switchID})
-				Expect(getErr).NotTo(HaveOccurred())
-				Expect(getSw.IsError).To(BeTrue())
-
-				By("the build still existing, still referencing the deleted switch id")
-				getBuild, getErr := client.CallTool(ctx, "get_build", map[string]any{"build_id": buildID})
-				Expect(getErr).NotTo(HaveOccurred())
-				Expect(getBuild.IsError).To(BeFalse())
-
-				raw, marshalErr := json.Marshal(getBuild.StructuredContent)
-				Expect(marshalErr).NotTo(HaveOccurred())
-
-				var buildOut struct {
-					Build struct {
-						Switches []struct {
-							Switch string `json:"switch"`
-						} `json:"switches"`
-					} `json:"build"`
-				}
-				Expect(json.Unmarshal(raw, &buildOut)).To(Succeed())
-				Expect(buildOut.Build.Switches).To(HaveLen(1))
-				Expect(buildOut.Build.Switches[0].Switch).To(Equal(switchID))
-			})
-		})
-	})
 })

@@ -132,6 +132,7 @@ var _ = Describe("Listing builds over MCP", func() {
 		Context("given another user owns builds at every visibility tier", func() {
 			var (
 				otherID         string
+				otherKeyboardID string
 				publicID        string
 				authenticatedID string
 				privateID       string
@@ -139,20 +140,23 @@ var _ = Describe("Listing builds over MCP", func() {
 
 			BeforeEach(func(ctx SpecContext) {
 				otherID = api.NewOtherUserID(ctx)
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				Expect(db.SeedKeyboard(ctx, otherID, otherKeyboardID, "private")).To(Succeed())
 
 				publicID = "public-build-" + uuid.NewString()
 				authenticatedID = "authenticated-build-" + uuid.NewString()
 				privateID = "private-build-" + uuid.NewString()
 
-				Expect(db.SeedBuild(ctx, otherID, publicID, keyboardID, "public")).To(Succeed())
-				Expect(db.SeedBuild(ctx, otherID, authenticatedID, keyboardID, "authenticated")).To(Succeed())
-				Expect(db.SeedBuild(ctx, otherID, privateID, keyboardID, "private")).To(Succeed())
+				Expect(db.SeedBuild(ctx, otherID, publicID, otherKeyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuild(ctx, otherID, authenticatedID, otherKeyboardID, "authenticated")).To(Succeed())
+				Expect(db.SeedBuild(ctx, otherID, privateID, otherKeyboardID, "private")).To(Succeed())
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, publicID, keyboardID)).To(Succeed())
-				Expect(db.DeleteBuild(ctx, otherID, authenticatedID, keyboardID)).To(Succeed())
-				Expect(db.DeleteBuild(ctx, otherID, privateID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, publicID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, authenticatedID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, privateID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 			})
 
 			When("the list_builds tool is called with that user_id", func() {

@@ -45,7 +45,7 @@ var updateKeyboardTool = &mcp.Tool{
 
 var deleteKeyboardTool = &mcp.Tool{
 	Name:        "delete_keyboard",
-	Description: "Removes a keyboard from your own collection. Idempotent: deleting a keyboard that isn't there succeeds. on_delete controls what happens if a build still references this keyboard: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the keyboard and every referencing build; \"detach\" deletes the keyboard regardless, leaving referencing builds with a dangling keyboard_id.",
+	Description: "Removes a keyboard from your own collection. Idempotent: deleting a keyboard that isn't there succeeds. on_delete controls what happens if a build still references this keyboard: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the keyboard and every referencing build.",
 }
 
 var listKeyboardImagesTool = &mcp.Tool{
@@ -208,7 +208,7 @@ func handleDeleteKeyboard(
 
 		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
 		if !ok {
-			return nil, schema.DeleteKeyboardOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+			return nil, schema.DeleteKeyboardOutput{}, errors.New("on_delete must be block or cascade")
 		}
 
 		ownerID, err := resolveOwnerID(ctx, "")

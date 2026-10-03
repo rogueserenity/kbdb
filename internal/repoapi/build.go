@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"time"
 
@@ -29,11 +30,8 @@ type Build struct {
 // ToAPI maps a repository.Build to its wire representation, resolving the
 // Keyboard/Switch/KeycapSet references it carries into denormalized
 // objects so a client can render the build without follow-up requests. A
-// reference that can't be resolved (repository.ErrNotFound - e.g. deleted
-// after the build referenced it, see
-// https://github.com/rogueserenity/kbdb/issues/172) is left nil rather than
-// failing the whole request; any other repository error, or b.BuildDate
-// not matching dateLayout, or an image failing to presign, still fails it.
+// reference that can't be resolved, any other repository error, b.BuildDate
+// not matching dateLayout, or an image failing to presign fails it.
 //
 // The owner always sees their own Stabs.Price and TotalCost; a non-owner
 // sees them only if ownerPrefs.ShowPriceToOthers. A build's Keyboard,
@@ -62,21 +60,20 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		return api.Build{}, err
 	}
 
-	keycapKits, keycapKitsCost, err := b.keycapKitEntriesResolvedToAPI(ctx, build.UserID, build.KeycapKits)
+	keycapSets, keycapKitsCost, err := b.keycapSetRefsToAPI(ctx, build.UserID, build.KeycapKits)
 	if err != nil {
 		return api.Build{}, err
 	}
 
 	out := api.Build{
 		Id:            build.ID,
-		KeyboardId:    build.Keyboard,
 		Keyboard:      keyboardRef,
 		Plate:         build.Plate,
 		CaseMountType: b.caseMountTypeToAPI(build.CaseMountType),
 		Stabs:         b.stabsToAPI(build.Stabs, isOwner, ownerPrefs),
 		Foam:          build.Foam,
 		Switches:      switches,
-		KeycapKits:    keycapKits,
+		KeycapSets:    keycapSets,
 		BuildDate:     buildDate,
 		Notes:         build.Notes,
 		Visibility:    ownerVisibility(build.Visibility, isOwner),
@@ -88,7 +85,7 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		if build.Stabs != nil {
 			stabsPrice = build.Stabs.Price
 		}
-		out.TotalCost = sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice)
+		out.TotalCost = roundCents(sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice))
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
 
@@ -233,20 +230,16 @@ func (b Build) keycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repo
 }
 
 // keyboardRefToAPI resolves keyboardID into a denormalized reference plus
-// its purchase price. Returns (nil, nil, nil) if the keyboard no longer
-// exists. The ref carries only the keyboard's first image.
+// its purchase price. The ref carries only the keyboard's first image.
 func (b Build) keyboardRefToAPI(
 	ctx context.Context, ownerID, keyboardID string,
-) (*api.BuildKeyboardRef, *float64, error) {
+) (api.BuildKeyboardRef, *float64, error) {
 	kb, err := b.KeyboardRepo.Get(ctx, ownerID, keyboardID)
 	if err != nil {
-		if errors.Is(err, repository.ErrNotFound) {
-			return nil, nil, nil //nolint:nilnil // deleted-after-reference is a valid, expected result
-		}
-		return nil, nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
+		return api.BuildKeyboardRef{}, nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
 	}
 
-	ref := &api.BuildKeyboardRef{
+	ref := api.BuildKeyboardRef{
 		Id:     kb.ID,
 		Brand:  kb.Brand,
 		Name:   kb.Name,
@@ -258,7 +251,7 @@ func (b Build) keyboardRefToAPI(
 		img := imgs[0]
 		url, err := b.resolveKeyboardImageURL(ctx, ownerID, keyboardID, img)
 		if err != nil {
-			return nil, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
+			return api.BuildKeyboardRef{}, nil, fmt.Errorf("presigning keyboard image for keyboard %q: %w", keyboardID, err)
 		}
 		ref.ImageUrl = &url
 	}
@@ -268,9 +261,8 @@ func (b Build) keyboardRefToAPI(
 
 // switchEntriesResolvedToAPI resolves each entry's Switch id into a
 // denormalized reference via a per-entry SwitchRepo.Get call, run
-// concurrently across entries since each only touches its own out[i]. An
-// entry whose switch no longer exists keeps its Count but leaves Switch
-// nil rather than dropping the entry or failing the request. Also returns
+// concurrently across entries since each only touches its own out[i]. Also
+// returns
 // the summed cost across entries with a known per-unit price: switches are
 // bought in bulk (SwitchPurchase.Price is the total for Quantity units, not
 // a per-unit price - see SwitchPurchase's doc), so an entry contributes
@@ -295,17 +287,13 @@ func (b Build) switchEntriesResolvedToAPI(
 
 			sw, err := b.SwitchRepo.Get(ctx, ownerID, e.Switch)
 			if err != nil {
-				if !errors.Is(err, repository.ErrNotFound) {
-					errs[i] = fmt.Errorf("getting switch %q: %w", e.Switch, err)
-					return
-				}
-				out[i] = api.BuildSwitchEntryResolved{Count: e.Count}
+				errs[i] = fmt.Errorf("getting switch %q: %w", e.Switch, err)
 				return
 			}
 
 			out[i] = api.BuildSwitchEntryResolved{
 				Count: e.Count,
-				Switch: &api.BuildSwitchRef{
+				Switch: api.BuildSwitchRef{
 					Id:           sw.ID,
 					Brand:        sw.Brand,
 					Manufacturer: sw.Manufacturer,
@@ -339,65 +327,40 @@ func (b Build) switchEntriesResolvedToAPI(
 	return &out, sumKnownCosts(costs...), nil
 }
 
-// keycapKitEntriesResolvedToAPI resolves each entry's (KeycapSet, Kit) pair
-// into a denormalized reference plus the kit's own name/image, via a
-// per-entry KeycapSetRepo.Get call - same per-item-fetch approach as
-// [Build.switchEntriesResolvedToAPI], run concurrently across entries for
-// the same reason. An entry whose keycap set - or whose kit within it - no
-// longer exists keeps its KitId but leaves KeycapSet, KitName, and
-// KitImageUrl nil rather than dropping the entry or failing the request.
-// Also returns the summed price across entries whose kit has a known
-// price.
-func (b Build) keycapKitEntriesResolvedToAPI(
+// keycapSetRefsToAPI groups entries by keycap set, in the order each set
+// first appears, and resolves each set and its kits into a denormalized
+// reference via one KeycapSetRepo.Get per set, run concurrently across
+// sets. A kit listed more than once appears, and is priced, once. Also
+// returns the summed price across kits with a known price.
+func (b Build) keycapSetRefsToAPI(
 	ctx context.Context, ownerID string, entries []repository.BuildKeycapKitEntry,
-) (*[]api.BuildKeycapKitEntryResolved, *float64, error) {
+) (*[]api.BuildKeycapSetRef, *float64, error) {
 	if entries == nil {
 		return nil, nil, nil //nolint:nilnil // no keycap kits is a valid, expected result
 	}
 
-	out := make([]api.BuildKeycapKitEntryResolved, len(entries))
-	costs := make([]*float64, len(entries))
-	errs := make([]error, len(entries))
+	var setIDs []string
+	kitIDs := map[string][]string{}
+	for _, e := range entries {
+		if _, ok := kitIDs[e.KeycapSet]; !ok {
+			setIDs = append(setIDs, e.KeycapSet)
+		}
+		if !slices.Contains(kitIDs[e.KeycapSet], e.Kit) {
+			kitIDs[e.KeycapSet] = append(kitIDs[e.KeycapSet], e.Kit)
+		}
+	}
+
+	out := make([]api.BuildKeycapSetRef, len(setIDs))
+	costs := make([][]*float64, len(setIDs))
+	errs := make([]error, len(setIDs))
 
 	var wg sync.WaitGroup
-	for i, e := range entries {
+	for i, setID := range setIDs {
 		wg.Add(1)
-		go func(i int, e repository.BuildKeycapKitEntry) {
+		go func(i int, setID string) {
 			defer wg.Done()
-
-			out[i] = api.BuildKeycapKitEntryResolved{KitId: e.Kit}
-
-			ks, err := b.KeycapSetRepo.Get(ctx, ownerID, e.KeycapSet)
-			if err != nil {
-				if !errors.Is(err, repository.ErrNotFound) {
-					errs[i] = fmt.Errorf("getting keycap set %q: %w", e.KeycapSet, err)
-				}
-				return
-			}
-
-			kit := b.findKeycapKit(ks.Kits, e.Kit)
-			if kit == nil {
-				return
-			}
-
-			out[i].KeycapSet = &api.BuildKeycapSetRef{
-				Id:      ks.ID,
-				Brand:   ks.Brand,
-				Name:    ks.Name,
-				Profile: ks.Profile,
-			}
-			out[i].KitName = &kit.Name
-			costs[i] = kit.Purchase.Price
-
-			if kit.ImagePath != nil {
-				url, err := b.resolveKeycapKitImageURL(ctx, ownerID, ks.ID, *kit)
-				if err != nil {
-					errs[i] = fmt.Errorf("presigning kit image for kit %q: %w", e.Kit, err)
-					return
-				}
-				out[i].KitImageUrl = &url
-			}
-		}(i, e)
+			out[i], costs[i], errs[i] = b.keycapSetRefToAPI(ctx, ownerID, setID, kitIDs[setID])
+		}(i, setID)
 	}
 	wg.Wait()
 
@@ -405,15 +368,47 @@ func (b Build) keycapKitEntriesResolvedToAPI(
 		return nil, nil, err
 	}
 
-	return &out, sumKnownCosts(costs...), nil
+	return &out, sumKnownCosts(slices.Concat(costs...)...), nil
 }
 
-func (b Build) findKeycapKit(kits map[string]repository.KeycapKit, kitID string) *repository.KeycapKit {
-	kit, ok := kits[kitID]
-	if !ok {
-		return nil
+// keycapSetRefToAPI resolves setID and the given kits within it, returning
+// each kit's price alongside.
+func (b Build) keycapSetRefToAPI(
+	ctx context.Context, ownerID, setID string, kitIDs []string,
+) (api.BuildKeycapSetRef, []*float64, error) {
+	ks, err := b.KeycapSetRepo.Get(ctx, ownerID, setID)
+	if err != nil {
+		return api.BuildKeycapSetRef{}, nil, fmt.Errorf("getting keycap set %q: %w", setID, err)
 	}
-	return &kit
+
+	ref := api.BuildKeycapSetRef{
+		Id:      ks.ID,
+		Brand:   ks.Brand,
+		Name:    ks.Name,
+		Profile: ks.Profile,
+		Kits:    make([]api.BuildKeycapKitRef, len(kitIDs)),
+	}
+	costs := make([]*float64, len(kitIDs))
+
+	for i, kitID := range kitIDs {
+		kit, ok := ks.Kits[kitID]
+		if !ok {
+			return api.BuildKeycapSetRef{}, nil, fmt.Errorf("getting kit %q of keycap set %q: %w", kitID, setID, repository.ErrNotFound)
+		}
+
+		ref.Kits[i] = api.BuildKeycapKitRef{KitId: kit.KitID, Name: kit.Name}
+		costs[i] = kit.Purchase.Price
+
+		if kit.ImagePath != nil {
+			url, err := b.resolveKeycapKitImageURL(ctx, ownerID, ks.ID, kit)
+			if err != nil {
+				return api.BuildKeycapSetRef{}, nil, fmt.Errorf("presigning kit image for kit %q: %w", kitID, err)
+			}
+			ref.Kits[i].ImageUrl = &url
+		}
+	}
+
+	return ref, costs, nil
 }
 
 // imagesToAPI resolves a presigned GET URL per image, reusing each image's

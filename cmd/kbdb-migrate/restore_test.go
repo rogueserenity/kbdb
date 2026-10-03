@@ -33,14 +33,14 @@ func (s *RestoreSuite) TestBuildInputFromResolved_RemapsEveryReference() {
 	brass := "brass"
 	full := api.Build{
 		Id:         "b-old",
-		Keyboard:   &api.BuildKeyboardRef{Id: "kb-old", Brand: "B", Name: "N"},
+		Keyboard:   api.BuildKeyboardRef{Id: "kb-old", Brand: "B", Name: "N"},
 		Plate:      &brass,
 		Visibility: new(api.Visibility("public")),
 		Switches: &[]api.BuildSwitchEntryResolved{
-			{Count: 70, Switch: &api.BuildSwitchRef{Id: "sw-old", Name: "S", Type: "linear"}},
+			{Count: 70, Switch: api.BuildSwitchRef{Id: "sw-old", Name: "S", Type: "linear"}},
 		},
-		KeycapKits: &[]api.BuildKeycapKitEntryResolved{
-			{KitId: "kit-old", KeycapSet: &api.BuildKeycapSetRef{Id: "set-old", Brand: "GMK", Name: "X"}},
+		KeycapSets: &[]api.BuildKeycapSetRef{
+			{Id: "set-old", Brand: "GMK", Name: "X", Kits: []api.BuildKeycapKitRef{{KitId: "kit-old", Name: "Base"}}},
 		},
 	}
 
@@ -62,7 +62,7 @@ func (s *RestoreSuite) TestBuildInputFromResolved_RemapsEveryReference() {
 }
 
 func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKeyboardIsError() {
-	full := api.Build{Keyboard: &api.BuildKeyboardRef{Id: "kb-unknown"}, Visibility: new(api.Visibility("public"))}
+	full := api.Build{Keyboard: api.BuildKeyboardRef{Id: "kb-unknown"}, Visibility: new(api.Visibility("public"))}
 	_, err := buildInputFromResolved(full, s.fullMap())
 	s.Require().Error(err)
 	s.ErrorContains(err, "kb-unknown")
@@ -70,10 +70,10 @@ func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKeyboardIsError() {
 
 func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedSwitchIsError() {
 	full := api.Build{
-		Keyboard:   &api.BuildKeyboardRef{Id: "kb-old"},
+		Keyboard:   api.BuildKeyboardRef{Id: "kb-old"},
 		Visibility: new(api.Visibility("public")),
 		Switches: &[]api.BuildSwitchEntryResolved{
-			{Count: 1, Switch: &api.BuildSwitchRef{Id: "sw-unknown"}},
+			{Count: 1, Switch: api.BuildSwitchRef{Id: "sw-unknown"}},
 		},
 	}
 	_, err := buildInputFromResolved(full, s.fullMap())
@@ -83,10 +83,10 @@ func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedSwitchIsError() {
 
 func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKitIsError() {
 	full := api.Build{
-		Keyboard:   &api.BuildKeyboardRef{Id: "kb-old"},
+		Keyboard:   api.BuildKeyboardRef{Id: "kb-old"},
 		Visibility: new(api.Visibility("public")),
-		KeycapKits: &[]api.BuildKeycapKitEntryResolved{
-			{KitId: "kit-unknown", KeycapSet: &api.BuildKeycapSetRef{Id: "set-old"}},
+		KeycapSets: &[]api.BuildKeycapSetRef{
+			{Id: "set-old", Kits: []api.BuildKeycapKitRef{{KitId: "kit-unknown"}}},
 		},
 	}
 	_, err := buildInputFromResolved(full, s.fullMap())
@@ -95,7 +95,7 @@ func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKitIsError() {
 }
 
 func (s *RestoreSuite) TestBuildInputFromResolved_MissingVisibilityIsError() {
-	full := api.Build{Keyboard: &api.BuildKeyboardRef{Id: "kb-old"}}
+	full := api.Build{Keyboard: api.BuildKeyboardRef{Id: "kb-old"}}
 	_, err := buildInputFromResolved(full, s.fullMap())
 	s.Require().Error(err)
 	s.ErrorContains(err, "no visibility")
@@ -105,22 +105,4 @@ func (s *RestoreSuite) TestBuildInputFromResolved_MissingKeyboardIsError() {
 	_, err := buildInputFromResolved(api.Build{Visibility: new(api.Visibility("public"))}, s.fullMap())
 	s.Require().Error(err)
 	s.ErrorContains(err, "no keyboard")
-}
-
-func (s *RestoreSuite) TestBuildInputFromResolved_UsesKeyboardIDWhenKeyboardMissing() {
-	full := api.Build{KeyboardId: "kb-old", Visibility: new(api.Visibility("public"))}
-
-	got, err := buildInputFromResolved(full, s.fullMap())
-
-	s.Require().NoError(err)
-	s.Equal("kb-new", got.Keyboard)
-}
-
-func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKeyboardIDIsError() {
-	full := api.Build{KeyboardId: "kb-deleted", Visibility: new(api.Visibility("public"))}
-
-	_, err := buildInputFromResolved(full, s.fullMap())
-
-	s.Require().Error(err)
-	s.ErrorContains(err, "kb-deleted")
 }

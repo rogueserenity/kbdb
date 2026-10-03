@@ -44,7 +44,7 @@ var updateSwitchTool = &mcp.Tool{
 
 var deleteSwitchTool = &mcp.Tool{
 	Name:        "delete_switch",
-	Description: "Removes a switch from your own collection. Idempotent: deleting a switch that isn't there succeeds. on_delete controls what happens if a build still references this switch: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the switch and every referencing build; \"detach\" deletes the switch regardless, leaving referencing builds with a dangling switches[].switch id.",
+	Description: "Removes a switch from your own collection. Idempotent: deleting a switch that isn't there succeeds. on_delete controls what happens if a build still references this switch: \"block\" (default) fails and lists the blocking build ids; \"cascade\" deletes the switch and every referencing build.",
 }
 
 var setSwitchImageTool = &mcp.Tool{
@@ -206,7 +206,7 @@ func handleDeleteSwitch(
 
 		onDelete, ok := cascadedelete.ParseOnDelete(in.OnDelete)
 		if !ok {
-			return nil, schema.DeleteSwitchOutput{}, errors.New("on_delete must be one of: block, cascade, detach")
+			return nil, schema.DeleteSwitchOutput{}, errors.New("on_delete must be block or cascade")
 		}
 
 		ownerID, err := resolveOwnerID(ctx, "")

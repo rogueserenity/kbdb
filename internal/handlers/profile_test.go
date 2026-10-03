@@ -840,17 +840,6 @@ func (s *SetProfileImageSuite) TestNoProfile_404() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
-func (s *SetProfileImageSuite) TestMutationConflict_409() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
-		Return("https://example.com/presigned-put", nil)
-	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrMutationConflict)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
-
-	s.Equal(http.StatusConflict, rec.Code)
-}
-
 func (s *SetProfileImageSuite) TestPresignError_500() {
 	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
 		Return("", errors.New("s3: access denied"))
@@ -966,16 +955,4 @@ func (s *DeleteProfileImageSuite) TestS3DeleteError_500_DoesNotClearDBRecord() {
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	// No .EXPECT() for ClearAvatarPath - the DB record must survive so a
 	// retry can re-attempt the S3 delete.
-}
-
-func (s *DeleteProfileImageSuite) TestMutationConflict_409() {
-	s.mockRepo.EXPECT().Get(mock.Anything, "user-alice").
-		Return(&repository.Profile{OwnerID: "user-alice", Username: "alice", AvatarPath: &deleteProfileImageTestKey}, nil)
-	s.mockImages.EXPECT().Delete(mock.Anything, deleteProfileImageTestKey).Return(nil)
-	s.mockRepo.EXPECT().ClearAvatarPath(mock.Anything).Return(nil, repository.ErrMutationConflict)
-
-	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx()))
-
-	s.Equal(http.StatusConflict, rec.Code)
 }

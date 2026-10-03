@@ -210,6 +210,55 @@ var _ = Describe("Creating a build", func() {
 			})
 		})
 
+		Context("given the plate isn't one the keyboard offers", func() {
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private","plate":"Polycarbonate"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 naming the plate field", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+
+					var got struct {
+						InvalidParams []struct {
+							Name string `json:"name"`
+						} `json:"invalid_params"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.InvalidParams).To(ConsistOf(HaveField("Name", "plate")))
+				})
+			})
+		})
+
+		Context("given a durometer with a mount type that doesn't support one", func() {
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private",`+
+							`"case_mount_type":{"type":"Top Mount","durometer":"`+approvedDurometer+`"}}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 400 naming the durometer field", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+					Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+
+					var got struct {
+						InvalidParams []struct {
+							Name string `json:"name"`
+						} `json:"invalid_params"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.InvalidParams).To(ConsistOf(HaveField("Name", "case_mount_type.durometer")))
+				})
+			})
+		})
+
 		Context("given the build references a switch owned by another user", func() {
 			var (
 				otherOwnerID string
