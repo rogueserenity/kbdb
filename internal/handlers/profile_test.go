@@ -56,8 +56,7 @@ func (s *GetProfileSuite) TestDiscoverableByID_200() {
 	var body api.Profile
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
 	s.Equal("alice", body.Username)
-	s.Require().NotNil(body.UserId)
-	s.Equal("user-alice", *body.UserId) // needed to address the {userId} collection routes
+	s.Equal("user-alice", body.UserId)
 	s.Require().NotNil(body.Bio)
 	s.Equal("keebs", *body.Bio)
 	s.Nil(body.Preferences)
@@ -367,8 +366,7 @@ func (s *UpdateProfileSuite) TestValidInput_200() {
 	var body api.Profile
 	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &body))
 	s.Equal("alice", body.Username)
-	s.Require().NotNil(body.UserId)
-	s.Equal("user-alice", *body.UserId)
+	s.Equal("user-alice", body.UserId)
 }
 
 func (s *UpdateProfileSuite) TestNotOwner_404_NoRepoCall() {
@@ -605,8 +603,7 @@ func (s *ListProfilesSuite) TestNoFilters_PassesEmptyPrefixes() {
 	s.Require().Len(*got.Items, 1)
 	row := (*got.Items)[0]
 	s.Equal("alice", row.Username)
-	s.Require().NotNil(row.UserId)
-	s.Equal("user-alice", *row.UserId)
+	s.Equal("user-alice", row.UserId)
 }
 
 func (s *ListProfilesSuite) TestFullProfiles_PreferencesOnlyOnCallersOwnRow() {

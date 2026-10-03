@@ -1969,7 +1969,7 @@ components:
 
     Profile:
       type: object
-      required: [username]
+      required: [user_id, username, discoverable]
       properties:
         user_id:
           type: string

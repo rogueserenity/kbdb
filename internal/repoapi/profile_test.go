@@ -44,10 +44,8 @@ func (s *ProfileMapperSuite) TestProfileToAPI_FullProfile_NoAvatar() {
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
-	s.Require().NotNil(out.UserId)
-	s.Equal("user-alice", *out.UserId)
-	s.Require().NotNil(out.Discoverable)
-	s.True(*out.Discoverable)
+	s.Equal("user-alice", out.UserId)
+	s.True(out.Discoverable)
 	s.Require().NotNil(out.DiscordUsername)
 	s.Equal("alice_kb", *out.DiscordUsername)
 	s.Require().NotNil(out.Bio)
@@ -69,8 +67,7 @@ func (s *ProfileMapperSuite) TestProfileToAPI_ExposesSubjectAsUserID() {
 
 	s.Require().NoError(err)
 	s.Equal("alice", out.Username)
-	s.Require().NotNil(out.UserId)
-	s.Equal("user-alice", *out.UserId)
+	s.Equal("user-alice", out.UserId)
 }
 
 func (s *ProfileMapperSuite) TestProfileToAPI_PresignsAvatar() {
