@@ -12,6 +12,9 @@
 # Test binary, built with `go test -c`
 *.test
 
+# `go build ./cmd/...` from the repo root drops binaries here
+/kbdb-migrate
+
 # Code coverage profiles and other test artifacts
 *.out
 coverage.*

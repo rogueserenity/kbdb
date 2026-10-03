@@ -468,3 +468,14 @@ func (s *BuildToMCPSummarySuite) TestSwitchRepositoryError_ReturnsError() {
 		context.Background(), b, true, repository.ProfilePreferences{ShowPriceToMe: true})
 	s.Require().Error(err)
 }
+
+func (s *BuildToMCPSuite) TestNonOwnerShowPriceToOthersFalse_PriceOnlyStabs_OmitsStabs() {
+	out := Build{}.ToMCP(repository.Build{
+		ID:         "build-1",
+		Keyboard:   "kb-1",
+		Visibility: repository.VisibilityPublic,
+		Stabs:      &repository.BuildStabs{Price: new(12.5)},
+	}, false, repository.ProfilePreferences{})
+
+	s.Nil(out.Stabs)
+}

@@ -648,8 +648,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersFalse_Om
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().NoError(err)
-	s.Require().NotNil(out.Build.Stabs)
-	s.Nil(out.Build.Stabs.Price)
+	s.Nil(out.Build.Stabs, "stabs had only a price, so nothing is left")
 }
 
 func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceAndCurrency() {

@@ -400,16 +400,29 @@ func dumpedVisibility(v *api.Visibility) (api.Visibility, error) {
 	return *v, nil
 }
 
+// buildKeyboardID falls back to keyboard.id for dumps taken before Build
+// had keyboard_id.
+func buildKeyboardID(b api.Build) string {
+	if b.KeyboardId != "" {
+		return b.KeyboardId
+	}
+	if b.Keyboard != nil {
+		return b.Keyboard.Id
+	}
+	return ""
+}
+
 // buildInputFromResolved collapses a resolved Build GET body to a BuildInput,
 // remapping every cross-entity reference through m. A reference with no
 // mapping is a hard error — we never POST a build with a dangling ref.
 func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
-	if full.Keyboard == nil {
-		return api.BuildInput{}, errors.New("resolved build has no keyboard (was its keyboard deleted before the dump?)")
+	keyboardID := buildKeyboardID(full)
+	if keyboardID == "" {
+		return api.BuildInput{}, errors.New("resolved build has no keyboard")
 	}
-	kb, ok := m.Keyboards[full.Keyboard.Id]
+	kb, ok := m.Keyboards[keyboardID]
 	if !ok {
-		return api.BuildInput{}, fmt.Errorf("keyboard %s is not in the id map; restore keyboards first", full.Keyboard.Id)
+		return api.BuildInput{}, fmt.Errorf("keyboard %s is not in the id map (deleted before the dump, or not restored yet)", keyboardID)
 	}
 	visibility, err := dumpedVisibility(full.Visibility)
 	if err != nil {
