@@ -375,7 +375,7 @@ func AddBuildImage(buildRepo repository.BuildRepository, images repository.Build
 			return
 		}
 
-		uploadURL, err := images.PresignPutBuildImage(r.Context(), key, in.ContentType)
+		uploadURL, err := images.PresignPutBuildImage(r.Context(), key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(r.Context()).Error("presigning build image upload", log.Error, err, log.BuildID, buildID)
 			problem.Internal(w, "failed to add build image")

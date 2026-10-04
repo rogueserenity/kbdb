@@ -45,7 +45,7 @@ var _ = Describe("Deleting a profile's avatar", func() {
 
 		Context("given the profile has an avatar", func() {
 			BeforeEach(func(ctx SpecContext) {
-				setResp, err := client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+				setResp, err := client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 				Expect(err).NotTo(HaveOccurred())
 				Expect(setResp.StatusCode).To(Equal(http.StatusCreated))
 			})

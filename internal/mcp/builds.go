@@ -58,7 +58,7 @@ var deleteBuildTool = &mcp.Tool{
 
 var addBuildImageTool = &mcp.Tool{
 	Name:        "add_build_image",
-	Description: "Mints a presigned URL to upload a new image to one of your own builds. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header. A build may have any number of images; this always adds a new one rather than replacing an existing image.",
+	Description: "Mints a presigned URL to upload a new image to one of your own builds. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header and a body of exactly size_bytes. Images are capped at 5 MB; resize anything larger first. A build may have at most 10 images; this always adds a new one rather than replacing an existing image.",
 }
 
 var deleteBuildImageTool = &mcp.Tool{
@@ -386,6 +386,10 @@ func handleAddBuildImage(
 			return nil, schema.AddBuildImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		if err := validateImageSize(in.SizeBytes); err != nil {
+			return nil, schema.AddBuildImageOutput{}, err
+		}
+
 		imageID := uuid.NewString()
 
 		key, err := repository.NewBuildImageKey(ctx, in.BuildID, imageID)
@@ -394,7 +398,7 @@ func handleAddBuildImage(
 			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")
 		}
 
-		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType)
+		uploadURL, err := images.PresignPutBuildImage(ctx, key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning build image upload", log.BuildID, in.BuildID, log.Error, err)
 			return nil, schema.AddBuildImageOutput{}, errors.New("failed to add build image")

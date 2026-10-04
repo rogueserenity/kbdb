@@ -394,9 +394,10 @@ func (r *BuildRepository) Delete(ctx context.Context, id string) error {
 // images.<id> = {path, seq}. Seq is time.Now().UnixNano(), so a new image
 // sorts after every existing one without reading the current max (see
 // BuildImageEntry.Seq for the wall-clock caveat). images is not part of any
-// ref-marker, so this is a plain UpdateItem, no transaction. On the
-// compound-condition failure a consistent GetItem (buildExists) tells
-// build-gone (ErrNotFound) from duplicate-id.
+// ref-marker, so this is a plain UpdateItem, no transaction. The condition
+// also enforces MaxImagesPerItem, so concurrent adds can't overshoot it. On
+// the compound-condition failure the returned item tells build-gone
+// (ErrNotFound) from cap-reached (ErrImageLimitReached) from duplicate-id.
 func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image repository.BuildImage) error {
 	if image.ImageID == "" {
 		return fmt.Errorf("adding image to build %q: %w", buildID, errEmptyImageID)
@@ -411,7 +412,8 @@ func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image re
 	entry := repository.BuildImageEntry{Path: image.Path, Seq: int(time.Now().UnixNano())}
 	update := expression.Set(expression.Name(imagePath), expression.Value(entry))
 	cond := expression.AttributeExists(expression.Name("id")).
-		And(expression.AttributeNotExists(expression.Name(imagePath)))
+		And(expression.AttributeNotExists(expression.Name(imagePath))).
+		And(expression.Size(expression.Name("images")).LessThan(expression.Value(repository.MaxImagesPerItem)))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
 	if err != nil {
@@ -425,15 +427,17 @@ func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image re
 		ConditionExpression:       expr.Condition(),
 		ExpressionAttributeNames:  expr.Names(),
 		ExpressionAttributeValues: expr.Values(),
+		// The failed check hands back the item it was evaluated against, so
+		// classifying the failure can't race a concurrent write.
+		ReturnValuesOnConditionCheckFailure: types.ReturnValuesOnConditionCheckFailureAllOld,
 	})
 	if err != nil {
-		if _, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
-			exists, existsErr := r.buildExists(ctx, ownerID, buildID)
-			if existsErr != nil {
-				return fmt.Errorf("classifying add-image conflict for build %q: %w", buildID, existsErr)
-			}
-			if !exists {
+		if ccf, ok := errors.AsType[*types.ConditionalCheckFailedException](err); ok {
+			if len(ccf.Item) == 0 {
 				return repository.ErrNotFound
+			}
+			if images, ok := ccf.Item["images"].(*types.AttributeValueMemberM); ok && len(images.Value) >= repository.MaxImagesPerItem {
+				return fmt.Errorf("adding image %q to build %q: %w", image.ImageID, buildID, repository.ErrImageLimitReached)
 			}
 			return fmt.Errorf("adding image %q to build %q: %w", image.ImageID, buildID, errDuplicateImageID)
 		}

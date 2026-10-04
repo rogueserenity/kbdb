@@ -180,8 +180,9 @@ type ProfileImageStore interface {
 	PresignGet(ctx context.Context, key ProfileImageKey) (url string, expiresAt time.Time, err error)
 
 	// PresignPut returns a short-lived presigned PUT URL for key, locked to
-	// contentType via the Content-Type header the upload must match.
-	PresignPut(ctx context.Context, key ProfileImageKey, contentType string) (url string, err error)
+	// contentType and size via the Content-Type and Content-Length the upload
+	// must match.
+	PresignPut(ctx context.Context, key ProfileImageKey, contentType string, size int64) (url string, err error)
 
 	// Delete removes the object at key. Idempotent, matching S3 DeleteObject.
 	Delete(ctx context.Context, key ProfileImageKey) error

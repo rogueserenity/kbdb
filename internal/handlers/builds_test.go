@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -1361,10 +1362,10 @@ func (s *AddBuildImageSuite) TestAddBuildImage_Succeeds() {
 		})).
 		Return(nil)
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1383,7 +1384,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_Succeeds() {
 func (s *AddBuildImageSuite) TestAddBuildImage_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
-	req := s.newRequest(ctx, `{"content_type":"image/png"}`)
+	req := s.newRequest(ctx, `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1392,7 +1393,7 @@ func (s *AddBuildImageSuite) TestAddBuildImage_NotOwner_Returns404() {
 }
 
 func (s *AddBuildImageSuite) TestAddBuildImage_Anonymous_Returns404() {
-	req := s.newRequest(s.T().Context(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.T().Context(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1427,13 +1428,13 @@ func (s *AddBuildImageSuite) TestAddBuildImage_UnapprovedContentType_Returns400(
 
 func (s *AddBuildImageSuite) TestAddBuildImage_NotFound_Returns404() {
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 	s.mockBuildRepo.EXPECT().
 		AddImage(mock.Anything, "build1", mock.Anything).
 		Return(repository.ErrNotFound)
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1441,12 +1442,28 @@ func (s *AddBuildImageSuite) TestAddBuildImage_NotFound_Returns404() {
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
+func (s *AddBuildImageSuite) TestAddBuildImage_ImageLimitReached_Returns409() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
+		Return("https://example.com/presigned-put", nil)
+	s.mockBuildRepo.EXPECT().
+		AddImage(mock.Anything, "build1", mock.Anything).
+		Return(fmt.Errorf("adding image: %w", repository.ErrImageLimitReached))
+
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
+	rec := httptest.NewRecorder()
+	s.handler(rec, req)
+
+	s.Equal(http.StatusConflict, rec.Code)
+	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
+}
+
 func (s *AddBuildImageSuite) TestAddBuildImage_PresignError_Returns500() {
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("", errors.New("s3: access denied"))
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1458,13 +1475,13 @@ func (s *AddBuildImageSuite) TestAddBuildImage_PresignError_Returns500() {
 
 func (s *AddBuildImageSuite) TestAddBuildImage_RepositoryError_Returns500() {
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 	s.mockBuildRepo.EXPECT().
 		AddImage(mock.Anything, "build1", mock.Anything).
 		Return(errors.New("put item failed"))
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 

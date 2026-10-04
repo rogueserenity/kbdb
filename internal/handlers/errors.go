@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/rogueserenity/kbdb/internal/log"
@@ -10,13 +11,17 @@ import (
 )
 
 // handleMutationError is the standard error tail for a mutating repository
-// call: repository.ErrNotFound -> 404, any other non-nil error -> 500
-// (logged as an error). logFields are passed through to the log call for correlation
+// call: repository.ErrNotFound -> 404, repository.ErrImageLimitReached ->
+// 409, any other non-nil error -> 500 (logged as an error). logFields are passed through to the log call for correlation
 // (e.g. log.SwitchID, id). Returns true if err was non-nil and a response
 // was written - callers should return immediately when true.
 func handleMutationError(w http.ResponseWriter, r *http.Request, err error, logFields ...any) bool {
 	if errors.Is(err, repository.ErrNotFound) {
 		problem.NotFound(w, "resource not found")
+		return true
+	}
+	if errors.Is(err, repository.ErrImageLimitReached) {
+		problem.Conflict(w, fmt.Sprintf("the item already has %d images, the maximum; delete one first", repository.MaxImagesPerItem))
 		return true
 	}
 	if err != nil {

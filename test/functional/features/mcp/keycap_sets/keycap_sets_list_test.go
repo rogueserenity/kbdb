@@ -97,11 +97,12 @@ var _ = Describe("Listing keycap sets over MCP", func() {
 					"keycap_set_id": keycapSetID,
 					"kit_id":        kitID,
 					"content_type":  approvedImageContentType,
+					"size_bytes":    len(api.TestImageBytes),
 				})
 				Expect(setErr).NotTo(HaveOccurred())
 				Expect(setResult.IsError).To(BeFalse())
 
-				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, decodeUploadURL(setResult), approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes-for-list-testing")))
+				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, decodeUploadURL(setResult), approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 				Expect(putErr).NotTo(HaveOccurred())
 				Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 			})

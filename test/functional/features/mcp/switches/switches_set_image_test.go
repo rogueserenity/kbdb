@@ -50,6 +50,7 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 						result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
 							"switch_id":    switchID,
 							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -61,7 +62,7 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 						Expect(out.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(putErr).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -81,6 +82,7 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 						result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
 							"switch_id":    switchID,
 							"content_type": "application/x-not-an-image",
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -111,6 +113,7 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 					result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
 						"switch_id":    switchID,
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -127,6 +130,7 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 					result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
 						"switch_id":    "no-such-switch-" + uuid.NewString(),
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -148,6 +152,7 @@ var _ = Describe("Setting a switch's image over MCP", func() {
 				result, err = client.CallTool(ctx, "set_switch_image", map[string]any{
 					"switch_id":    "irrelevant-" + uuid.NewString(),
 					"content_type": approvedImageContentType,
+					"size_bytes":   len(api.TestImageBytes),
 				})
 			})
 

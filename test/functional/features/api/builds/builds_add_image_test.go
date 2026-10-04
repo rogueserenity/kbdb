@@ -79,7 +79,7 @@ var _ = Describe("Adding an image to a build", func() {
 				When("adding an image to the build", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.AddImage(ctx, ownerID, buildID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+						resp, err = client.AddImage(ctx, ownerID, buildID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -96,7 +96,7 @@ var _ = Describe("Adding an image to a build", func() {
 						Expect(created.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(err).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -132,7 +132,7 @@ var _ = Describe("Adding an image to a build", func() {
 				When("adding an image to the build", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.AddImage(ctx, ownerID, buildID, ownerToken, `{"content_type":"application/x-not-an-image"}`)
+						resp, err = client.AddImage(ctx, ownerID, buildID, ownerToken, api.ImageUploadBody("application/x-not-an-image"))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -158,6 +158,30 @@ var _ = Describe("Adding an image to a build", func() {
 				})
 			})
 
+			Context("given the build already has 10 images", func() {
+				BeforeEach(func(ctx SpecContext) {
+					for range 10 {
+						addResp, err := client.AddImage(ctx, ownerID, buildID, ownerToken, api.ImageUploadBody(approvedImageContentType))
+						Expect(err).NotTo(HaveOccurred())
+						_ = addResp.Body.Close()
+						Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
+					}
+				})
+
+				When("adding an image to the build", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.AddImage(ctx, ownerID, buildID, ownerToken, api.ImageUploadBody(approvedImageContentType))
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("returns 409 with a problem+json body", func() {
+						Expect(resp.StatusCode).To(Equal(http.StatusConflict))
+						Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+					})
+				})
+			})
+
 			Context("given several images added in sequence", func() {
 				When("listing them, then deleting a middle one", func() {
 					It("returns them in add order, and the order survives the delete", func(ctx SpecContext) {
@@ -165,7 +189,7 @@ var _ = Describe("Adding an image to a build", func() {
 						ids := make([]string, 3)
 						for i := range ids {
 							addResp, err := client.AddImage(ctx, ownerID, buildID, ownerToken,
-								`{"content_type":"`+approvedImageContentType+`"}`)
+								api.ImageUploadBody(approvedImageContentType))
 							Expect(err).NotTo(HaveOccurred())
 							Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
 							var created struct {
@@ -202,7 +226,7 @@ var _ = Describe("Adding an image to a build", func() {
 			When("adding an image to the build", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.AddImage(ctx, ownerID, buildID, token, `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.AddImage(ctx, ownerID, buildID, token, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -217,7 +241,7 @@ var _ = Describe("Adding an image to a build", func() {
 			When("adding an image to the build", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.AddImage(ctx, ownerID, buildID, "", `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.AddImage(ctx, ownerID, buildID, "", api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -232,7 +256,7 @@ var _ = Describe("Adding an image to a build", func() {
 		When("adding an image to the build", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.AddImage(ctx, ownerID, "no-such-build-"+uuid.NewString(), ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+				resp, err = client.AddImage(ctx, ownerID, "no-such-build-"+uuid.NewString(), ownerToken, api.ImageUploadBody(approvedImageContentType))
 				Expect(err).NotTo(HaveOccurred())
 			})
 

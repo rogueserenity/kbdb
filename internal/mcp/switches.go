@@ -49,7 +49,7 @@ var deleteSwitchTool = &mcp.Tool{
 
 var setSwitchImageTool = &mcp.Tool{
 	Name:        "set_switch_image",
-	Description: "Mints a presigned URL to upload a switch's image to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header.",
+	Description: "Mints a presigned URL to upload a switch's image to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header and a body of exactly size_bytes. Images are capped at 5 MB; resize anything larger first.",
 }
 
 var deleteSwitchImageTool = &mcp.Tool{
@@ -240,13 +240,17 @@ func handleSetSwitchImage(
 			return nil, schema.SetSwitchImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		if err := validateImageSize(in.SizeBytes); err != nil {
+			return nil, schema.SetSwitchImageOutput{}, err
+		}
+
 		key, err := repository.NewSwitchImageKey(ctx, in.SwitchID)
 		if err != nil {
 			log.FromContext(ctx).Error("building switch image key", log.SwitchID, in.SwitchID, log.Error, err)
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")
 		}
 
-		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning switch image upload", log.SwitchID, in.SwitchID, log.Error, err)
 			return nil, schema.SetSwitchImageOutput{}, errors.New("failed to set switch image")

@@ -168,6 +168,7 @@ type SwitchPurchaseInput struct {
 type SetSwitchImageInput struct {
 	SwitchID    string `json:"switch_id" jsonschema:"the id of the switch to set the image on"`
 	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+	SizeBytes   int64  `json:"size_bytes" jsonschema:"the image's exact size in bytes, at most 5242880 (5 MB); resize anything larger before calling this tool. The upload must send exactly this many bytes"`
 }
 
 // SetSwitchImageOutput is the set_switch_image tool's output. UploadURL is
@@ -175,7 +176,7 @@ type SetSwitchImageInput struct {
 // it, matching REST's SetSwitchImage; the tool call itself never carries
 // image bytes.
 type SetSwitchImageOutput struct {
-	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the image bytes to directly, using the requested content_type as the Content-Type header and a body of exactly size_bytes; do not cache or persist it, it expires within minutes"`
 }
 
 // DeleteSwitchImageInput is the delete_switch_image tool's input.

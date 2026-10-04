@@ -60,7 +60,7 @@ var _ = Describe("Deleting a keycap kit's image", func() {
 				var imageGetURL string
 
 				BeforeEach(func(ctx SpecContext) {
-					setResp, err := client.SetKitImage(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"content_type":"image/png"}`)
+					setResp, err := client.SetKitImage(ctx, ownerID, keycapSetID, kitID, ownerToken, api.ImageUploadBody("image/png"))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(setResp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -69,7 +69,7 @@ var _ = Describe("Deleting a keycap kit's image", func() {
 					}
 					Expect(json.NewDecoder(setResp.Body).Decode(&created)).To(Succeed())
 
-					putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, "image/png", bytes.NewReader([]byte("fake-image-bytes")))
+					putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, "image/png", bytes.NewReader(api.TestImageBytes))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 

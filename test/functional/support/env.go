@@ -71,3 +71,9 @@ func ProfileUsernameTableName() string {
 func DynamoDBEndpointURL() string {
 	return os.Getenv("KBDB_DYNAMODB_ENDPOINT_URL")
 }
+
+// IsCI reports whether specs are running in CI, which targets real AWS
+// rather than the local emulator.
+func IsCI() bool {
+	return os.Getenv("CI") == "true"
+}

@@ -50,6 +50,7 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 						result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
 							"keyboard_id":  keyboardID,
 							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -62,7 +63,7 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 						Expect(out.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(putErr).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -106,6 +107,53 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 						result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
 							"keyboard_id":  keyboardID,
 							"content_type": "application/x-not-an-image",
+							"size_bytes":   len(api.TestImageBytes),
+						})
+					})
+
+					It("returns an MCP tool error result", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeTrue())
+					})
+				})
+			})
+
+			Context("given size_bytes over the 5 MB cap", func() {
+				When("the add_keyboard_image tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
+							"keyboard_id":  keyboardID,
+							"content_type": approvedImageContentType,
+							"size_bytes":   5242881,
+						})
+					})
+
+					It("returns an MCP tool error result", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeTrue())
+					})
+				})
+			})
+
+			Context("given the keyboard already has 10 images", func() {
+				BeforeEach(func(ctx SpecContext) {
+					for range 10 {
+						added, addErr := client.CallTool(ctx, "add_keyboard_image", map[string]any{
+							"keyboard_id":  keyboardID,
+							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
+						})
+						Expect(addErr).NotTo(HaveOccurred())
+						Expect(added.IsError).To(BeFalse())
+					}
+				})
+
+				When("the add_keyboard_image tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
+							"keyboard_id":  keyboardID,
+							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -135,6 +183,7 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 					result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
 						"keyboard_id":  keyboardID,
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -151,6 +200,7 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 					result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
 						"keyboard_id":  "no-such-keyboard-" + uuid.NewString(),
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -172,6 +222,7 @@ var _ = Describe("Adding an image to a keyboard over MCP", func() {
 				result, err = client.CallTool(ctx, "add_keyboard_image", map[string]any{
 					"keyboard_id":  "irrelevant-" + uuid.NewString(),
 					"content_type": approvedImageContentType,
+					"size_bytes":   len(api.TestImageBytes),
 				})
 			})
 

@@ -757,13 +757,14 @@ func (s *HandleSetSwitchImageSuite) TestSucceeds() {
 		SetImagePath(mock.Anything, "sw-1", mock.Anything).
 		Return(nil)
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, mock.Anything, "image/png").
+		PresignPut(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 
 	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
 		SwitchID:    "sw-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().NoError(err)
@@ -775,9 +776,21 @@ func (s *HandleSetSwitchImageSuite) TestBlankSwitchID_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
 		SwitchID:    " ",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorContains(err, "switch_id must not be blank")
+}
+
+func (s *HandleSetSwitchImageSuite) TestSizeOverCap_ReturnsError() {
+	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
+		SwitchID:    "sw-1",
+		ContentType: "image/png",
+		SizeBytes:   repository.MaxImageSizeBytes + 1,
+	})
+
+	s.Require().ErrorContains(err, "size_bytes")
 }
 
 func (s *HandleSetSwitchImageSuite) TestUnapprovedContentType_ReturnsError() {
@@ -792,7 +805,7 @@ func (s *HandleSetSwitchImageSuite) TestUnapprovedContentType_ReturnsError() {
 
 func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, mock.Anything, "image/png").
+		PresignPut(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 	s.mockSwitches.EXPECT().
 		SetImagePath(mock.Anything, "sw-1", mock.Anything).
@@ -802,6 +815,7 @@ func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
 		SwitchID:    "sw-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
@@ -809,13 +823,14 @@ func (s *HandleSetSwitchImageSuite) TestNotFound_ReturnsError() {
 
 func (s *HandleSetSwitchImageSuite) TestPresignError_ReturnsError() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, mock.Anything, "image/png").
+		PresignPut(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("", errors.New("s3: access denied"))
 
 	handler := handleSetSwitchImage(s.mockSwitches, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.SetSwitchImageInput{
 		SwitchID:    "sw-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().Error(err)

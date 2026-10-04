@@ -44,13 +44,14 @@ var _ = Describe("Deleting an image from a keyboard over MCP", func() {
 				addResult, addErr := client.CallTool(ctx, "add_keyboard_image", map[string]any{
 					"keyboard_id":  keyboardID,
 					"content_type": approvedImageContentType,
+					"size_bytes":   len(api.TestImageBytes),
 				})
 				Expect(addErr).NotTo(HaveOccurred())
 				Expect(addResult.IsError).To(BeFalse())
 				out := decodeAddImageOutput(addResult)
 				imageID = out.ImageID
 
-				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes-for-testing")))
+				putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 				Expect(putErr).NotTo(HaveOccurred())
 				Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 			})

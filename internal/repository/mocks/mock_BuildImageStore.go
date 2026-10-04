@@ -178,8 +178,8 @@ func (_c *MockBuildImageStore_PresignGetBuildImage_Call) RunAndReturn(run func(c
 }
 
 // PresignPutBuildImage provides a mock function for the type MockBuildImageStore
-func (_mock *MockBuildImageStore) PresignPutBuildImage(ctx context.Context, key repository.BuildImageKey, contentType string) (string, error) {
-	ret := _mock.Called(ctx, key, contentType)
+func (_mock *MockBuildImageStore) PresignPutBuildImage(ctx context.Context, key repository.BuildImageKey, contentType string, size int64) (string, error) {
+	ret := _mock.Called(ctx, key, contentType, size)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PresignPutBuildImage")
@@ -187,16 +187,16 @@ func (_mock *MockBuildImageStore) PresignPutBuildImage(ctx context.Context, key 
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey, string) (string, error)); ok {
-		return returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey, string, int64) (string, error)); ok {
+		return returnFunc(ctx, key, contentType, size)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey, string) string); ok {
-		r0 = returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.BuildImageKey, string, int64) string); ok {
+		r0 = returnFunc(ctx, key, contentType, size)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.BuildImageKey, string) error); ok {
-		r1 = returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.BuildImageKey, string, int64) error); ok {
+		r1 = returnFunc(ctx, key, contentType, size)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -212,11 +212,12 @@ type MockBuildImageStore_PresignPutBuildImage_Call struct {
 //   - ctx context.Context
 //   - key repository.BuildImageKey
 //   - contentType string
-func (_e *MockBuildImageStore_Expecter) PresignPutBuildImage(ctx any, key any, contentType any) *MockBuildImageStore_PresignPutBuildImage_Call {
-	return &MockBuildImageStore_PresignPutBuildImage_Call{Call: _e.mock.On("PresignPutBuildImage", ctx, key, contentType)}
+//   - size int64
+func (_e *MockBuildImageStore_Expecter) PresignPutBuildImage(ctx any, key any, contentType any, size any) *MockBuildImageStore_PresignPutBuildImage_Call {
+	return &MockBuildImageStore_PresignPutBuildImage_Call{Call: _e.mock.On("PresignPutBuildImage", ctx, key, contentType, size)}
 }
 
-func (_c *MockBuildImageStore_PresignPutBuildImage_Call) Run(run func(ctx context.Context, key repository.BuildImageKey, contentType string)) *MockBuildImageStore_PresignPutBuildImage_Call {
+func (_c *MockBuildImageStore_PresignPutBuildImage_Call) Run(run func(ctx context.Context, key repository.BuildImageKey, contentType string, size int64)) *MockBuildImageStore_PresignPutBuildImage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -230,10 +231,15 @@ func (_c *MockBuildImageStore_PresignPutBuildImage_Call) Run(run func(ctx contex
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 int64
+		if args[3] != nil {
+			arg3 = args[3].(int64)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -244,7 +250,7 @@ func (_c *MockBuildImageStore_PresignPutBuildImage_Call) Return(url string, err 
 	return _c
 }
 
-func (_c *MockBuildImageStore_PresignPutBuildImage_Call) RunAndReturn(run func(ctx context.Context, key repository.BuildImageKey, contentType string) (string, error)) *MockBuildImageStore_PresignPutBuildImage_Call {
+func (_c *MockBuildImageStore_PresignPutBuildImage_Call) RunAndReturn(run func(ctx context.Context, key repository.BuildImageKey, contentType string, size int64) (string, error)) *MockBuildImageStore_PresignPutBuildImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

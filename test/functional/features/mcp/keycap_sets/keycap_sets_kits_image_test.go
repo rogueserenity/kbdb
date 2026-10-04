@@ -60,6 +60,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 							"keycap_set_id": keycapSetID,
 							"kit_id":        kitID,
 							"content_type":  approvedImageContentType,
+							"size_bytes":    len(api.TestImageBytes),
 						})
 					})
 
@@ -71,7 +72,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 						Expect(uploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, uploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(putErr).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -93,6 +94,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 							"keycap_set_id": keycapSetID,
 							"kit_id":        kitID,
 							"content_type":  "application/x-not-an-image",
+							"size_bytes":    len(api.TestImageBytes),
 						})
 					})
 
@@ -110,6 +112,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 							"keycap_set_id": keycapSetID,
 							"kit_id":        "no-such-kit-" + uuid.NewString(),
 							"content_type":  approvedImageContentType,
+							"size_bytes":    len(api.TestImageBytes),
 						})
 					})
 
@@ -142,12 +145,13 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 						"keycap_set_id": keycapSetID,
 						"kit_id":        kitID,
 						"content_type":  approvedImageContentType,
+						"size_bytes":    len(api.TestImageBytes),
 					})
 					Expect(setErr).NotTo(HaveOccurred())
 					Expect(setResult.IsError).To(BeFalse())
 					uploadURL := decodeUploadURL(setResult)
 
-					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, uploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes")))
+					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, uploadURL, approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 					Expect(putErr).NotTo(HaveOccurred())
 					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 				})
@@ -205,6 +209,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 						"keycap_set_id": keycapSetID,
 						"kit_id":        kitID,
 						"content_type":  approvedImageContentType,
+						"size_bytes":    len(api.TestImageBytes),
 					})
 				})
 
@@ -222,6 +227,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 						"keycap_set_id": "no-such-keycap-set-" + uuid.NewString(),
 						"kit_id":        "some-kit-id",
 						"content_type":  approvedImageContentType,
+						"size_bytes":    len(api.TestImageBytes),
 					})
 				})
 
@@ -244,6 +250,7 @@ var _ = Describe("Managing a keycap kit's image over MCP", func() {
 					"keycap_set_id": "irrelevant-" + uuid.NewString(),
 					"kit_id":        "irrelevant",
 					"content_type":  approvedImageContentType,
+					"size_bytes":    len(api.TestImageBytes),
 				})
 			})
 

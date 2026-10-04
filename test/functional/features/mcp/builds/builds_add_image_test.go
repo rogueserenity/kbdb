@@ -60,6 +60,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 						result, err = client.CallTool(ctx, "add_build_image", map[string]any{
 							"build_id":     buildID,
 							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -72,7 +73,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 						Expect(out.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(putErr).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -92,6 +93,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 						result, err = client.CallTool(ctx, "add_build_image", map[string]any{
 							"build_id":     buildID,
 							"content_type": "application/x-not-an-image",
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -121,6 +123,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 					result, err = client.CallTool(ctx, "add_build_image", map[string]any{
 						"build_id":     buildID,
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -137,6 +140,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 					result, err = client.CallTool(ctx, "add_build_image", map[string]any{
 						"build_id":     "no-such-build-" + uuid.NewString(),
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -158,6 +162,7 @@ var _ = Describe("Adding an image to a build over MCP", func() {
 				result, err = client.CallTool(ctx, "add_build_image", map[string]any{
 					"build_id":     "irrelevant-" + uuid.NewString(),
 					"content_type": approvedImageContentType,
+					"size_bytes":   len(api.TestImageBytes),
 				})
 			})
 

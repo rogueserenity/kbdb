@@ -48,7 +48,7 @@ var _ = Describe("Setting a switch's image", func() {
 				When("setting the switch's image", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+						resp, err = client.SetImage(ctx, ownerID, switchID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -63,7 +63,7 @@ var _ = Describe("Setting a switch's image", func() {
 						Expect(created.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(err).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -97,7 +97,7 @@ var _ = Describe("Setting a switch's image", func() {
 				When("setting the switch's image", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"application/x-not-an-image"}`)
+						resp, err = client.SetImage(ctx, ownerID, switchID, ownerToken, api.ImageUploadBody("application/x-not-an-image"))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -125,7 +125,7 @@ var _ = Describe("Setting a switch's image", func() {
 
 			Context("given the switch already has an image set", func() {
 				BeforeEach(func(ctx SpecContext) {
-					firstResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+					firstResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(firstResp.StatusCode).To(Equal(http.StatusCreated))
 				})
@@ -133,7 +133,7 @@ var _ = Describe("Setting a switch's image", func() {
 				When("setting the switch's image again", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+						resp, err = client.SetImage(ctx, ownerID, switchID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -156,7 +156,7 @@ var _ = Describe("Setting a switch's image", func() {
 			When("setting the switch's image", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.SetImage(ctx, ownerID, switchID, token, `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.SetImage(ctx, ownerID, switchID, token, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -171,7 +171,7 @@ var _ = Describe("Setting a switch's image", func() {
 			When("setting the switch's image", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.SetImage(ctx, ownerID, switchID, "", `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.SetImage(ctx, ownerID, switchID, "", api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -186,7 +186,7 @@ var _ = Describe("Setting a switch's image", func() {
 		When("setting the switch's image", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.SetImage(ctx, ownerID, "no-such-switch-"+uuid.NewString(), ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+				resp, err = client.SetImage(ctx, ownerID, "no-such-switch-"+uuid.NewString(), ownerToken, api.ImageUploadBody(approvedImageContentType))
 				Expect(err).NotTo(HaveOccurred())
 			})
 

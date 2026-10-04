@@ -55,7 +55,7 @@ var listKeyboardImagesTool = &mcp.Tool{
 
 var addKeyboardImageTool = &mcp.Tool{
 	Name:        "add_keyboard_image",
-	Description: "Adds an image to a keyboard in your own collection. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header.",
+	Description: "Adds an image to a keyboard in your own collection. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header and a body of exactly size_bytes. Images are capped at 5 MB; resize anything larger first. A keyboard may have at most 10 images.",
 }
 
 var deleteKeyboardImageTool = &mcp.Tool{
@@ -266,6 +266,10 @@ func handleAddKeyboardImage(
 			return nil, schema.AddKeyboardImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		if err := validateImageSize(in.SizeBytes); err != nil {
+			return nil, schema.AddKeyboardImageOutput{}, err
+		}
+
 		imageID := uuid.NewString()
 
 		key, err := repository.NewKeyboardImageKey(ctx, in.KeyboardID, imageID)
@@ -274,7 +278,7 @@ func handleAddKeyboardImage(
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")
 		}
 
-		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType)
+		uploadURL, err := images.PresignPutKeyboardImage(ctx, key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning keyboard image upload", log.KeyboardID, in.KeyboardID, log.Error, err)
 			return nil, schema.AddKeyboardImageOutput{}, errors.New("failed to add keyboard image")

@@ -178,8 +178,8 @@ func (_c *MockKeyboardImageStore_PresignGetKeyboardImage_Call) RunAndReturn(run 
 }
 
 // PresignPutKeyboardImage provides a mock function for the type MockKeyboardImageStore
-func (_mock *MockKeyboardImageStore) PresignPutKeyboardImage(ctx context.Context, key repository.KeyboardImageKey, contentType string) (string, error) {
-	ret := _mock.Called(ctx, key, contentType)
+func (_mock *MockKeyboardImageStore) PresignPutKeyboardImage(ctx context.Context, key repository.KeyboardImageKey, contentType string, size int64) (string, error) {
+	ret := _mock.Called(ctx, key, contentType, size)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PresignPutKeyboardImage")
@@ -187,16 +187,16 @@ func (_mock *MockKeyboardImageStore) PresignPutKeyboardImage(ctx context.Context
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey, string) (string, error)); ok {
-		return returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey, string, int64) (string, error)); ok {
+		return returnFunc(ctx, key, contentType, size)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey, string) string); ok {
-		r0 = returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.KeyboardImageKey, string, int64) string); ok {
+		r0 = returnFunc(ctx, key, contentType, size)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.KeyboardImageKey, string) error); ok {
-		r1 = returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.KeyboardImageKey, string, int64) error); ok {
+		r1 = returnFunc(ctx, key, contentType, size)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -212,11 +212,12 @@ type MockKeyboardImageStore_PresignPutKeyboardImage_Call struct {
 //   - ctx context.Context
 //   - key repository.KeyboardImageKey
 //   - contentType string
-func (_e *MockKeyboardImageStore_Expecter) PresignPutKeyboardImage(ctx any, key any, contentType any) *MockKeyboardImageStore_PresignPutKeyboardImage_Call {
-	return &MockKeyboardImageStore_PresignPutKeyboardImage_Call{Call: _e.mock.On("PresignPutKeyboardImage", ctx, key, contentType)}
+//   - size int64
+func (_e *MockKeyboardImageStore_Expecter) PresignPutKeyboardImage(ctx any, key any, contentType any, size any) *MockKeyboardImageStore_PresignPutKeyboardImage_Call {
+	return &MockKeyboardImageStore_PresignPutKeyboardImage_Call{Call: _e.mock.On("PresignPutKeyboardImage", ctx, key, contentType, size)}
 }
 
-func (_c *MockKeyboardImageStore_PresignPutKeyboardImage_Call) Run(run func(ctx context.Context, key repository.KeyboardImageKey, contentType string)) *MockKeyboardImageStore_PresignPutKeyboardImage_Call {
+func (_c *MockKeyboardImageStore_PresignPutKeyboardImage_Call) Run(run func(ctx context.Context, key repository.KeyboardImageKey, contentType string, size int64)) *MockKeyboardImageStore_PresignPutKeyboardImage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -230,10 +231,15 @@ func (_c *MockKeyboardImageStore_PresignPutKeyboardImage_Call) Run(run func(ctx 
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 int64
+		if args[3] != nil {
+			arg3 = args[3].(int64)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -244,7 +250,7 @@ func (_c *MockKeyboardImageStore_PresignPutKeyboardImage_Call) Return(url string
 	return _c
 }
 
-func (_c *MockKeyboardImageStore_PresignPutKeyboardImage_Call) RunAndReturn(run func(ctx context.Context, key repository.KeyboardImageKey, contentType string) (string, error)) *MockKeyboardImageStore_PresignPutKeyboardImage_Call {
+func (_c *MockKeyboardImageStore_PresignPutKeyboardImage_Call) RunAndReturn(run func(ctx context.Context, key repository.KeyboardImageKey, contentType string, size int64) (string, error)) *MockKeyboardImageStore_PresignPutKeyboardImage_Call {
 	_c.Call.Return(run)
 	return _c
 }

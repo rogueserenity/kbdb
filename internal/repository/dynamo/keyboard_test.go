@@ -2,6 +2,7 @@ package dynamo
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"testing"
@@ -378,7 +379,9 @@ func (s *KeyboardRepositorySuite) TestAddImage_Succeeds_SetsMonotonicSeq() {
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return strings.Contains(*in.ConditionExpression, "attribute_exists") &&
-				strings.Contains(*in.ConditionExpression, "attribute_not_exists")
+				strings.Contains(*in.ConditionExpression, "attribute_not_exists") &&
+				strings.Contains(*in.ConditionExpression, "size (") &&
+				in.ReturnValuesOnConditionCheckFailure == types.ReturnValuesOnConditionCheckFailureAllOld
 		})).
 		Return(&dynamodb.UpdateItemOutput{}, nil)
 
@@ -386,7 +389,13 @@ func (s *KeyboardRepositorySuite) TestAddImage_Succeeds_SetsMonotonicSeq() {
 	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img2", Path: "keyboards/alice/kb1/images/img2"})
 	s.Require().NoError(err)
 
-	entry := captured.ExpressionAttributeValues[":0"].(*types.AttributeValueMemberM)
+	var entry *types.AttributeValueMemberM
+	for _, v := range captured.ExpressionAttributeValues {
+		if m, ok := v.(*types.AttributeValueMemberM); ok {
+			entry = m
+		}
+	}
+	s.Require().NotNil(entry)
 	seq, convErr := strconv.ParseInt(entry.Value["seq"].(*types.AttributeValueMemberN).Value, 10, 64)
 	s.Require().NoError(convErr)
 	s.GreaterOrEqual(seq, before)
@@ -394,15 +403,10 @@ func (s *KeyboardRepositorySuite) TestAddImage_Succeeds_SetsMonotonicSeq() {
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_ParentKeyboardNotFound_ReturnsErrNotFound() {
-	// attribute_exists(id) fails; the classify Get confirms the keyboard is gone.
+	// attribute_exists(id) fails; the returned item is empty.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
-			return in.ConsistentRead != nil && *in.ConsistentRead
-		})).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
@@ -411,14 +415,11 @@ func (s *KeyboardRepositorySuite) TestAddImage_ParentKeyboardNotFound_ReturnsErr
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
-	// attribute_not_exists(images.img1) fails; the classify Get finds the
-	// keyboard, so the id is a duplicate.
+	// attribute_not_exists(images.img1) fails; the returned item exists and
+	// is under the cap, so the id is a duplicate.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.storedKeyboard(), nil)
+		Return(nil, &types.ConditionalCheckFailedException{Item: s.storedKeyboard().Item})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p2"})
@@ -426,19 +427,22 @@ func (s *KeyboardRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
 	s.Require().ErrorIs(err, errDuplicateKeyboardImageID)
 }
 
-func (s *KeyboardRepositorySuite) TestAddImage_ClassifyGetItemError_Propagates() {
+func (s *KeyboardRepositorySuite) TestAddImage_AtImageLimit_ReturnsErrImageLimitReached() {
+	// size(images) < MaxImagesPerItem fails; the returned item is at the cap.
+	full := map[string]types.AttributeValue{}
+	for i := range repository.MaxImagesPerItem {
+		full[fmt.Sprintf("img%d", i)] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
+	}
+	item := s.storedKeyboard().Item
+	item["images"] = &types.AttributeValueMemberM{Value: full}
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(nil, errors.New("dynamodb: throttled"))
+		Return(nil, &types.ConditionalCheckFailedException{Item: item})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "img1", Path: "p"})
+	err := s.repo.AddImage(ctx, "kb1", repository.KeyboardImage{ImageID: "new", Path: "p"})
 
-	s.Require().Error(err)
-	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Require().ErrorIs(err, repository.ErrImageLimitReached)
 }
 
 func (s *KeyboardRepositorySuite) TestAddImage_UpdateItemError_Propagates() {

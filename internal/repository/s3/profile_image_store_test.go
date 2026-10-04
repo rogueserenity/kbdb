@@ -138,11 +138,12 @@ func (s *ProfileImageStoreSuite) TestPresignPut_Succeeds() {
 		PresignPutObject(mock.Anything, mock.MatchedBy(func(in *s3.PutObjectInput) bool {
 			return *in.Bucket == "images-bucket" &&
 				*in.Key == "profiles/user-alice/avatar" &&
-				*in.ContentType == "image/png"
+				*in.ContentType == "image/png" &&
+				*in.ContentLength == 1234
 		})).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-put"}, nil)
 
-	url, err := s.store.PresignPut(s.T().Context(), "profiles/user-alice/avatar", "image/png")
+	url, err := s.store.PresignPut(s.T().Context(), "profiles/user-alice/avatar", "image/png", 1234)
 
 	s.Require().NoError(err)
 	s.Equal("https://example.com/presigned-put", url)

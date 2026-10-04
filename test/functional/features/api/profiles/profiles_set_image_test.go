@@ -54,7 +54,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 				When("setting the avatar", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+						resp, err = client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -69,7 +69,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 						Expect(created.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-avatar-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(err).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -103,7 +103,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 				When("setting the avatar", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"application/x-not-an-image"}`)
+						resp, err = client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody("application/x-not-an-image"))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -131,7 +131,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 
 			Context("given the avatar is already set", func() {
 				BeforeEach(func(ctx SpecContext) {
-					firstResp, err := client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+					firstResp, err := client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 					Expect(firstResp.StatusCode).To(Equal(http.StatusCreated))
 				})
@@ -139,7 +139,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 				When("setting the avatar again", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+						resp, err = client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -162,7 +162,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 			When("setting the avatar", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.SetImage(ctx, ownerID, token, `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.SetImage(ctx, ownerID, token, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -177,7 +177,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 			When("setting the avatar", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.SetImage(ctx, ownerID, "", `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.SetImage(ctx, ownerID, "", api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -191,7 +191,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 			When("setting the avatar", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.SetImage(ctx, username, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.SetImage(ctx, username, ownerToken, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -207,7 +207,7 @@ var _ = Describe("Setting a profile's avatar", func() {
 		When("setting the avatar", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+				resp, err = client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 				Expect(err).NotTo(HaveOccurred())
 			})
 

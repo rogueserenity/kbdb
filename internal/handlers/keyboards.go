@@ -386,7 +386,7 @@ func AddKeyboardImage(keyboardRepo repository.KeyboardRepository, images reposit
 			return
 		}
 
-		uploadURL, err := images.PresignPutKeyboardImage(r.Context(), key, in.ContentType)
+		uploadURL, err := images.PresignPutKeyboardImage(r.Context(), key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(r.Context()).Error("presigning keyboard image upload", log.Error, err, log.KeyboardID, keyboardID)
 			problem.Internal(w, "failed to add keyboard image")

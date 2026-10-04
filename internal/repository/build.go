@@ -146,8 +146,9 @@ type BuildRepository interface {
 	// AddImage adds image (image.ImageID must be set) to the build's Images
 	// map with a server-assigned Seq that sorts it after every existing
 	// image; image.Seq is ignored. Returns ErrNotFound if the parent build
-	// doesn't exist, or a wrapped duplicate-id error if image.ImageID is
-	// already present.
+	// doesn't exist, ErrImageLimitReached if it already has
+	// MaxImagesPerItem images, or a wrapped duplicate-id error if
+	// image.ImageID is already present.
 	AddImage(ctx context.Context, buildID string, image BuildImage) error
 
 	// DeleteImage removes imageID from buildID's Images map and returns the
@@ -209,7 +210,7 @@ type BuildImageStore interface {
 	// PresignGetBuildImage returns a presigned GET URL for key, and when it
 	// stops working - bounded by the signing credentials, not configured.
 	PresignGetBuildImage(ctx context.Context, key BuildImageKey) (url string, expiresAt time.Time, err error)
-	PresignPutBuildImage(ctx context.Context, key BuildImageKey, contentType string) (url string, err error)
+	PresignPutBuildImage(ctx context.Context, key BuildImageKey, contentType string, size int64) (url string, err error)
 
 	// DeleteBuildImage is idempotent, matching S3's own DeleteObject.
 	DeleteBuildImage(ctx context.Context, key BuildImageKey) error

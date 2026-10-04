@@ -91,13 +91,14 @@ type ProfileSummary struct {
 // carry the image bytes themselves (see UploadURL on the output).
 type SetProfileImageInput struct {
 	ContentType string `json:"content_type" jsonschema:"the image's MIME type; must be an approved image_content_type lookup value"`
+	SizeBytes   int64  `json:"size_bytes" jsonschema:"the image's exact size in bytes, at most 5242880 (5 MB); resize anything larger before calling this tool. The upload must send exactly this many bytes"`
 }
 
 // SetProfileImageOutput is the set_profile_image tool's output. UploadURL
 // is a presigned S3 PUT URL - the caller uploads the image bytes directly
 // to it; the tool call itself never carries image bytes.
 type SetProfileImageOutput struct {
-	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the avatar bytes to directly, using the requested content_type as the Content-Type header; do not cache or persist it, it expires within minutes"`
+	UploadURL string `json:"upload_url" jsonschema:"a freshly-minted, short-lived presigned URL to PUT the avatar bytes to directly, using the requested content_type as the Content-Type header and a body of exactly size_bytes; do not cache or persist it, it expires within minutes"`
 }
 
 // DeleteProfileImageInput is the delete_profile_image tool's input. It

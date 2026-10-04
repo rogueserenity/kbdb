@@ -37,14 +37,15 @@ func (s *KeyboardImageStore) PresignGetKeyboardImage(ctx context.Context, key re
 }
 
 // PresignPutKeyboardImage implements repository.KeyboardImageStore.
-func (s *KeyboardImageStore) PresignPutKeyboardImage(ctx context.Context, key repository.KeyboardImageKey, contentType string) (string, error) {
+func (s *KeyboardImageStore) PresignPutKeyboardImage(ctx context.Context, key repository.KeyboardImageKey, contentType string, size int64) (string, error) {
 	req, err := s.presign.PresignPutObject(ctx, &s3.PutObjectInput{
-		Bucket:      aws.String(s.bucket),
-		Key:         aws.String(string(key)),
-		ContentType: aws.String(contentType),
+		Bucket:        aws.String(s.bucket),
+		Key:           aws.String(string(key)),
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(size),
 	})
 	if err != nil {
-		return "", fmt.Errorf("presigning PUT s3://%s/%s (content-type %q): %w", s.bucket, key, contentType, err)
+		return "", fmt.Errorf("presigning PUT s3://%s/%s (content-type %q, %d bytes): %w", s.bucket, key, contentType, size, err)
 	}
 
 	return req.URL, nil

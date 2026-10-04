@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/rogueserenity/kbdb/internal/authz"
@@ -94,6 +95,15 @@ func ownedReadable[T any](
 	return item, nil
 }
 
+// validateImageSize is REST's ImageUploadRequest.size_bytes bound, which
+// the request validator applies there, for the MCP image tools.
+func validateImageSize(size int64) error {
+	if size < 1 || size > repository.MaxImageSizeBytes {
+		return fmt.Errorf("size_bytes: must be between 1 and %d (5 MB); resize the image first", repository.MaxImageSizeBytes)
+	}
+	return nil
+}
+
 // errMutationNotFound, errMutationConflict, and errMutationFailed are
 // returned by handleMutationError and handleTransactionError. Generic rather than per-entity: the
 // calling tool is already known to whatever invoked it (unlike REST, MCP
@@ -105,12 +115,19 @@ var (
 	errMutationFailed   = errors.New("failed to mutate resource")
 )
 
+// errImageLimitReached is handleMutationError's mapping for
+// repository.ErrImageLimitReached.
+var errImageLimitReached = fmt.Errorf("the item already has %d images, the maximum; delete one first", repository.MaxImagesPerItem)
+
 // handleMutationError is the standard error tail for a mutating repository
-// call: repository.ErrNotFound -> errMutationNotFound, any other non-nil error -> errMutationFailed (logged as an error). logFields are passed through to the log call for correlation
+// call: repository.ErrNotFound -> errMutationNotFound, repository.ErrImageLimitReached -> errImageLimitReached, any other non-nil error -> errMutationFailed (logged as an error). logFields are passed through to the log call for correlation
 // (e.g. log.SwitchID, id). Returns nil if err was nil.
 func handleMutationError(ctx context.Context, err error, logFields ...any) error {
 	if errors.Is(err, repository.ErrNotFound) {
 		return errMutationNotFound
+	}
+	if errors.Is(err, repository.ErrImageLimitReached) {
+		return errImageLimitReached
 	}
 	if err != nil {
 		log.FromContext(ctx).Error("mutation failed", append([]any{log.Error, err}, logFields...)...)

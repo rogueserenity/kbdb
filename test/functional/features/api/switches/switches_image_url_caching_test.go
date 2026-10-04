@@ -49,7 +49,7 @@ var _ = Describe("Presigned image GET URL caching for a switch", func() {
 		switchID = "image-cache-switch-" + uuid.NewString()
 		Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
 
-		setResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+		setResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(setResp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -58,7 +58,7 @@ var _ = Describe("Presigned image GET URL caching for a switch", func() {
 		}
 		Expect(json.NewDecoder(setResp.Body).Decode(&created)).To(Succeed())
 
-		putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes")))
+		putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 	})
