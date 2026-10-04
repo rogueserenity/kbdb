@@ -51,12 +51,13 @@ var _ = Describe("Deleting a profile's avatar over MCP", func() {
 				BeforeEach(func(ctx SpecContext) {
 					setResult, setErr := client.CallTool(ctx, "set_profile_image", map[string]any{
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 					Expect(setErr).NotTo(HaveOccurred())
 					Expect(setResult.IsError).To(BeFalse())
 					out := decodeSetProfileImageOutput(setResult)
 
-					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-avatar-bytes-for-testing")))
+					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 					Expect(putErr).NotTo(HaveOccurred())
 					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 				})

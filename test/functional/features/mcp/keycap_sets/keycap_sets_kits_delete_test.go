@@ -113,6 +113,7 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 						"keycap_set_id": keycapSetID,
 						"kit_id":        kitID,
 						"content_type":  approvedImageContentType,
+						"size_bytes":    len(api.TestImageBytes),
 					})
 					Expect(setImgErr).NotTo(HaveOccurred())
 					Expect(setImgResult.IsError).To(BeFalse())
@@ -124,7 +125,7 @@ var _ = Describe("Deleting a keycap kit over MCP", func() {
 					Expect(marshalErr).NotTo(HaveOccurred())
 					Expect(json.Unmarshal(raw, &upload)).To(Succeed())
 
-					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, upload.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-image-bytes")))
+					putResp, putErr := api.DoPresigned(ctx, http.MethodPut, upload.UploadURL, approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 					Expect(putErr).NotTo(HaveOccurred())
 					Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 				})

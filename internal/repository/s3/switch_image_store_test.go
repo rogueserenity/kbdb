@@ -137,11 +137,12 @@ func (s *SwitchImageStoreSuite) TestPresignGet_SDKError_Propagates() {
 func (s *SwitchImageStoreSuite) TestPresignPut_Succeeds() {
 	s.mockPresign.EXPECT().
 		PresignPutObject(mock.Anything, mock.MatchedBy(func(in *s3.PutObjectInput) bool {
-			return *in.Bucket == "images-bucket" && *in.Key == "switches/alice/sw1/image" && *in.ContentType == "image/png"
+			return *in.Bucket == "images-bucket" && *in.Key == "switches/alice/sw1/image" && *in.ContentType == "image/png" &&
+				*in.ContentLength == 1234
 		})).
 		Return(&v4.PresignedHTTPRequest{URL: "https://example.com/presigned-put"}, nil)
 
-	url, err := s.store.PresignPut(s.T().Context(), "switches/alice/sw1/image", "image/png")
+	url, err := s.store.PresignPut(s.T().Context(), "switches/alice/sw1/image", "image/png", 1234)
 
 	s.Require().NoError(err)
 	s.Equal("https://example.com/presigned-put", url)
@@ -152,7 +153,7 @@ func (s *SwitchImageStoreSuite) TestPresignPut_SDKError_Propagates() {
 		PresignPutObject(mock.Anything, mock.Anything).
 		Return(nil, errors.New("s3: access denied"))
 
-	url, err := s.store.PresignPut(s.T().Context(), "switches/alice/sw1/image", "image/png")
+	url, err := s.store.PresignPut(s.T().Context(), "switches/alice/sw1/image", "image/png", 1234)
 
 	s.Require().ErrorContains(err, "s3: access denied")
 	s.Empty(url)

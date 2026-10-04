@@ -192,7 +192,8 @@ paths:
         requires the exact content_type given here on the upload — this
         lets the API reject an unsupported content_type up front, before
         ever issuing a presigned URL, and lets S3 reject an upload that
-        doesn't match what was requested.
+        doesn't match what was requested. A keyboard holds at most 10
+        images.
       requestBody:
         required: true
         content:
@@ -204,7 +205,8 @@ paths:
           description: >
             An image slot has been allocated; upload the image bytes to
             upload_url (HTTP PUT, with a Content-Type header matching the
-            content_type given in the request) to complete it.
+            content_type and a body of exactly size_bytes given in the
+            request) to complete it.
           content:
             application/json:
               schema:
@@ -213,6 +215,12 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: The keyboard already has 10 images, the maximum; delete one first.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -410,7 +418,8 @@ paths:
           description: >
             An image slot has been allocated; upload the image bytes to
             upload_url (HTTP PUT, with a Content-Type header matching the
-            content_type given in the request) to complete it.
+            content_type and a body of exactly size_bytes given in the
+            request) to complete it.
           content:
             application/json:
               schema:
@@ -655,7 +664,8 @@ paths:
           description: >
             An avatar slot has been allocated; upload the image bytes to
             upload_url (HTTP PUT, with a Content-Type header matching the
-            content_type given in the request) to complete it.
+            content_type and a body of exactly size_bytes given in the
+            request) to complete it.
           content:
             application/json:
               schema:
@@ -971,7 +981,8 @@ paths:
           description: >
             An image slot has been allocated; upload the image bytes to
             upload_url (HTTP PUT, with a Content-Type header matching the
-            content_type given in the request) to complete it.
+            content_type and a body of exactly size_bytes given in the
+            request) to complete it.
           content:
             application/json:
               schema:
@@ -1137,7 +1148,7 @@ paths:
         content_type given here on the upload — this lets the API reject
         an unsupported content_type up front, before ever issuing a
         presigned URL, and lets S3 reject an upload that doesn't match
-        what was requested.
+        what was requested. A build holds at most 10 images.
       requestBody:
         required: true
         content:
@@ -1149,7 +1160,8 @@ paths:
           description: >
             An image slot has been allocated; upload the image bytes to
             upload_url (HTTP PUT, with a Content-Type header matching the
-            content_type given in the request) to complete it.
+            content_type and a body of exactly size_bytes given in the
+            request) to complete it.
           content:
             application/json:
               schema:
@@ -1158,6 +1170,12 @@ paths:
           $ref: "#/components/responses/ProblemResponse"
         "404":
           $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: The build already has 10 images, the maximum; delete one first.
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
         default:
           $ref: "#/components/responses/ProblemResponse"
 
@@ -1558,14 +1576,26 @@ components:
         Request body for every image-upload endpoint (keyboard, switch,
         profile avatar, keycap kit, build). The upload is two-step: this
         call allocates a slot and returns a presigned S3 PUT URL, then the
-        client PUTs the bytes to that URL with a matching Content-Type.
-      required: [content_type]
+        client PUTs the bytes to that URL with a matching Content-Type and
+        exactly size_bytes of body.
+      required: [content_type, size_bytes]
       additionalProperties: false
       properties:
         content_type:
           type: string
           example: image/png
           description: Open vocabulary — validated against the "image_content_type" lookup at request time.
+        size_bytes:
+          type: integer
+          format: int64
+          minimum: 1
+          maximum: 5242880
+          example: 524288
+          description: >
+            The exact size of the image in bytes. Images are capped at 5 MB
+            (5,242,880 bytes); resize anything larger before uploading. The
+            presigned URL is signed for this size, so S3 rejects a PUT whose
+            body is any other length.
 
     KeyboardImage:
       type: object

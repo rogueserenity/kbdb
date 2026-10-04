@@ -381,7 +381,7 @@ func SetSwitchImage(switchRepo repository.SwitchRepository, images repository.Sw
 			return
 		}
 
-		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(r.Context()).Error("presigning switch image upload", log.Error, err, log.SwitchID, id)
 			problem.Internal(w, "failed to set switch image")

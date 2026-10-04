@@ -165,8 +165,9 @@ type KeyboardRepository interface {
 	// AddImage adds image (image.ImageID must be set) to the keyboard's
 	// Images map with a server-assigned Seq that sorts it after every
 	// existing image (see KeyboardImageEntry.Seq); image.Seq is ignored.
-	// Returns ErrNotFound if the keyboard doesn't exist, or a wrapped
-	// duplicate-id error if image.ImageID is already present.
+	// Returns ErrNotFound if the keyboard doesn't exist, ErrImageLimitReached
+	// if it already has MaxImagesPerItem images, or a wrapped duplicate-id
+	// error if image.ImageID is already present.
 	AddImage(ctx context.Context, keyboardID string, image KeyboardImage) error
 
 	// DeleteImage removes imageID from keyboardID's Images map and returns
@@ -209,9 +210,9 @@ type KeyboardImageStore interface {
 	PresignGetKeyboardImage(ctx context.Context, key KeyboardImageKey) (url string, expiresAt time.Time, err error)
 
 	// PresignPutKeyboardImage returns a short-lived presigned PUT URL for
-	// key, locked to contentType via the Content-Type header the upload
-	// must match.
-	PresignPutKeyboardImage(ctx context.Context, key KeyboardImageKey, contentType string) (url string, err error)
+	// key, locked to contentType and size via the Content-Type and
+	// Content-Length the upload must match.
+	PresignPutKeyboardImage(ctx context.Context, key KeyboardImageKey, contentType string, size int64) (url string, err error)
 
 	// DeleteKeyboardImage removes the object at key. Idempotent: a
 	// nonexistent key is not an error, matching S3's own DeleteObject

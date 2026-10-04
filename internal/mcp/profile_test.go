@@ -473,13 +473,20 @@ func (s *HandleSetProfileImageSuite) avatarKey() repository.ProfileImageKey {
 
 func (s *HandleSetProfileImageSuite) TestValid_ReturnsUploadURL() {
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(nil)
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png", int64(524288)).
 		Return("https://example.com/put", nil)
 
-	out, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+	out, err := s.call(schema.SetProfileImageInput{ContentType: "image/png", SizeBytes: 524288})
 
 	s.Require().NoError(err)
 	s.Equal("https://example.com/put", out.UploadURL)
+}
+
+func (s *HandleSetProfileImageSuite) TestSizeOverCap_ErrorNoRepoCall() {
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png", SizeBytes: repository.MaxImageSizeBytes + 1})
+
+	s.Require().ErrorContains(err, "size_bytes")
+	s.mockRepo.AssertNotCalled(s.T(), "SetAvatarPath", mock.Anything, mock.Anything)
 }
 
 func (s *HandleSetProfileImageSuite) TestUnapprovedContentType_ErrorNoRepoCall() {
@@ -490,30 +497,30 @@ func (s *HandleSetProfileImageSuite) TestUnapprovedContentType_ErrorNoRepoCall()
 }
 
 func (s *HandleSetProfileImageSuite) TestNoProfile_NotFoundError() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png", int64(524288)).
 		Return("https://example.com/put", nil)
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(repository.ErrNotFound)
 
-	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png", SizeBytes: 524288})
 
 	s.Require().Error(err)
 }
 
 func (s *HandleSetProfileImageSuite) TestMutationConflict_RetryableError() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png", int64(524288)).
 		Return("https://example.com/put", nil)
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, s.avatarKey()).Return(repository.ErrMutationConflict)
 
-	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png", SizeBytes: 524288})
 
 	s.Require().Error(err)
 }
 
 func (s *HandleSetProfileImageSuite) TestPresignError_GenericError() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, s.avatarKey(), "image/png", int64(524288)).
 		Return("", errors.New("s3 down"))
 
-	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png"})
+	_, err := s.call(schema.SetProfileImageInput{ContentType: "image/png", SizeBytes: 524288})
 
 	s.Require().Error(err)
 }

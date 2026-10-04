@@ -39,7 +39,7 @@ var _ = Describe("Deleting a switch's image", func() {
 
 	Context("given a private switch owned by the caller with an image on it", func() {
 		BeforeEach(func(ctx SpecContext) {
-			setResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+			setResp, err := client.SetImage(ctx, ownerID, switchID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(setResp.StatusCode).To(Equal(http.StatusCreated))
 		})

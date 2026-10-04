@@ -178,8 +178,8 @@ func (_c *MockSwitchImageStore_PresignGet_Call) RunAndReturn(run func(ctx contex
 }
 
 // PresignPut provides a mock function for the type MockSwitchImageStore
-func (_mock *MockSwitchImageStore) PresignPut(ctx context.Context, key repository.SwitchImageKey, contentType string) (string, error) {
-	ret := _mock.Called(ctx, key, contentType)
+func (_mock *MockSwitchImageStore) PresignPut(ctx context.Context, key repository.SwitchImageKey, contentType string, size int64) (string, error) {
+	ret := _mock.Called(ctx, key, contentType, size)
 
 	if len(ret) == 0 {
 		panic("no return value specified for PresignPut")
@@ -187,16 +187,16 @@ func (_mock *MockSwitchImageStore) PresignPut(ctx context.Context, key repositor
 
 	var r0 string
 	var r1 error
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SwitchImageKey, string) (string, error)); ok {
-		return returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SwitchImageKey, string, int64) (string, error)); ok {
+		return returnFunc(ctx, key, contentType, size)
 	}
-	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SwitchImageKey, string) string); ok {
-		r0 = returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(0).(func(context.Context, repository.SwitchImageKey, string, int64) string); ok {
+		r0 = returnFunc(ctx, key, contentType, size)
 	} else {
 		r0 = ret.Get(0).(string)
 	}
-	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.SwitchImageKey, string) error); ok {
-		r1 = returnFunc(ctx, key, contentType)
+	if returnFunc, ok := ret.Get(1).(func(context.Context, repository.SwitchImageKey, string, int64) error); ok {
+		r1 = returnFunc(ctx, key, contentType, size)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -212,11 +212,12 @@ type MockSwitchImageStore_PresignPut_Call struct {
 //   - ctx context.Context
 //   - key repository.SwitchImageKey
 //   - contentType string
-func (_e *MockSwitchImageStore_Expecter) PresignPut(ctx any, key any, contentType any) *MockSwitchImageStore_PresignPut_Call {
-	return &MockSwitchImageStore_PresignPut_Call{Call: _e.mock.On("PresignPut", ctx, key, contentType)}
+//   - size int64
+func (_e *MockSwitchImageStore_Expecter) PresignPut(ctx any, key any, contentType any, size any) *MockSwitchImageStore_PresignPut_Call {
+	return &MockSwitchImageStore_PresignPut_Call{Call: _e.mock.On("PresignPut", ctx, key, contentType, size)}
 }
 
-func (_c *MockSwitchImageStore_PresignPut_Call) Run(run func(ctx context.Context, key repository.SwitchImageKey, contentType string)) *MockSwitchImageStore_PresignPut_Call {
+func (_c *MockSwitchImageStore_PresignPut_Call) Run(run func(ctx context.Context, key repository.SwitchImageKey, contentType string, size int64)) *MockSwitchImageStore_PresignPut_Call {
 	_c.Call.Run(func(args mock.Arguments) {
 		var arg0 context.Context
 		if args[0] != nil {
@@ -230,10 +231,15 @@ func (_c *MockSwitchImageStore_PresignPut_Call) Run(run func(ctx context.Context
 		if args[2] != nil {
 			arg2 = args[2].(string)
 		}
+		var arg3 int64
+		if args[3] != nil {
+			arg3 = args[3].(int64)
+		}
 		run(
 			arg0,
 			arg1,
 			arg2,
+			arg3,
 		)
 	})
 	return _c
@@ -244,7 +250,7 @@ func (_c *MockSwitchImageStore_PresignPut_Call) Return(url string, err error) *M
 	return _c
 }
 
-func (_c *MockSwitchImageStore_PresignPut_Call) RunAndReturn(run func(ctx context.Context, key repository.SwitchImageKey, contentType string) (string, error)) *MockSwitchImageStore_PresignPut_Call {
+func (_c *MockSwitchImageStore_PresignPut_Call) RunAndReturn(run func(ctx context.Context, key repository.SwitchImageKey, contentType string, size int64) (string, error)) *MockSwitchImageStore_PresignPut_Call {
 	_c.Call.Return(run)
 	return _c
 }

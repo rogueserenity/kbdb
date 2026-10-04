@@ -64,7 +64,7 @@ var deleteKeycapKitTool = &mcp.Tool{
 
 var setKeycapKitImageTool = &mcp.Tool{
 	Name:        "set_keycap_kit_image",
-	Description: "Mints a presigned URL to upload a kit's image to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header.",
+	Description: "Mints a presigned URL to upload a kit's image to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header and a body of exactly size_bytes. Images are capped at 5 MB; resize anything larger first.",
 }
 
 var deleteKeycapKitImageTool = &mcp.Tool{
@@ -391,13 +391,17 @@ func handleSetKeycapKitImage(
 			return nil, schema.SetKeycapKitImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		if err := validateImageSize(in.SizeBytes); err != nil {
+			return nil, schema.SetKeycapKitImageOutput{}, err
+		}
+
 		key, err := repository.NewKeycapKitImageKey(ctx, in.KeycapSetID, in.KitID)
 		if err != nil {
 			log.FromContext(ctx).Error("building keycap kit image key", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")
 		}
 
-		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning keycap kit image upload", log.KeycapSetID, in.KeycapSetID, log.KeycapKitID, in.KitID, log.Error, err)
 			return nil, schema.SetKeycapKitImageOutput{}, errors.New("failed to set kit image")

@@ -1105,10 +1105,10 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_Succeeds() {
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
 		Return(nil)
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1125,7 +1125,7 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_Succeeds() {
 func (s *SetSwitchImageSuite) TestSetSwitchImage_NotOwner_Returns404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "bob")
 
-	req := s.newRequest(ctx, `{"content_type":"image/png"}`)
+	req := s.newRequest(ctx, `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1134,7 +1134,7 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_NotOwner_Returns404() {
 }
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_Anonymous_Returns404() {
-	req := s.newRequest(s.T().Context(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.T().Context(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1169,13 +1169,13 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_UnapprovedContentType_Returns40
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
 		Return(repository.ErrNotFound)
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1185,10 +1185,10 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_NotFound_Returns404() {
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png", int64(524288)).
 		Return("", errors.New("s3: access denied"))
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1200,13 +1200,13 @@ func (s *SetSwitchImageSuite) TestSetSwitchImage_PresignError_Returns500() {
 
 func (s *SetSwitchImageSuite) TestSetSwitchImage_RepositoryError_Returns500() {
 	s.mockImages.EXPECT().
-		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png").
+		PresignPut(mock.Anything, setSwitchImageTestKey, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().
 		SetImagePath(mock.Anything, "sw1", setSwitchImageTestKey).
 		Return(errors.New("put item failed"))
 
-	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png"}`)
+	req := s.newRequest(s.ownerCtx(), `{"content_type":"image/png","size_bytes":524288}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 

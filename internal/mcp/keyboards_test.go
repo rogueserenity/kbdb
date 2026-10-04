@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -794,13 +795,14 @@ func (s *HandleAddKeyboardImageSuite) TestSucceeds() {
 		})).
 		Return(nil)
 	s.mockImages.EXPECT().
-		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 
 	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
 		KeyboardID:  "kb-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().NoError(err)
@@ -813,9 +815,39 @@ func (s *HandleAddKeyboardImageSuite) TestBlankKeyboardID_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
 		KeyboardID:  " ",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorContains(err, "keyboard_id must not be blank")
+}
+
+func (s *HandleAddKeyboardImageSuite) TestImageLimitReached_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
+		Return("https://example.com/upload", nil)
+	s.mockKeyboards.EXPECT().
+		AddImage(mock.Anything, "kb-1", mock.Anything).
+		Return(fmt.Errorf("adding image: %w", repository.ErrImageLimitReached))
+
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "image/png",
+		SizeBytes:   524288,
+	})
+
+	s.Require().ErrorIs(err, errImageLimitReached)
+}
+
+func (s *HandleAddKeyboardImageSuite) TestSizeOverCap_ReturnsError() {
+	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
+		KeyboardID:  "kb-1",
+		ContentType: "image/png",
+		SizeBytes:   repository.MaxImageSizeBytes + 1,
+	})
+
+	s.Require().ErrorContains(err, "size_bytes")
 }
 
 func (s *HandleAddKeyboardImageSuite) TestUnapprovedContentType_ReturnsError() {
@@ -830,7 +862,7 @@ func (s *HandleAddKeyboardImageSuite) TestUnapprovedContentType_ReturnsError() {
 
 func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 	s.mockImages.EXPECT().
-		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 	s.mockKeyboards.EXPECT().
 		AddImage(mock.Anything, "kb-1", mock.Anything).
@@ -840,6 +872,7 @@ func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
 		KeyboardID:  "kb-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
@@ -847,13 +880,14 @@ func (s *HandleAddKeyboardImageSuite) TestNotFound_ReturnsError() {
 
 func (s *HandleAddKeyboardImageSuite) TestPresignError_ReturnsError() {
 	s.mockImages.EXPECT().
-		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutKeyboardImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("", errors.New("s3: access denied"))
 
 	handler := handleAddKeyboardImage(s.mockKeyboards, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddKeyboardImageInput{
 		KeyboardID:  "kb-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().Error(err)

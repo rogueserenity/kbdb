@@ -48,7 +48,7 @@ var _ = Describe("Presigned avatar GET URL caching for a profile", func() {
 			Discoverable: true,
 		})).To(Succeed())
 
-		setResp, err := client.SetImage(ctx, ownerID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+		setResp, err := client.SetImage(ctx, ownerID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(setResp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -57,7 +57,7 @@ var _ = Describe("Presigned avatar GET URL caching for a profile", func() {
 		}
 		Expect(json.NewDecoder(setResp.Body).Decode(&created)).To(Succeed())
 
-		putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader([]byte("fake-avatar-bytes")))
+		putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader(api.TestImageBytes))
 		Expect(err).NotTo(HaveOccurred())
 		Expect(putResp.StatusCode).To(Equal(http.StatusOK))
 	})

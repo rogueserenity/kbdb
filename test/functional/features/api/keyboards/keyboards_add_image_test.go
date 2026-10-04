@@ -13,6 +13,7 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
+	"github.com/rogueserenity/kbdb/test/functional/support"
 	"github.com/rogueserenity/kbdb/test/functional/support/api"
 	"github.com/rogueserenity/kbdb/test/functional/support/db"
 )
@@ -76,7 +77,7 @@ var _ = Describe("Adding an image to a keyboard", func() {
 				When("adding an image to the keyboard", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.AddImage(ctx, ownerID, keyboardID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+						resp, err = client.AddImage(ctx, ownerID, keyboardID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
@@ -93,7 +94,7 @@ var _ = Describe("Adding an image to a keyboard", func() {
 						Expect(created.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-image-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(err).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -138,12 +139,85 @@ var _ = Describe("Adding an image to a keyboard", func() {
 				When("adding an image to the keyboard", func() {
 					BeforeEach(func(ctx SpecContext) {
 						var err error
-						resp, err = client.AddImage(ctx, ownerID, keyboardID, ownerToken, `{"content_type":"application/x-not-an-image"}`)
+						resp, err = client.AddImage(ctx, ownerID, keyboardID, ownerToken, api.ImageUploadBody("application/x-not-an-image"))
 						Expect(err).NotTo(HaveOccurred())
 					})
 
 					It("returns 400 with a problem+json body", func() {
 						Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+						Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+					})
+				})
+			})
+
+			Context("given size_bytes over the 5 MB cap", func() {
+				When("adding an image to the keyboard", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.AddImage(ctx, ownerID, keyboardID, ownerToken,
+							`{"content_type":"`+approvedImageContentType+`","size_bytes":5242881}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("returns 400 with a problem+json body", func() {
+						Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+						Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
+					})
+				})
+			})
+
+			Context("given an upload URL minted for a different size than the body", func() {
+				var uploadURL string
+
+				BeforeEach(func(ctx SpecContext) {
+					if !support.IsCI() {
+						Skip("only CI's real S3 validates presigned signatures; the local emulator doesn't")
+					}
+
+					addResp, err := client.AddImage(ctx, ownerID, keyboardID, ownerToken, api.ImageUploadBody(approvedImageContentType))
+					Expect(err).NotTo(HaveOccurred())
+					defer func() { _ = addResp.Body.Close() }()
+					Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
+					var created struct {
+						UploadURL string `json:"upload_url"`
+					}
+					Expect(json.NewDecoder(addResp.Body).Decode(&created)).To(Succeed())
+					uploadURL = created.UploadURL
+				})
+
+				When("PUTting the body to the upload URL", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						oversized := append(append([]byte{}, api.TestImageBytes...), "-and-then-some"...)
+						resp, err = api.DoPresigned(ctx, http.MethodPut, uploadURL, approvedImageContentType, bytes.NewReader(oversized))
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("is rejected by S3", func() {
+						Expect(resp.StatusCode).To(Equal(http.StatusForbidden))
+					})
+				})
+			})
+
+			Context("given the keyboard already has 10 images", func() {
+				BeforeEach(func(ctx SpecContext) {
+					for range 10 {
+						addResp, err := client.AddImage(ctx, ownerID, keyboardID, ownerToken, api.ImageUploadBody(approvedImageContentType))
+						Expect(err).NotTo(HaveOccurred())
+						_ = addResp.Body.Close()
+						Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
+					}
+				})
+
+				When("adding an image to the keyboard", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.AddImage(ctx, ownerID, keyboardID, ownerToken, api.ImageUploadBody(approvedImageContentType))
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("returns 409 with a problem+json body", func() {
+						Expect(resp.StatusCode).To(Equal(http.StatusConflict))
 						Expect(resp.Header.Get("Content-Type")).To(Equal("application/problem+json"))
 					})
 				})
@@ -171,7 +245,7 @@ var _ = Describe("Adding an image to a keyboard", func() {
 						ids := make([]string, 3)
 						for i := range ids {
 							addResp, err := client.AddImage(ctx, ownerID, keyboardID, ownerToken,
-								`{"content_type":"`+approvedImageContentType+`"}`)
+								api.ImageUploadBody(approvedImageContentType))
 							Expect(err).NotTo(HaveOccurred())
 							Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
 							var created struct {
@@ -208,7 +282,7 @@ var _ = Describe("Adding an image to a keyboard", func() {
 			When("adding an image to the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.AddImage(ctx, ownerID, keyboardID, token, `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.AddImage(ctx, ownerID, keyboardID, token, api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -223,7 +297,7 @@ var _ = Describe("Adding an image to a keyboard", func() {
 			When("adding an image to the keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {
 					var err error
-					resp, err = client.AddImage(ctx, ownerID, keyboardID, "", `{"content_type":"`+approvedImageContentType+`"}`)
+					resp, err = client.AddImage(ctx, ownerID, keyboardID, "", api.ImageUploadBody(approvedImageContentType))
 					Expect(err).NotTo(HaveOccurred())
 				})
 
@@ -238,7 +312,7 @@ var _ = Describe("Adding an image to a keyboard", func() {
 		When("adding an image to the keyboard", func() {
 			BeforeEach(func(ctx SpecContext) {
 				var err error
-				resp, err = client.AddImage(ctx, ownerID, "no-such-keyboard-"+uuid.NewString(), ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+				resp, err = client.AddImage(ctx, ownerID, "no-such-keyboard-"+uuid.NewString(), ownerToken, api.ImageUploadBody(approvedImageContentType))
 				Expect(err).NotTo(HaveOccurred())
 			})
 

@@ -44,7 +44,7 @@ var _ = Describe("Deleting an image from a build", func() {
 			buildID = "delete-image-build-" + uuid.NewString()
 			Expect(db.SeedBuild(ctx, ownerID, buildID, keyboardID, "private")).To(Succeed())
 
-			addResp, err := client.AddImage(ctx, ownerID, buildID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+			addResp, err := client.AddImage(ctx, ownerID, buildID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
 

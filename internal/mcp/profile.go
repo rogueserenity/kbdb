@@ -49,7 +49,7 @@ var listProfilesTool = &mcp.Tool{
 
 var setProfileImageTool = &mcp.Tool{
 	Name:        "set_profile_image",
-	Description: "Mints a presigned URL to upload your profile's avatar to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header. Your profile has at most one avatar; calling this again replaces it. Fails if you have no profile yet.",
+	Description: "Mints a presigned URL to upload your profile's avatar to. Doesn't upload the image itself - PUT the image bytes to the returned upload_url using the same content_type as the Content-Type header and a body of exactly size_bytes. Images are capped at 5 MB; resize anything larger first. Your profile has at most one avatar; calling this again replaces it. Fails if you have no profile yet.",
 }
 
 var deleteProfileImageTool = &mcp.Tool{
@@ -183,6 +183,10 @@ func handleSetProfileImage(
 			return nil, schema.SetProfileImageOutput{}, fmt.Errorf("content_type: %q is not an approved %s value", in.ContentType, lookup.CategoryImageContentType)
 		}
 
+		if err := validateImageSize(in.SizeBytes); err != nil {
+			return nil, schema.SetProfileImageOutput{}, err
+		}
+
 		ownerID, err := resolveOwnerID(ctx, "")
 		if err != nil {
 			return nil, schema.SetProfileImageOutput{}, err
@@ -194,7 +198,7 @@ func handleSetProfileImage(
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")
 		}
 
-		uploadURL, err := images.PresignPut(ctx, key, in.ContentType)
+		uploadURL, err := images.PresignPut(ctx, key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(ctx).Error("presigning profile image upload", log.Error, err, log.ProfileID, ownerID)
 			return nil, schema.SetProfileImageOutput{}, errors.New("failed to set profile image")

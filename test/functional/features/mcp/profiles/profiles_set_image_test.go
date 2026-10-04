@@ -52,6 +52,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 					BeforeEach(func(ctx SpecContext) {
 						result, err = client.CallTool(ctx, "set_profile_image", map[string]any{
 							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -63,7 +64,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 						Expect(out.UploadURL).NotTo(BeEmpty())
 
 						By("uploading arbitrary bytes to the presigned PUT URL")
-						imageBytes := []byte("fake-avatar-bytes-for-testing")
+						imageBytes := api.TestImageBytes
 						putResp, putErr := api.DoPresigned(ctx, http.MethodPut, out.UploadURL, approvedImageContentType, bytes.NewReader(imageBytes))
 						Expect(putErr).NotTo(HaveOccurred())
 						Expect(putResp.StatusCode).To(Equal(http.StatusOK))
@@ -82,6 +83,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 					BeforeEach(func(ctx SpecContext) {
 						result, err = client.CallTool(ctx, "set_profile_image", map[string]any{
 							"content_type": "application/x-not-an-image",
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -96,6 +98,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 				BeforeEach(func(ctx SpecContext) {
 					first, firstErr := client.CallTool(ctx, "set_profile_image", map[string]any{
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 					Expect(firstErr).NotTo(HaveOccurred())
 					Expect(first.IsError).To(BeFalse())
@@ -105,6 +108,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 					BeforeEach(func(ctx SpecContext) {
 						result, err = client.CallTool(ctx, "set_profile_image", map[string]any{
 							"content_type": approvedImageContentType,
+							"size_bytes":   len(api.TestImageBytes),
 						})
 					})
 
@@ -121,6 +125,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 				BeforeEach(func(ctx SpecContext) {
 					result, err = client.CallTool(ctx, "set_profile_image", map[string]any{
 						"content_type": approvedImageContentType,
+						"size_bytes":   len(api.TestImageBytes),
 					})
 				})
 
@@ -141,6 +146,7 @@ var _ = Describe("Setting a profile's avatar over MCP", func() {
 			BeforeEach(func(ctx SpecContext) {
 				result, err = client.CallTool(ctx, "set_profile_image", map[string]any{
 					"content_type": approvedImageContentType,
+					"size_bytes":   len(api.TestImageBytes),
 				})
 			})
 

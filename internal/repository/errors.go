@@ -37,3 +37,9 @@ var ErrNoUserID = errors.New("no user id in context")
 // ErrInvalidCursor is returned when a pagination cursor is malformed or was
 // minted for a different query shape. Handlers map it to a 400.
 var ErrInvalidCursor = errors.New("invalid pagination cursor")
+
+// ErrImageLimitReached is returned by KeyboardRepository/BuildRepository
+// AddImage when the item already has MaxImagesPerItem images. Handlers map
+// it to a 409: unlike ErrMutationConflict, retrying won't help until an
+// image is deleted.
+var ErrImageLimitReached = errors.New("image limit reached")

@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -810,13 +811,14 @@ func (s *HandleAddBuildImageSuite) TestSucceeds() {
 		})).
 		Return(nil)
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
 	_, out, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
 		BuildID:     "build-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().NoError(err)
@@ -829,9 +831,39 @@ func (s *HandleAddBuildImageSuite) TestBlankBuildID_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
 		BuildID:     " ",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorContains(err, "build_id must not be blank")
+}
+
+func (s *HandleAddBuildImageSuite) TestImageLimitReached_ReturnsError() {
+	s.mockImages.EXPECT().
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
+		Return("https://example.com/upload", nil)
+	s.mockBuilds.EXPECT().
+		AddImage(mock.Anything, "build-1", mock.Anything).
+		Return(fmt.Errorf("adding image: %w", repository.ErrImageLimitReached))
+
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "image/png",
+		SizeBytes:   524288,
+	})
+
+	s.Require().ErrorIs(err, errImageLimitReached)
+}
+
+func (s *HandleAddBuildImageSuite) TestSizeOverCap_ReturnsError() {
+	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
+	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
+		BuildID:     "build-1",
+		ContentType: "image/png",
+		SizeBytes:   repository.MaxImageSizeBytes + 1,
+	})
+
+	s.Require().ErrorContains(err, "size_bytes")
 }
 
 func (s *HandleAddBuildImageSuite) TestUnapprovedContentType_ReturnsError() {
@@ -847,7 +879,7 @@ func (s *HandleAddBuildImageSuite) TestUnapprovedContentType_ReturnsError() {
 
 func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "missing", mock.Anything).
@@ -857,6 +889,7 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
 		BuildID:     "missing",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorIs(err, errMutationNotFound)
@@ -864,13 +897,14 @@ func (s *HandleAddBuildImageSuite) TestBuildNotFound_ReturnsNotFound() {
 
 func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("", errors.New("s3: access denied"))
 
 	handler := handleAddBuildImage(s.mockBuilds, s.mockImages)
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
 		BuildID:     "build-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorContains(err, "failed to add build image")
@@ -880,7 +914,7 @@ func (s *HandleAddBuildImageSuite) TestPresignError_ReturnsError() {
 
 func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
 	s.mockImages.EXPECT().
-		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png").
+		PresignPutBuildImage(mock.Anything, mock.Anything, "image/png", int64(524288)).
 		Return("https://example.com/upload", nil)
 	s.mockBuilds.EXPECT().
 		AddImage(mock.Anything, "build-1", mock.Anything).
@@ -890,6 +924,7 @@ func (s *HandleAddBuildImageSuite) TestRepositoryError_ReturnsError() {
 	_, _, err := handler(callerContext(s.T()), nil, schema.AddBuildImageInput{
 		BuildID:     "build-1",
 		ContentType: "image/png",
+		SizeBytes:   524288,
 	})
 
 	s.Require().ErrorIs(err, errMutationFailed)

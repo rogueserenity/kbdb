@@ -182,7 +182,7 @@ var _ = Describe("Listing keycap sets", func() {
 			kitID = "kit-" + uuid.NewString()
 			Expect(db.SeedKeycapSetWithPrimaryKit(ctx, ownerID, keycapSetID, kitID, "public")).To(Succeed())
 
-			setImageResp, err := client.SetKitImage(ctx, ownerID, keycapSetID, kitID, ownerToken, `{"content_type":"image/png"}`)
+			setImageResp, err := client.SetKitImage(ctx, ownerID, keycapSetID, kitID, ownerToken, api.ImageUploadBody("image/png"))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(setImageResp.StatusCode).To(Equal(http.StatusCreated))
 
@@ -191,7 +191,7 @@ var _ = Describe("Listing keycap sets", func() {
 			}
 			Expect(json.NewDecoder(setImageResp.Body).Decode(&created)).To(Succeed())
 
-			imageBytes = []byte("fake-image-bytes-for-list-testing")
+			imageBytes = api.TestImageBytes
 			putResp, err := api.DoPresigned(ctx, http.MethodPut, created.UploadURL, "image/png", bytes.NewReader(imageBytes))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(putResp.StatusCode).To(Equal(http.StatusOK))

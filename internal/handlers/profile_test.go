@@ -766,11 +766,11 @@ const setProfileImageTestKey = repository.ProfileImageKey("profiles/user-alice/a
 
 func (s *SetProfileImageSuite) TestSucceeds() {
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(nil)
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png","size_bytes":524288}`))
 
 	s.Equal(http.StatusCreated, rec.Code)
 	s.Equal("application/json", rec.Header().Get("Content-Type"))
@@ -785,7 +785,7 @@ func (s *SetProfileImageSuite) TestNotOwner_404() {
 	ctx := kbdbctx.WithUserID(s.T().Context(), "user-bob")
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(ctx, "user-alice", `{"content_type":"image/png"}`))
+	s.handler(rec, s.newRequest(ctx, "user-alice", `{"content_type":"image/png","size_bytes":524288}`))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
@@ -795,14 +795,14 @@ func (s *SetProfileImageSuite) TestUsernameIdentifier_404() {
 	// A username can never be the caller's own subject, so authz.IsOwner
 	// rejects it - writes address the profile by IdP subject only.
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "alice", `{"content_type":"image/png"}`))
+	s.handler(rec, s.newRequest(s.ownerCtx(), "alice", `{"content_type":"image/png","size_bytes":524288}`))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 }
 
 func (s *SetProfileImageSuite) TestAnonymous_404() {
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.T().Context(), "user-alice", `{"content_type":"image/png"}`))
+	s.handler(rec, s.newRequest(s.T().Context(), "user-alice", `{"content_type":"image/png","size_bytes":524288}`))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 }
@@ -829,23 +829,23 @@ func (s *SetProfileImageSuite) TestUnapprovedContentType_400() {
 }
 
 func (s *SetProfileImageSuite) TestNoProfile_404() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png", int64(524288)).
 		Return("https://example.com/presigned-put", nil)
 	s.mockRepo.EXPECT().SetAvatarPath(mock.Anything, setProfileImageTestKey).Return(repository.ErrNotFound)
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png","size_bytes":524288}`))
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 }
 
 func (s *SetProfileImageSuite) TestPresignError_500() {
-	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png").
+	s.mockImages.EXPECT().PresignPut(mock.Anything, setProfileImageTestKey, "image/png", int64(524288)).
 		Return("", errors.New("s3: access denied"))
 
 	rec := httptest.NewRecorder()
-	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png"}`))
+	s.handler(rec, s.newRequest(s.ownerCtx(), "user-alice", `{"content_type":"image/png","size_bytes":524288}`))
 
 	s.Equal(http.StatusInternalServerError, rec.Code)
 	// mockRepo has no .EXPECT() for SetAvatarPath - verifies the DB was

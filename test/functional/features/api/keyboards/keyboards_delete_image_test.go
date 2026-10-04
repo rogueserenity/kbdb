@@ -36,7 +36,7 @@ var _ = Describe("Deleting an image from a keyboard", func() {
 			keyboardID = "delete-image-keyboard-" + uuid.NewString()
 			Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
 
-			addResp, err := client.AddImage(ctx, ownerID, keyboardID, ownerToken, `{"content_type":"`+approvedImageContentType+`"}`)
+			addResp, err := client.AddImage(ctx, ownerID, keyboardID, ownerToken, api.ImageUploadBody(approvedImageContentType))
 			Expect(err).NotTo(HaveOccurred())
 			Expect(addResp.StatusCode).To(Equal(http.StatusCreated))
 

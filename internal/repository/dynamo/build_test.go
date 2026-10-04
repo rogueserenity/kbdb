@@ -624,7 +624,9 @@ func (s *BuildRepositorySuite) TestAddImage_Succeeds_PlainUpdateItemNoTransactio
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
 			captured = in
 			return strings.Contains(*in.ConditionExpression, "attribute_exists") &&
-				strings.Contains(*in.ConditionExpression, "attribute_not_exists")
+				strings.Contains(*in.ConditionExpression, "attribute_not_exists") &&
+				strings.Contains(*in.ConditionExpression, "size (") &&
+				in.ReturnValuesOnConditionCheckFailure == types.ReturnValuesOnConditionCheckFailureAllOld
 		})).
 		Return(&dynamodb.UpdateItemOutput{}, nil)
 
@@ -632,7 +634,13 @@ func (s *BuildRepositorySuite) TestAddImage_Succeeds_PlainUpdateItemNoTransactio
 	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "builds/alice/b1/images/img1"})
 	s.Require().NoError(err)
 
-	entry := captured.ExpressionAttributeValues[":0"].(*types.AttributeValueMemberM)
+	var entry *types.AttributeValueMemberM
+	for _, v := range captured.ExpressionAttributeValues {
+		if m, ok := v.(*types.AttributeValueMemberM); ok {
+			entry = m
+		}
+	}
+	s.Require().NotNil(entry)
 	seq, convErr := strconv.ParseInt(entry.Value["seq"].(*types.AttributeValueMemberN).Value, 10, 64)
 	s.Require().NoError(convErr)
 	s.GreaterOrEqual(seq, before)
@@ -640,14 +648,10 @@ func (s *BuildRepositorySuite) TestAddImage_Succeeds_PlainUpdateItemNoTransactio
 }
 
 func (s *BuildRepositorySuite) TestAddImage_ParentBuildNotFound_ReturnsErrNotFound() {
+	// attribute_exists(id) fails; the returned item is empty.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
 		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.GetItemInput) bool {
-			return in.ConsistentRead != nil && *in.ConsistentRead
-		})).
-		Return(&dynamodb.GetItemOutput{Item: map[string]types.AttributeValue{}}, nil)
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p"})
@@ -656,12 +660,11 @@ func (s *BuildRepositorySuite) TestAddImage_ParentBuildNotFound_ReturnsErrNotFou
 }
 
 func (s *BuildRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
+	// attribute_not_exists(images.img1) fails; the returned item exists and
+	// is under the cap, so the id is a duplicate.
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(s.storedBuild(nil), nil)
+		Return(nil, &types.ConditionalCheckFailedException{Item: s.storedBuild(nil).Item})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
 	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p2"})
@@ -669,19 +672,22 @@ func (s *BuildRepositorySuite) TestAddImage_DuplicateImageID_ReturnsError() {
 	s.Require().ErrorIs(err, errDuplicateImageID)
 }
 
-func (s *BuildRepositorySuite) TestAddImage_ClassifyGetItemError_Propagates() {
+func (s *BuildRepositorySuite) TestAddImage_AtImageLimit_ReturnsErrImageLimitReached() {
+	// size(images) < MaxImagesPerItem fails; the returned item is at the cap.
+	full := map[string]types.AttributeValue{}
+	for i := range repository.MaxImagesPerItem {
+		full[fmt.Sprintf("img%d", i)] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
+	}
+	item := s.storedBuild(nil).Item
+	item["images"] = &types.AttributeValueMemberM{Value: full}
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.Anything).
-		Return(nil, &types.ConditionalCheckFailedException{})
-	s.mockClient.EXPECT().
-		GetItem(mock.Anything, mock.Anything).
-		Return(nil, errors.New("dynamodb: throttled"))
+		Return(nil, &types.ConditionalCheckFailedException{Item: item})
 
 	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
-	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "img1", Path: "p"})
+	err := s.repo.AddImage(ctx, "b1", repository.BuildImage{ImageID: "new", Path: "p"})
 
-	s.Require().Error(err)
-	s.Require().NotErrorIs(err, repository.ErrNotFound)
+	s.Require().ErrorIs(err, repository.ErrImageLimitReached)
 }
 
 func (s *BuildRepositorySuite) TestAddImage_UpdateItemError_Propagates() {

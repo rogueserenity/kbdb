@@ -37,6 +37,10 @@ func (c *RestoreCmd) Run(ctx context.Context) error {
 		return fmt.Errorf("%s does not look like a dump directory (no manifest.json): %w", c.In, err)
 	}
 
+	if err := checkImageLimits(c.In); err != nil {
+		return err
+	}
+
 	m, err := loadOrNewIDMap(c.In, client.subject)
 	if err != nil {
 		return err
@@ -486,9 +490,9 @@ func restoreArrayImages(ctx context.Context, client *apiClient, itemDir, imagesP
 			return fmt.Errorf("reading %s: %w", entry.Filename, err)
 		}
 
+		req := api.ImageUploadRequest{ContentType: entry.ContentType, SizeBytes: int64(len(data))}
 		var upload api.KeyboardImageUpload // {image_id, upload_url} — same shape for builds.
-		if err := client.doJSON(ctx, http.MethodPost, imagesPath,
-			api.ImageUploadRequest{ContentType: entry.ContentType}, &upload); err != nil {
+		if err := client.doJSON(ctx, http.MethodPost, imagesPath, req, &upload); err != nil {
 			return fmt.Errorf("allocating image slot: %w", err)
 		}
 		if err := uploadImage(ctx, upload.UploadUrl, entry.ContentType, data); err != nil {
@@ -525,9 +529,9 @@ func loadSingleImageManifest(dir, name string) (entry imageManifestEntry, data [
 // {upload_url} response (the shape switch/kit/avatar all share), then PUTs the
 // bytes.
 func uploadSingleSlot(ctx context.Context, client *apiClient, imagePath string, entry imageManifestEntry, data []byte) error {
+	req := api.ImageUploadRequest{ContentType: entry.ContentType, SizeBytes: int64(len(data))}
 	var upload api.SwitchImageUpload
-	if err := client.doJSON(ctx, http.MethodPost, imagePath,
-		api.ImageUploadRequest{ContentType: entry.ContentType}, &upload); err != nil {
+	if err := client.doJSON(ctx, http.MethodPost, imagePath, req, &upload); err != nil {
 		return fmt.Errorf("allocating image slot: %w", err)
 	}
 	return uploadImage(ctx, upload.UploadUrl, entry.ContentType, data)

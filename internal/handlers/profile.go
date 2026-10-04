@@ -313,7 +313,7 @@ func SetProfileImage(repo repository.ProfileRepository, images repository.Profil
 			return
 		}
 
-		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType)
+		uploadURL, err := images.PresignPut(r.Context(), key, in.ContentType, in.SizeBytes)
 		if err != nil {
 			log.FromContext(r.Context()).Error("presigning profile image upload", log.Error, err, log.ProfileID, userID)
 			problem.Internal(w, "failed to set profile image")
