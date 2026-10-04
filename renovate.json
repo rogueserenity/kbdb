@@ -9,9 +9,15 @@
   "postUpdateOptions": ["gomodTidy"],
   "packageRules": [
     {
+      "description": "Dockerfile images ship in the deployed Lambda image, so bumps must release",
+      "matchManagers": ["dockerfile"],
+      "semanticCommitType": "fix"
+    },
+    {
       "groupName": "go toolchain version",
       "matchManagers": ["mise", "dockerfile"],
-      "matchPackageNames": ["golang/go", "golang"]
+      "matchPackageNames": ["golang/go", "golang"],
+      "semanticCommitType": "fix"
     }
   ],
   "lockFileMaintenance": {

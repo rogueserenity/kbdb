@@ -223,5 +223,6 @@ Functional tests run no auth server. [`oidc-testkit`](https://github.com/roguese
 ## Conventions
 
 - **Commit messages and PR titles** follow [Conventional Commits](https://www.conventionalcommits.org/): `type(scope): subject` (e.g. `fix(ci): scope IAM permissions to account/region`). Common types: `feat`, `fix`, `chore`, `docs`, `test`, `ci`, `refactor`.
+- **Changes to deployed behavior use `fix(...)` or `feat(...)`, never `chore(...)`.** Only commits that cut a release reach prod, and `chore` doesn't. That includes hand-written changes to `template.yaml`. Renovate follows the same rule: Dockerfile image and Go toolchain bumps are `fix(deps)`, while CI actions, dev tools and lock file maintenance stay `chore(deps)`.
 - **Mise tasks live in `scripts/`**, one `.sh` file per task, referenced from `mise.toml` via `file = "scripts/<name>.sh"` — even one-liners. Add a new task the same way.
 - Package layout, mocking patterns, and other code-level conventions are documented in `CLAUDE.md`.
