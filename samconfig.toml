@@ -1,26 +1,37 @@
 #:tombi schema.strict = false
 version = 0.1
 
-# kbdb-dev hosts multiple concurrent per-developer stacks (kbdb-dev-<name>,
-# see mise.toml's dev-setup/dev-deploy/dev-teardown tasks and CONTRIBUTING.md),
-# not one shared stack - stack_name and image_repositories are deliberately NOT
-# set here, same reasoning as [ci.deploy.parameters] below: both are supplied
-# per-run by those tasks, so no single hardcoded value here could accidentally
-# be reused across developers.
-[default.deploy.parameters]
-region = "us-east-2"
-confirm_changeset = true
-capabilities = "CAPABILITY_IAM"
+# One section per environment, deployed with mise run setup|deploy|teardown
+# <env> (see CONTRIBUTING.md). Every parameter an environment needs lives in
+# its section: passing --parameter-overrides on the command line would
+# replace parameter_overrides here wholesale, not merge with it.
 
 [default.global.parameters]
 region = "us-east-2"
 
+[dev-jay.deploy.parameters]
+stack_name = "kbdb-dev-jay"
+s3_bucket = "kbdb-sam-artifacts-992234857260"
+image_repositories = ["ApiFunction=992234857260.dkr.ecr.us-east-2.amazonaws.com/kbdb-api-kbdb-dev-jay"]
+region = "us-east-2"
+capabilities = "CAPABILITY_IAM"
+confirm_changeset = false
+fail_on_empty_changeset = false
+parameter_overrides = """\
+  OidcIssuerBaseUrl=https://auth.jay.mykeebs.dev \
+  OidcAudience=project-test-e811f2fd-9992-4bc8-ba6a-ed578b7f5411 \
+  IdpConsentPublicToken=public-token-test-ecb1c2b7-2170-4a87-947c-b6dcc6ae3047 \
+  CorsAllowOrigins=http://localhost:5173,https://jay.mykeebs.dev \
+  LogoutReturnOrigins=http://localhost:5173,https://jay.mykeebs.dev \
+  CustomDomainName=api.jay.mykeebs.dev \
+  CustomDomainCertificateArn=arn:aws:acm:us-east-2:992234857260:certificate/1831f13e-7a40-4c83-91e7-c93c254e2807\
+  """
+
 # CI deploys per-PR stacks into the separate kbdb-ci account (475976462467),
-# selected via `sam build/deploy --config-env ci`. stack_name and
-# image_repositories are deliberately NOT set here - both are supplied
-# per-run via CLI flags (--stack-name kbdb-pr-<N>, computed by
-# .github/actions/kbdb-pr-stack), so a CI run can never accidentally
-# collide with or reuse kbdb-dev's [default.*] values above.
+# selected via `sam build/deploy --config-env ci`. stack_name,
+# image_repositories and parameter_overrides are deliberately NOT set here -
+# all are supplied per-run on the command line (--stack-name kbdb-pr-<N>,
+# computed by .github/actions/kbdb-pr-stack).
 [ci.deploy.parameters]
 s3_bucket = "kbdb-sam-artifacts-475976462467"
 region = "us-east-2"

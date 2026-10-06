@@ -121,7 +121,7 @@ jobs:
             --config-env ci \
             --stack-name "${{ steps.pr-stack.outputs.stack-name }}" \
             --image-repositories "ApiFunction=${ECR_REPOSITORY_URI}" \
-            --parameter-overrides "SkipApiRepository=true" \
+            --parameter-overrides \
               "OidcIssuerBaseUrl=${{ steps.oidc.outputs.issuer }}" \
               "OidcAudience=${{ steps.oidc.outputs.audience }}" \
               "IdpConsentPublicToken=public-token-test-local-kbdb" \
