@@ -6,6 +6,7 @@ mockery = "3.8.0"
 golangci-lint = "2.14.0"
 actionlint = "1.7.12"
 shellcheck = "0.11.0"
+yq = "4.54.1"
 
 [hooks]
 postinstall = "go install golang.org/x/tools/gopls@latest"
@@ -35,20 +36,17 @@ alias = "b"
 description = "sam build"
 file = "scripts/build.sh"
 
-[tasks.dev-setup]
-alias = "ds"
-description = "One-time per-developer kbdb-dev stack bootstrap (requires an authenticated AWS profile)"
-file = "scripts/dev-setup.sh"
+[tasks.setup]
+description = "One-time setup of an environment's ECR repo + stack: mise run setup [env], env defaults to dev-$(whoami) (requires an authenticated AWS profile)"
+file = "scripts/setup.sh"
 
-[tasks.dev-deploy]
-alias = "dd"
-description = "Deploy to your personal kbdb-dev-<name> stack (requires an authenticated AWS profile; run dev-setup first)"
-file = "scripts/dev-deploy.sh"
+[tasks.deploy]
+description = "Deploy the current code to an environment: mise run deploy [env], env defaults to dev-$(whoami) (run setup first)"
+file = "scripts/deploy.sh"
 
-[tasks.dev-teardown]
-alias = "dt"
-description = "Delete your personal kbdb-dev-<name> stack, including its owned ECR repo (requires an authenticated AWS profile)"
-file = "scripts/dev-teardown.sh"
+[tasks.teardown]
+description = "Delete an environment's stack and ECR repo: mise run teardown [env], env defaults to dev-$(whoami); refuses prod"
+file = "scripts/teardown.sh"
 
 [tasks.func-setup]
 alias = "fs"

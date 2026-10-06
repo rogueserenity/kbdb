@@ -1,65 +1,84 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
-  One-time-per-account bootstrap: creates the ECR repo standalone, so an
-  initial image can be pushed to it before the first sam deploy (sam deploy
-  needs to push ApiFunction's image to resolve its ImageUri parameter before
-  creating/updating the stack, but template.yaml's own ApiRepository
-  resource can't exist yet on a fresh account - a chicken-and-egg problem
-  with no first-party SAM fix). After this bootstrap and an initial image
-  push, import this repo into the app stack via an IMPORT-type changeset so
-  template.yaml "owns" it from then on - see the procedure in CONTRIBUTING.md.
+  Per-environment bootstrap: the ECR repo ApiFunction's image is pushed to.
+  It lives in its own permanent stack rather than template.yaml because sam
+  deploy pushes the image before creating/updating the app stack, so the
+  repo has to exist first. kbdb-ci's shared per-PR repo is deployed by hand
+  (CONTRIBUTING.md); every other environment's is deployed by mise run setup.
 
-  DeletionPolicy: Retain is required here even before the import: it's a
-  hard CloudFormation prerequisite that any resource targeted for import
-  into another stack already carry an explicit DeletionPolicy at import
-  time - carrying it from creation avoids needing a separate update step
-  later just to add it.
+  DeletionPolicy: Retain keeps the repo if this stack is deleted. mise run
+  teardown deletes the repo itself afterwards; importing an existing repo
+  into this stack also requires an explicit DeletionPolicy.
 
 Parameters:
   RepositoryName:
     Type: String
     Default: kbdb-api
     Description: >
-      Defaults to kbdb-api (kbdb-ci's shared per-PR-CI-image repo, this
-      template's original use case, unaffected). mise run dev-setup
-      overrides this to kbdb-api-<per-developer stack name> when
-      bootstrapping a new developer's own fully-owned repo in kbdb-dev.
+      kbdb-api for kbdb-ci's shared repo; mise run setup passes
+      kbdb-api-<stack name>.
+  ExpireBy:
+    Type: String
+    Default: age
+    AllowedValues: [age, count]
+    Description: >
+      age expires every image 2 days after push - for kbdb-ci, which only
+      holds transient per-PR images. count keeps the 5 newest - for any
+      environment with a live image a Lambda function is running.
+
+Conditions:
+  ExpireByAge: !Equals [!Ref ExpireBy, age]
 
 Resources:
-  # LifecyclePolicy expires by age alone (tagStatus: "any"), not a tag
-  # pattern: kbdb-ci only ever holds transient per-PR CI build artifacts,
-  # nothing long-lived, so age is the right and only signal - and there's no
-  # "live" image here to accidentally protect, unlike kbdb-dev's copy of this
-  # resource (template.yaml), which uses imageCountMoreThan instead since it
-  # does have one. A prior version of this rule matched on
-  # tagPrefixList: ["pr-"], but sam build/deploy actually tags images as
-  # apifunction-<content-hash>-latest, not pr-<N> - that pattern never
-  # matched anything, so images accumulated unbounded until this was caught
-  # and fixed. (ECR's own "description" field has a 255-char limit, hence
-  # this reasoning living here instead - confirmed via a real UPDATE_FAILED
-  # error rather than assumed.)
+  # Age-based expiry matches on tagStatus "any", not a tag prefix: sam
+  # build/deploy tags images apifunction-<content-hash>-latest, so a
+  # tagPrefixList of "pr-" (an earlier version) never matched anything.
+  #
+  # Count-based expiry exists because age alone has no floor - it would
+  # expire a live environment's deployed image out from under its Lambda
+  # function if deploys went quiet for longer than the threshold.
+  #
+  # (ECR's own "description" field has a 255-char limit, hence the
+  # reasoning living here.)
   ApiRepository:
     Type: AWS::ECR::Repository
     DeletionPolicy: Retain
     Properties:
       RepositoryName: !Ref RepositoryName
       LifecyclePolicy:
-        LifecyclePolicyText: |
-          {
-            "rules": [
-              {
-                "rulePriority": 1,
-                "description": "Expire any image 2 days after push",
-                "selection": {
-                  "tagStatus": "any",
-                  "countType": "sinceImagePushed",
-                  "countUnit": "days",
-                  "countNumber": 2
-                },
-                "action": { "type": "expire" }
-              }
-            ]
-          }
+        LifecyclePolicyText: !If
+          - ExpireByAge
+          - |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Expire any image 2 days after push",
+                  "selection": {
+                    "tagStatus": "any",
+                    "countType": "sinceImagePushed",
+                    "countUnit": "days",
+                    "countNumber": 2
+                  },
+                  "action": { "type": "expire" }
+                }
+              ]
+            }
+          - |
+            {
+              "rules": [
+                {
+                  "rulePriority": 1,
+                  "description": "Keep the 5 most recent images, expire the rest",
+                  "selection": {
+                    "tagStatus": "any",
+                    "countType": "imageCountMoreThan",
+                    "countNumber": 5
+                  },
+                  "action": { "type": "expire" }
+                }
+              ]
+            }
 
 Outputs:
   ApiRepositoryUri:

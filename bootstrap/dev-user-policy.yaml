@@ -1,14 +1,14 @@
 AWSTemplateFormatVersion: '2010-09-09'
 Description: >
   One-time-per-account bootstrap: a managed IAM policy granting exactly the
-  permissions mise run dev-setup/dev-deploy/dev-teardown need, scoped to
+  permissions mise run setup/deploy/teardown need for a kbdb-dev-* stack, scoped to
   kbdb-dev-* stacks/resources - not AdministratorAccess. Deployed once by
   an account admin (see AWS_SETUP.md), then attached to whichever IAM
   identity (user, group, or role) each developer authenticates as. Mirrors
   bootstrap/ci-oidc-role.yaml's permissions policy - same resource surface,
-  since dev-deploy and CI's functional-test job both deploy the same
+  since deploy and CI's functional-test job both deploy the same
   template.yaml - but scoped to kbdb-dev-* instead of kbdb-pr-*, and with
-  the extra actions dev-setup/dev-teardown need that CI's job never does
+  the extra actions setup/teardown need that CI's job never does
   (CI's ECR repo is a permanent, admin-managed bootstrap resource shared
   across every PR; each developer creates and destroys their own).
 
@@ -17,7 +17,7 @@ Resources:
     Type: AWS::IAM::ManagedPolicy
     Properties:
       ManagedPolicyName: kbdb-dev-deploy
-      Description: "Everything mise run dev-setup/dev-deploy/dev-teardown need, scoped to kbdb-dev-* stacks and their owned resources."
+      Description: "Everything mise run setup/deploy/teardown need, scoped to kbdb-dev-* stacks and their owned resources."
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
@@ -40,10 +40,8 @@ Resources:
             Resource:
               # The dev's own app stack (kbdb-dev-<name>) ...
               - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-dev-*/*
-              # ... and dev-setup's temporary standalone-repo bootstrap
-              # stack (kbdb-ecr-bootstrap-kbdb-dev-<name>), deleted again
-              # partway through dev-setup once the repo is imported - see
-              # CONTRIBUTING.md's ECR bootstrap procedure.
+              # ... and its ECR repo stack (kbdb-ecr-bootstrap-kbdb-dev-<name>,
+              # from bootstrap/ecr-repo.yaml).
               - !Sub arn:aws:cloudformation:${AWS::Region}:${AWS::AccountId}:stack/kbdb-ecr-bootstrap-kbdb-dev-*/*
           - Sid: CloudFormationServerlessTransform
             Effect: Allow
@@ -111,9 +109,9 @@ Resources:
               - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}
               - !Sub arn:aws:s3:::kbdb-sam-artifacts-${AWS::AccountId}/*
           # template.yaml's ImagesBucket. Unlike CI's per-PR stacks, a dev
-          # owns this bucket's full lifecycle: dev-setup creates it,
-          # dev-teardown deletes it (S3 refuses DeleteBucket on a non-empty
-          # bucket, so dev-teardown also needs object-level delete + list).
+          # owns this bucket's full lifecycle: setup creates it, teardown
+          # deletes it (S3 refuses DeleteBucket on a non-empty bucket, so
+          # teardown also needs object-level delete + list).
           - Sid: ImagesBucketManagement
             Effect: Allow
             Action:
@@ -189,7 +187,7 @@ Resources:
             Action:
               # Unlike kbdb-ci's one shared, admin-managed repo, each
               # developer's repo (kbdb-api-kbdb-dev-<name>) is created by
-              # dev-setup and destroyed by dev-teardown - so, unlike
+              # setup and destroyed by teardown - so, unlike
               # bootstrap/ci-oidc-role.yaml's equivalent statement, this
               # needs to fully manage the repo's lifecycle, not just push/
               # pull images to an already-existing one.
@@ -212,14 +210,11 @@ Resources:
               # only if the principal calling CreateFunction also has these.
               - ecr:GetRepositoryPolicy
               - ecr:SetRepositoryPolicy
-              # Both needed by dev-setup's post-import reconcile deploy:
-              # DeleteRepositoryPolicy clears the repository policy the
-              # standalone bootstrap stack never set; TagResource applies
-              # the stack's own tags to the now-imported repo. Both
-              # confirmed via real AccessDenied errors (UPDATE_FAILED on
-              # ApiRepository, one per action, in two separate end-to-end
-              # test runs) during verification of this exact policy, not
-              # assumed from docs.
+              # Both confirmed via real AccessDenied errors (UPDATE_FAILED
+              # on ApiRepository, one per action) when the repo was
+              # imported into a stack: DeleteRepositoryPolicy clears a
+              # repository policy the template doesn't set; TagResource
+              # applies the owning stack's tags to the repo.
               - ecr:DeleteRepositoryPolicy
               - ecr:TagResource
             Resource: !Sub arn:aws:ecr:${AWS::Region}:${AWS::AccountId}:repository/kbdb-api-kbdb-dev-*

@@ -71,39 +71,39 @@ Restore always **creates new** items (new server-generated IDs), recording an ol
 
 ## Deploying to AWS
 
-Deploys use a personal, isolated stack per developer rather than one shared environment, so nobody can break anyone else's testing.
+Each environment is a section in `samconfig.toml` — stack name, artifact bucket, ECR repo, region and every template parameter — deployed with three tasks:
 
 ```sh
-mise run dev-setup     # one-time: creates your kbdb-dev-<name> stack
-mise run dev-deploy    # deploy your current code to it
-mise run dev-teardown  # tear it down completely, including its ECR images
+mise run setup [env]     # one-time: creates the env's ECR repo stack, then deploys
+mise run deploy [env]    # deploy your current code to it
+mise run teardown [env]  # delete the stack, the ECR repo stack and the repo itself
 ```
 
-`<name>` defaults to your `whoami`. Set `KBDB_DEV_NAME` to override it (e.g. if you want more than one stack, or your `whoami` collides with a teammate's).
+`env` defaults to `dev-$(whoami)`. Developers each get their own isolated stack, so nobody can break anyone else's testing. To add yours, copy the `[dev-jay.deploy.parameters]` section to `[dev-<your-name>.deploy.parameters]` and change its values: `stack_name` must be `kbdb-dev-<your-name>`, and the ECR repo in `image_repositories` must be `kbdb-api-<stack_name>` (the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) only covers those names). None of the values are secret; commit the section. Want a second stack? Add a second section, e.g. `dev-<your-name>-test`.
 
-These scripts derive your AWS account ID and region automatically from your active credentials (`aws sts get-caller-identity`, `aws configure get region`) — nothing to hardcode. Set `KBDB_DEV_REGION` to override the region if your CLI config doesn't set one.
+Put every template parameter in the section's `parameter_overrides`. Passing `--parameter-overrides` on the command line replaces that list wholesale rather than merging with it, so the scripts never do.
+
+Before changing anything, each task checks that your active AWS credentials belong to the account in the section's `s3_bucket` (`kbdb-sam-artifacts-<account-id>`) and stops if not. `teardown` refuses `prod` outright.
 
 You just need an active, authenticated AWS session — any profile works, there's no required profile name. This project's own maintainer setup happens to use a profile named `AWS_PROFILE=kbdb-dev-admin` (see [AWS accounts](#aws-accounts) below), but that's just this project's convention, not a requirement. **If you're forking this repo**, use any profile authenticated to your own AWS account, with either admin access or the [scoped dev policy](#giving-a-developer-scoped-access-no-admin-needed) attached.
 
-### IdP OIDC config (`KBDB_OIDC_ISSUER_BASE_URL`/`KBDB_OIDC_AUDIENCE`/`KBDB_IDP_CONSENT_PUBLIC_TOKEN`)
+### IdP OIDC config (`OidcIssuerBaseUrl`/`OidcAudience`/`IdpConsentPublicToken`)
 
-All three scripts also require these three vars. kbdb is IdP-agnostic (see [Identity provider requirements](README.md#identity-provider-requirements)); this project is currently run against a Stytch **Test** project, and the parenthetical guidance below reflects that.
+kbdb is IdP-agnostic (see [Identity provider requirements](README.md#identity-provider-requirements)); this project is currently run against a Stytch **Test** project, and the parenthetical guidance below reflects that.
 
-- `KBDB_OIDC_ISSUER_BASE_URL` — your IdP project's OIDC issuer base URL (for a Stytch Test project: `https://test.stytch.com/v1/public/{project_id}`).
-- `KBDB_OIDC_AUDIENCE` — the `aud` claim on every access token, REST and MCP alike: typically your IdP project ID. Some IdPs (Stytch included) put the project ID in `aud` regardless of client type, so one value covers both flows — no separate MCP audience needed.
-- `KBDB_IDP_CONSENT_PUBLIC_TOKEN` — your IdP's browser-SDK public token (for Stytch: dashboard → your project → API keys → Public token). Rendered client-side into the `GET /authorize` consent page to construct the IdP SDK client - safe to embed client-side by design, but still varies per stack.
+- `OidcIssuerBaseUrl` — your IdP project's OIDC issuer base URL (for a Stytch Test project: `https://test.stytch.com/v1/public/{project_id}`).
+- `OidcAudience` — the `aud` claim on every access token, REST and MCP alike: typically your IdP project ID. Some IdPs (Stytch included) put the project ID in `aud` regardless of client type, so one value covers both flows — no separate MCP audience needed.
+- `IdpConsentPublicToken` — your IdP's browser-SDK public token (for Stytch: dashboard → your project → API keys → Public token). Rendered client-side into the `GET /authorize` consent page to construct the IdP SDK client - safe to embed client-side by design, but still varies per stack.
 
 Test is for dev/personal stacks only — never point a dev stack at a live/production IdP project.
 
-To avoid re-exporting these each session, copy `scripts/env/example-dev.env` to `scripts/env/<your-name>-dev.env`, fill it in, commit it (none of these values are secret), and symlink it: `ln -s <your-name>-dev.env scripts/env/dev.env`. All three scripts read that symlink if present; a real shell export still takes precedence.
+### CORS (`CorsAllowOrigins`)
 
-### CORS (`KBDB_CORS_ALLOW_ORIGINS`)
+A comma-separated list of browser origins (each scheme + host + port) allowed to call your stack's `HttpApi` cross-origin, e.g. `http://localhost:5173,https://jay.mykeebs.dev` to cover both a local frontend dev server and its deployed counterpart. Without this, browser preflight (`OPTIONS`) requests 404 before the authorizer is ever reached — API Gateway auto-generates CORS `OPTIONS` routes and exempts them from `DefaultAuthorizer` only when `HttpApi.Properties.CorsConfiguration` is set.
 
-`dev-deploy.sh` also requires `KBDB_CORS_ALLOW_ORIGINS` — a comma-separated list of browser origins (each scheme + host + port) allowed to call your stack's `HttpApi` cross-origin, e.g. `http://localhost:5173,https://jay.mykeebs.dev` to cover both a local frontend dev server and its deployed counterpart. Without this, browser preflight (`OPTIONS`) requests 404 before the authorizer is ever reached — API Gateway auto-generates CORS `OPTIONS` routes and exempts them from `DefaultAuthorizer` only when `HttpApi.Properties.CorsConfiguration` is set.
+### Logout return origins (`LogoutReturnOrigins`)
 
-### Logout return origins (`KBDB_LOGOUT_RETURN_ORIGINS`)
-
-All three scripts also require `KBDB_LOGOUT_RETURN_ORIGINS` — a comma-separated list of browser origins `GET /logout` is allowed to redirect back to via its `return_to` param (see `internal/consent`), same format as `KBDB_CORS_ALLOW_ORIGINS` above. `/logout` revokes the IdP session on this stack's own origin (something `mykeebs-web`'s `signOut()` can't do itself, since the session lives on a different origin than `mykeebs-web`), then redirects to `return_to` — restricted to this allowlist so it isn't an open redirect.
+A comma-separated list of browser origins `GET /logout` is allowed to redirect back to via its `return_to` param (see `internal/consent`), same format as `CorsAllowOrigins` above. `/logout` revokes the IdP session on this stack's own origin (something `mykeebs-web`'s `signOut()` can't do itself, since the session lives on a different origin than `mykeebs-web`), then redirects to `return_to` — restricted to this allowlist so it isn't an open redirect.
 
 ### Custom domain (`api.<your-name>.mykeebs.dev`)
 
@@ -130,8 +130,8 @@ Each developer who wants this does it once for their own name:
    aws acm wait certificate-validated --certificate-arn <arn-from-step-1> \
      --region us-east-2 --profile kbdb-dev-admin
    ```
-5. **Set `KBDB_DEV_CUSTOM_DOMAIN=true` and `KBDB_DEV_CUSTOM_DOMAIN_CERT_ARN=<arn-from-step-1>`** in your `scripts/env/<your-name>-dev.env` (see `scripts/env/example-dev.env` for the exact keys). `dev-setup`/`dev-deploy` pick this up automatically and pass `CustomDomainName=api.<your-name>.mykeebs.dev`/`CustomDomainCertificateArn` through to `sam deploy` — no other flag or command needed. Leaving `KBDB_DEV_CUSTOM_DOMAIN` unset (the default for everyone else) means these parameters are never touched.
-6. **Deploy** (`mise run dev-deploy`), then read the stack's `ApiCustomDomainTarget` output and create a matching `api.<your-name>` CNAME in the `mykeebs.dev` Cloudflare zone (DNS-only, not proxied), pointed at that value. This one is a normal, static record — created once, not rewritten on later deploys.
+5. **Add `CustomDomainName=api.<your-name>.mykeebs.dev` and `CustomDomainCertificateArn=<arn-from-step-1>`** to your section's `parameter_overrides` in `samconfig.toml` (see `[dev-jay.deploy.parameters]`). Leaving both out (the default) means no custom domain.
+6. **Deploy** (`mise run deploy`), then read the stack's `ApiCustomDomainTarget` output and create a matching `api.<your-name>` CNAME in the `mykeebs.dev` Cloudflare zone (DNS-only, not proxied), pointed at that value. This one is a normal, static record — created once, not rewritten on later deploys.
 
 ### AWS accounts
 
@@ -147,54 +147,30 @@ There's no default AWS profile — commands will fail with `NoCredentials` unles
 
 ### First-time account bootstrap
 
-New AWS account, never deployed to before? One-time steps, done once per account by whoever's setting it up (not needed for everyday `dev-deploy`). **If you're forking this repo to deploy to your own account, you only need step 1** — steps 3-5 exist for this project's own separate CI account and don't apply to a single-account personal deploy; `.github/workflows/` is entirely specific to this project's own CI and isn't something you need to set up or replicate.
+New AWS account, never deployed to before? One-time steps, done once per account by whoever's setting it up (not needed for everyday `deploy`). **If you're forking this repo to deploy to your own account, you only need step 1** — steps 3-5 exist for this project's own separate CI account and don't apply to a single-account personal deploy; `.github/workflows/` is entirely specific to this project's own CI and isn't something you need to set up or replicate.
 
-1. **Artifact bucket** (needed by everyone): `aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml --stack-name kbdb-bootstrap --profile <profile>`. The scripts compute its name automatically (`kbdb-sam-artifacts-<your-account-id>`, matching this template's output) — nothing to copy into `samconfig.toml` by hand.
-2. **ECR repo**: for a personal/`kbdb-dev`-style account, `mise run dev-setup` handles this automatically — nothing manual to do. For `kbdb-ci`'s shared bootstrap repo, see [ECR bootstrap procedure](#ecr-bootstrap-procedure) below.
+1. **Artifact bucket** (needed by everyone): `aws cloudformation deploy --template-file bootstrap/artifact-bucket.yaml --stack-name kbdb-bootstrap --profile <profile>`. Its name is `kbdb-sam-artifacts-<your-account-id>`; that's the `s3_bucket` value in your `samconfig.toml` section.
+2. **ECR repo**: each environment's repo is created by `mise run setup` — nothing manual to do. For `kbdb-ci`'s shared repo, see [ECR repo for `kbdb-ci`](#ecr-repo-for-kbdb-ci) below.
 3. **Cost budget** (only needed for accounts without their own app stack, e.g. `kbdb-ci`): `aws cloudformation deploy --template-file bootstrap/cost-budget.yaml --stack-name kbdb-cost-budget --profile <profile>`.
 4. **(`kbdb-ci` only) GitHub Actions OIDC role**, so CI can authenticate to AWS: `aws cloudformation deploy --template-file bootstrap/ci-oidc-role.yaml --stack-name kbdb-ci-oidc --capabilities CAPABILITY_NAMED_IAM --profile kbdb-ci-admin`.
 5. **(`kbdb-ci` only) JWKS bucket**, so CI's functional-test job can publish a publicly-fetchable OIDC discovery document + JWKS (generated by `oidc-testkit-gen`) for its per-PR stacks' native JWT authorizer to verify against: `aws cloudformation deploy --template-file bootstrap/jwks-bucket.yaml --stack-name kbdb-bootstrap-jwks --profile kbdb-ci-admin`. Then set the resulting `JWKSBucketName` output as the `JWKS_BUCKET_NAME` GitHub Actions repo variable (Settings → Secrets and variables → Actions → Variables) — `ci.yml`'s functional-test job fails at its "Generate OIDC signing material" step until that's set.
 
 After all bootstraps, ordinary `sam deploy` calls (and, for `kbdb-ci`, CI's own workflow) work.
 
-#### ECR bootstrap procedure
+#### ECR repo for `kbdb-ci`
 
-The ECR repo needs to exist and hold an image *before* the first `sam deploy` can run, but `template.yaml` also declares that same repo as one of its own resources — a chicken-and-egg problem. `mise run dev-setup` automates this for `kbdb-dev`; for `kbdb-ci`'s one shared repo, do it by hand, once:
+`sam deploy` pushes the function's image before it creates or updates the stack, so the repo can't live in `template.yaml` — it's in its own permanent stack from `bootstrap/ecr-repo.yaml`. `mise run setup` deploys one per environment. CI's per-PR stacks all share one repo, deployed by hand, once:
 
 ```sh
-# 1. Create the repo standalone.
 aws cloudformation deploy --template-file bootstrap/ecr-repo.yaml \
-  --stack-name kbdb-ecr-bootstrap --profile <profile>
-
-# 2. Build and push an initial image to it.
-sam build --template-file template.yaml
-sam package --s3-bucket kbdb-sam-artifacts-<account-id> \
-  --image-repository <account-id>.dkr.ecr.<region>.amazonaws.com/kbdb-api \
-  --output-template-file /tmp/packaged.yaml
-
-# 3. Deploy the rest of the stack, excluding ApiRepository (it already
-#    exists standalone; CloudFormation can't create a second one with the
-#    same name). Use a temporary copy of template.yaml with the
-#    ApiRepository resource block removed:
-sam deploy --template-file <template-copy-without-ApiRepository>.yaml \
-  --stack-name kbdb-dev --s3-bucket kbdb-sam-artifacts-<account-id> \
-  --image-repositories ApiFunction=<account-id>.dkr.ecr.<region>.amazonaws.com/kbdb-api \
-  --capabilities CAPABILITY_IAM --no-confirm-changeset
-
-# 4. Import the standalone repo into the now-existing stack, so
-#    template.yaml "owns" it going forward.
-aws cloudformation create-change-set --stack-name kbdb-dev \
-  --change-set-name import-ecr-repo --change-set-type IMPORT \
-  --template-body file:///tmp/packaged.yaml --capabilities CAPABILITY_IAM \
-  --resources-to-import '[{"ResourceType":"AWS::ECR::Repository","LogicalResourceId":"ApiRepository","ResourceIdentifier":{"RepositoryName":"kbdb-api"}}]'
-aws cloudformation execute-change-set --stack-name kbdb-dev --change-set-name import-ecr-repo
+  --stack-name kbdb-ecr-bootstrap --profile kbdb-ci-admin
 ```
 
-A CloudFormation `IMPORT` changeset can only import into a stack that already exists, which is why step 3 runs before step 4 rather than combined with it.
+Its defaults (`RepositoryName=kbdb-api`, `ExpireBy=age`) are CI's: images expire 2 days after push, since nothing there is long-lived.
 
 ### Giving a developer scoped access (no admin needed)
 
-Once the account is bootstrapped, day-to-day `dev-setup`/`dev-deploy`/`dev-teardown` don't need admin access — a much narrower policy covers exactly what those three scripts do. This is the setup for a fork you're deploying to your own AWS account, or for adding a teammate without handing them broad permissions:
+Once the account is bootstrapped, day-to-day `setup`/`deploy`/`teardown` of a `kbdb-dev-*` stack don't need admin access — a much narrower policy covers exactly what those three scripts do. This is the setup for a fork you're deploying to your own AWS account, or for adding a teammate without handing them broad permissions:
 
 1. **Account admin, once**: deploy the scoped policy.
    ```sh
@@ -205,9 +181,9 @@ Once the account is bootstrapped, day-to-day `dev-setup`/`dev-deploy`/`dev-teard
    ```sh
    aws iam attach-user-policy --user-name <dev> --policy-arn <DevPolicyArn>
    ```
-2. **Each developer**: with that policy attached (and no other permissions needed), run `mise run dev-setup`, `dev-deploy`, `dev-teardown` as usual.
+2. **Each developer**: with that policy attached (and no other permissions needed), run `mise run setup`, `deploy`, `teardown` as usual.
 
-This policy is scoped to `kbdb-dev-*`-named stacks/resources only — it can't touch anything outside a developer's own stack, and can't grant itself broader access. It was verified by running the full `dev-setup` → `dev-deploy` → `dev-teardown` cycle as a real IAM user with only this policy attached and nothing else.
+This policy is scoped to `kbdb-dev-*`-named stacks/resources only — it can't touch anything outside a developer's own stack, and can't grant itself broader access. It was verified by running the full `setup` → `deploy` → `teardown` cycle as a real IAM user with only this policy attached and nothing else.
 
 ## Testing strategy
 
