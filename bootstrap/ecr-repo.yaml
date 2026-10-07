@@ -40,11 +40,31 @@ Resources:
   #
   # (ECR's own "description" field has a 255-char limit, hence the
   # reasoning living here.)
+  #
+  # RepositoryPolicyText declares the pull grant Lambda would otherwise add
+  # itself at CreateFunction. Left undeclared, CloudFormation deletes that
+  # grant on any update to this resource, and the function fails with
+  # ImageAccessDenied the next time it is reactivated from Inactive. Function
+  # names are kbdb-api-<stack name>: exactly RepositoryName for a per-env
+  # repo, RepositoryName-kbdb-pr-<N> for kbdb-ci's shared one.
   ApiRepository:
     Type: AWS::ECR::Repository
     DeletionPolicy: Retain
     Properties:
       RepositoryName: !Ref RepositoryName
+      RepositoryPolicyText:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: LambdaECRImageRetrievalPolicy
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - ecr:BatchGetImage
+              - ecr:GetDownloadUrlForLayer
+            Condition:
+              StringLike:
+                aws:sourceArn: !Sub arn:${AWS::Partition}:lambda:${AWS::Region}:${AWS::AccountId}:function:${RepositoryName}*
       LifecyclePolicy:
         LifecyclePolicyText: !If
           - ExpireByAge
