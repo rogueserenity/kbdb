@@ -2,7 +2,6 @@ package repomcp
 
 import (
 	"math"
-	"slices"
 
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -19,10 +18,10 @@ type KeycapSet struct{}
 func (ks KeycapSet) ToMCP(set repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeycapSet {
 	var kits []schema.KeycapKit
 	if len(set.Kits) > 0 {
-		ids := sortedKitIDs(set.Kits)
-		kits = make([]schema.KeycapKit, len(ids))
-		for i, id := range ids {
-			kits[i] = ks.KitToMCP(set.Kits[id], isOwner, ownerPrefs)
+		sorted := repository.SortedKits(set.Kits)
+		kits = make([]schema.KeycapKit, len(sorted))
+		for i, kit := range sorted {
+			kits[i] = ks.KitToMCP(kit, isOwner, ownerPrefs)
 		}
 	}
 
@@ -164,16 +163,6 @@ func validPrimaryKitID(primaryKitID *string, kits map[string]repository.KeycapKi
 		return nil
 	}
 	return primaryKitID
-}
-
-// sortedKitIDs returns kits' keys sorted, for a deterministic output order.
-func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
-	ids := make([]string, 0, len(kits))
-	for id := range kits {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
 }
 
 // sumKnownCosts mirrors repoapi's helper of the same name: sums the

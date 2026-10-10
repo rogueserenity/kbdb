@@ -110,6 +110,18 @@ func New(
 		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateKeyboard(keyboardRepo, kr)))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}",
 		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboard(keyboardRepo, buildRepo, buildImageStore, keyboardImageStore))))
+	mux.Handle("POST /v1/users/{userId}/keyboards/{keyboardId}/plates",
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateKeyboardPlate(keyboardRepo, kr)))))
+	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}/plates/{plateId}",
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateKeyboardPlate(keyboardRepo, kr)))))
+	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}/plates/{plateId}",
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboardPlate(keyboardRepo, buildRepo, buildImageStore))))
+	mux.Handle("POST /v1/users/{userId}/keyboards/{keyboardId}/pcbs",
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.CreateKeyboardPCB(keyboardRepo, kr)))))
+	mux.Handle("PUT /v1/users/{userId}/keyboards/{keyboardId}/pcbs/{pcbId}",
+		middleware.RequireAuthorizerIdentity(ownerPrefs(validate(handlers.UpdateKeyboardPCB(keyboardRepo, kr)))))
+	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}/pcbs/{pcbId}",
+		middleware.RequireAuthorizerIdentity(validate(handlers.DeleteKeyboardPCB(keyboardRepo, buildRepo, buildImageStore))))
 	mux.Handle("POST /v1/users/{userId}/keyboards/{keyboardId}/images",
 		middleware.RequireAuthorizerIdentity(validate(handlers.AddKeyboardImage(keyboardRepo, keyboardImageStore))))
 	mux.Handle("DELETE /v1/users/{userId}/keyboards/{keyboardId}/images/{imageId}",

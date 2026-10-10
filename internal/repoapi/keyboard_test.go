@@ -27,20 +27,20 @@ func fullRepoKeyboard() repository.Keyboard {
 			BottomCase: repository.KeyboardMaterialColor{Material: strPtr("Aluminum"), Color: strPtr("Black")},
 			Weight:     repository.KeyboardMaterialColor{Material: strPtr("Brass"), Color: strPtr("Gold")},
 		},
-		Plates: []repository.KeyboardPlate{
+		Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{
 			{ID: "p1", Material: "FR4"},
 			{
 				ID: "p2", Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2),
 				Purchase: repository.KeyboardPurchase{Vendor: strPtr("Keychron"), Price: floatPtr(30), OrderDate: strPtr("2026-02-01")},
 			},
-		},
-		PCBs: []repository.KeyboardPCB{{
+		}),
+		PCBs: repository.KeyboardPCBsMap([]repository.KeyboardPCB{{
 			ID:           "b1",
 			Thickness:    floatPtr(1.6),
 			Firmware:     strPtr("QMK/VIA"),
 			Assembly:     strPtr("Hot-swap"),
 			Connectivity: strPtr("Wired"),
-		}},
+		}}),
 		Purchase: repository.KeyboardPurchase{
 			Vendor:       strPtr("Keychron"),
 			Price:        floatPtr(199.99),
@@ -102,10 +102,10 @@ func (s *KeyboardToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	if s.NotNil(out.Pcbs) && s.Len(*out.Pcbs, 1) {
 		pcb := (*out.Pcbs)[0]
 		s.Equal("b1", pcb.Id)
-		s.Equal(kb.PCBs[0].Thickness, pcb.Thickness)
-		s.Equal(kb.PCBs[0].Firmware, pcb.Firmware)
-		s.Equal(kb.PCBs[0].Assembly, pcb.Assembly)
-		s.Equal(kb.PCBs[0].Connectivity, pcb.Connectivity)
+		s.Equal(kb.PCBs["b1"].Thickness, pcb.Thickness)
+		s.Equal(kb.PCBs["b1"].Firmware, pcb.Firmware)
+		s.Equal(kb.PCBs["b1"].Assembly, pcb.Assembly)
+		s.Equal(kb.PCBs["b1"].Connectivity, pcb.Connectivity)
 		s.Nil(pcb.Purchase)
 	}
 	s.Equal(floatPtr(229.99), out.TotalCost)
@@ -169,7 +169,7 @@ func (s *KeyboardToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 func (s *KeyboardToAPISuite) TestMalformedStoredPartDate_ReturnsError() {
 	kb := repository.Keyboard{
 		ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPrivate,
-		PCBs: []repository.KeyboardPCB{{ID: "b1", Purchase: repository.KeyboardPurchase{DeliveryDate: strPtr("not-a-date")}}},
+		PCBs: repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1", Purchase: repository.KeyboardPurchase{DeliveryDate: strPtr("not-a-date")}}}),
 	}
 
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
@@ -313,16 +313,6 @@ func (s *KeyboardToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 			BottomCase: &api.MaterialColor{Material: strPtr("Aluminum"), Color: strPtr("Black")},
 			Weight:     &api.MaterialColor{Material: strPtr("Brass"), Color: strPtr("Gold")},
 		},
-		Plates: &[]api.KeyboardPlateInput{
-			{Material: "FR4"},
-			{Id: strPtr("p2"), Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2), Purchase: &api.PurchaseInput{Price: floatPtr(30), OrderDate: &orderDate}},
-		},
-		Pcbs: &[]api.KeyboardPCBInput{{
-			Thickness:    floatPtr(1.6),
-			Firmware:     strPtr("QMK/VIA"),
-			Assembly:     strPtr("Hot-swap"),
-			Connectivity: strPtr("Wired"),
-		}},
 		Purchase: &api.PurchaseInput{
 			Vendor:       strPtr("Keychron"),
 			Price:        floatPtr(199.99),
@@ -347,20 +337,6 @@ func (s *KeyboardToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(in.Design.BottomCase.Material, kb.Design.BottomCase.Material)
 	s.Equal(in.Design.Weight.Material, kb.Design.Weight.Material)
 
-	s.Equal([]repository.KeyboardPlate{
-		{Material: "FR4"},
-		{
-			ID: "p2", Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2),
-			Purchase: repository.KeyboardPurchase{Price: floatPtr(30), OrderDate: strPtr("2026-01-15")},
-		},
-	}, kb.Plates)
-	s.Equal([]repository.KeyboardPCB{{
-		Thickness:    floatPtr(1.6),
-		Firmware:     strPtr("QMK/VIA"),
-		Assembly:     strPtr("Hot-swap"),
-		Connectivity: strPtr("Wired"),
-	}}, kb.PCBs)
-
 	s.Equal(in.Purchase.Vendor, kb.Purchase.Vendor)
 	s.Equal(in.Purchase.Price, kb.Purchase.Price)
 	s.Equal(in.Purchase.OrderStatus, kb.Purchase.OrderStatus)
@@ -368,6 +344,30 @@ func (s *KeyboardToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(in.Purchase.OrderDate.Format(dateLayout), *kb.Purchase.OrderDate)
 	s.Require().NotNil(kb.Purchase.DeliveryDate)
 	s.Equal(in.Purchase.DeliveryDate.Format(dateLayout), *kb.Purchase.DeliveryDate)
+}
+
+func (s *KeyboardToRepoSuite) TestPlateToRepo_MapsAllFields() {
+	orderDate := openapi_types.Date{Time: time.Date(2026, 1, 15, 0, 0, 0, 0, time.UTC)}
+
+	plate := Keyboard{}.PlateToRepo(api.KeyboardPlateInput{
+		Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2),
+		Purchase: &api.PurchaseInput{Price: floatPtr(30), OrderDate: &orderDate},
+	})
+
+	s.Equal(repository.KeyboardPlate{
+		Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2),
+		Purchase: repository.KeyboardPurchase{Price: floatPtr(30), OrderDate: strPtr("2026-01-15")},
+	}, plate)
+}
+
+func (s *KeyboardToRepoSuite) TestPCBToRepo_MapsAllFields() {
+	pcb := Keyboard{}.PCBToRepo(api.KeyboardPCBInput{
+		Thickness: floatPtr(1.6), Firmware: strPtr("QMK/VIA"), Assembly: strPtr("Hotswap"), Connectivity: strPtr("Wired"),
+	})
+
+	s.Equal(repository.KeyboardPCB{
+		Thickness: floatPtr(1.6), Firmware: strPtr("QMK/VIA"), Assembly: strPtr("Hotswap"), Connectivity: strPtr("Wired"),
+	}, pcb)
 }
 
 func (s *KeyboardToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {
@@ -425,4 +425,27 @@ func (s *KeyboardToAPISuite) TestStripPrices_NoPurchase_NoOp() {
 	Keyboard{}.StripPrices(&out)
 
 	s.Equal(api.Keyboard{Id: "kb1"}, out)
+}
+
+func (s *KeyboardToAPISuite) TestParts_ListedInSeqOrder() {
+	kb := repository.Keyboard{
+		ID: "kb1", Brand: "B", Name: "N", Visibility: repository.VisibilityPrivate,
+		Plates: map[string]repository.KeyboardPlate{
+			"z": {ID: "z", Material: "AL", Seq: 1},
+			"a": {ID: "a", Material: "PC", Seq: 2},
+			"m": {ID: "m", Material: "PP", Seq: 0},
+		},
+		PCBs: map[string]repository.KeyboardPCB{
+			"y": {ID: "y", Seq: 2},
+			"b": {ID: "b", Seq: 1},
+		},
+	}
+
+	out, err := Keyboard{}.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Plates)
+	s.Equal([]string{"m", "z", "a"}, []string{(*out.Plates)[0].Id, (*out.Plates)[1].Id, (*out.Plates)[2].Id})
+	s.Require().NotNil(out.Pcbs)
+	s.Equal([]string{"b", "y"}, []string{(*out.Pcbs)[0].Id, (*out.Pcbs)[1].Id})
 }

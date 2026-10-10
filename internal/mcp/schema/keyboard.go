@@ -77,15 +77,14 @@ type DeleteKeyboardOutput struct {
 }
 
 // KeyboardInput is the writable half of a keyboard, shared by
-// create_keyboard and update_keyboard.
+// create_keyboard and update_keyboard. Plates and PCBs have their own
+// tools, like keycap kits.
 type KeyboardInput struct {
 	Brand      string                 `json:"brand" jsonschema:"the keyboard's brand"`
 	Name       string                 `json:"name" jsonschema:"the keyboard's name"`
 	Size       *string                `json:"size,omitempty" jsonschema:"the keyboard's size; must be an approved keyboard_size lookup value"`
 	Layout     *string                `json:"layout,omitempty" jsonschema:"the keyboard's layout; must be an approved keyboard_layout value whose sizes include this keyboard's size"`
 	Design     *KeyboardDesign        `json:"design,omitempty" jsonschema:"the case makeup"`
-	Plates     []KeyboardPlateInput   `json:"plates,omitempty" jsonschema:"every plate the keyboard has, including extras bought separately; send an existing plate's id to keep it, since builds reference plates by id"`
-	PCBs       []KeyboardPCBInput     `json:"pcbs,omitempty" jsonschema:"every PCB the keyboard has, including extras bought separately; send an existing PCB's id to keep it, since builds reference PCBs by id"`
 	Purchase   *KeyboardPurchaseInput `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status; price is the base price, excluding plates and PCBs that have their own purchase"`
 	Notes      *string                `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility string                 `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
@@ -103,8 +102,8 @@ type Keyboard struct {
 	Size       *string           `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
 	Layout     *string           `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
 	Design     *KeyboardDesign   `json:"design,omitempty" jsonschema:"the case makeup"`
-	Plates     []KeyboardPlate   `json:"plates,omitempty" jsonschema:"every plate the keyboard has"`
-	PCBs       []KeyboardPCB     `json:"pcbs,omitempty" jsonschema:"every PCB the keyboard has"`
+	Plates     []KeyboardPlate   `json:"plates,omitempty" jsonschema:"every plate the keyboard has, in the order they were added; managed with create/update/delete_keyboard_plate"`
+	PCBs       []KeyboardPCB     `json:"pcbs,omitempty" jsonschema:"every PCB the keyboard has, in the order they were added; managed with create/update/delete_keyboard_pcb"`
 	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status; price is the base price, excluding plates and PCBs that have their own purchase"`
 	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility *string           `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; only ever present for the keyboard's owner"`
@@ -137,7 +136,6 @@ type KeyboardPlate struct {
 
 // KeyboardPlateInput is the writable form of KeyboardPlate.
 type KeyboardPlateInput struct {
-	ID        string                     `json:"id,omitempty" jsonschema:"an existing plate's id, to keep it; omit to add a new plate"`
 	Material  string                     `json:"material" jsonschema:"what the plate is made of; must be an approved keyboard_plate_material lookup value"`
 	Color     *string                    `json:"color,omitempty" jsonschema:"the plate's color"`
 	Thickness *float64                   `json:"thickness,omitempty" jsonschema:"plate thickness in mm"`
@@ -156,7 +154,6 @@ type KeyboardPCB struct {
 
 // KeyboardPCBInput is the writable form of KeyboardPCB.
 type KeyboardPCBInput struct {
-	ID           string                     `json:"id,omitempty" jsonschema:"an existing PCB's id, to keep it; omit to add a new PCB"`
 	Thickness    *float64                   `json:"thickness,omitempty" jsonschema:"PCB thickness in mm"`
 	Firmware     *string                    `json:"firmware,omitempty" jsonschema:"the firmware the PCB runs; must be an approved keyboard_pcb_firmware lookup value"`
 	Assembly     *string                    `json:"assembly,omitempty" jsonschema:"how the PCB is assembled; must be an approved keyboard_pcb_assembly_type lookup value"`
@@ -249,3 +246,78 @@ type DeleteKeyboardImageInput struct {
 // DeleteKeyboardImageOutput is the delete_keyboard_image tool's output.
 // Deleting is idempotent, so there is no payload.
 type DeleteKeyboardImageOutput struct{}
+
+// CreateKeyboardPlateInput is the create_keyboard_plate tool input.
+type CreateKeyboardPlateInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to add the plate to"`
+	KeyboardPlateInput
+}
+
+// CreateKeyboardPlateOutput is the create_keyboard_plate tool output.
+type CreateKeyboardPlateOutput struct {
+	Plate KeyboardPlate `json:"plate" jsonschema:"the created plate, including its server-generated id"`
+}
+
+// UpdateKeyboardPlateInput is the update_keyboard_plate tool input. Every
+// field is replaced, so omitting an optional field clears it.
+type UpdateKeyboardPlateInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the plate belongs to"`
+	PlateID    string `json:"plate_id" jsonschema:"the id of the plate to replace"`
+	KeyboardPlateInput
+}
+
+// UpdateKeyboardPlateOutput is the update_keyboard_plate tool output.
+type UpdateKeyboardPlateOutput struct {
+	Plate KeyboardPlate `json:"plate" jsonschema:"the updated plate"`
+}
+
+// DeleteKeyboardPlateInput is the delete_keyboard_plate tool input.
+// OnDelete controls what happens if a build uses the plate: "block" (the
+// default when omitted) fails the call; "cascade" deletes the plate and
+// every build using it.
+type DeleteKeyboardPlateInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the plate belongs to"`
+	PlateID    string `json:"plate_id" jsonschema:"the id of the plate to delete"`
+	OnDelete   string `json:"on_delete,omitempty" jsonschema:"how to handle a plate a build uses: block (default) or cascade"`
+}
+
+// DeleteKeyboardPlateOutput is the delete_keyboard_plate tool output.
+type DeleteKeyboardPlateOutput struct {
+	DeletedBuildIDs []string `json:"deleted_build_ids,omitempty" jsonschema:"ids of builds also deleted, when on_delete was cascade"`
+}
+
+// CreateKeyboardPCBInput is the create_keyboard_pcb tool input.
+type CreateKeyboardPCBInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard to add the PCB to"`
+	KeyboardPCBInput
+}
+
+// CreateKeyboardPCBOutput is the create_keyboard_pcb tool output.
+type CreateKeyboardPCBOutput struct {
+	PCB KeyboardPCB `json:"pcb" jsonschema:"the created PCB, including its server-generated id"`
+}
+
+// UpdateKeyboardPCBInput is the update_keyboard_pcb tool input. Every field
+// is replaced, so omitting an optional field clears it.
+type UpdateKeyboardPCBInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the PCB belongs to"`
+	PCBID      string `json:"pcb_id" jsonschema:"the id of the PCB to replace"`
+	KeyboardPCBInput
+}
+
+// UpdateKeyboardPCBOutput is the update_keyboard_pcb tool output.
+type UpdateKeyboardPCBOutput struct {
+	PCB KeyboardPCB `json:"pcb" jsonschema:"the updated PCB"`
+}
+
+// DeleteKeyboardPCBInput is DeleteKeyboardPlateInput for PCBs.
+type DeleteKeyboardPCBInput struct {
+	KeyboardID string `json:"keyboard_id" jsonschema:"the id of the keyboard the PCB belongs to"`
+	PCBID      string `json:"pcb_id" jsonschema:"the id of the PCB to delete"`
+	OnDelete   string `json:"on_delete,omitempty" jsonschema:"how to handle a PCB a build uses: block (default) or cascade"`
+}
+
+// DeleteKeyboardPCBOutput is the delete_keyboard_pcb tool output.
+type DeleteKeyboardPCBOutput struct {
+	DeletedBuildIDs []string `json:"deleted_build_ids,omitempty" jsonschema:"ids of builds also deleted, when on_delete was cascade"`
+}

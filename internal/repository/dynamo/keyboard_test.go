@@ -211,6 +211,25 @@ func (s *KeyboardRepositorySuite) TestCreate_Succeeds() {
 	s.Equal(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron"}, kb)
 }
 
+func (s *KeyboardRepositorySuite) TestCreate_SeedsEmptyPartAndImageMaps() {
+	s.mockClient.EXPECT().
+		PutItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.PutItemInput) bool {
+			for _, attr := range []string{"images", "plates", "pcbs"} {
+				m, ok := in.Item[attr].(*types.AttributeValueMemberM)
+				if !ok || len(m.Value) != 0 {
+					return false
+				}
+			}
+			return true
+		})).
+		Return(&dynamodb.PutItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.Create(ctx, repository.Keyboard{ID: "kb1", Brand: "Keychron"})
+
+	s.Require().NoError(err)
+}
+
 func (s *KeyboardRepositorySuite) TestCreate_AlreadyExists_ReturnsErrAlreadyExists() {
 	s.mockClient.EXPECT().
 		PutItem(mock.Anything, mock.Anything).
@@ -261,6 +280,53 @@ func (s *KeyboardRepositorySuite) TestUpdate_Succeeds() {
 
 	s.Require().NoError(err)
 	s.Equal("Keychron", kb.Brand)
+}
+
+func (s *KeyboardRepositorySuite) TestDeleteImage_DottedImageID_IsOneKeyNotANestedField() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			has := map[string]bool{}
+			for _, n := range in.ExpressionAttributeNames {
+				has[n] = true
+			}
+			return has["images"] && has["img1.path"] && !has["path"]
+		})).
+		Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.DeleteImage(ctx, "kb1", "img1.path")
+
+	s.Require().NoError(err)
+}
+
+func (s *KeyboardRepositorySuite) TestBracketedImageID_NeverReachesDynamo() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+
+	key, err := s.repo.DeleteImage(ctx, "kb1", "img1[0]")
+	s.Require().NoError(err)
+	s.Nil(key)
+
+	ok, err := s.repo.SetImageGetCache(ctx, "alice", "kb1", "img1[0]", "k", "url", time.Now())
+	s.Require().NoError(err)
+	s.False(ok)
+}
+
+func (s *KeyboardRepositorySuite) TestUpdate_LeavesPartsUntouched() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			for _, name := range in.ExpressionAttributeNames {
+				if name == "plates" || name == "pcbs" || name == "images" {
+					return false
+				}
+			}
+			return true
+		})).
+		Return(&dynamodb.UpdateItemOutput{Attributes: s.updatedItem()}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.Update(ctx, repository.Keyboard{ID: "kb1", Brand: "Keychron"})
+
+	s.Require().NoError(err)
 }
 
 func (s *KeyboardRepositorySuite) TestUpdate_OmittedOptionalFields_AreRemoved() {

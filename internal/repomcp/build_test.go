@@ -340,11 +340,11 @@ func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb-1",
 			Purchase: repository.KeyboardPurchase{Price: &price},
-			Plates: []repository.KeyboardPlate{
+			Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{
 				{ID: "p-1", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}},
 				{ID: "p-2", Purchase: repository.KeyboardPurchase{Price: floatPtr(30)}},
-			},
-			PCBs: []repository.KeyboardPCB{{ID: "b-1", Purchase: repository.KeyboardPurchase{Price: floatPtr(45)}}},
+			}),
+			PCBs: repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b-1", Purchase: repository.KeyboardPurchase{Price: floatPtr(45)}}}),
 		}, nil)
 
 	switches := mocks.NewMockSwitchRepository(s.T())

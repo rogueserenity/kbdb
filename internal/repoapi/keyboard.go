@@ -28,12 +28,12 @@ func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner boo
 		return api.Keyboard{}, err
 	}
 
-	plates, err := k.platesToAPI(kb.Plates, isOwner, ownerPrefs)
+	plates, err := k.platesToAPI(repository.SortedPlates(kb.Plates), isOwner, ownerPrefs)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
 
-	pcbs, err := k.pcbsToAPI(kb.PCBs, isOwner, ownerPrefs)
+	pcbs, err := k.pcbsToAPI(repository.SortedPCBs(kb.PCBs), isOwner, ownerPrefs)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -102,7 +102,8 @@ func (k Keyboard) imagesToAPI(ctx context.Context, ownerID, keyboardID string, i
 // ToRepo maps a generated KeyboardInput (already schema-validated by the
 // OpenAPI request validator) to a repository.Keyboard. It does not set
 // UserID or ID - those come from the request's path/caller, not the body,
-// and stay the handler's responsibility.
+// and stay the handler's responsibility. Plates and PCBs have their own
+// routes, so the input carries neither.
 func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 	return repository.Keyboard{
 		Brand:      in.Brand,
@@ -110,8 +111,6 @@ func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 		Size:       in.Size,
 		Layout:     in.Layout,
 		Design:     k.designToRepo(in.Design),
-		Plates:     k.platesToRepo(in.Plates),
-		PCBs:       k.pcbsToRepo(in.Pcbs),
 		Purchase:   k.purchaseToRepo(in.Purchase),
 		Notes:      in.Notes,
 		Visibility: repository.Visibility(in.Visibility),
@@ -217,41 +216,40 @@ func (k Keyboard) platesToAPI(plates []repository.KeyboardPlate, isOwner bool, o
 
 	out := make([]api.KeyboardPlate, len(plates))
 	for i, p := range plates {
-		purchase, err := k.purchaseToAPI(p.Purchase, isOwner, ownerPrefs)
+		plate, err := k.PlateToAPI(p, isOwner, ownerPrefs)
 		if err != nil {
-			return nil, fmt.Errorf("plate %q: %w", p.ID, err)
+			return nil, err
 		}
-		out[i] = api.KeyboardPlate{
-			Id:        p.ID,
-			Material:  p.Material,
-			Color:     p.Color,
-			Thickness: p.Thickness,
-			Purchase:  purchase,
-		}
+		out[i] = plate
 	}
 
 	return &out, nil
 }
 
-func (k Keyboard) platesToRepo(plates *[]api.KeyboardPlateInput) []repository.KeyboardPlate {
-	if plates == nil || len(*plates) == 0 {
-		return nil
+// PlateToAPI maps one plate, with the same price rules as [Keyboard.ToAPI].
+func (k Keyboard) PlateToAPI(p repository.KeyboardPlate, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardPlate, error) {
+	purchase, err := k.purchaseToAPI(p.Purchase, isOwner, ownerPrefs)
+	if err != nil {
+		return api.KeyboardPlate{}, fmt.Errorf("plate %q: %w", p.ID, err)
 	}
 
-	out := make([]repository.KeyboardPlate, len(*plates))
-	for i, p := range *plates {
-		out[i] = repository.KeyboardPlate{
-			Material:  p.Material,
-			Color:     p.Color,
-			Thickness: p.Thickness,
-			Purchase:  k.purchaseToRepo(p.Purchase),
-		}
-		if p.Id != nil {
-			out[i].ID = *p.Id
-		}
-	}
+	return api.KeyboardPlate{
+		Id:        p.ID,
+		Material:  p.Material,
+		Color:     p.Color,
+		Thickness: p.Thickness,
+		Purchase:  purchase,
+	}, nil
+}
 
-	return out
+// PlateToRepo maps a plate request body. ID is left for the handler to set.
+func (k Keyboard) PlateToRepo(in api.KeyboardPlateInput) repository.KeyboardPlate {
+	return repository.KeyboardPlate{
+		Material:  in.Material,
+		Color:     in.Color,
+		Thickness: in.Thickness,
+		Purchase:  k.purchaseToRepo(in.Purchase),
+	}
 }
 
 func (k Keyboard) pcbsToAPI(pcbs []repository.KeyboardPCB, isOwner bool, ownerPrefs repository.ProfilePreferences) (*[]api.KeyboardPCB, error) {
@@ -261,43 +259,42 @@ func (k Keyboard) pcbsToAPI(pcbs []repository.KeyboardPCB, isOwner bool, ownerPr
 
 	out := make([]api.KeyboardPCB, len(pcbs))
 	for i, p := range pcbs {
-		purchase, err := k.purchaseToAPI(p.Purchase, isOwner, ownerPrefs)
+		pcb, err := k.PCBToAPI(p, isOwner, ownerPrefs)
 		if err != nil {
-			return nil, fmt.Errorf("PCB %q: %w", p.ID, err)
+			return nil, err
 		}
-		out[i] = api.KeyboardPCB{
-			Id:           p.ID,
-			Thickness:    p.Thickness,
-			Firmware:     p.Firmware,
-			Assembly:     p.Assembly,
-			Connectivity: p.Connectivity,
-			Purchase:     purchase,
-		}
+		out[i] = pcb
 	}
 
 	return &out, nil
 }
 
-func (k Keyboard) pcbsToRepo(pcbs *[]api.KeyboardPCBInput) []repository.KeyboardPCB {
-	if pcbs == nil || len(*pcbs) == 0 {
-		return nil
+// PCBToAPI maps one PCB, with the same price rules as [Keyboard.ToAPI].
+func (k Keyboard) PCBToAPI(p repository.KeyboardPCB, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeyboardPCB, error) {
+	purchase, err := k.purchaseToAPI(p.Purchase, isOwner, ownerPrefs)
+	if err != nil {
+		return api.KeyboardPCB{}, fmt.Errorf("PCB %q: %w", p.ID, err)
 	}
 
-	out := make([]repository.KeyboardPCB, len(*pcbs))
-	for i, p := range *pcbs {
-		out[i] = repository.KeyboardPCB{
-			Thickness:    p.Thickness,
-			Firmware:     p.Firmware,
-			Assembly:     p.Assembly,
-			Connectivity: p.Connectivity,
-			Purchase:     k.purchaseToRepo(p.Purchase),
-		}
-		if p.Id != nil {
-			out[i].ID = *p.Id
-		}
-	}
+	return api.KeyboardPCB{
+		Id:           p.ID,
+		Thickness:    p.Thickness,
+		Firmware:     p.Firmware,
+		Assembly:     p.Assembly,
+		Connectivity: p.Connectivity,
+		Purchase:     purchase,
+	}, nil
+}
 
-	return out
+// PCBToRepo maps a PCB request body. ID is left for the handler to set.
+func (k Keyboard) PCBToRepo(in api.KeyboardPCBInput) repository.KeyboardPCB {
+	return repository.KeyboardPCB{
+		Thickness:    in.Thickness,
+		Firmware:     in.Firmware,
+		Assembly:     in.Assembly,
+		Connectivity: in.Connectivity,
+		Purchase:     k.purchaseToRepo(in.Purchase),
+	}
 }
 
 func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) (*api.Purchase, error) {

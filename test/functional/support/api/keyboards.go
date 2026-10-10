@@ -94,3 +94,26 @@ func (c *KeyboardsClient) AddImage(ctx context.Context, ownerID, id, token, body
 func (c *KeyboardsClient) DeleteImage(ctx context.Context, ownerID, id, imageID, token string) (*http.Response, error) {
 	return c.client.Do(ctx, http.MethodDelete, "/v1/users/"+ownerID+"/keyboards/"+id+"/images/"+imageID, token, nil)
 }
+
+// CreatePart calls POST /v1/users/{ownerID}/keyboards/{id}/{kind}, where kind
+// is "plates" or "pcbs", with body as the raw JSON request body. The caller
+// owns closing resp.Body.
+func (c *KeyboardsClient) CreatePart(ctx context.Context, ownerID, id, kind, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPost, "/v1/users/"+ownerID+"/keyboards/"+id+"/"+kind, token, bytes.NewBufferString(body))
+}
+
+// UpdatePart calls PUT /v1/users/{ownerID}/keyboards/{id}/{kind}/{partID}.
+// The caller owns closing resp.Body.
+func (c *KeyboardsClient) UpdatePart(ctx context.Context, ownerID, id, kind, partID, token, body string) (*http.Response, error) {
+	return c.client.Do(ctx, http.MethodPut, "/v1/users/"+ownerID+"/keyboards/"+id+"/"+kind+"/"+partID, token, bytes.NewBufferString(body))
+}
+
+// DeletePart calls DELETE /v1/users/{ownerID}/keyboards/{id}/{kind}/{partID},
+// appending on_delete when it's non-empty. The caller owns closing resp.Body.
+func (c *KeyboardsClient) DeletePart(ctx context.Context, ownerID, id, kind, partID, token, onDelete string) (*http.Response, error) {
+	path := "/v1/users/" + ownerID + "/keyboards/" + id + "/" + kind + "/" + partID
+	if onDelete != "" {
+		path += "?" + url.Values{"on_delete": []string{onDelete}}.Encode()
+	}
+	return c.client.Do(ctx, http.MethodDelete, path, token, nil)
+}

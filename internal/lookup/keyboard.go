@@ -2,7 +2,6 @@ package lookup
 
 import (
 	"context"
-	"fmt"
 	"slices"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
@@ -29,24 +28,8 @@ func ValidateKeyboard(ctx context.Context, kb repository.Keyboard) []FieldError 
 	add("design.top_case.material", kb.Design.TopCase.Material, CategoryKeyboardCaseMaterial)
 	add("design.bottom_case.material", kb.Design.BottomCase.Material, CategoryKeyboardCaseMaterial)
 	add("design.weight.material", kb.Design.Weight.Material, CategoryKeyboardWeightMaterial)
-	addPurchase := func(prefix string, p repository.KeyboardPurchase) {
-		add(prefix+"purchase.vendor", p.Vendor, CategoryVendor)
-		add(prefix+"purchase.order_status", p.OrderStatus, CategoryOrderStatus)
-	}
-	addPurchase("", kb.Purchase)
-
-	for i, p := range kb.Plates {
-		prefix := fmt.Sprintf("plates[%d].", i)
-		add(prefix+"material", &p.Material, CategoryKeyboardPlateMaterial)
-		addPurchase(prefix, p.Purchase)
-	}
-	for i, p := range kb.PCBs {
-		prefix := fmt.Sprintf("pcbs[%d].", i)
-		add(prefix+"firmware", p.Firmware, CategoryKeyboardPCBFirmware)
-		add(prefix+"assembly", p.Assembly, CategoryKeyboardPCBAssemblyType)
-		add(prefix+"connectivity", p.Connectivity, CategoryKeyboardPCBConnectivityType)
-		addPurchase(prefix, p.Purchase)
-	}
+	add("purchase.vendor", kb.Purchase.Vendor, CategoryVendor)
+	add("purchase.order_status", kb.Purchase.OrderStatus, CategoryOrderStatus)
 
 	fieldErrs := validateFields(ctx, checks)
 
@@ -90,4 +73,45 @@ func validateKeyboardLayout(ctx context.Context, size *string, layout string) *F
 	}
 
 	return nil
+}
+
+// ValidateKeyboardPlate returns every field on p that isn't an approved
+// value for its lookup category. An unset field is skipped.
+func ValidateKeyboardPlate(ctx context.Context, p repository.KeyboardPlate) []FieldError {
+	checks := []fieldCheck{{Field: "material", Value: p.Material, Category: CategoryKeyboardPlateMaterial}}
+	checks = appendPartPurchaseChecks(checks, p.Purchase)
+
+	return validateFields(ctx, checks)
+}
+
+// ValidateKeyboardPCB returns every field on p that isn't an approved value
+// for its lookup category. An unset field is skipped.
+func ValidateKeyboardPCB(ctx context.Context, p repository.KeyboardPCB) []FieldError {
+	var checks []fieldCheck
+	for _, c := range []struct {
+		field    string
+		value    *string
+		category Category
+	}{
+		{"firmware", p.Firmware, CategoryKeyboardPCBFirmware},
+		{"assembly", p.Assembly, CategoryKeyboardPCBAssemblyType},
+		{"connectivity", p.Connectivity, CategoryKeyboardPCBConnectivityType},
+	} {
+		if c.value != nil {
+			checks = append(checks, fieldCheck{Field: c.field, Value: *c.value, Category: c.category})
+		}
+	}
+	checks = appendPartPurchaseChecks(checks, p.Purchase)
+
+	return validateFields(ctx, checks)
+}
+
+func appendPartPurchaseChecks(checks []fieldCheck, p repository.KeyboardPurchase) []fieldCheck {
+	if p.Vendor != nil {
+		checks = append(checks, fieldCheck{Field: "purchase.vendor", Value: *p.Vendor, Category: CategoryVendor})
+	}
+	if p.OrderStatus != nil {
+		checks = append(checks, fieldCheck{Field: "purchase.order_status", Value: *p.OrderStatus, Category: CategoryOrderStatus})
+	}
+	return checks
 }

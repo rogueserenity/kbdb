@@ -94,6 +94,21 @@ func (s *KeycapSetToMCPSuite) TestPrimaryKitID_KitDeleted_IsNil() {
 	s.Nil(out.PrimaryKitID)
 }
 
+func (s *KeycapSetToMCPSuite) TestKits_ListedInSeqOrder() {
+	out := KeycapSet{}.ToMCP(repository.KeycapSet{
+		ID:         "ks-1",
+		Visibility: repository.VisibilityPrivate,
+		Kits: map[string]repository.KeycapKit{
+			"aaa": {KitID: "aaa", Name: "Added last", Seq: 20},
+			"zzz": {KitID: "zzz", Name: "Added first", Seq: 10},
+		},
+	}, true, repository.ProfilePreferences{})
+
+	s.Require().Len(out.Kits, 2)
+	s.Equal("zzz", out.Kits[0].KitID)
+	s.Equal("aaa", out.Kits[1].KitID)
+}
+
 func (s *KeycapSetToMCPSuite) TestOrderStatus_SetsAggregateFromKits() {
 	ordered := "Ordered"
 	shipped := "Shipped"

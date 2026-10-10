@@ -14,17 +14,21 @@ const (
 	SeededPCBID   = "seeded-pcb"
 )
 
+// Plates and PCBs are maps keyed by part id, each entry carrying a seq
+// ordering key (see repository.KeyboardPlate).
 var (
-	seededPlates = []map[string]any{{
+	seededPlates = map[string]any{SeededPlateID: map[string]any{
 		"id":       SeededPlateID,
 		"material": "FR4",
 		"color":    "Raw",
 		"purchase": map[string]any{"vendor": "Amazon", "price": 40},
+		"seq":      0,
 	}}
-	seededPCBs = []map[string]any{{
+	seededPCBs = map[string]any{SeededPCBID: map[string]any{
 		"id":       SeededPCBID,
 		"firmware": "QMK/VIA",
 		"purchase": map[string]any{},
+		"seq":      0,
 	}}
 )
 

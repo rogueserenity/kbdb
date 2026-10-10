@@ -417,6 +417,42 @@ func (s *KeycapSetRepositorySuite) TestAddKit_Succeeds() {
 	s.Equal("Base", kit.Name)
 }
 
+func (s *KeycapSetRepositorySuite) TestUpdateKit_DottedKitID_IsOneKeyNotANestedField() {
+	s.mockClient.EXPECT().
+		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {
+			has := map[string]bool{}
+			for _, n := range in.ExpressionAttributeNames {
+				has[n] = true
+			}
+			return has["kits"] && has["kit1.image_path"] && !has["image_path"]
+		})).
+		Return(nil, &types.ConditionalCheckFailedException{})
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	_, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1.image_path", Name: "Base"}, nil)
+
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+}
+
+func (s *KeycapSetRepositorySuite) TestBracketedKitID_NeverReachesDynamo() {
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+
+	_, err := s.repo.UpdateKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1[0]", Name: "Base"}, nil)
+	s.Require().ErrorIs(err, repository.ErrNotFound)
+	s.Require().ErrorIs(s.repo.SetKitImagePath(ctx, "ks1", "kit1[0]", "k"), repository.ErrNotFound)
+	s.Require().NoError(s.repo.DeleteKit(ctx, "ks1", "kit1[0]"))
+}
+
+func (s *KeycapSetRepositorySuite) TestAddKit_AssignsSeq() {
+	s.mockClient.EXPECT().UpdateItem(mock.Anything, mock.Anything).Return(&dynamodb.UpdateItemOutput{}, nil)
+
+	ctx := kbdbctx.WithUserID(s.T().Context(), "alice")
+	kit, err := s.repo.AddKit(ctx, "ks1", repository.KeycapKit{KitID: "kit1", Name: "Base"}, nil)
+
+	s.Require().NoError(err)
+	s.Positive(kit.Seq, "a new kit gets a seq that sorts after existing ones")
+}
+
 func (s *KeycapSetRepositorySuite) TestAddKit_PrimaryTrue_SetsPrimaryKitIDInSameUpdate() {
 	s.mockClient.EXPECT().
 		UpdateItem(mock.Anything, mock.MatchedBy(func(in *dynamodb.UpdateItemInput) bool {

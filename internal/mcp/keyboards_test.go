@@ -398,36 +398,6 @@ func (s *HandleCreateKeyboardSuite) TestSucceeds() {
 	s.NotEmpty(out.Keyboard.ID, "create must assign a server-generated id")
 }
 
-func (s *HandleCreateKeyboardSuite) TestAssignsPartIDs() {
-	s.mockKeyboards.EXPECT().
-		Create(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-			return &kb, nil
-		})
-	in := validKeyboardInput()
-	in.Plates = []schema.KeyboardPlateInput{{Material: "AL"}}
-	in.PCBs = []schema.KeyboardPCBInput{{}}
-
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, out, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
-
-	s.Require().NoError(err)
-	s.Require().Len(out.Keyboard.Plates, 1)
-	s.NotEmpty(out.Keyboard.Plates[0].ID)
-	s.Require().Len(out.Keyboard.PCBs, 1)
-	s.NotEmpty(out.Keyboard.PCBs[0].ID)
-}
-
-func (s *HandleCreateKeyboardSuite) TestSentPartID_ReturnsError() {
-	in := validKeyboardInput()
-	in.Plates = []schema.KeyboardPlateInput{{ID: "made-up", Material: "AL"}}
-
-	handler := handleCreateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, _, err := handler(callerContext(s.T()), nil, schema.CreateKeyboardInput{KeyboardInput: in})
-
-	s.Require().ErrorContains(err, "plates[0].id")
-}
-
 func (s *HandleCreateKeyboardSuite) TestBlankBrand_ReturnsError() {
 	in := validKeyboardInput()
 	in.Brand = "   "
@@ -525,67 +495,6 @@ func (s *HandleUpdateKeyboardSuite) SetupTest() {
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
 		Return(repository.ProfilePreferences{Currency: "EUR"}, nil).Maybe()
 	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
-	s.mockKeyboards.EXPECT().Get(mock.Anything, callerID, "kb-1").
-		Return(&repository.Keyboard{
-			ID:     "kb-1",
-			Plates: []repository.KeyboardPlate{{ID: "plate-1", Material: "AL"}},
-			PCBs:   []repository.KeyboardPCB{{ID: "pcb-1"}},
-		}, nil).Maybe()
-}
-
-func (s *HandleUpdateKeyboardSuite) TestKeepsSentPartIDsAndAssignsNewOnes() {
-	s.mockKeyboards.EXPECT().
-		Update(mock.Anything, mock.Anything).
-		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-			return &kb, nil
-		})
-	in := validKeyboardInput()
-	in.Plates = []schema.KeyboardPlateInput{{ID: "plate-1", Material: "AL"}, {Material: "PC"}}
-	in.PCBs = []schema.KeyboardPCBInput{{ID: "pcb-1"}}
-
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, out, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{KeyboardID: "kb-1", KeyboardInput: in})
-
-	s.Require().NoError(err)
-	s.Require().Len(out.Keyboard.Plates, 2)
-	s.Equal("plate-1", out.Keyboard.Plates[0].ID)
-	s.NotEmpty(out.Keyboard.Plates[1].ID)
-	s.NotEqual("plate-1", out.Keyboard.Plates[1].ID)
-	s.Require().Len(out.Keyboard.PCBs, 1)
-	s.Equal("pcb-1", out.Keyboard.PCBs[0].ID)
-}
-
-func (s *HandleUpdateKeyboardSuite) TestUnknownPartID_ReturnsErrorWithoutWriting() {
-	in := validKeyboardInput()
-	in.PCBs = []schema.KeyboardPCBInput{{ID: "plate-1"}}
-
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{KeyboardID: "kb-1", KeyboardInput: in})
-
-	s.Require().ErrorContains(err, "pcbs[0].id")
-}
-
-func (s *HandleUpdateKeyboardSuite) TestKeyboardMissingOnRead_ReturnsNotFoundWithoutWriting() {
-	s.mockKeyboards.EXPECT().Get(mock.Anything, callerID, "missing").Return(nil, repository.ErrNotFound)
-
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{
-		KeyboardID:    "missing",
-		KeyboardInput: validKeyboardInput(),
-	})
-
-	s.Require().ErrorIs(err, errMutationNotFound)
-}
-
-func (s *HandleUpdateKeyboardSuite) TestMalformedPartDate_ReturnsError() {
-	bad := "01/15/2026"
-	in := validKeyboardInput()
-	in.Plates = []schema.KeyboardPlateInput{{Material: "AL", Purchase: &schema.KeyboardPartPurchaseInput{DeliveryDate: &bad}}}
-
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, _, err := handler(callerContext(s.T()), nil, schema.UpdateKeyboardInput{KeyboardID: "kb-1", KeyboardInput: in})
-
-	s.Require().ErrorContains(err, "plates[0].purchase.delivery_date")
 }
 
 func (s *HandleUpdateKeyboardSuite) TestSucceeds() {
@@ -613,16 +522,6 @@ func (s *HandleUpdateKeyboardSuite) TestBlankKeyboardID_ReturnsError() {
 	})
 
 	s.Require().ErrorContains(err, "keyboard_id must not be blank")
-}
-
-func (s *HandleUpdateKeyboardSuite) TestNoCallerIdentity_ReturnsError() {
-	handler := handleUpdateKeyboard(s.mockKeyboards, s.mockPrefs)
-	_, _, err := handler(s.T().Context(), nil, schema.UpdateKeyboardInput{
-		KeyboardID:    "kb-1",
-		KeyboardInput: validKeyboardInput(),
-	})
-
-	s.Require().ErrorIs(err, errNoCallerIdentity)
 }
 
 func (s *HandleUpdateKeyboardSuite) TestNotFound_ReturnsNotFound() {

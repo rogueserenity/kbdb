@@ -174,6 +174,228 @@ paths:
         default:
           $ref: "#/components/responses/ProblemResponse"
 
+  /v1/users/{userId}/keyboards/{keyboardId}/plates:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/KeyboardId"
+    post:
+      tags: [keyboards]
+      summary: Add a plate to a keyboard
+      operationId: createKeyboardPlate
+      description: >
+        userId must be the caller's own subject; adding a plate to another
+        user's keyboard always returns 404. The plate goes after the
+        keyboard's existing plates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyboardPlateInput"
+      responses:
+        "201":
+          description: The created plate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyboardPlate"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /v1/users/{userId}/keyboards/{keyboardId}/plates/{plateId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/KeyboardId"
+      - name: plateId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The id returned when the plate was added.
+    put:
+      tags: [keyboards]
+      summary: Update a plate
+      operationId: updateKeyboardPlate
+      description: >
+        userId must be the caller's own subject; updating a plate on another
+        user's keyboard always returns 404. The plate keeps its id and its
+        place in the keyboard's plates.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyboardPlateInput"
+      responses:
+        "200":
+          description: The updated plate.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyboardPlate"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [keyboards]
+      summary: Delete a plate
+      operationId: deleteKeyboardPlate
+      description: >
+        userId must be the caller's own subject; deleting a plate from
+        another user's keyboard, or from a keyboard that doesn't exist,
+        both return 404. Idempotent — deleting a plateId not present on the
+        keyboard is not an error. on_delete controls what happens if a
+        build uses the plate: "block" (the default) fails with 409 and
+        lists the blocking build ids; "cascade" deletes the plate and every
+        build that uses it, returning their ids.
+      parameters:
+        - name: on_delete
+          in: query
+          schema:
+            type: string
+            enum: [block, cascade]
+            default: block
+          description: How to handle a plate one or more builds use.
+      responses:
+        "200":
+          description: Deleted via cascade; lists the builds that were also deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CascadeDeleteResult"
+        "204":
+          description: Deleted (no builds used it).
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: Blocked by one or more builds using it (on_delete=block, the default).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /v1/users/{userId}/keyboards/{keyboardId}/pcbs:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/KeyboardId"
+    post:
+      tags: [keyboards]
+      summary: Add a PCB to a keyboard
+      operationId: createKeyboardPCB
+      description: >
+        userId must be the caller's own subject; adding a PCB to another
+        user's keyboard always returns 404. The PCB goes after the
+        keyboard's existing pcbs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyboardPCBInput"
+      responses:
+        "201":
+          description: The created PCB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyboardPCB"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
+  /v1/users/{userId}/keyboards/{keyboardId}/pcbs/{pcbId}:
+    parameters:
+      - $ref: "#/components/parameters/UserId"
+      - $ref: "#/components/parameters/KeyboardId"
+      - name: pcbId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: The id returned when the PCB was added.
+    put:
+      tags: [keyboards]
+      summary: Update a PCB
+      operationId: updateKeyboardPCB
+      description: >
+        userId must be the caller's own subject; updating a PCB on another
+        user's keyboard always returns 404. The PCB keeps its id and its
+        place in the keyboard's pcbs.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/KeyboardPCBInput"
+      responses:
+        "200":
+          description: The updated PCB.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/KeyboardPCB"
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+    delete:
+      tags: [keyboards]
+      summary: Delete a PCB
+      operationId: deleteKeyboardPCB
+      description: >
+        userId must be the caller's own subject; deleting a PCB from
+        another user's keyboard, or from a keyboard that doesn't exist,
+        both return 404. Idempotent — deleting a pcbId not present on the
+        keyboard is not an error. on_delete controls what happens if a
+        build uses the PCB: "block" (the default) fails with 409 and
+        lists the blocking build ids; "cascade" deletes the PCB and every
+        build that uses it, returning their ids.
+      parameters:
+        - name: on_delete
+          in: query
+          schema:
+            type: string
+            enum: [block, cascade]
+            default: block
+          description: How to handle a PCB one or more builds use.
+      responses:
+        "200":
+          description: Deleted via cascade; lists the builds that were also deleted.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CascadeDeleteResult"
+        "204":
+          description: Deleted (no builds used it).
+        "400":
+          $ref: "#/components/responses/ProblemResponse"
+        "404":
+          $ref: "#/components/responses/NotFoundResponse"
+        "409":
+          description: Blocked by one or more builds using it (on_delete=block, the default).
+          content:
+            application/problem+json:
+              schema:
+                $ref: "#/components/schemas/Problem"
+        default:
+          $ref: "#/components/responses/ProblemResponse"
+
   /v1/users/{userId}/keyboards/{keyboardId}/images:
     parameters:
       - $ref: "#/components/parameters/UserId"
@@ -1514,21 +1736,11 @@ components:
         weight:
           $ref: "#/components/schemas/MaterialColor"
 
-    KeyboardPartId:
-      type: string
-      description: >
-        Server-generated, unique within the keyboard. Omit it to add a new
-        part; send a part's existing id to keep it, so builds that
-        reference the part still do. Any other id fails the request with
-        400.
-
     KeyboardPlateInput:
       type: object
       required: [material]
       additionalProperties: false
       properties:
-        id:
-          $ref: "#/components/schemas/KeyboardPartId"
         material:
           type: string
           description: Open vocabulary — validated against the "keyboard_plate_material" lookup at request time.
@@ -1553,6 +1765,7 @@ components:
       properties:
         id:
           type: string
+          description: Server-generated when the plate is added, unique within the keyboard. Builds reference the plate by it.
         material:
           type: string
         color:
@@ -1568,8 +1781,6 @@ components:
       type: object
       additionalProperties: false
       properties:
-        id:
-          $ref: "#/components/schemas/KeyboardPartId"
         thickness:
           type: number
           format: double
@@ -1597,6 +1808,7 @@ components:
       properties:
         id:
           type: string
+          description: Server-generated when the PCB is added, unique within the keyboard. Builds reference the PCB by it.
         thickness:
           type: number
           format: double
@@ -1634,14 +1846,6 @@ components:
             the keyboard's size.
         design:
           $ref: "#/components/schemas/KeyboardDesign"
-        plates:
-          type: array
-          items:
-            $ref: "#/components/schemas/KeyboardPlateInput"
-        pcbs:
-          type: array
-          items:
-            $ref: "#/components/schemas/KeyboardPCBInput"
         purchase:
           $ref: "#/components/schemas/PurchaseInput"
           description: >
@@ -1727,10 +1931,18 @@ components:
           type: array
           items:
             $ref: "#/components/schemas/KeyboardPlate"
+          description: >
+            In the order they were added. Managed via the dedicated plate
+            endpoints, not via PUT on the keyboard itself — see
+            POST/PUT/DELETE .../keyboards/{keyboardId}/plates[/{plateId}].
         pcbs:
           type: array
           items:
             $ref: "#/components/schemas/KeyboardPCB"
+          description: >
+            In the order they were added. Managed via the dedicated PCB
+            endpoints, not via PUT on the keyboard itself — see
+            POST/PUT/DELETE .../keyboards/{keyboardId}/pcbs[/{pcbId}].
         purchase:
           $ref: "#/components/schemas/Purchase"
           description: >
@@ -2278,9 +2490,9 @@ components:
           items:
             $ref: "#/components/schemas/KeycapKit"
           description: >
-            Managed via the dedicated kit endpoints below, not via PUT
-            on the set itself — see POST/PUT/DELETE
-            .../keycap-sets/{keycapSetId}/kits[/{kitId}].
+            In the order they were added. Managed via the dedicated kit
+            endpoints below, not via PUT on the set itself — see
+            POST/PUT/DELETE .../keycap-sets/{keycapSetId}/kits[/{kitId}].
         primary_kit_id:
           type: string
           description: >

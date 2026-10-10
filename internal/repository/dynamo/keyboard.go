@@ -138,10 +138,12 @@ func (r *KeyboardRepository) Create(ctx context.Context, kb repository.Keyboard)
 	if err != nil {
 		return nil, fmt.Errorf("marshalling keyboard %q for owner %q: %w", kb.ID, kb.UserID, err)
 	}
-	// AddImage addresses images.<id> in place - DynamoDB won't auto-vivify
-	// the parent Map, so seed an empty one.
-	if _, ok := item["images"]; !ok {
-		item["images"] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
+	// AddImage, AddPlate and AddPCB address <map>.<id> in place - DynamoDB
+	// won't auto-vivify the parent Map, so seed empty ones.
+	for _, attr := range []string{"images", platesAttr, pcbsAttr} {
+		if _, ok := item[attr]; !ok {
+			item[attr] = &types.AttributeValueMemberM{Value: map[string]types.AttributeValue{}}
+		}
 	}
 
 	_, err = r.client.PutItem(ctx, &dynamodb.PutItemInput{
@@ -168,7 +170,7 @@ func keyboardKey(ownerID, keyboardID string) map[string]types.AttributeValue {
 }
 
 // Update rewrites the caller's keyboard from the request body with a single
-// UpdateItem. images isn't named, so it carries forward.
+// UpdateItem. images, plates and pcbs aren't named, so they carry forward.
 // id is the sort key, so a failed attribute_exists(id) can only mean the
 // keyboard is gone -> ErrNotFound.
 func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
@@ -181,8 +183,6 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 		Set(expression.Name("brand"), expression.Value(kb.Brand)).
 		Set(expression.Name("name"), expression.Value(kb.Name)).
 		Set(expression.Name("design"), expression.Value(kb.Design)).
-		Set(expression.Name("plates"), expression.Value(kb.Plates)).
-		Set(expression.Name("pcbs"), expression.Value(kb.PCBs)).
 		Set(expression.Name("purchase"), expression.Value(kb.Purchase)).
 		Set(expression.Name("visibility"), expression.Value(kb.Visibility))
 	update = setOrRemovePtr(update, "size", kb.Size)
@@ -257,11 +257,14 @@ func (r *KeyboardRepository) AddImage(ctx context.Context, keyboardID string, im
 		return fmt.Errorf("adding image to keyboard %q: %w", keyboardID, repository.ErrNoUserID)
 	}
 
-	imagePath := "images." + image.ImageID
+	imagePath, ok := mapKey("images", image.ImageID)
+	if !ok {
+		return fmt.Errorf("adding image %q to keyboard: %w", image.ImageID, errInvalidMapKey)
+	}
 	entry := repository.KeyboardImageEntry{Path: image.Path, Seq: int(time.Now().UnixNano())}
-	update := expression.Set(expression.Name(imagePath), expression.Value(entry))
+	update := expression.Set(imagePath, expression.Value(entry))
 	cond := expression.AttributeExists(expression.Name("id")).
-		And(expression.AttributeNotExists(expression.Name(imagePath))).
+		And(expression.AttributeNotExists(imagePath)).
 		And(expression.Size(expression.Name("images")).LessThan(expression.Value(repository.MaxImagesPerItem)))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
@@ -320,12 +323,15 @@ func (r *KeyboardRepository) DeleteImage(ctx context.Context, keyboardID, imageI
 		return nil, fmt.Errorf("deleting image from keyboard %q: %w", keyboardID, repository.ErrNoUserID)
 	}
 
-	imagePath := "images." + imageID
+	imagePath, ok := mapKey("images", imageID)
+	if !ok {
+		return nil, nil //nolint:nilnil // no stored image can have this id, so it's already absent
+	}
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Remove(expression.Name(imagePath))).
+		WithUpdate(expression.Remove(imagePath)).
 		WithCondition(
 			expression.AttributeExists(expression.Name("id")).
-				And(expression.AttributeExists(expression.Name(imagePath))),
+				And(expression.AttributeExists(imagePath)),
 		).
 		Build()
 	if err != nil {
@@ -374,11 +380,14 @@ func (r *KeyboardRepository) classifyDeleteImageConflict(ctx context.Context, ow
 
 // SetImageGetCache implements repository.KeyboardRepository.
 func (r *KeyboardRepository) SetImageGetCache(ctx context.Context, ownerID, keyboardID, imageID string, forPath repository.KeyboardImageKey, url string, expiresAt time.Time) (bool, error) {
-	imagePath := "images." + imageID
-	update := expression.Set(expression.Name(imagePath+".get_url"), expression.Value(url)).
-		Set(expression.Name(imagePath+".get_url_expires_at"), expression.Value(expiresAt))
-	cond := expression.AttributeExists(expression.Name(imagePath)).
-		And(expression.Name(imagePath + ".path").Equal(expression.Value(forPath)))
+	imagePath, ok := mapKey("images", imageID)
+	if !ok {
+		return false, nil
+	}
+	update := expression.Set(field(imagePath, "get_url"), expression.Value(url)).
+		Set(field(imagePath, "get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(imagePath).
+		And(field(imagePath, "path").Equal(expression.Value(forPath)))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
 	if err != nil {

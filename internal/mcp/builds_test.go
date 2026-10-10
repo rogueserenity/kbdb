@@ -552,8 +552,8 @@ func (s *HandleGetBuildSuite) SetupTest() {
 		Get(mock.Anything, mock.Anything, "kb-1").
 		Return(&repository.Keyboard{
 			ID:     "kb-1",
-			Plates: []repository.KeyboardPlate{{ID: "plate-1", Material: "FR4"}},
-			PCBs:   []repository.KeyboardPCB{{ID: "pcb-1"}},
+			Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{{ID: "plate-1", Material: "FR4"}}),
+			PCBs:   repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "pcb-1"}}),
 		}, nil).
 		Maybe()
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())

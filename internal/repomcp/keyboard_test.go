@@ -37,11 +37,11 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 		Design: repository.KeyboardDesign{
 			TopCase: repository.KeyboardMaterialColor{Material: &material, Color: &color},
 		},
-		Plates: []repository.KeyboardPlate{
+		Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{
 			{ID: "p1", Material: "Brass"},
 			{ID: "p2", Material: "POM", Color: &color, Purchase: repository.KeyboardPurchase{Vendor: &vendor, Price: new(25.0)}},
-		},
-		PCBs:       []repository.KeyboardPCB{{ID: "b1", Thickness: &thickness, Firmware: &firmware}},
+		}),
+		PCBs:       repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1", Thickness: &thickness, Firmware: &firmware}}),
 		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status, Price: new(300.0)},
 		Notes:      &notes,
 		Visibility: repository.VisibilityPublic,
@@ -110,7 +110,7 @@ func (s *KeyboardToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	thickness := 0.0
 
 	out := Keyboard{}.ToMCP(repository.Keyboard{
-		PCBs:     []repository.KeyboardPCB{{ID: "b1", Thickness: &thickness}},
+		PCBs:     repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1", Thickness: &thickness}}),
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{})
 
@@ -130,7 +130,7 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 	out := Keyboard{}.ToMCP(repository.Keyboard{
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status, Price: &price},
-		PCBs:       []repository.KeyboardPCB{{ID: "b1", Purchase: repository.KeyboardPurchase{Price: &price}}},
+		PCBs:       repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1", Purchase: repository.KeyboardPurchase{Price: &price}}}),
 		Visibility: repository.VisibilityPublic,
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
@@ -230,7 +230,7 @@ func (s *KeyboardToMCPSummarySuite) TestTotalCost_IncludesPartPrices() {
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
 		ID:       "kb-1",
 		Purchase: repository.KeyboardPurchase{Price: new(300.0)},
-		Plates:   []repository.KeyboardPlate{{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: new(40.0)}}},
+		Plates:   repository.KeyboardPlatesMap([]repository.KeyboardPlate{{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: new(40.0)}}}),
 	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
 
 	s.Equal(new(340.0), out.TotalCost)
@@ -285,7 +285,6 @@ func TestKeyboardFromMCPSuite(t *testing.T) {
 func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 	size := "60%"
 	material := "Aluminum"
-	firmware := "QMK/VIA"
 	price := 0.0
 
 	out := Keyboard{}.FromMCP(schema.KeyboardInput{
@@ -295,10 +294,6 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 		Design: &schema.KeyboardDesign{
 			TopCase: &schema.KeyboardMaterialColor{Material: &material},
 		},
-		Plates: []schema.KeyboardPlateInput{
-			{ID: "p1", Material: "Brass", Purchase: &schema.KeyboardPartPurchaseInput{Vendor: new("Divinikey"), OrderDate: new("2026-02-01")}},
-		},
-		PCBs:       []schema.KeyboardPCBInput{{Firmware: &firmware}},
 		Purchase:   &schema.KeyboardPurchaseInput{Price: &price},
 		Visibility: "public",
 	})
@@ -307,12 +302,29 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 	s.Equal(repository.VisibilityPublic, out.Visibility)
 	s.Equal("60%", *out.Size)
 	s.Equal("Aluminum", *out.Design.TopCase.Material)
-	s.Equal([]repository.KeyboardPlate{{
-		ID: "p1", Material: "Brass",
-		Purchase: repository.KeyboardPurchase{Vendor: new("Divinikey"), OrderDate: new("2026-02-01")},
-	}}, out.Plates)
-	s.Equal([]repository.KeyboardPCB{{Firmware: &firmware}}, out.PCBs)
 	s.Zero(*out.Purchase.Price, "a recorded zero price must survive the inbound mapping too")
+}
+
+func (s *KeyboardFromMCPSuite) TestPlateFromMCP_MapsAllFields() {
+	out := Keyboard{}.PlateFromMCP(schema.KeyboardPlateInput{
+		Material: "Brass", Color: new("Raw"), Thickness: new(1.5),
+		Purchase: &schema.KeyboardPartPurchaseInput{Vendor: new("Divinikey"), OrderDate: new("2026-02-01")},
+	})
+
+	s.Equal(repository.KeyboardPlate{
+		Material: "Brass", Color: new("Raw"), Thickness: new(1.5),
+		Purchase: repository.KeyboardPurchase{Vendor: new("Divinikey"), OrderDate: new("2026-02-01")},
+	}, out)
+}
+
+func (s *KeyboardFromMCPSuite) TestPCBFromMCP_MapsAllFields() {
+	firmware := "QMK/VIA"
+
+	out := Keyboard{}.PCBFromMCP(schema.KeyboardPCBInput{
+		Firmware: &firmware, Assembly: new("EC"), Connectivity: new("Wired"), Thickness: new(1.6),
+	})
+
+	s.Equal(repository.KeyboardPCB{Firmware: &firmware, Assembly: new("EC"), Connectivity: new("Wired"), Thickness: new(1.6)}, out)
 }
 
 // ID and UserID are set by the caller and the repository layer

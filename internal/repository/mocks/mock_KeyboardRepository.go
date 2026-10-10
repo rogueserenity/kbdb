@@ -111,6 +111,154 @@ func (_c *MockKeyboardRepository_AddImage_Call) RunAndReturn(run func(ctx contex
 	return _c
 }
 
+// AddPCB provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) AddPCB(ctx context.Context, keyboardID string, pcb repository.KeyboardPCB) (*repository.KeyboardPCB, error) {
+	ret := _mock.Called(ctx, keyboardID, pcb)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddPCB")
+	}
+
+	var r0 *repository.KeyboardPCB
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPCB) (*repository.KeyboardPCB, error)); ok {
+		return returnFunc(ctx, keyboardID, pcb)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPCB) *repository.KeyboardPCB); ok {
+		r0 = returnFunc(ctx, keyboardID, pcb)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeyboardPCB)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeyboardPCB) error); ok {
+		r1 = returnFunc(ctx, keyboardID, pcb)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_AddPCB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddPCB'
+type MockKeyboardRepository_AddPCB_Call struct {
+	*mock.Call
+}
+
+// AddPCB is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - pcb repository.KeyboardPCB
+func (_e *MockKeyboardRepository_Expecter) AddPCB(ctx any, keyboardID any, pcb any) *MockKeyboardRepository_AddPCB_Call {
+	return &MockKeyboardRepository_AddPCB_Call{Call: _e.mock.On("AddPCB", ctx, keyboardID, pcb)}
+}
+
+func (_c *MockKeyboardRepository_AddPCB_Call) Run(run func(ctx context.Context, keyboardID string, pcb repository.KeyboardPCB)) *MockKeyboardRepository_AddPCB_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.KeyboardPCB
+		if args[2] != nil {
+			arg2 = args[2].(repository.KeyboardPCB)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_AddPCB_Call) Return(keyboardPCB *repository.KeyboardPCB, err error) *MockKeyboardRepository_AddPCB_Call {
+	_c.Call.Return(keyboardPCB, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_AddPCB_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, pcb repository.KeyboardPCB) (*repository.KeyboardPCB, error)) *MockKeyboardRepository_AddPCB_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// AddPlate provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) AddPlate(ctx context.Context, keyboardID string, plate repository.KeyboardPlate) (*repository.KeyboardPlate, error) {
+	ret := _mock.Called(ctx, keyboardID, plate)
+
+	if len(ret) == 0 {
+		panic("no return value specified for AddPlate")
+	}
+
+	var r0 *repository.KeyboardPlate
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPlate) (*repository.KeyboardPlate, error)); ok {
+		return returnFunc(ctx, keyboardID, plate)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPlate) *repository.KeyboardPlate); ok {
+		r0 = returnFunc(ctx, keyboardID, plate)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeyboardPlate)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeyboardPlate) error); ok {
+		r1 = returnFunc(ctx, keyboardID, plate)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_AddPlate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'AddPlate'
+type MockKeyboardRepository_AddPlate_Call struct {
+	*mock.Call
+}
+
+// AddPlate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - plate repository.KeyboardPlate
+func (_e *MockKeyboardRepository_Expecter) AddPlate(ctx any, keyboardID any, plate any) *MockKeyboardRepository_AddPlate_Call {
+	return &MockKeyboardRepository_AddPlate_Call{Call: _e.mock.On("AddPlate", ctx, keyboardID, plate)}
+}
+
+func (_c *MockKeyboardRepository_AddPlate_Call) Run(run func(ctx context.Context, keyboardID string, plate repository.KeyboardPlate)) *MockKeyboardRepository_AddPlate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.KeyboardPlate
+		if args[2] != nil {
+			arg2 = args[2].(repository.KeyboardPlate)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_AddPlate_Call) Return(keyboardPlate *repository.KeyboardPlate, err error) *MockKeyboardRepository_AddPlate_Call {
+	_c.Call.Return(keyboardPlate, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_AddPlate_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, plate repository.KeyboardPlate) (*repository.KeyboardPlate, error)) *MockKeyboardRepository_AddPlate_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Create provides a mock function for the type MockKeyboardRepository
 func (_mock *MockKeyboardRepository) Create(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
 	ret := _mock.Called(ctx, kb)
@@ -306,6 +454,132 @@ func (_c *MockKeyboardRepository_DeleteImage_Call) Return(keyboardImageKey *repo
 }
 
 func (_c *MockKeyboardRepository_DeleteImage_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, imageID string) (*repository.KeyboardImageKey, error)) *MockKeyboardRepository_DeleteImage_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeletePCB provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) DeletePCB(ctx context.Context, keyboardID string, pcbID string) error {
+	ret := _mock.Called(ctx, keyboardID, pcbID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeletePCB")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, keyboardID, pcbID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockKeyboardRepository_DeletePCB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeletePCB'
+type MockKeyboardRepository_DeletePCB_Call struct {
+	*mock.Call
+}
+
+// DeletePCB is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - pcbID string
+func (_e *MockKeyboardRepository_Expecter) DeletePCB(ctx any, keyboardID any, pcbID any) *MockKeyboardRepository_DeletePCB_Call {
+	return &MockKeyboardRepository_DeletePCB_Call{Call: _e.mock.On("DeletePCB", ctx, keyboardID, pcbID)}
+}
+
+func (_c *MockKeyboardRepository_DeletePCB_Call) Run(run func(ctx context.Context, keyboardID string, pcbID string)) *MockKeyboardRepository_DeletePCB_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_DeletePCB_Call) Return(err error) *MockKeyboardRepository_DeletePCB_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_DeletePCB_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, pcbID string) error) *MockKeyboardRepository_DeletePCB_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// DeletePlate provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) DeletePlate(ctx context.Context, keyboardID string, plateID string) error {
+	ret := _mock.Called(ctx, keyboardID, plateID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DeletePlate")
+	}
+
+	var r0 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
+		r0 = returnFunc(ctx, keyboardID, plateID)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}
+
+// MockKeyboardRepository_DeletePlate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DeletePlate'
+type MockKeyboardRepository_DeletePlate_Call struct {
+	*mock.Call
+}
+
+// DeletePlate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - plateID string
+func (_e *MockKeyboardRepository_Expecter) DeletePlate(ctx any, keyboardID any, plateID any) *MockKeyboardRepository_DeletePlate_Call {
+	return &MockKeyboardRepository_DeletePlate_Call{Call: _e.mock.On("DeletePlate", ctx, keyboardID, plateID)}
+}
+
+func (_c *MockKeyboardRepository_DeletePlate_Call) Run(run func(ctx context.Context, keyboardID string, plateID string)) *MockKeyboardRepository_DeletePlate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_DeletePlate_Call) Return(err error) *MockKeyboardRepository_DeletePlate_Call {
+	_c.Call.Return(err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_DeletePlate_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, plateID string) error) *MockKeyboardRepository_DeletePlate_Call {
 	_c.Call.Return(run)
 	return _c
 }
@@ -636,6 +910,154 @@ func (_c *MockKeyboardRepository_Update_Call) Return(keyboard *repository.Keyboa
 }
 
 func (_c *MockKeyboardRepository_Update_Call) RunAndReturn(run func(ctx context.Context, kb repository.Keyboard) (*repository.Keyboard, error)) *MockKeyboardRepository_Update_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdatePCB provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) UpdatePCB(ctx context.Context, keyboardID string, pcb repository.KeyboardPCB) (*repository.KeyboardPCB, error) {
+	ret := _mock.Called(ctx, keyboardID, pcb)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdatePCB")
+	}
+
+	var r0 *repository.KeyboardPCB
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPCB) (*repository.KeyboardPCB, error)); ok {
+		return returnFunc(ctx, keyboardID, pcb)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPCB) *repository.KeyboardPCB); ok {
+		r0 = returnFunc(ctx, keyboardID, pcb)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeyboardPCB)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeyboardPCB) error); ok {
+		r1 = returnFunc(ctx, keyboardID, pcb)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_UpdatePCB_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdatePCB'
+type MockKeyboardRepository_UpdatePCB_Call struct {
+	*mock.Call
+}
+
+// UpdatePCB is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - pcb repository.KeyboardPCB
+func (_e *MockKeyboardRepository_Expecter) UpdatePCB(ctx any, keyboardID any, pcb any) *MockKeyboardRepository_UpdatePCB_Call {
+	return &MockKeyboardRepository_UpdatePCB_Call{Call: _e.mock.On("UpdatePCB", ctx, keyboardID, pcb)}
+}
+
+func (_c *MockKeyboardRepository_UpdatePCB_Call) Run(run func(ctx context.Context, keyboardID string, pcb repository.KeyboardPCB)) *MockKeyboardRepository_UpdatePCB_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.KeyboardPCB
+		if args[2] != nil {
+			arg2 = args[2].(repository.KeyboardPCB)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_UpdatePCB_Call) Return(keyboardPCB *repository.KeyboardPCB, err error) *MockKeyboardRepository_UpdatePCB_Call {
+	_c.Call.Return(keyboardPCB, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_UpdatePCB_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, pcb repository.KeyboardPCB) (*repository.KeyboardPCB, error)) *MockKeyboardRepository_UpdatePCB_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UpdatePlate provides a mock function for the type MockKeyboardRepository
+func (_mock *MockKeyboardRepository) UpdatePlate(ctx context.Context, keyboardID string, plate repository.KeyboardPlate) (*repository.KeyboardPlate, error) {
+	ret := _mock.Called(ctx, keyboardID, plate)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UpdatePlate")
+	}
+
+	var r0 *repository.KeyboardPlate
+	var r1 error
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPlate) (*repository.KeyboardPlate, error)); ok {
+		return returnFunc(ctx, keyboardID, plate)
+	}
+	if returnFunc, ok := ret.Get(0).(func(context.Context, string, repository.KeyboardPlate) *repository.KeyboardPlate); ok {
+		r0 = returnFunc(ctx, keyboardID, plate)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*repository.KeyboardPlate)
+		}
+	}
+	if returnFunc, ok := ret.Get(1).(func(context.Context, string, repository.KeyboardPlate) error); ok {
+		r1 = returnFunc(ctx, keyboardID, plate)
+	} else {
+		r1 = ret.Error(1)
+	}
+	return r0, r1
+}
+
+// MockKeyboardRepository_UpdatePlate_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdatePlate'
+type MockKeyboardRepository_UpdatePlate_Call struct {
+	*mock.Call
+}
+
+// UpdatePlate is a helper method to define mock.On call
+//   - ctx context.Context
+//   - keyboardID string
+//   - plate repository.KeyboardPlate
+func (_e *MockKeyboardRepository_Expecter) UpdatePlate(ctx any, keyboardID any, plate any) *MockKeyboardRepository_UpdatePlate_Call {
+	return &MockKeyboardRepository_UpdatePlate_Call{Call: _e.mock.On("UpdatePlate", ctx, keyboardID, plate)}
+}
+
+func (_c *MockKeyboardRepository_UpdatePlate_Call) Run(run func(ctx context.Context, keyboardID string, plate repository.KeyboardPlate)) *MockKeyboardRepository_UpdatePlate_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 repository.KeyboardPlate
+		if args[2] != nil {
+			arg2 = args[2].(repository.KeyboardPlate)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
+	})
+	return _c
+}
+
+func (_c *MockKeyboardRepository_UpdatePlate_Call) Return(keyboardPlate *repository.KeyboardPlate, err error) *MockKeyboardRepository_UpdatePlate_Call {
+	_c.Call.Return(keyboardPlate, err)
+	return _c
+}
+
+func (_c *MockKeyboardRepository_UpdatePlate_Call) RunAndReturn(run func(ctx context.Context, keyboardID string, plate repository.KeyboardPlate) (*repository.KeyboardPlate, error)) *MockKeyboardRepository_UpdatePlate_Call {
 	_c.Call.Return(run)
 	return _c
 }

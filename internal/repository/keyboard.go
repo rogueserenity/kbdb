@@ -26,18 +26,21 @@ type KeyboardDesign struct {
 
 // KeyboardPlate is one plate a keyboard has. ID is server-generated and
 // unique within the keyboard; builds reference a plate by it. A plate
-// with no purchase came with the keyboard at no extra cost.
+// with no purchase came with the keyboard at no extra cost. Seq orders a
+// keyboard's plates, the same way KeyboardImageEntry.Seq orders images.
 type KeyboardPlate struct {
 	ID        string           `dynamodbav:"id" json:"id"`
 	Material  string           `dynamodbav:"material" json:"material"`
 	Color     *string          `dynamodbav:"color,omitempty" json:"color,omitempty"`
 	Thickness *float64         `dynamodbav:"thickness,omitempty" json:"thickness,omitempty"`
 	Purchase  KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
+	Seq       int              `dynamodbav:"seq" json:"-"`
 }
 
 // KeyboardPCB is one PCB a keyboard has. ID is server-generated and unique
 // within the keyboard; builds reference a PCB by it. A PCB with no
-// purchase came with the keyboard at no extra cost.
+// purchase came with the keyboard at no extra cost. Seq orders a
+// keyboard's PCBs, the same way KeyboardImageEntry.Seq orders images.
 type KeyboardPCB struct {
 	ID           string           `dynamodbav:"id" json:"id"`
 	Thickness    *float64         `dynamodbav:"thickness,omitempty" json:"thickness,omitempty"`
@@ -45,6 +48,63 @@ type KeyboardPCB struct {
 	Assembly     *string          `dynamodbav:"assembly,omitempty" json:"assembly,omitempty"`
 	Connectivity *string          `dynamodbav:"connectivity,omitempty" json:"connectivity,omitempty"`
 	Purchase     KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
+	Seq          int              `dynamodbav:"seq" json:"-"`
+}
+
+// SortedPlates flattens a Plates map into a slice ordered by Seq, then ID.
+func SortedPlates(plates map[string]KeyboardPlate) []KeyboardPlate {
+	return sortedBySeq(plates, func(p KeyboardPlate) (int, string) { return p.Seq, p.ID })
+}
+
+// SortedPCBs flattens a PCBs map into a slice ordered by Seq, then ID.
+func SortedPCBs(pcbs map[string]KeyboardPCB) []KeyboardPCB {
+	return sortedBySeq(pcbs, func(p KeyboardPCB) (int, string) { return p.Seq, p.ID })
+}
+
+// KeyboardPlatesMap builds a Plates map from an ordered slice, assigning
+// Seq by position. The inverse of SortedPlates, for callers holding plates
+// as a list (e.g. tests).
+func KeyboardPlatesMap(plates []KeyboardPlate) map[string]KeyboardPlate {
+	if len(plates) == 0 {
+		return nil
+	}
+	out := make(map[string]KeyboardPlate, len(plates))
+	for i, p := range plates {
+		p.Seq = i
+		out[p.ID] = p
+	}
+	return out
+}
+
+// KeyboardPCBsMap is KeyboardPlatesMap for PCBs.
+func KeyboardPCBsMap(pcbs []KeyboardPCB) map[string]KeyboardPCB {
+	if len(pcbs) == 0 {
+		return nil
+	}
+	out := make(map[string]KeyboardPCB, len(pcbs))
+	for i, p := range pcbs {
+		p.Seq = i
+		out[p.ID] = p
+	}
+	return out
+}
+
+// sortedBySeq orders by seq, then id, so entries stored before they had a
+// seq (all 0) keep a stable order.
+func sortedBySeq[T any](m map[string]T, key func(T) (int, string)) []T {
+	out := make([]T, 0, len(m))
+	for _, v := range m {
+		out = append(out, v)
+	}
+	sort.Slice(out, func(i, j int) bool {
+		si, idi := key(out[i])
+		sj, idj := key(out[j])
+		if si != sj {
+			return si < sj
+		}
+		return idi < idj
+	})
+	return out
 }
 
 // KeyboardPurchase is where/how much a keyboard was bought, plus its
@@ -130,18 +190,22 @@ func KeyboardImagesMap(images []KeyboardImage) map[string]KeyboardImageEntry {
 // Purchase.Price is the base price, excluding plates and PCBs that carry
 // their own purchase.
 type Keyboard struct {
-	UserID     string           `dynamodbav:"user_id" json:"-"`
-	ID         string           `dynamodbav:"id" json:"id"`
-	Brand      string           `dynamodbav:"brand" json:"brand"`
-	Name       string           `dynamodbav:"name" json:"name"`
-	Size       *string          `dynamodbav:"size,omitempty" json:"size,omitempty"`
-	Layout     *string          `dynamodbav:"layout,omitempty" json:"layout,omitempty"`
-	Design     KeyboardDesign   `dynamodbav:"design" json:"design"`
-	Plates     []KeyboardPlate  `dynamodbav:"plates,omitempty" json:"plates,omitempty"`
-	PCBs       []KeyboardPCB    `dynamodbav:"pcbs,omitempty" json:"pcbs,omitempty"`
-	Purchase   KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
-	Notes      *string          `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
-	Visibility Visibility       `dynamodbav:"visibility" json:"visibility"`
+	UserID string         `dynamodbav:"user_id" json:"-"`
+	ID     string         `dynamodbav:"id" json:"id"`
+	Brand  string         `dynamodbav:"brand" json:"brand"`
+	Name   string         `dynamodbav:"name" json:"name"`
+	Size   *string        `dynamodbav:"size,omitempty" json:"size,omitempty"`
+	Layout *string        `dynamodbav:"layout,omitempty" json:"layout,omitempty"`
+	Design KeyboardDesign `dynamodbav:"design" json:"design"`
+	// Plates and PCBs are keyed by part id, so a single part is addressable
+	// via UpdateItem (plates.<id>) without a whole-item read-modify-write.
+	// The API/MCP layers project them to ordered lists via SortedPlates and
+	// SortedPCBs.
+	Plates     map[string]KeyboardPlate `dynamodbav:"plates,omitempty" json:"-"`
+	PCBs       map[string]KeyboardPCB   `dynamodbav:"pcbs,omitempty" json:"-"`
+	Purchase   KeyboardPurchase         `dynamodbav:"purchase" json:"purchase"`
+	Notes      *string                  `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
+	Visibility Visibility               `dynamodbav:"visibility" json:"visibility"`
 	// Images is keyed by image id. AddImage/DeleteImage address a single
 	// entry in place (images.<id>); the API/MCP layers project it to an
 	// ordered list via SortedKeyboardImages, sorting on each entry's Seq.
@@ -154,12 +218,11 @@ func (kb Keyboard) Plate(id *string) *KeyboardPlate {
 	if id == nil {
 		return nil
 	}
-	for i := range kb.Plates {
-		if kb.Plates[i].ID == *id {
-			return &kb.Plates[i]
-		}
+	p, ok := kb.Plates[*id]
+	if !ok {
+		return nil
 	}
-	return nil
+	return &p
 }
 
 // PCB returns the keyboard's PCB with the given id, or nil if id is nil or
@@ -168,12 +231,11 @@ func (kb Keyboard) PCB(id *string) *KeyboardPCB {
 	if id == nil {
 		return nil
 	}
-	for i := range kb.PCBs {
-		if kb.PCBs[i].ID == *id {
-			return &kb.PCBs[i]
-		}
+	p, ok := kb.PCBs[*id]
+	if !ok {
+		return nil
 	}
-	return nil
+	return &p
 }
 
 // Price is p's purchase price, or nil if p is nil.
@@ -242,9 +304,36 @@ type KeyboardRepository interface {
 	Create(ctx context.Context, kb Keyboard) (*Keyboard, error)
 
 	// Update replaces the caller's keyboard (UserID is set from ctx, kb.ID
-	// must already be set to the keyboard being updated). Returns
-	// ErrNotFound if no keyboard with that id exists for the caller.
+	// must already be set to the keyboard being updated). Plates, PCBs and
+	// Images are left untouched. Returns ErrNotFound if no keyboard with
+	// that id exists for the caller.
 	Update(ctx context.Context, kb Keyboard) (*Keyboard, error)
+
+	// AddPlate adds plate (plate.ID must already be set) to keyboardID's
+	// Plates with a server-assigned Seq that sorts it after every existing
+	// plate; plate.Seq is ignored. Returns the stored plate, ErrNotFound if
+	// the keyboard doesn't exist, or a wrapped duplicate-id error if
+	// plate.ID is already in use (practically unreachable given a fresh
+	// UUID).
+	AddPlate(ctx context.Context, keyboardID string, plate KeyboardPlate) (*KeyboardPlate, error)
+
+	// UpdatePlate replaces the plate matching plate.ID, keeping its Seq.
+	// Returns ErrNotFound if keyboardID or the plate doesn't exist.
+	UpdatePlate(ctx context.Context, keyboardID string, plate KeyboardPlate) (*KeyboardPlate, error)
+
+	// DeletePlate removes plateID from keyboardID's Plates. Idempotent: a
+	// plateID not present is not an error. Returns ErrNotFound if
+	// keyboardID doesn't exist for the owner.
+	DeletePlate(ctx context.Context, keyboardID, plateID string) error
+
+	// AddPCB is AddPlate for PCBs.
+	AddPCB(ctx context.Context, keyboardID string, pcb KeyboardPCB) (*KeyboardPCB, error)
+
+	// UpdatePCB is UpdatePlate for PCBs.
+	UpdatePCB(ctx context.Context, keyboardID string, pcb KeyboardPCB) (*KeyboardPCB, error)
+
+	// DeletePCB is DeletePlate for PCBs.
+	DeletePCB(ctx context.Context, keyboardID, pcbID string) error
 
 	// Delete removes the caller's keyboard with the given id. Callers clean
 	// up any images it had in a KeyboardImageStore themselves, before

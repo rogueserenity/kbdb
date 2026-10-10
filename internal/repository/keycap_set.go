@@ -22,12 +22,15 @@ type KeycapKitPurchase struct {
 // KeycapKit is one purchase within a KeycapSet (e.g. "Base", "Extension").
 // KitID is server-generated and unique within its parent set, not globally.
 // Kept as a field too (not just the Kits map's key), so a single KeycapKit
-// value is still self-describing.
+// value is still self-describing. Seq orders a set's kits, the same way
+// KeyboardImageEntry.Seq orders images; kits added before it existed have
+// 0 and sort by KitID among themselves.
 type KeycapKit struct {
 	KitID     string             `dynamodbav:"kit_id" json:"kit_id"`
 	Name      string             `dynamodbav:"name" json:"name"`
 	ImagePath *KeycapKitImageKey `dynamodbav:"image_path,omitempty" json:"image_path,omitempty"`
 	Purchase  KeycapKitPurchase  `dynamodbav:"purchase" json:"purchase"`
+	Seq       int                `dynamodbav:"seq" json:"-"`
 
 	// GetURL/GetURLExpiresAt cache the last presigned GET URL for
 	// ImagePath. SetKitImagePath clears both when ImagePath changes.
@@ -54,6 +57,11 @@ type KeycapSet struct {
 	// PrimaryKitID names the kit whose image represents this set in a
 	// list/grid view. Reads must treat a dangling reference as absent.
 	PrimaryKitID *string `dynamodbav:"primary_kit_id,omitempty" json:"primary_kit_id,omitempty"`
+}
+
+// SortedKits flattens a Kits map into a slice ordered by Seq, then KitID.
+func SortedKits(kits map[string]KeycapKit) []KeycapKit {
+	return sortedBySeq(kits, func(k KeycapKit) (int, string) { return k.Seq, k.KitID })
 }
 
 // orderStatusProgression ranks every non-Cancelled order_status lookup
@@ -169,7 +177,8 @@ type KeycapSetRepository interface {
 	Delete(ctx context.Context, id string) error
 
 	// AddKit adds kit to the set's Kits, keyed by kit.KitID (which must
-	// already be set), and returns the stored kit, matching Create's shape
+	// already be set), with a server-assigned Seq that sorts it after every
+	// existing kit (kit.Seq is ignored), and returns the stored kit, matching Create's shape
 	// for every other entity. primary controls the set's PrimaryKitID,
 	// applied atomically with the add: nil leaves it untouched, true makes
 	// the new kit primary. Returns ErrNotFound if the parent set doesn't
