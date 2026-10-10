@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"math"
 	"sort"
 	"time"
 
@@ -16,20 +17,34 @@ type KeyboardMaterialColor struct {
 	Color    *string `dynamodbav:"color,omitempty" json:"color,omitempty"`
 }
 
-// KeyboardDesign is a keyboard's physical case/plate makeup.
+// KeyboardDesign is a keyboard's physical case makeup.
 type KeyboardDesign struct {
 	TopCase    KeyboardMaterialColor `dynamodbav:"top_case" json:"top_case"`
 	BottomCase KeyboardMaterialColor `dynamodbav:"bottom_case" json:"bottom_case"`
 	Weight     KeyboardMaterialColor `dynamodbav:"weight" json:"weight"`
-	Plates     []string              `dynamodbav:"plates,omitempty" json:"plates,omitempty"`
 }
 
-// KeyboardPCB is a keyboard's PCB characteristics.
+// KeyboardPlate is one plate a keyboard has. ID is server-generated and
+// unique within the keyboard; builds reference a plate by it. A plate
+// with no purchase came with the keyboard at no extra cost.
+type KeyboardPlate struct {
+	ID        string           `dynamodbav:"id" json:"id"`
+	Material  string           `dynamodbav:"material" json:"material"`
+	Color     *string          `dynamodbav:"color,omitempty" json:"color,omitempty"`
+	Thickness *float64         `dynamodbav:"thickness,omitempty" json:"thickness,omitempty"`
+	Purchase  KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
+}
+
+// KeyboardPCB is one PCB a keyboard has. ID is server-generated and unique
+// within the keyboard; builds reference a PCB by it. A PCB with no
+// purchase came with the keyboard at no extra cost.
 type KeyboardPCB struct {
-	Thickness    *float64 `dynamodbav:"thickness,omitempty" json:"thickness,omitempty"`
-	Firmware     *string  `dynamodbav:"firmware,omitempty" json:"firmware,omitempty"`
-	Assembly     *string  `dynamodbav:"assembly,omitempty" json:"assembly,omitempty"`
-	Connectivity *string  `dynamodbav:"connectivity,omitempty" json:"connectivity,omitempty"`
+	ID           string           `dynamodbav:"id" json:"id"`
+	Thickness    *float64         `dynamodbav:"thickness,omitempty" json:"thickness,omitempty"`
+	Firmware     *string          `dynamodbav:"firmware,omitempty" json:"firmware,omitempty"`
+	Assembly     *string          `dynamodbav:"assembly,omitempty" json:"assembly,omitempty"`
+	Connectivity *string          `dynamodbav:"connectivity,omitempty" json:"connectivity,omitempty"`
+	Purchase     KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
 }
 
 // KeyboardPurchase is where/how much a keyboard was bought, plus its
@@ -108,10 +123,12 @@ func KeyboardImagesMap(images []KeyboardImage) map[string]KeyboardImageEntry {
 // Keyboard is a mechanical keyboard in a user's collection, or shared with
 // the caller. UserID is the DynamoDB partition key (the owner's IdP-issued
 // user ID); ID is the sort key. Only Brand, Name, and Visibility are
-// required, per api/openapi.yaml's KeyboardInput schema; every other field
-// (here and in KeyboardMaterialColor/KeyboardDesign/KeyboardPCB/
-// KeyboardPurchase) is a pointer so nil ("not provided") round-trips
-// distinctly from an explicit zero value.
+// required, per api/openapi.yaml's KeyboardInput schema; every other
+// optional field (here and in KeyboardMaterialColor/KeyboardDesign/
+// KeyboardPlate/KeyboardPCB/KeyboardPurchase) is a pointer so nil ("not
+// provided") round-trips distinctly from an explicit zero value.
+// Purchase.Price is the base price, excluding plates and PCBs that carry
+// their own purchase.
 type Keyboard struct {
 	UserID     string           `dynamodbav:"user_id" json:"-"`
 	ID         string           `dynamodbav:"id" json:"id"`
@@ -120,7 +137,8 @@ type Keyboard struct {
 	Size       *string          `dynamodbav:"size,omitempty" json:"size,omitempty"`
 	Layout     *string          `dynamodbav:"layout,omitempty" json:"layout,omitempty"`
 	Design     KeyboardDesign   `dynamodbav:"design" json:"design"`
-	PCB        KeyboardPCB      `dynamodbav:"pcb" json:"pcb"`
+	Plates     []KeyboardPlate  `dynamodbav:"plates,omitempty" json:"plates,omitempty"`
+	PCBs       []KeyboardPCB    `dynamodbav:"pcbs,omitempty" json:"pcbs,omitempty"`
 	Purchase   KeyboardPurchase `dynamodbav:"purchase" json:"purchase"`
 	Notes      *string          `dynamodbav:"notes,omitempty" json:"notes,omitempty"`
 	Visibility Visibility       `dynamodbav:"visibility" json:"visibility"`
@@ -128,6 +146,79 @@ type Keyboard struct {
 	// entry in place (images.<id>); the API/MCP layers project it to an
 	// ordered list via SortedKeyboardImages, sorting on each entry's Seq.
 	Images map[string]KeyboardImageEntry `dynamodbav:"images,omitempty" json:"-"`
+}
+
+// Plate returns the keyboard's plate with the given id, or nil if id is nil
+// or the keyboard has no such plate.
+func (kb Keyboard) Plate(id *string) *KeyboardPlate {
+	if id == nil {
+		return nil
+	}
+	for i := range kb.Plates {
+		if kb.Plates[i].ID == *id {
+			return &kb.Plates[i]
+		}
+	}
+	return nil
+}
+
+// PCB returns the keyboard's PCB with the given id, or nil if id is nil or
+// the keyboard has no such PCB.
+func (kb Keyboard) PCB(id *string) *KeyboardPCB {
+	if id == nil {
+		return nil
+	}
+	for i := range kb.PCBs {
+		if kb.PCBs[i].ID == *id {
+			return &kb.PCBs[i]
+		}
+	}
+	return nil
+}
+
+// Price is p's purchase price, or nil if p is nil.
+func (p *KeyboardPlate) Price() *float64 {
+	if p == nil {
+		return nil
+	}
+	return p.Purchase.Price
+}
+
+// Price is p's purchase price, or nil if p is nil.
+func (p *KeyboardPCB) Price() *float64 {
+	if p == nil {
+		return nil
+	}
+	return p.Purchase.Price
+}
+
+// TotalCost sums the base price and every plate's and PCB's price, skipping
+// unknown ones, or returns nil if none is known. Rounded to cents, like
+// [KeycapSet.TotalCost].
+func (kb Keyboard) TotalCost() *float64 {
+	prices := []*float64{kb.Purchase.Price}
+	for _, p := range kb.Plates {
+		prices = append(prices, p.Purchase.Price)
+	}
+	for _, p := range kb.PCBs {
+		prices = append(prices, p.Purchase.Price)
+	}
+
+	var total float64
+	priced := false
+	for _, p := range prices {
+		if p == nil {
+			continue
+		}
+		total += *p
+		priced = true
+	}
+	if !priced {
+		return nil
+	}
+
+	total = math.Round(total*100) / 100
+	return &total
 }
 
 // KeyboardRepository provides access to keyboards.

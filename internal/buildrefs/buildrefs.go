@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/rogueserenity/kbdb/internal/repository"
 )
@@ -20,8 +19,8 @@ type FieldError struct {
 	Reason string
 }
 
-// ValidateReferences also checks that Plate is one of the referenced
-// keyboard's design.plates. It doesn't report an unset/empty Keyboard or
+// ValidateReferences also checks that Plate and PCB are ids of the
+// referenced keyboard's plates and PCBs. It doesn't report an unset/empty Keyboard or
 // empty Switches/KeycapKits entry - required/minLength constraints
 // upstream already guard those.
 //
@@ -49,11 +48,19 @@ func ValidateReferences(
 			})
 		case err != nil:
 			return nil, fmt.Errorf("checking keyboard %q: %w", b.Keyboard, err)
-		case b.Plate != nil && !slices.Contains(kb.Design.Plates, *b.Plate):
-			fieldErrs = append(fieldErrs, FieldError{
-				Field: "plate", Value: *b.Plate,
-				Reason: fmt.Sprintf("is not one of keyboard %q's design.plates", b.Keyboard),
-			})
+		default:
+			if b.Plate != nil && kb.Plate(b.Plate) == nil {
+				fieldErrs = append(fieldErrs, FieldError{
+					Field: "plate", Value: *b.Plate,
+					Reason: fmt.Sprintf("is not the id of one of keyboard %q's plates", b.Keyboard),
+				})
+			}
+			if b.PCB != nil && kb.PCB(b.PCB) == nil {
+				fieldErrs = append(fieldErrs, FieldError{
+					Field: "pcb", Value: *b.PCB,
+					Reason: fmt.Sprintf("is not the id of one of keyboard %q's pcbs", b.Keyboard),
+				})
+			}
 		}
 	}
 

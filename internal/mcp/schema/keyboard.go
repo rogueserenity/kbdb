@@ -22,8 +22,8 @@ type KeyboardSummary struct {
 	Layout      *string  `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
 	OrderStatus *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 	HasImages   bool     `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
-	Price       *float64 `json:"price,omitempty" jsonschema:"purchase price; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
-	Currency    *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
+	TotalCost   *float64 `json:"total_cost,omitempty" jsonschema:"the base price plus every plate's and PCB's price, skipping unknown ones; present for the owner only if their show_price_to_me preference is set, and for any other caller only if the owner's show_price_to_others is"`
+	Currency    *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for total_cost; present exactly when total_cost is"`
 	Visibility  *string  `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; only ever present for the keyboard's owner"`
 }
 
@@ -83,9 +83,10 @@ type KeyboardInput struct {
 	Name       string                 `json:"name" jsonschema:"the keyboard's name"`
 	Size       *string                `json:"size,omitempty" jsonschema:"the keyboard's size; must be an approved keyboard_size lookup value"`
 	Layout     *string                `json:"layout,omitempty" jsonschema:"the keyboard's layout; must be an approved keyboard_layout value whose sizes include this keyboard's size"`
-	Design     *KeyboardDesign        `json:"design,omitempty" jsonschema:"the case and plate makeup"`
-	PCB        *KeyboardPCB           `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
-	Purchase   *KeyboardPurchaseInput `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Design     *KeyboardDesign        `json:"design,omitempty" jsonschema:"the case makeup"`
+	Plates     []KeyboardPlateInput   `json:"plates,omitempty" jsonschema:"every plate the keyboard has, including extras bought separately; send an existing plate's id to keep it, since builds reference plates by id"`
+	PCBs       []KeyboardPCBInput     `json:"pcbs,omitempty" jsonschema:"every PCB the keyboard has, including extras bought separately; send an existing PCB's id to keep it, since builds reference PCBs by id"`
+	Purchase   *KeyboardPurchaseInput `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status; price is the base price, excluding plates and PCBs that have their own purchase"`
 	Notes      *string                `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility string                 `json:"visibility" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\""`
 }
@@ -101,20 +102,22 @@ type Keyboard struct {
 	Name       string            `json:"name" jsonschema:"the keyboard's name"`
 	Size       *string           `json:"size,omitempty" jsonschema:"the keyboard's size, e.g. 65% or TKL"`
 	Layout     *string           `json:"layout,omitempty" jsonschema:"the keyboard's layout, e.g. ANSI or ISO"`
-	Design     *KeyboardDesign   `json:"design,omitempty" jsonschema:"the case and plate makeup"`
-	PCB        *KeyboardPCB      `json:"pcb,omitempty" jsonschema:"the PCB's characteristics"`
-	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status"`
+	Design     *KeyboardDesign   `json:"design,omitempty" jsonschema:"the case makeup"`
+	Plates     []KeyboardPlate   `json:"plates,omitempty" jsonschema:"every plate the keyboard has"`
+	PCBs       []KeyboardPCB     `json:"pcbs,omitempty" jsonschema:"every PCB the keyboard has"`
+	Purchase   *KeyboardPurchase `json:"purchase,omitempty" jsonschema:"where it was bought and the order's status; price is the base price, excluding plates and PCBs that have their own purchase"`
 	Notes      *string           `json:"notes,omitempty" jsonschema:"free-form notes"`
 	Visibility *string           `json:"visibility,omitempty" jsonschema:"who can read this keyboard; one of \"public\", \"authenticated\", \"private\"; only ever present for the keyboard's owner"`
 	HasImages  bool              `json:"has_images" jsonschema:"whether this keyboard has any images on file; call list_keyboard_images for their ids"`
+	TotalCost  *float64          `json:"total_cost,omitempty" jsonschema:"the base price plus every plate's and PCB's price, skipping unknown ones"`
+	Currency   *string           `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for total_cost; present exactly when total_cost is"`
 }
 
-// KeyboardDesign is a keyboard's case and plate makeup.
+// KeyboardDesign is a keyboard's case makeup.
 type KeyboardDesign struct {
 	TopCase    *KeyboardMaterialColor `json:"top_case,omitempty" jsonschema:"the top case's material and color"`
 	BottomCase *KeyboardMaterialColor `json:"bottom_case,omitempty" jsonschema:"the bottom case's material and color"`
 	Weight     *KeyboardMaterialColor `json:"weight,omitempty" jsonschema:"the weight's material and color"`
-	Plates     []string               `json:"plates,omitempty" jsonschema:"the plate materials included with the keyboard"`
 }
 
 // KeyboardMaterialColor is one physical part of a keyboard.
@@ -123,12 +126,62 @@ type KeyboardMaterialColor struct {
 	Color    *string `json:"color,omitempty" jsonschema:"the part's color"`
 }
 
-// KeyboardPCB is a keyboard's PCB.
+// KeyboardPlate is one plate a keyboard has.
+type KeyboardPlate struct {
+	ID        string                `json:"id" jsonschema:"the plate's id, unique within the keyboard; builds reference the plate by it"`
+	Material  string                `json:"material" jsonschema:"what the plate is made of"`
+	Color     *string               `json:"color,omitempty" jsonschema:"the plate's color"`
+	Thickness *float64              `json:"thickness,omitempty" jsonschema:"plate thickness in mm"`
+	Purchase  *KeyboardPartPurchase `json:"purchase,omitempty" jsonschema:"where the plate was bought, if separately priced; absent for a plate that came with the keyboard"`
+}
+
+// KeyboardPlateInput is the writable form of KeyboardPlate.
+type KeyboardPlateInput struct {
+	ID        string                     `json:"id,omitempty" jsonschema:"an existing plate's id, to keep it; omit to add a new plate"`
+	Material  string                     `json:"material" jsonschema:"what the plate is made of; must be an approved keyboard_plate_material lookup value"`
+	Color     *string                    `json:"color,omitempty" jsonschema:"the plate's color"`
+	Thickness *float64                   `json:"thickness,omitempty" jsonschema:"plate thickness in mm"`
+	Purchase  *KeyboardPartPurchaseInput `json:"purchase,omitempty" jsonschema:"where the plate was bought; omit for a plate that came with the keyboard at no extra cost"`
+}
+
+// KeyboardPCB is one PCB a keyboard has.
 type KeyboardPCB struct {
-	Thickness    *float64 `json:"thickness,omitempty" jsonschema:"PCB thickness in mm"`
-	Firmware     *string  `json:"firmware,omitempty" jsonschema:"the firmware the PCB runs, e.g. QMK/VIA"`
-	Assembly     *string  `json:"assembly,omitempty" jsonschema:"how the PCB is assembled, e.g. hotswap or soldered"`
-	Connectivity *string  `json:"connectivity,omitempty" jsonschema:"how the PCB connects, e.g. wired or wireless"`
+	ID           string                `json:"id" jsonschema:"the PCB's id, unique within the keyboard; builds reference the PCB by it"`
+	Thickness    *float64              `json:"thickness,omitempty" jsonschema:"PCB thickness in mm"`
+	Firmware     *string               `json:"firmware,omitempty" jsonschema:"the firmware the PCB runs, e.g. QMK/VIA"`
+	Assembly     *string               `json:"assembly,omitempty" jsonschema:"how the PCB is assembled, e.g. hotswap or soldered"`
+	Connectivity *string               `json:"connectivity,omitempty" jsonschema:"how the PCB connects, e.g. wired or wireless"`
+	Purchase     *KeyboardPartPurchase `json:"purchase,omitempty" jsonschema:"where the PCB was bought, if separately priced; absent for a PCB that came with the keyboard"`
+}
+
+// KeyboardPCBInput is the writable form of KeyboardPCB.
+type KeyboardPCBInput struct {
+	ID           string                     `json:"id,omitempty" jsonschema:"an existing PCB's id, to keep it; omit to add a new PCB"`
+	Thickness    *float64                   `json:"thickness,omitempty" jsonschema:"PCB thickness in mm"`
+	Firmware     *string                    `json:"firmware,omitempty" jsonschema:"the firmware the PCB runs; must be an approved keyboard_pcb_firmware lookup value"`
+	Assembly     *string                    `json:"assembly,omitempty" jsonschema:"how the PCB is assembled; must be an approved keyboard_pcb_assembly_type lookup value"`
+	Connectivity *string                    `json:"connectivity,omitempty" jsonschema:"how the PCB connects; must be an approved keyboard_pcb_connectivity_type lookup value"`
+	Purchase     *KeyboardPartPurchaseInput `json:"purchase,omitempty" jsonschema:"where the PCB was bought; omit for a PCB that came with the keyboard at no extra cost"`
+}
+
+// KeyboardPartPurchase is a plate's or PCB's own purchase, independent of
+// the keyboard's - extras are often bought from another vendor.
+type KeyboardPartPurchase struct {
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the part was bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	Currency     *string  `json:"currency,omitempty" jsonschema:"the owner's display currency (an ISO 4217 code) for price; present exactly when price is"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
+}
+
+// KeyboardPartPurchaseInput is the writable form of KeyboardPartPurchase.
+type KeyboardPartPurchaseInput struct {
+	Vendor       *string  `json:"vendor,omitempty" jsonschema:"where the part was bought"`
+	Price        *float64 `json:"price,omitempty" jsonschema:"price paid"`
+	OrderDate    *string  `json:"order_date,omitempty" jsonschema:"when it was ordered (YYYY-MM-DD)"`
+	DeliveryDate *string  `json:"delivery_date,omitempty" jsonschema:"when it arrived (YYYY-MM-DD)"`
+	OrderStatus  *string  `json:"order_status,omitempty" jsonschema:"where the order stands, e.g. ordered or delivered"`
 }
 
 // KeyboardPurchase is a keyboard's purchase and order lifecycle. Dates

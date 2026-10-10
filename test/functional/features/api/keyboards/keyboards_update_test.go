@@ -78,6 +78,93 @@ var _ = Describe("Updating a keyboard", func() {
 				})
 			})
 
+			Context("given the seeded plate's id is sent back alongside a new plate", func() {
+				When("updating the keyboard", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.Update(ctx, ownerID, keyboardID, ownerToken,
+							`{"brand":"Keychron","name":"Q1","visibility":"private",`+
+								`"plates":[{"id":"`+db.SeededPlateID+`","material":"AL"},{"material":"PC"}]}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("keeps the sent id, gives the new plate its own, and drops the omitted PCB", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+						getResp, err := client.Get(ctx, ownerID, keyboardID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+						Expect(getResp.StatusCode).To(Equal(http.StatusOK))
+
+						var got keyboardWithParts
+						Expect(json.NewDecoder(getResp.Body).Decode(&got)).To(Succeed())
+						Expect(got.Plates).To(HaveLen(2))
+						Expect(got.Plates[0].ID).To(Equal(db.SeededPlateID))
+						Expect(got.Plates[0].Material).To(Equal("AL"))
+						Expect(got.Plates[1].ID).NotTo(BeEmpty())
+						Expect(got.Plates[1].ID).NotTo(Equal(db.SeededPlateID))
+						Expect(got.PCBs).To(BeEmpty())
+					})
+				})
+			})
+
+			Context("given a build uses the keyboard's plate and PCB", func() {
+				var (
+					builds  *api.BuildsClient
+					buildID string
+				)
+
+				BeforeEach(func(ctx SpecContext) {
+					builds = api.NewBuildsClient()
+					buildID = "update-keyboard-build-" + uuid.NewString()
+					Expect(db.SeedBuildWithParts(ctx, ownerID, buildID, keyboardID, "private")).To(Succeed())
+				})
+
+				AfterEach(func(ctx SpecContext) {
+					Expect(db.DeleteBuild(ctx, ownerID, buildID, keyboardID)).To(Succeed())
+				})
+
+				Context("given both part ids are sent back with changed details", func() {
+					When("updating the keyboard", func() {
+						BeforeEach(func(ctx SpecContext) {
+							var err error
+							resp, err = client.Update(ctx, ownerID, keyboardID, ownerToken,
+								`{"brand":"Keychron","name":"Q1","visibility":"private",`+
+									`"plates":[{"id":"`+db.SeededPlateID+`","material":"AL","color":"Silver"}],`+
+									`"pcbs":[{"id":"`+db.SeededPCBID+`","firmware":"ZMK"}]}`)
+							Expect(err).NotTo(HaveOccurred())
+						})
+
+						It("leaves the build pointing at the same parts, showing their new details", func(ctx SpecContext) {
+							Expect(resp.StatusCode).To(Equal(http.StatusOK))
+
+							buildResp, err := builds.Get(ctx, ownerID, buildID, ownerToken)
+							Expect(err).NotTo(HaveOccurred())
+							Expect(buildResp.StatusCode).To(Equal(http.StatusOK))
+
+							var got struct {
+								Plate *struct {
+									ID       string  `json:"id"`
+									Material string  `json:"material"`
+									Color    *string `json:"color"`
+								} `json:"plate"`
+								PCB *struct {
+									ID       string  `json:"id"`
+									Firmware *string `json:"firmware"`
+								} `json:"pcb"`
+							}
+							Expect(json.NewDecoder(buildResp.Body).Decode(&got)).To(Succeed())
+							Expect(got.Plate).NotTo(BeNil())
+							Expect(got.Plate.ID).To(Equal(db.SeededPlateID))
+							Expect(got.Plate.Material).To(Equal("AL"))
+							Expect(*got.Plate.Color).To(Equal("Silver"))
+							Expect(got.PCB).NotTo(BeNil())
+							Expect(got.PCB.ID).To(Equal(db.SeededPCBID))
+							Expect(*got.PCB.Firmware).To(Equal("ZMK"))
+						})
+					})
+				})
+			})
+
 			Context("given a request body changing visibility to public", func() {
 				When("updating the keyboard", func() {
 					BeforeEach(func(ctx SpecContext) {

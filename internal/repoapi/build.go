@@ -50,10 +50,12 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		return api.Build{}, err
 	}
 
-	keyboardRef, keyboardPrice, err := b.keyboardRefToAPI(ctx, build.UserID, build.Keyboard)
+	keyboardRef, kb, err := b.keyboardRefToAPI(ctx, build.UserID, build.Keyboard)
 	if err != nil {
 		return api.Build{}, err
 	}
+	plate := kb.Plate(build.Plate)
+	pcb := kb.PCB(build.PCB)
 
 	switches, switchesCost, err := b.switchEntriesResolvedToAPI(ctx, build.UserID, build.Switches)
 	if err != nil {
@@ -68,7 +70,8 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 	out := api.Build{
 		Id:            build.ID,
 		Keyboard:      keyboardRef,
-		Plate:         build.Plate,
+		Plate:         b.plateRefToAPI(plate),
+		Pcb:           b.pcbRefToAPI(pcb),
 		CaseMountType: b.caseMountTypeToAPI(build.CaseMountType),
 		Stabs:         b.stabsToAPI(build.Stabs, isOwner, ownerPrefs),
 		Foam:          build.Foam,
@@ -85,7 +88,8 @@ func (b Build) ToAPI(ctx context.Context, build repository.Build, isOwner bool, 
 		if build.Stabs != nil {
 			stabsPrice = build.Stabs.Price
 		}
-		out.TotalCost = roundCents(sumKnownCosts(keyboardPrice, switchesCost, keycapKitsCost, stabsPrice))
+		out.TotalCost = roundCents(sumKnownCosts(
+			kb.Purchase.Price, plate.Price(), pcb.Price(), switchesCost, keycapKitsCost, stabsPrice))
 	}
 	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
 
@@ -102,6 +106,7 @@ func (b Build) ToRepo(in api.BuildInput) repository.Build {
 	return repository.Build{
 		Keyboard:      in.Keyboard,
 		Plate:         in.Plate,
+		PCB:           in.Pcb,
 		CaseMountType: b.caseMountTypeToRepo(in.CaseMountType),
 		Stabs:         b.stabsToRepo(in.Stabs),
 		Foam:          in.Foam,
@@ -230,10 +235,10 @@ func (b Build) keycapKitEntriesToRepo(entries *[]api.BuildKeycapKitEntry) []repo
 }
 
 // keyboardRefToAPI resolves keyboardID into a denormalized reference plus
-// its purchase price. The ref carries only the keyboard's first image.
+// the keyboard itself. The ref carries only the keyboard's first image.
 func (b Build) keyboardRefToAPI(
 	ctx context.Context, ownerID, keyboardID string,
-) (api.BuildKeyboardRef, *float64, error) {
+) (api.BuildKeyboardRef, *repository.Keyboard, error) {
 	kb, err := b.KeyboardRepo.Get(ctx, ownerID, keyboardID)
 	if err != nil {
 		return api.BuildKeyboardRef{}, nil, fmt.Errorf("getting keyboard %q: %w", keyboardID, err)
@@ -256,7 +261,34 @@ func (b Build) keyboardRefToAPI(
 		ref.ImageUrl = &url
 	}
 
-	return ref, kb.Purchase.Price, nil
+	return ref, kb, nil
+}
+
+func (b Build) plateRefToAPI(p *repository.KeyboardPlate) *api.BuildPlateRef {
+	if p == nil {
+		return nil
+	}
+
+	return &api.BuildPlateRef{
+		Id:        p.ID,
+		Material:  p.Material,
+		Color:     p.Color,
+		Thickness: p.Thickness,
+	}
+}
+
+func (b Build) pcbRefToAPI(p *repository.KeyboardPCB) *api.BuildPCBRef {
+	if p == nil {
+		return nil
+	}
+
+	return &api.BuildPCBRef{
+		Id:           p.ID,
+		Thickness:    p.Thickness,
+		Firmware:     p.Firmware,
+		Assembly:     p.Assembly,
+		Connectivity: p.Connectivity,
+	}
 }
 
 // switchEntriesResolvedToAPI resolves each entry's Switch id into a

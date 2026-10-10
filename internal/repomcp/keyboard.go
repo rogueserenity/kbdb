@@ -12,29 +12,38 @@ type Keyboard struct{}
 
 // ToMCP maps a repository.Keyboard to its MCP tool shape. Pointers pass
 // through undereferenced so a recorded zero survives, as
-// [repoapi.Keyboard.ToAPI] does. The owner always sees their own
-// purchase.price; a non-owner sees it only if ownerPrefs.ShowPriceToOthers.
+// [repoapi.Keyboard.ToAPI] does. The owner always sees their own prices
+// (purchase.price, each part's purchase.price, total_cost); a non-owner
+// sees them only if ownerPrefs.ShowPriceToOthers.
 func (k Keyboard) ToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.Keyboard {
-	return schema.Keyboard{
+	out := schema.Keyboard{
 		ID:         kb.ID,
 		Brand:      kb.Brand,
 		Name:       kb.Name,
 		Size:       kb.Size,
 		Layout:     kb.Layout,
 		Design:     k.designToMCP(kb.Design),
-		PCB:        k.pcbToMCP(kb.PCB),
+		Plates:     k.platesToMCP(kb.Plates, isOwner, ownerPrefs),
+		PCBs:       k.pcbsToMCP(kb.PCBs, isOwner, ownerPrefs),
 		Purchase:   k.purchaseToMCP(kb.Purchase, isOwner, ownerPrefs),
 		Notes:      kb.Notes,
 		Visibility: ownerVisibility(kb.Visibility, isOwner),
 		HasImages:  len(kb.Images) > 0,
 	}
+	if ownerPrefs.ShowPriceSingle(isOwner) {
+		out.TotalCost = kb.TotalCost()
+	}
+	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
+
+	return out
 }
 
 // ToMCPSummary lifts order_status out of purchase, so a keyboard still on
-// order is visible while browsing a list. Price is shown per
+// order is visible while browsing a list. TotalCost rather than the base
+// price, so a keyboard with priced parts doesn't list low. It's shown per
 // ownerPrefs.ShowPriceToMe (owner) or ownerPrefs.ShowPriceToOthers
 // (non-owner) - unlike [Keyboard.ToMCP], the owner isn't unconditionally
-// shown price here.
+// shown it here.
 func (k Keyboard) ToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeyboardSummary {
 	summary := schema.KeyboardSummary{
 		ID:          kb.ID,
@@ -46,9 +55,9 @@ func (k Keyboard) ToMCPSummary(kb repository.Keyboard, isOwner bool, ownerPrefs 
 		HasImages:   len(kb.Images) > 0,
 	}
 	if ownerPrefs.ShowPriceSummary(isOwner) {
-		summary.Price = kb.Purchase.Price
+		summary.TotalCost = kb.TotalCost()
 	}
-	summary.Currency = ownerPrefs.CurrencyFor(summary.Price)
+	summary.Currency = ownerPrefs.CurrencyFor(summary.TotalCost)
 	if isOwner {
 		v := string(kb.Visibility)
 		summary.Visibility = &v
@@ -62,7 +71,7 @@ func (k Keyboard) designToMCP(d repository.KeyboardDesign) *schema.KeyboardDesig
 	bottomCase := k.materialColorToMCP(d.BottomCase)
 	weight := k.materialColorToMCP(d.Weight)
 
-	if topCase == nil && bottomCase == nil && weight == nil && len(d.Plates) == 0 {
+	if topCase == nil && bottomCase == nil && weight == nil {
 		return nil
 	}
 
@@ -70,7 +79,6 @@ func (k Keyboard) designToMCP(d repository.KeyboardDesign) *schema.KeyboardDesig
 		TopCase:    topCase,
 		BottomCase: bottomCase,
 		Weight:     weight,
-		Plates:     d.Plates,
 	}
 }
 
@@ -85,17 +93,53 @@ func (k Keyboard) materialColorToMCP(mc repository.KeyboardMaterialColor) *schem
 	}
 }
 
-func (k Keyboard) pcbToMCP(p repository.KeyboardPCB) *schema.KeyboardPCB {
-	if p.Thickness == nil && p.Firmware == nil && p.Assembly == nil && p.Connectivity == nil {
+func (k Keyboard) platesToMCP(plates []repository.KeyboardPlate, isOwner bool, ownerPrefs repository.ProfilePreferences) []schema.KeyboardPlate {
+	if len(plates) == 0 {
 		return nil
 	}
 
-	return &schema.KeyboardPCB{
-		Thickness:    p.Thickness,
-		Firmware:     p.Firmware,
-		Assembly:     p.Assembly,
-		Connectivity: p.Connectivity,
+	out := make([]schema.KeyboardPlate, len(plates))
+	for i, p := range plates {
+		out[i] = schema.KeyboardPlate{
+			ID:        p.ID,
+			Material:  p.Material,
+			Color:     p.Color,
+			Thickness: p.Thickness,
+			Purchase:  k.partPurchaseToMCP(p.Purchase, isOwner, ownerPrefs),
+		}
 	}
+
+	return out
+}
+
+func (k Keyboard) pcbsToMCP(pcbs []repository.KeyboardPCB, isOwner bool, ownerPrefs repository.ProfilePreferences) []schema.KeyboardPCB {
+	if len(pcbs) == 0 {
+		return nil
+	}
+
+	out := make([]schema.KeyboardPCB, len(pcbs))
+	for i, p := range pcbs {
+		out[i] = schema.KeyboardPCB{
+			ID:           p.ID,
+			Thickness:    p.Thickness,
+			Firmware:     p.Firmware,
+			Assembly:     p.Assembly,
+			Connectivity: p.Connectivity,
+			Purchase:     k.partPurchaseToMCP(p.Purchase, isOwner, ownerPrefs),
+		}
+	}
+
+	return out
+}
+
+func (k Keyboard) partPurchaseToMCP(p repository.KeyboardPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) *schema.KeyboardPartPurchase {
+	kp := k.purchaseToMCP(p, isOwner, ownerPrefs)
+	if kp == nil {
+		return nil
+	}
+
+	out := schema.KeyboardPartPurchase(*kp)
+	return &out
 }
 
 // Dates pass through as strings, unlike [repoapi.Keyboard.ToAPI], so this
@@ -130,7 +174,8 @@ func (k Keyboard) FromMCP(in schema.KeyboardInput) repository.Keyboard {
 		Size:       in.Size,
 		Layout:     in.Layout,
 		Design:     k.designFromMCP(in.Design),
-		PCB:        k.pcbFromMCP(in.PCB),
+		Plates:     k.platesFromMCP(in.Plates),
+		PCBs:       k.pcbsFromMCP(in.PCBs),
 		Purchase:   k.purchaseFromMCP(in.Purchase),
 		Notes:      in.Notes,
 		Visibility: repository.Visibility(in.Visibility),
@@ -146,7 +191,6 @@ func (k Keyboard) designFromMCP(d *schema.KeyboardDesign) repository.KeyboardDes
 		TopCase:    k.materialColorFromMCP(d.TopCase),
 		BottomCase: k.materialColorFromMCP(d.BottomCase),
 		Weight:     k.materialColorFromMCP(d.Weight),
-		Plates:     d.Plates,
 	}
 }
 
@@ -161,17 +205,51 @@ func (k Keyboard) materialColorFromMCP(mc *schema.KeyboardMaterialColor) reposit
 	}
 }
 
-func (k Keyboard) pcbFromMCP(p *schema.KeyboardPCB) repository.KeyboardPCB {
-	if p == nil {
-		return repository.KeyboardPCB{}
+func (k Keyboard) platesFromMCP(plates []schema.KeyboardPlateInput) []repository.KeyboardPlate {
+	if len(plates) == 0 {
+		return nil
 	}
 
-	return repository.KeyboardPCB{
-		Thickness:    p.Thickness,
-		Firmware:     p.Firmware,
-		Assembly:     p.Assembly,
-		Connectivity: p.Connectivity,
+	out := make([]repository.KeyboardPlate, len(plates))
+	for i, p := range plates {
+		out[i] = repository.KeyboardPlate{
+			ID:        p.ID,
+			Material:  p.Material,
+			Color:     p.Color,
+			Thickness: p.Thickness,
+			Purchase:  k.partPurchaseFromMCP(p.Purchase),
+		}
 	}
+
+	return out
+}
+
+func (k Keyboard) pcbsFromMCP(pcbs []schema.KeyboardPCBInput) []repository.KeyboardPCB {
+	if len(pcbs) == 0 {
+		return nil
+	}
+
+	out := make([]repository.KeyboardPCB, len(pcbs))
+	for i, p := range pcbs {
+		out[i] = repository.KeyboardPCB{
+			ID:           p.ID,
+			Thickness:    p.Thickness,
+			Firmware:     p.Firmware,
+			Assembly:     p.Assembly,
+			Connectivity: p.Connectivity,
+			Purchase:     k.partPurchaseFromMCP(p.Purchase),
+		}
+	}
+
+	return out
+}
+
+func (k Keyboard) partPurchaseFromMCP(p *schema.KeyboardPartPurchaseInput) repository.KeyboardPurchase {
+	if p == nil {
+		return repository.KeyboardPurchase{}
+	}
+
+	return k.purchaseFromMCP((*schema.KeyboardPurchaseInput)(p))
 }
 
 func (k Keyboard) purchaseFromMCP(p *schema.KeyboardPurchaseInput) repository.KeyboardPurchase {

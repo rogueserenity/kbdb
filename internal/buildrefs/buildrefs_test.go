@@ -78,30 +78,40 @@ func (s *ValidateReferencesSuite) TestKeyboardRepositoryError_ReturnsError() {
 	s.Nil(fieldErrs)
 }
 
-func (s *ValidateReferencesSuite) TestPlateOfferedByKeyboard_Succeeds() {
+func (s *ValidateReferencesSuite) TestPartsOnKeyboard_Succeed() {
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Design: repository.KeyboardDesign{Plates: []string{"Brass", "FR4"}}}, nil)
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1",
+			Plates: []repository.KeyboardPlate{{ID: "p1", Material: "Brass"}, {ID: "p2", Material: "FR4"}},
+			PCBs:   []repository.KeyboardPCB{{ID: "b1"}},
+		}, nil)
 
-	plate := "FR4"
-	fieldErrs, err := s.validate(repository.Build{Keyboard: "kb1", Plate: &plate})
+	plate, pcb := "p2", "b1"
+	fieldErrs, err := s.validate(repository.Build{Keyboard: "kb1", Plate: &plate, PCB: &pcb})
 
 	s.Require().NoError(err)
 	s.Empty(fieldErrs)
 }
 
-func (s *ValidateReferencesSuite) TestPlateNotOfferedByKeyboard_ReturnsFieldError() {
+func (s *ValidateReferencesSuite) TestPartsNotOnKeyboard_ReturnFieldErrors() {
 	s.mockKeyboards.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Design: repository.KeyboardDesign{Plates: []string{"Brass"}}}, nil)
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1",
+			Plates: []repository.KeyboardPlate{{ID: "p1", Material: "Brass"}},
+			PCBs:   []repository.KeyboardPCB{{ID: "b1"}},
+		}, nil)
 
-	plate := "PC"
-	fieldErrs, err := s.validate(repository.Build{Keyboard: "kb1", Plate: &plate})
+	plate, pcb := "Brass", "b2"
+	fieldErrs, err := s.validate(repository.Build{Keyboard: "kb1", Plate: &plate, PCB: &pcb})
 
 	s.Require().NoError(err)
-	s.Require().Len(fieldErrs, 1)
+	s.Require().Len(fieldErrs, 2)
 	s.Equal("plate", fieldErrs[0].Field)
-	s.Equal("PC", fieldErrs[0].Value)
+	s.Equal("Brass", fieldErrs[0].Value)
+	s.Equal("pcb", fieldErrs[1].Field)
+	s.Equal("b2", fieldErrs[1].Value)
 }
 
 func (s *ValidateReferencesSuite) TestValidSwitch_Succeeds() {

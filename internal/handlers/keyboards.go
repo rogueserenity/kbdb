@@ -13,6 +13,7 @@ import (
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
 	"github.com/rogueserenity/kbdb/internal/handlers/api"
+	"github.com/rogueserenity/kbdb/internal/keyboardparts"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/ownerprefs"
@@ -187,6 +188,22 @@ func keyboardFieldErrorToInvalidParam(fe lookup.FieldError, size *string) proble
 	}
 }
 
+// assignKeyboardPartIDs writes a 400 listing every part id the request
+// can't use. existing is nil on create.
+func assignKeyboardPartIDs(w http.ResponseWriter, kb *repository.Keyboard, existing *repository.Keyboard) (ok bool) {
+	fieldErrs := keyboardparts.AssignIDs(kb, existing, uuid.NewString)
+	if len(fieldErrs) > 0 {
+		invalidParams := make([]problem.InvalidParam, len(fieldErrs))
+		for i, fe := range fieldErrs {
+			invalidParams[i] = problem.InvalidParam{Name: fe.Field, Reason: fmt.Sprintf("%q %s", fe.Value, fe.Reason)}
+		}
+		problem.ValidationFailed(w, "one or more part ids are not ones this keyboard has", invalidParams)
+		return false
+	}
+
+	return true
+}
+
 // CreateKeyboard reads the {userId} path value and requires an
 // authenticated caller. userId must be the caller's own subject; creating
 // in another user's collection returns 404, not 403, to avoid revealing it
@@ -206,6 +223,10 @@ func CreateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 		}
 
 		if !validateKeyboardLookups(r.Context(), w, kb) {
+			return
+		}
+
+		if !assignKeyboardPartIDs(w, &kb, nil) {
 			return
 		}
 
@@ -266,6 +287,15 @@ func UpdateKeyboard(keyboardRepo repository.KeyboardRepository, kr repoapi.Keybo
 		}
 
 		if !validateKeyboardLookups(r.Context(), w, kb) {
+			return
+		}
+
+		existing, err := keyboardRepo.Get(r.Context(), ownerID, id)
+		if handleMutationError(w, r, err, log.KeyboardID, id) {
+			return
+		}
+
+		if !assignKeyboardPartIDs(w, &kb, existing) {
 			return
 		}
 

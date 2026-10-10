@@ -95,6 +95,32 @@ func SeedBuildWithStabs(ctx context.Context, ownerID, id, keyboardID, visibility
 	})
 }
 
+// SeedBuildWithParts is SeedBuild, but the build uses keyboardID's seeded
+// plate and PCB (SeededPlateID/SeededPCBID).
+func SeedBuildWithParts(ctx context.Context, ownerID, id, keyboardID, visibility string) error {
+	table := NewDynamoTable(ctx, support.BuildTableName())
+	if err := table.PutItem(ctx, map[string]any{
+		"user_id":    ownerID,
+		"id":         id,
+		"keyboard":   keyboardID,
+		"plate":      SeededPlateID,
+		"pcb":        SeededPCBID,
+		"visibility": visibility,
+		"images":     map[string]any{},
+	}); err != nil {
+		return err
+	}
+
+	return table.PutItem(ctx, map[string]any{
+		"user_id":   ownerID,
+		"id":        keyboardRefMarkerSortKey(keyboardID, id),
+		"item_type": "build_ref_marker",
+		"ref_type":  "keyboard",
+		"ref_id":    keyboardID,
+		"build_id":  id,
+	})
+}
+
 // DeleteBuild removes the build with id, and its keyboard reverse-reference
 // marker, from the table. Both deletes are attempted even if the first
 // fails, so a transient failure on one doesn't orphan the other in the

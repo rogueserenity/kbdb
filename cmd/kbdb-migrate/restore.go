@@ -117,7 +117,7 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 		itemDir := filepath.Join(dumpDir, "keyboards", oldID)
 
 		var full api.Keyboard
-		if err := readJSONFile(filepath.Join(itemDir, "item.json"), &full); err != nil {
+		if err := readUpgradedJSON(filepath.Join(itemDir, "item.json"), upgradeKeyboardJSON, &full); err != nil {
 			return err
 		}
 		visibility, err := dumpedVisibility(full.Visibility)
@@ -130,7 +130,8 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 			Layout:     full.Layout,
 			Name:       full.Name,
 			Notes:      full.Notes,
-			Pcb:        full.Pcb,
+			Plates:     plateInputs(full.Plates),
+			Pcbs:       pcbInputs(full.Pcbs),
 			Purchase:   purchaseInput(full.Purchase),
 			Size:       full.Size,
 			Visibility: visibility,
@@ -140,8 +141,20 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 			return fmt.Errorf("creating keyboard (was %s): %w", oldID, err)
 		}
 		mapped := &mappedEntity{NewID: created.Id, Images: map[string]string{}}
+		var platesErr, pcbsErr error
+		if mapped.Plates, platesErr = mapPartIDs(full.Plates, created.Plates, func(p api.KeyboardPlate) string { return p.Id }); platesErr != nil {
+			platesErr = fmt.Errorf("keyboard %s plates: %w", created.Id, platesErr)
+		}
+		if mapped.PCBs, pcbsErr = mapPartIDs(full.Pcbs, created.Pcbs, func(p api.KeyboardPCB) string { return p.Id }); pcbsErr != nil {
+			pcbsErr = fmt.Errorf("keyboard %s pcbs: %w", created.Id, pcbsErr)
+		}
+		// The keyboard exists now, so it's recorded even when its parts didn't
+		// map; otherwise a rerun would create it again.
 		m.Keyboards[oldID] = mapped
 		if err := m.save(); err != nil {
+			return err
+		}
+		if err := errors.Join(platesErr, pcbsErr); err != nil {
 			return err
 		}
 		progress("keyboards", i+1, total, oldID, created.Id)
@@ -325,7 +338,7 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 		itemDir := filepath.Join(dumpDir, "builds", oldID)
 
 		var full api.Build
-		if err := readJSONFile(filepath.Join(itemDir, "item.json"), &full); err != nil {
+		if err := readUpgradedJSON(filepath.Join(itemDir, "item.json"), upgradeBuildJSON, &full); err != nil {
 			return err
 		}
 		input, err := buildInputFromResolved(full, m)
@@ -354,6 +367,59 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 		}
 	}
 	return nil
+}
+
+func plateInputs(plates *[]api.KeyboardPlate) *[]api.KeyboardPlateInput {
+	if plates == nil {
+		return nil
+	}
+	out := make([]api.KeyboardPlateInput, len(*plates))
+	for i, p := range *plates {
+		out[i] = api.KeyboardPlateInput{
+			Material:  p.Material,
+			Color:     p.Color,
+			Thickness: p.Thickness,
+			Purchase:  purchaseInput(p.Purchase),
+		}
+	}
+	return &out
+}
+
+func pcbInputs(pcbs *[]api.KeyboardPCB) *[]api.KeyboardPCBInput {
+	if pcbs == nil {
+		return nil
+	}
+	out := make([]api.KeyboardPCBInput, len(*pcbs))
+	for i, p := range *pcbs {
+		out[i] = api.KeyboardPCBInput{
+			Thickness:    p.Thickness,
+			Firmware:     p.Firmware,
+			Assembly:     p.Assembly,
+			Connectivity: p.Connectivity,
+			Purchase:     purchaseInput(p.Purchase),
+		}
+	}
+	return &out
+}
+
+// mapPartIDs pairs each dumped part's id with the id the server gave the part
+// in the same position of the created keyboard.
+func mapPartIDs[T any](dumped, created *[]T, id func(T) string) (map[string]string, error) {
+	var d, c []T
+	if dumped != nil {
+		d = *dumped
+	}
+	if created != nil {
+		c = *created
+	}
+	if len(d) != len(c) {
+		return nil, fmt.Errorf("dump has %d, created keyboard has %d", len(d), len(c))
+	}
+	out := make(map[string]string, len(d))
+	for i := range d {
+		out[id(d[i])] = id(c[i])
+	}
+	return out, nil
 }
 
 func purchaseInput(p *api.Purchase) *api.PurchaseInput {
@@ -427,9 +493,23 @@ func buildInputFromResolved(full api.Build, m *idMap) (api.BuildInput, error) {
 		Foam:          full.Foam,
 		Keyboard:      kb.NewID,
 		Notes:         full.Notes,
-		Plate:         full.Plate,
 		Stabs:         stabsInput(full.Stabs),
 		Visibility:    visibility,
+	}
+
+	if full.Plate != nil {
+		plate, ok := kb.Plates[full.Plate.Id]
+		if !ok {
+			return api.BuildInput{}, fmt.Errorf("plate %s of keyboard %s is not in the id map", full.Plate.Id, keyboardID)
+		}
+		input.Plate = &plate
+	}
+	if full.Pcb != nil {
+		pcb, ok := kb.PCBs[full.Pcb.Id]
+		if !ok {
+			return api.BuildInput{}, fmt.Errorf("pcb %s of keyboard %s is not in the id map", full.Pcb.Id, keyboardID)
+		}
+		input.Pcb = &pcb
 	}
 
 	if full.Switches != nil {

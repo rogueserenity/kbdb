@@ -536,8 +536,9 @@ func (s *HandleListBuildsSuite) TestInvalidCursor_ReturnsError() {
 type HandleGetBuildSuite struct {
 	suite.Suite
 
-	mockBuilds *mocks.MockBuildRepository
-	mockPrefs  *mocks.MockPreferencesReader
+	mockBuilds    *mocks.MockBuildRepository
+	mockKeyboards *mocks.MockKeyboardRepository
+	mockPrefs     *mocks.MockPreferencesReader
 }
 
 func TestHandleGetBuildSuite(t *testing.T) {
@@ -546,7 +547,20 @@ func TestHandleGetBuildSuite(t *testing.T) {
 
 func (s *HandleGetBuildSuite) SetupTest() {
 	s.mockBuilds = mocks.NewMockBuildRepository(s.T())
+	s.mockKeyboards = mocks.NewMockKeyboardRepository(s.T())
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, mock.Anything, "kb-1").
+		Return(&repository.Keyboard{
+			ID:     "kb-1",
+			Plates: []repository.KeyboardPlate{{ID: "plate-1", Material: "FR4"}},
+			PCBs:   []repository.KeyboardPCB{{ID: "pcb-1"}},
+		}, nil).
+		Maybe()
 	s.mockPrefs = mocks.NewMockPreferencesReader(s.T())
+}
+
+func (s *HandleGetBuildSuite) handler() mcp.ToolHandlerFor[schema.GetBuildInput, schema.GetBuildOutput] {
+	return handleGetBuild(s.mockBuilds, s.mockKeyboards, s.mockPrefs)
 }
 
 func (s *HandleGetBuildSuite) TestSucceeds() {
@@ -559,7 +573,7 @@ func (s *HandleGetBuildSuite) TestSucceeds() {
 		}, nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
 
 	s.Require().NoError(err)
@@ -569,8 +583,54 @@ func (s *HandleGetBuildSuite) TestSucceeds() {
 	s.Equal("private", *out.Build.Visibility)
 }
 
+func (s *HandleGetBuildSuite) TestPartsTheKeyboardStillHas_AreKept() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, callerID, "build-1").
+		Return(&repository.Build{
+			ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate,
+			Plate: new("plate-1"), PCB: new("pcb-1"),
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
+
+	_, out, err := s.handler()(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
+
+	s.Require().NoError(err)
+	s.Equal(new("plate-1"), out.Build.Plate)
+	s.Equal(new("pcb-1"), out.Build.PCB)
+}
+
+func (s *HandleGetBuildSuite) TestPartsTheKeyboardNoLongerHas_AreLeftOut() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, callerID, "build-1").
+		Return(&repository.Build{
+			ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPrivate,
+			Plate: new("removed-plate"), PCB: new("removed-pcb"),
+		}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
+
+	_, out, err := s.handler()(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
+
+	s.Require().NoError(err)
+	s.Nil(out.Build.Plate)
+	s.Nil(out.Build.PCB)
+}
+
+func (s *HandleGetBuildSuite) TestKeyboardError_ReturnsError() {
+	s.mockBuilds.EXPECT().
+		Get(mock.Anything, callerID, "build-1").
+		Return(&repository.Build{ID: "build-1", Keyboard: "kb-gone", Visibility: repository.VisibilityPrivate}, nil)
+	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).Return(repository.DefaultProfilePreferences(), nil)
+	s.mockKeyboards.EXPECT().
+		Get(mock.Anything, mock.Anything, "kb-gone").
+		Return(nil, errors.New("dynamo down"))
+
+	_, _, err := s.handler()(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
+
+	s.Require().ErrorContains(err, "failed to get build")
+}
+
 func (s *HandleGetBuildSuite) TestBlankBuildID_ReturnsError() {
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "  "})
 
 	s.Require().ErrorContains(err, "build_id must not be blank")
@@ -581,7 +641,7 @@ func (s *HandleGetBuildSuite) TestNotFound_ReturnsNotFound() {
 		Get(mock.Anything, mock.Anything, "missing").
 		Return(nil, repository.ErrNotFound)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "missing"})
 
 	s.Require().ErrorIs(err, errBuildNotFound)
@@ -592,7 +652,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPrivateBuild_ReturnsNotFound() {
 		Get(mock.Anything, otherID, "build-1").
 		Return(&repository.Build{ID: "build-1", Visibility: repository.VisibilityPrivate}, nil)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().ErrorIs(err, errBuildNotFound)
@@ -604,7 +664,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersSharedVisibilityBuild_Succeeds() {
 		Return(&repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityAuthenticated}, nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, nil)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().NoError(err)
@@ -622,7 +682,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersTrue_Inc
 		}, nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: true}, nil)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().NoError(err)
@@ -641,7 +701,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPublicBuildShowPriceToOthersFalse_Om
 		}, nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{ShowPriceToOthers: false}, nil)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().NoError(err)
@@ -659,7 +719,7 @@ func (s *HandleGetBuildSuite) TestOwner_AlwaysIncludesStabsPriceAndCurrency() {
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, callerID).
 		Return(repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: false}, nil)
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, out, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1"})
 
 	s.Require().NoError(err)
@@ -676,7 +736,7 @@ func (s *HandleGetBuildSuite) TestOtherUsersPreferencesError_ReturnsError() {
 		Return(&repository.Build{ID: "build-1", Keyboard: "kb-1", Visibility: repository.VisibilityPublic}, nil)
 	s.mockPrefs.EXPECT().GetPreferences(mock.Anything, otherID).Return(repository.ProfilePreferences{}, errors.New("dynamo down"))
 
-	handler := handleGetBuild(s.mockBuilds, s.mockPrefs)
+	handler := s.handler()
 	_, _, err := handler(callerContext(s.T()), nil, schema.GetBuildInput{BuildID: "build-1", UserID: otherID})
 
 	s.Require().Error(err)

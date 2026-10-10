@@ -44,10 +44,13 @@ type idMap struct {
 }
 
 // mappedEntity is a restored entity's new id, plus (for array-image entities)
-// the per-image old-id -> new-id map.
+// the per-image old-id -> new-id map, and for a keyboard the same for its
+// plates and PCBs.
 type mappedEntity struct {
 	NewID  string            `json:"new_id"`
 	Images map[string]string `json:"images,omitempty"`
+	Plates map[string]string `json:"plates,omitempty"`
+	PCBs   map[string]string `json:"pcbs,omitempty"`
 }
 
 // mappedKeycaps is a restored keycap set: its new id plus the per-set

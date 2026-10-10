@@ -26,14 +26,21 @@ func fullRepoKeyboard() repository.Keyboard {
 			TopCase:    repository.KeyboardMaterialColor{Material: strPtr("Aluminum"), Color: strPtr("Black")},
 			BottomCase: repository.KeyboardMaterialColor{Material: strPtr("Aluminum"), Color: strPtr("Black")},
 			Weight:     repository.KeyboardMaterialColor{Material: strPtr("Brass"), Color: strPtr("Gold")},
-			Plates:     []string{"FR4", "PC"},
 		},
-		PCB: repository.KeyboardPCB{
+		Plates: []repository.KeyboardPlate{
+			{ID: "p1", Material: "FR4"},
+			{
+				ID: "p2", Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2),
+				Purchase: repository.KeyboardPurchase{Vendor: strPtr("Keychron"), Price: floatPtr(30), OrderDate: strPtr("2026-02-01")},
+			},
+		},
+		PCBs: []repository.KeyboardPCB{{
+			ID:           "b1",
 			Thickness:    floatPtr(1.6),
 			Firmware:     strPtr("QMK/VIA"),
 			Assembly:     strPtr("Hot-swap"),
 			Connectivity: strPtr("Wired"),
-		},
+		}},
 		Purchase: repository.KeyboardPurchase{
 			Vendor:       strPtr("Keychron"),
 			Price:        floatPtr(199.99),
@@ -77,15 +84,31 @@ func (s *KeyboardToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 		s.Equal(kb.Design.BottomCase.Material, out.Design.BottomCase.Material)
 		s.Require().NotNil(out.Design.Weight)
 		s.Equal(kb.Design.Weight.Material, out.Design.Weight.Material)
-		s.Require().NotNil(out.Design.Plates)
-		s.Equal(kb.Design.Plates, *out.Design.Plates)
 	}
-	if s.NotNil(out.Pcb) {
-		s.Equal(kb.PCB.Thickness, out.Pcb.Thickness)
-		s.Equal(kb.PCB.Firmware, out.Pcb.Firmware)
-		s.Equal(kb.PCB.Assembly, out.Pcb.Assembly)
-		s.Equal(kb.PCB.Connectivity, out.Pcb.Connectivity)
+	if s.NotNil(out.Plates) && s.Len(*out.Plates, 2) {
+		s.Equal(api.KeyboardPlate{Id: "p1", Material: "FR4"}, (*out.Plates)[0])
+		p := (*out.Plates)[1]
+		s.Equal("p2", p.Id)
+		s.Equal("PC", p.Material)
+		s.Equal(strPtr("Clear"), p.Color)
+		s.Equal(floatPtr(1.2), p.Thickness)
+		if s.NotNil(p.Purchase) {
+			s.Equal(strPtr("Keychron"), p.Purchase.Vendor)
+			s.Equal(floatPtr(30), p.Purchase.Price)
+			s.Require().NotNil(p.Purchase.OrderDate)
+			s.Equal("2026-02-01", p.Purchase.OrderDate.Format(dateLayout))
+		}
 	}
+	if s.NotNil(out.Pcbs) && s.Len(*out.Pcbs, 1) {
+		pcb := (*out.Pcbs)[0]
+		s.Equal("b1", pcb.Id)
+		s.Equal(kb.PCBs[0].Thickness, pcb.Thickness)
+		s.Equal(kb.PCBs[0].Firmware, pcb.Firmware)
+		s.Equal(kb.PCBs[0].Assembly, pcb.Assembly)
+		s.Equal(kb.PCBs[0].Connectivity, pcb.Connectivity)
+		s.Nil(pcb.Purchase)
+	}
+	s.Equal(floatPtr(229.99), out.TotalCost)
 	if s.NotNil(out.Purchase) {
 		s.Equal(kb.Purchase.Vendor, out.Purchase.Vendor)
 		s.Equal(kb.Purchase.Price, out.Purchase.Price)
@@ -118,8 +141,11 @@ func (s *KeyboardToAPISuite) TestAllOptionalFieldsNil_SubStructsOmitted() {
 	s.Nil(out.Layout)
 	s.Nil(out.Notes)
 	s.Nil(out.Design, "an all-nil KeyboardDesign must map to a nil pointer, not an empty object")
-	s.Nil(out.Pcb, "an all-nil KeyboardPCB must map to a nil pointer, not an empty object")
+	s.Nil(out.Plates)
+	s.Nil(out.Pcbs)
 	s.Nil(out.Purchase, "an all-nil KeyboardPurchase must map to a nil pointer, not an empty object")
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
@@ -137,38 +163,19 @@ func (s *KeyboardToAPISuite) TestOneFieldSetInSubStruct_SubStructPresent() {
 		s.Equal(strPtr("Aluminum"), out.Design.TopCase.Material)
 		s.Nil(out.Design.BottomCase)
 		s.Nil(out.Design.Weight)
-		s.Nil(out.Design.Plates)
 	}
 }
 
-func (s *KeyboardToAPISuite) TestPlatesNil_OmittedFromDesign() {
+func (s *KeyboardToAPISuite) TestMalformedStoredPartDate_ReturnsError() {
 	kb := repository.Keyboard{
 		ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPrivate,
-		Design: repository.KeyboardDesign{TopCase: repository.KeyboardMaterialColor{Material: strPtr("Aluminum")}},
+		PCBs: []repository.KeyboardPCB{{ID: "b1", Purchase: repository.KeyboardPurchase{DeliveryDate: strPtr("not-a-date")}}},
 	}
 
 	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-	out, err := kr.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
+	_, err := kr.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{})
 
-	s.Require().NotNil(out.Design)
-	s.Nil(out.Design.Plates, "a nil Plates slice must map to a nil pointer, not an empty slice")
-}
-
-func (s *KeyboardToAPISuite) TestPlatesEmptySlice_PresentNotNil() {
-	kb := repository.Keyboard{
-		ID: "kb1", Brand: "Keychron", Name: "Q1", Visibility: repository.VisibilityPrivate,
-		Design: repository.KeyboardDesign{Plates: []string{}},
-	}
-
-	kr := Keyboard{Images: mocks.NewMockKeyboardImageStore(s.T())}
-	out, err := kr.ToAPI(s.T().Context(), kb, true, repository.ProfilePreferences{})
-	s.Require().NoError(err)
-
-	s.Require().NotNil(out.Design)
-	if s.NotNil(out.Design.Plates, "an empty (non-nil) Plates slice must still map to a non-nil pointer") {
-		s.Empty(*out.Design.Plates)
-	}
+	s.Require().Error(err)
 }
 
 func (s *KeyboardToAPISuite) TestMalformedStoredDate_ReturnsError() {
@@ -190,6 +197,12 @@ func (s *KeyboardToAPISuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 	out, err := kr.ToAPI(s.T().Context(), kb, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 	s.Require().NoError(err)
 
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+	s.Require().NotNil(out.Plates)
+	s.Require().NotNil((*out.Plates)[1].Purchase)
+	s.Nil((*out.Plates)[1].Purchase.Price)
+	s.Equal(strPtr("Keychron"), (*out.Plates)[1].Purchase.Vendor)
 	s.Require().NotNil(out.Purchase)
 	s.Nil(out.Purchase.Price)
 	s.Equal(kb.Purchase.Vendor, out.Purchase.Vendor)
@@ -212,6 +225,8 @@ func (s *KeyboardToAPISuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
 	s.Equal(kb.Purchase.Price, out.Purchase.Price)
 	s.Require().NotNil(out.Purchase.Currency)
 	s.Equal("EUR", *out.Purchase.Currency)
+	s.Equal(floatPtr(229.99), out.TotalCost)
+	s.Equal(strPtr("EUR"), out.Currency)
 }
 
 func (s *KeyboardToAPISuite) TestOwner_AlwaysIncludesPriceRegardlessOfShowPriceToMe() {
@@ -297,14 +312,17 @@ func (s *KeyboardToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 			TopCase:    &api.MaterialColor{Material: strPtr("Aluminum"), Color: strPtr("Black")},
 			BottomCase: &api.MaterialColor{Material: strPtr("Aluminum"), Color: strPtr("Black")},
 			Weight:     &api.MaterialColor{Material: strPtr("Brass"), Color: strPtr("Gold")},
-			Plates:     &[]string{"FR4", "PC"},
 		},
-		Pcb: &api.KeyboardPCB{
+		Plates: &[]api.KeyboardPlateInput{
+			{Material: "FR4"},
+			{Id: strPtr("p2"), Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2), Purchase: &api.PurchaseInput{Price: floatPtr(30), OrderDate: &orderDate}},
+		},
+		Pcbs: &[]api.KeyboardPCBInput{{
 			Thickness:    floatPtr(1.6),
 			Firmware:     strPtr("QMK/VIA"),
 			Assembly:     strPtr("Hot-swap"),
 			Connectivity: strPtr("Wired"),
-		},
+		}},
 		Purchase: &api.PurchaseInput{
 			Vendor:       strPtr("Keychron"),
 			Price:        floatPtr(199.99),
@@ -328,12 +346,20 @@ func (s *KeyboardToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal(in.Design.TopCase.Material, kb.Design.TopCase.Material)
 	s.Equal(in.Design.BottomCase.Material, kb.Design.BottomCase.Material)
 	s.Equal(in.Design.Weight.Material, kb.Design.Weight.Material)
-	s.Equal(*in.Design.Plates, kb.Design.Plates)
 
-	s.Equal(in.Pcb.Thickness, kb.PCB.Thickness)
-	s.Equal(in.Pcb.Firmware, kb.PCB.Firmware)
-	s.Equal(in.Pcb.Assembly, kb.PCB.Assembly)
-	s.Equal(in.Pcb.Connectivity, kb.PCB.Connectivity)
+	s.Equal([]repository.KeyboardPlate{
+		{Material: "FR4"},
+		{
+			ID: "p2", Material: "PC", Color: strPtr("Clear"), Thickness: floatPtr(1.2),
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(30), OrderDate: strPtr("2026-01-15")},
+		},
+	}, kb.Plates)
+	s.Equal([]repository.KeyboardPCB{{
+		Thickness:    floatPtr(1.6),
+		Firmware:     strPtr("QMK/VIA"),
+		Assembly:     strPtr("Hot-swap"),
+		Connectivity: strPtr("Wired"),
+	}}, kb.PCBs)
 
 	s.Equal(in.Purchase.Vendor, kb.Purchase.Vendor)
 	s.Equal(in.Purchase.Price, kb.Purchase.Price)
@@ -350,7 +376,8 @@ func (s *KeyboardToRepoSuite) TestNilSubStructs_ProduceZeroValueStructs() {
 	kb := Keyboard{}.ToRepo(in)
 
 	s.Equal(repository.KeyboardDesign{}, kb.Design)
-	s.Equal(repository.KeyboardPCB{}, kb.PCB)
+	s.Nil(kb.Plates)
+	s.Nil(kb.PCBs)
 	s.Equal(repository.KeyboardPurchase{}, kb.Purchase)
 }
 
@@ -373,6 +400,23 @@ func (s *KeyboardToAPISuite) TestStripPrices_OnlyPriceSet_DropsPurchase() {
 	Keyboard{}.StripPrices(&out)
 
 	s.Nil(out.Purchase)
+}
+
+func (s *KeyboardToAPISuite) TestStripPrices_ClearsTotalCostAndPartPrices() {
+	price, currency, vendor := 30.0, "EUR", "Amazon"
+	out := api.Keyboard{
+		TotalCost: &price,
+		Currency:  &currency,
+		Plates:    &[]api.KeyboardPlate{{Id: "p1", Purchase: &api.Purchase{Price: &price, Currency: &currency, Vendor: &vendor}}},
+		Pcbs:      &[]api.KeyboardPCB{{Id: "b1", Purchase: &api.Purchase{Price: &price, Currency: &currency}}},
+	}
+
+	Keyboard{}.StripPrices(&out)
+
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+	s.Equal(&api.Purchase{Vendor: &vendor}, (*out.Plates)[0].Purchase)
+	s.Nil((*out.Pcbs)[0].Purchase)
 }
 
 func (s *KeyboardToAPISuite) TestStripPrices_NoPurchase_NoOp() {

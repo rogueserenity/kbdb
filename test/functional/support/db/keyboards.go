@@ -7,13 +7,34 @@ import (
 	"github.com/rogueserenity/kbdb/test/functional/support"
 )
 
+// The seeded keyboard's one plate and one PCB. The plate has its own
+// purchase price, so the keyboard's total_cost is 329.99 + 40.
+const (
+	SeededPlateID = "seeded-plate"
+	SeededPCBID   = "seeded-pcb"
+)
+
+var (
+	seededPlates = []map[string]any{{
+		"id":       SeededPlateID,
+		"material": "FR4",
+		"color":    "Raw",
+		"purchase": map[string]any{"vendor": "Amazon", "price": 40},
+	}}
+	seededPCBs = []map[string]any{{
+		"id":       SeededPCBID,
+		"firmware": "QMK/VIA",
+		"purchase": map[string]any{},
+	}}
+)
+
 // SeedKeyboard PutItems a keyboard directly into DynamoDB, bypassing the
 // API - for specs that need keyboard fixture data in place before
 // exercising a different route. images is seeded as an empty map, matching
 // what Create writes - AddImage/DeleteImage address images.<id> in place,
 // and DynamoDB rejects a nested-path write when the parent map is absent.
 //
-// The nested design/pcb/purchase groups are populated so reads exercise
+// The nested design/plates/pcbs/purchase groups are populated so reads exercise
 // their real DynamoDB round trip. Seeding only the top-level fields would
 // leave a dynamodbav tag mismatch on a nested group invisible to every
 // spec, since the mappers' own tests construct Go structs directly and
@@ -30,9 +51,9 @@ func SeedKeyboard(ctx context.Context, ownerID, id, visibility string) error {
 		"images":     map[string]any{},
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
-			"plates":   []string{"Brass"},
 		},
-		"pcb": map[string]any{"firmware": "QMK/VIA"},
+		"plates": seededPlates,
+		"pcbs":   seededPCBs,
 		"purchase": map[string]any{
 			"vendor":       "Amazon",
 			"price":        329.99,
@@ -57,9 +78,9 @@ func SeedKeyboardWithImage(ctx context.Context, ownerID, id, imageID, visibility
 		"visibility": visibility,
 		"design": map[string]any{
 			"top_case": map[string]any{"material": "Aluminum", "color": "Black"},
-			"plates":   []string{"Brass"},
 		},
-		"pcb": map[string]any{"firmware": "QMK/VIA"},
+		"plates": seededPlates,
+		"pcbs":   seededPCBs,
 		"purchase": map[string]any{
 			"vendor":       "Amazon",
 			"price":        329.99,

@@ -70,6 +70,42 @@ var _ = Describe("Creating a keyboard over MCP", func() {
 			})
 		})
 
+		Context("given plates and PCBs, one PCB with its own purchase", func() {
+			When("the create_keyboard tool is called", func() {
+				BeforeEach(func(ctx SpecContext) {
+					result, err = client.CallTool(ctx, "create_keyboard", map[string]any{
+						"brand":      "Mode",
+						"name":       "Sixty",
+						"visibility": "private",
+						"purchase":   map[string]any{"price": 300},
+						"plates":     []any{map[string]any{"material": "AL"}},
+						"pcbs": []any{
+							map[string]any{"firmware": "QMK/VIA"},
+							map[string]any{"firmware": "ZMK", "purchase": map[string]any{"price": 45, "order_date": "2026-03-01"}},
+						},
+					})
+					captureCreatedID(result)
+				})
+
+				It("stores every part with a server-generated id and prices the extra PCB", func() {
+					Expect(err).NotTo(HaveOccurred())
+					Expect(result.IsError).To(BeFalse())
+
+					out := decodeGetOutput(result)
+					Expect(out.Keyboard.Plates).To(HaveLen(1))
+					Expect(out.Keyboard.Plates[0].ID).NotTo(BeEmpty())
+					Expect(out.Keyboard.Plates[0].Material).To(Equal("AL"))
+					Expect(out.Keyboard.PCBs).To(HaveLen(2))
+					Expect(out.Keyboard.PCBs[0].ID).NotTo(BeEmpty())
+					Expect(out.Keyboard.PCBs[1].ID).NotTo(BeEmpty())
+					Expect(out.Keyboard.PCBs[0].ID).NotTo(Equal(out.Keyboard.PCBs[1].ID))
+					Expect(*out.Keyboard.PCBs[1].Firmware).To(Equal("ZMK"))
+					Expect(out.Keyboard.TotalCost).NotTo(BeNil())
+					Expect(*out.Keyboard.TotalCost).To(Equal(345.0))
+				})
+			})
+		})
+
 		Context("given a size that is not an approved lookup value", func() {
 			When("the create_keyboard tool is called", func() {
 				BeforeEach(func(ctx SpecContext) {

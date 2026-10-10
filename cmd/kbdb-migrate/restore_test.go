@@ -1,6 +1,11 @@
 package main
 
 import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -20,7 +25,11 @@ func TestRestoreSuite(t *testing.T) {
 // one kit) already restored.
 func (s *RestoreSuite) fullMap() *idMap {
 	return &idMap{
-		Keyboards: map[string]*mappedEntity{"kb-old": {NewID: "kb-new"}},
+		Keyboards: map[string]*mappedEntity{"kb-old": {
+			NewID:  "kb-new",
+			Plates: map[string]string{"plate-old": "plate-new"},
+			PCBs:   map[string]string{"pcb-old": "pcb-new"},
+		}},
 		Switches:  map[string]*mappedEntity{"sw-old": {NewID: "sw-new"}},
 		KeycapSets: map[string]*mappedKeycaps{
 			"set-old": {NewID: "set-new", Kits: map[string]string{"kit-old": "kit-new"}},
@@ -30,11 +39,11 @@ func (s *RestoreSuite) fullMap() *idMap {
 }
 
 func (s *RestoreSuite) TestBuildInputFromResolved_RemapsEveryReference() {
-	brass := "brass"
 	full := api.Build{
 		Id:         "b-old",
 		Keyboard:   api.BuildKeyboardRef{Id: "kb-old", Brand: "B", Name: "N"},
-		Plate:      &brass,
+		Plate:      &api.BuildPlateRef{Id: "plate-old", Material: "Brass"},
+		Pcb:        &api.BuildPCBRef{Id: "pcb-old"},
 		Visibility: new(api.Visibility("public")),
 		Switches: &[]api.BuildSwitchEntryResolved{
 			{Count: 70, Switch: api.BuildSwitchRef{Id: "sw-old", Name: "S", Type: "linear"}},
@@ -47,7 +56,8 @@ func (s *RestoreSuite) TestBuildInputFromResolved_RemapsEveryReference() {
 	got, err := buildInputFromResolved(full, s.fullMap())
 	s.Require().NoError(err)
 	s.Equal("kb-new", got.Keyboard)
-	s.Equal("brass", *got.Plate)
+	s.Equal(new("plate-new"), got.Plate)
+	s.Equal(new("pcb-new"), got.Pcb)
 	s.Equal("public", string(got.Visibility))
 
 	s.Require().NotNil(got.Switches)
@@ -66,6 +76,35 @@ func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedKeyboardIsError() {
 	_, err := buildInputFromResolved(full, s.fullMap())
 	s.Require().Error(err)
 	s.ErrorContains(err, "kb-unknown")
+}
+
+func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedPlateIsError() {
+	full := api.Build{
+		Keyboard:   api.BuildKeyboardRef{Id: "kb-old"},
+		Visibility: new(api.Visibility("public")),
+		Plate:      &api.BuildPlateRef{Id: "plate-unknown", Material: "AL"},
+	}
+	_, err := buildInputFromResolved(full, s.fullMap())
+	s.Require().Error(err)
+	s.ErrorContains(err, "plate-unknown")
+}
+
+func (s *RestoreSuite) TestMapPartIDs_PairsByPosition() {
+	dumped := &[]api.KeyboardPlate{{Id: "AL", Material: "AL"}, {Id: "AL#2", Material: "AL"}}
+	created := &[]api.KeyboardPlate{{Id: "n1", Material: "AL"}, {Id: "n2", Material: "AL"}}
+
+	got, err := mapPartIDs(dumped, created, func(p api.KeyboardPlate) string { return p.Id })
+
+	s.Require().NoError(err)
+	s.Equal(map[string]string{"AL": "n1", "AL#2": "n2"}, got)
+}
+
+func (s *RestoreSuite) TestMapPartIDs_CountMismatchIsError() {
+	dumped := &[]api.KeyboardPCB{{Id: "pcb"}}
+
+	_, err := mapPartIDs(dumped, nil, func(p api.KeyboardPCB) string { return p.Id })
+
+	s.Require().Error(err)
 }
 
 func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedSwitchIsError() {
@@ -105,4 +144,32 @@ func (s *RestoreSuite) TestBuildInputFromResolved_MissingKeyboardIsError() {
 	_, err := buildInputFromResolved(api.Build{Visibility: new(api.Visibility("public"))}, s.fullMap())
 	s.Require().Error(err)
 	s.ErrorContains(err, "no keyboard")
+}
+
+func (s *RestoreSuite) TestRestoreKeyboards_PartCountMismatchStillRecordsTheKeyboard() {
+	dumpDir := s.T().TempDir()
+	itemDir := filepath.Join(dumpDir, "keyboards", "kb-old")
+	s.Require().NoError(os.MkdirAll(itemDir, 0o750))
+	s.Require().NoError(os.WriteFile(filepath.Join(itemDir, "item.json"), []byte(
+		`{"id":"kb-old","brand":"Acme","name":"One","visibility":"private","plates":[{"id":"plate-old","material":"FR4"}]}`,
+	), 0o600))
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"kb-new","brand":"Acme","name":"One","visibility":"private"}`))
+	}))
+	defer srv.Close()
+
+	client := &apiClient{baseURL: srv.URL, subject: "u-1", http: srv.Client()}
+	m := newIDMap(s.T().TempDir(), "u-1")
+
+	err := restoreKeyboards(context.Background(), client, dumpDir, m)
+
+	s.Require().ErrorContains(err, "plates")
+	s.Require().Contains(m.Keyboards, "kb-old")
+	s.Equal("kb-new", m.Keyboards["kb-old"].NewID)
+	saved, err := os.ReadFile(m.path)
+	s.Require().NoError(err)
+	s.Contains(string(saved), `"kb-new"`)
 }

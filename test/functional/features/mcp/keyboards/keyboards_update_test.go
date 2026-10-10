@@ -67,6 +67,45 @@ var _ = Describe("Updating a keyboard over MCP", func() {
 			})
 		})
 
+		Context("given the caller owns a keyboard with a plate and PCB", func() {
+			BeforeEach(func(ctx SpecContext) {
+				Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
+			})
+
+			AfterEach(func(ctx SpecContext) {
+				Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
+			})
+
+			Context("given the PCB's id is sent back and a new plate replaces the old one", func() {
+				When("the update_keyboard tool is called", func() {
+					BeforeEach(func(ctx SpecContext) {
+						result, err = client.CallTool(ctx, "update_keyboard", map[string]any{
+							"keyboard_id": keyboardID,
+							"brand":       "Keychron",
+							"name":        "Q1",
+							"visibility":  "private",
+							"plates":      []any{map[string]any{"material": "PC"}},
+							"pcbs":        []any{map[string]any{"id": db.SeededPCBID, "firmware": "ZMK"}},
+						})
+					})
+
+					It("keeps the sent id and replaces the omitted plate with a new one", func() {
+						Expect(err).NotTo(HaveOccurred())
+						Expect(result.IsError).To(BeFalse())
+
+						out := decodeGetOutput(result)
+						Expect(out.Keyboard.PCBs).To(HaveLen(1))
+						Expect(out.Keyboard.PCBs[0].ID).To(Equal(db.SeededPCBID))
+						Expect(*out.Keyboard.PCBs[0].Firmware).To(Equal("ZMK"))
+						Expect(out.Keyboard.Plates).To(HaveLen(1))
+						Expect(out.Keyboard.Plates[0].ID).NotTo(BeEmpty())
+						Expect(out.Keyboard.Plates[0].ID).NotTo(Equal(db.SeededPlateID))
+						Expect(out.Keyboard.Plates[0].Material).To(Equal("PC"))
+					})
+				})
+			})
+		})
+
 		Context("given the keyboard never existed", func() {
 			When("the update_keyboard tool is called with that id", func() {
 				BeforeEach(func(ctx SpecContext) {

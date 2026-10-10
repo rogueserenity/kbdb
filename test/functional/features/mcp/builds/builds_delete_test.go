@@ -87,17 +87,20 @@ var _ = Describe("Deleting a build over MCP", func() {
 		})
 
 		Context("given another user owns the build", func() {
-			var otherID, otherToken string
+			var otherID, otherKeyboardID, otherToken string
 
 			BeforeEach(func(ctx SpecContext) {
 				otherToken, otherID, err = api.NewAuthIdentity(ctx)
 				Expect(err).NotTo(HaveOccurred())
 
-				Expect(db.SeedBuild(ctx, otherID, buildID, keyboardID, "public")).To(Succeed())
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				Expect(db.SeedKeyboard(ctx, otherID, otherKeyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuild(ctx, otherID, buildID, otherKeyboardID, "public")).To(Succeed())
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 			})
 
 			When("the delete_build tool is called with that id", func() {

@@ -56,7 +56,7 @@ func registerTools(
 	sdkmcp.AddTool(s, setKeycapKitImageTool, handleSetKeycapKitImage(keycapSetRepo, imageStore))
 	sdkmcp.AddTool(s, deleteKeycapKitImageTool, handleDeleteKeycapKitImage(keycapSetRepo, imageStore))
 	sdkmcp.AddTool(s, createBuildTool, handleCreateBuild(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, profileRepo))
-	sdkmcp.AddTool(s, getBuildTool, handleGetBuild(buildRepo, profileRepo))
+	sdkmcp.AddTool(s, getBuildTool, handleGetBuild(buildRepo, keyboardRepo, profileRepo))
 	sdkmcp.AddTool(s, listBuildsTool, handleListBuilds(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, profileRepo))
 	sdkmcp.AddTool(s, updateBuildTool, handleUpdateBuild(buildRepo, keyboardRepo, switchRepo, keycapSetRepo, profileRepo))
 	sdkmcp.AddTool(s, deleteBuildTool, handleDeleteBuild(buildRepo, buildImageStore))

@@ -142,16 +142,19 @@ var _ = Describe("Getting a build over MCP", func() {
 		})
 
 		Context("given another user owns a private build", func() {
-			var otherID string
+			var otherID, otherKeyboardID string
 
 			BeforeEach(func(ctx SpecContext) {
 				otherID = api.NewOtherUserID(ctx)
 
-				Expect(db.SeedBuild(ctx, otherID, buildID, keyboardID, "private")).To(Succeed())
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				Expect(db.SeedKeyboard(ctx, otherID, otherKeyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuild(ctx, otherID, buildID, otherKeyboardID, "private")).To(Succeed())
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 			})
 
 			When("the get_build tool is called with that user_id", func() {
@@ -170,16 +173,19 @@ var _ = Describe("Getting a build over MCP", func() {
 		})
 
 		Context("given another user owns a public build", func() {
-			var otherID string
+			var otherID, otherKeyboardID string
 
 			BeforeEach(func(ctx SpecContext) {
 				otherID = api.NewOtherUserID(ctx)
 
-				Expect(db.SeedBuild(ctx, otherID, buildID, keyboardID, "public")).To(Succeed())
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				Expect(db.SeedKeyboard(ctx, otherID, otherKeyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuild(ctx, otherID, buildID, otherKeyboardID, "public")).To(Succeed())
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 			})
 
 			When("the get_build tool is called with that user_id", func() {
@@ -199,16 +205,19 @@ var _ = Describe("Getting a build over MCP", func() {
 		})
 
 		Context("given another user owns a public build with stabs", func() {
-			var otherID string
+			var otherID, otherKeyboardID string
 
 			BeforeEach(func(ctx SpecContext) {
 				otherID = api.NewOtherUserID(ctx)
 
-				Expect(db.SeedBuildWithStabs(ctx, otherID, buildID, keyboardID, "public")).To(Succeed())
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				Expect(db.SeedKeyboard(ctx, otherID, otherKeyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuildWithStabs(ctx, otherID, buildID, otherKeyboardID, "public")).To(Succeed())
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 			})
 
 			When("the get_build tool is called with that user_id", func() {
@@ -237,13 +246,15 @@ var _ = Describe("Getting a build over MCP", func() {
 		})
 
 		Context("given another user owns a public build with stabs and has show_price_to_others true", func() {
-			var otherID, profileUsername string
+			var otherID, otherKeyboardID, profileUsername string
 
 			BeforeEach(func(ctx SpecContext) {
 				otherID = api.NewOtherUserID(ctx)
 				profileUsername = "u" + uuid.NewString()[:8]
 
-				Expect(db.SeedBuildWithStabs(ctx, otherID, buildID, keyboardID, "public")).To(Succeed())
+				otherKeyboardID = "build-fixture-keyboard-" + uuid.NewString()
+				Expect(db.SeedKeyboard(ctx, otherID, otherKeyboardID, "public")).To(Succeed())
+				Expect(db.SeedBuildWithStabs(ctx, otherID, buildID, otherKeyboardID, "public")).To(Succeed())
 				Expect(db.SeedProfile(ctx, otherID, db.SeedProfileOptions{
 					Username: profileUsername,
 					Preferences: map[string]any{
@@ -253,7 +264,8 @@ var _ = Describe("Getting a build over MCP", func() {
 			})
 
 			AfterEach(func(ctx SpecContext) {
-				Expect(db.DeleteBuild(ctx, otherID, buildID, keyboardID)).To(Succeed())
+				Expect(db.DeleteBuild(ctx, otherID, buildID, otherKeyboardID)).To(Succeed())
+				Expect(db.DeleteKeyboard(ctx, otherID, otherKeyboardID)).To(Succeed())
 				Expect(db.DeleteProfile(ctx, otherID, profileUsername)).To(Succeed())
 			})
 

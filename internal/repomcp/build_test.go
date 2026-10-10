@@ -26,7 +26,8 @@ func floatPtr(f float64) *float64 { return &f }
 func boolPtr(b bool) *bool        { return &b }
 
 func (s *BuildToMCPSuite) TestMapsAllFields() {
-	plate := "Brass"
+	plate := "p-1"
+	pcb := "b-1"
 	notes := "first build"
 	buildDate := "2026-01-15"
 
@@ -34,6 +35,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 		ID:       "build-1",
 		Keyboard: "kb-1",
 		Plate:    &plate,
+		PCB:      &pcb,
 		CaseMountType: &repository.BuildCaseMountType{
 			Type:      strPtr("Top Mount"),
 			Durometer: strPtr("70A"),
@@ -61,6 +63,7 @@ func (s *BuildToMCPSuite) TestMapsAllFields() {
 	s.Equal("build-1", out.ID)
 	s.Equal("kb-1", out.Keyboard)
 	s.Equal(&plate, out.Plate)
+	s.Equal(&pcb, out.PCB)
 	s.Require().NotNil(out.CaseMountType)
 	s.Equal("Top Mount", *out.CaseMountType.Type)
 	s.Equal("70A", *out.CaseMountType.Durometer)
@@ -148,13 +151,15 @@ func (s *BuildToMCPSuite) TestNoImages_HasImagesFalse() {
 }
 
 func (s *BuildToMCPSuite) TestBuildFromMCP_MapsAllFields() {
-	plate := "Brass"
+	plate := "p-1"
+	pcb := "b-1"
 	notes := "first build"
 	buildDate := "2026-01-15"
 
 	out := Build{}.FromMCP(schema.BuildInput{
 		Keyboard: "kb-1",
 		Plate:    &plate,
+		PCB:      &pcb,
 		CaseMountType: &schema.BuildCaseMountType{
 			Type:      strPtr("Top Mount"),
 			Durometer: strPtr("70A"),
@@ -178,6 +183,7 @@ func (s *BuildToMCPSuite) TestBuildFromMCP_MapsAllFields() {
 
 	s.Equal("kb-1", out.Keyboard)
 	s.Equal(&plate, out.Plate)
+	s.Equal(&pcb, out.PCB)
 	s.Require().NotNil(out.CaseMountType)
 	s.Equal("Top Mount", *out.CaseMountType.Type)
 	s.Require().NotNil(out.Stabs)
@@ -196,6 +202,7 @@ func (s *BuildToMCPSuite) TestBuildFromMCP_AllOptionalFieldsNil_MapsToNil() {
 	out := Build{}.FromMCP(schema.BuildInput{Keyboard: "kb-1", Visibility: "private"})
 
 	s.Nil(out.Plate)
+	s.Nil(out.PCB)
 	s.Nil(out.CaseMountType)
 	s.Nil(out.Stabs)
 	s.Nil(out.Foam)
@@ -321,6 +328,7 @@ func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
 
 	b := repository.Build{
 		UserID: "alice", ID: "build-1", Keyboard: "kb-1",
+		Plate: strPtr("p-2"), PCB: strPtr("b-1"),
 		Switches:   []repository.BuildSwitchEntry{{Switch: "sw-1", Count: 10}},
 		KeycapKits: []repository.BuildKeycapKitEntry{{KeycapSet: "ks-1", Kit: "kit-1"}},
 		Stabs:      &repository.BuildStabs{Price: &stabsPrice},
@@ -332,6 +340,11 @@ func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb-1",
 			Purchase: repository.KeyboardPurchase{Price: &price},
+			Plates: []repository.KeyboardPlate{
+				{ID: "p-1", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}},
+				{ID: "p-2", Purchase: repository.KeyboardPurchase{Price: floatPtr(30)}},
+			},
+			PCBs: []repository.KeyboardPCB{{ID: "b-1", Purchase: repository.KeyboardPurchase{Price: floatPtr(45)}}},
 		}, nil)
 
 	switches := mocks.NewMockSwitchRepository(s.T())
@@ -357,7 +370,7 @@ func (s *BuildToMCPSummarySuite) TestPriceShown_SumsComponentCosts() {
 	s.Require().NoError(err)
 
 	s.Require().NotNil(out.TotalCost)
-	s.InDelta(340.0, *out.TotalCost, 0.001)
+	s.InDelta(340.0+30+45, *out.TotalCost, 0.001, "only the selected plate and PCB count")
 	s.Require().NotNil(out.Currency)
 	s.Equal("EUR", *out.Currency)
 }

@@ -36,13 +36,16 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 		Layout: &layout,
 		Design: repository.KeyboardDesign{
 			TopCase: repository.KeyboardMaterialColor{Material: &material, Color: &color},
-			Plates:  []string{"Brass", "POM"},
 		},
-		PCB:        repository.KeyboardPCB{Thickness: &thickness, Firmware: &firmware},
-		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status},
+		Plates: []repository.KeyboardPlate{
+			{ID: "p1", Material: "Brass"},
+			{ID: "p2", Material: "POM", Color: &color, Purchase: repository.KeyboardPurchase{Vendor: &vendor, Price: new(25.0)}},
+		},
+		PCBs:       []repository.KeyboardPCB{{ID: "b1", Thickness: &thickness, Firmware: &firmware}},
+		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status, Price: new(300.0)},
 		Notes:      &notes,
 		Visibility: repository.VisibilityPublic,
-	}, true, repository.ProfilePreferences{})
+	}, true, repository.ProfilePreferences{Currency: "USD"})
 
 	s.Equal("kb-1", out.ID)
 	s.Require().NotNil(out.Size)
@@ -50,9 +53,15 @@ func (s *KeyboardToMCPSuite) TestMapsAllFields() {
 	s.Require().NotNil(out.Design)
 	s.Require().NotNil(out.Design.TopCase)
 	s.Equal("Aluminum", *out.Design.TopCase.Material)
-	s.Equal([]string{"Brass", "POM"}, out.Design.Plates)
-	s.Require().NotNil(out.PCB)
-	s.InDelta(1.6, *out.PCB.Thickness, 0.001)
+	s.Equal([]schema.KeyboardPlate{
+		{ID: "p1", Material: "Brass"},
+		{ID: "p2", Material: "POM", Color: &color, Purchase: &schema.KeyboardPartPurchase{Vendor: &vendor, Price: new(25.0), Currency: new("USD")}},
+	}, out.Plates)
+	s.Require().Len(out.PCBs, 1)
+	s.Equal("b1", out.PCBs[0].ID)
+	s.InDelta(1.6, *out.PCBs[0].Thickness, 0.001)
+	s.Nil(out.PCBs[0].Purchase)
+	s.Equal(new(325.0), out.TotalCost)
 	s.Require().NotNil(out.Purchase)
 	s.Equal("Delivered", *out.Purchase.OrderStatus)
 	s.Require().NotNil(out.Visibility)
@@ -69,24 +78,13 @@ func (s *KeyboardToMCPSuite) TestEmptyGroups_CollapseToNil() {
 	out := Keyboard{}.ToMCP(repository.Keyboard{ID: "kb-1", Visibility: repository.VisibilityPrivate}, true, repository.ProfilePreferences{})
 
 	s.Nil(out.Design)
-	s.Nil(out.PCB)
+	s.Nil(out.Plates)
+	s.Nil(out.PCBs)
 	s.Nil(out.Purchase)
+	s.Nil(out.TotalCost)
 	s.Nil(out.Size)
 	s.Nil(out.Layout)
 	s.Nil(out.Notes)
-}
-
-// design collapses only when every part AND plates are empty: plates alone
-// is enough to keep the group, since it's a sibling of the three parts
-// rather than one of them.
-func (s *KeyboardToMCPSuite) TestDesignWithOnlyPlates_IsRetained() {
-	out := Keyboard{}.ToMCP(repository.Keyboard{
-		Design: repository.KeyboardDesign{Plates: []string{"Brass"}},
-	}, true, repository.ProfilePreferences{})
-
-	s.Require().NotNil(out.Design)
-	s.Nil(out.Design.TopCase)
-	s.Equal([]string{"Brass"}, out.Design.Plates)
 }
 
 func (s *KeyboardToMCPSuite) TestDesignWithOnlyOnePart_IsRetained() {
@@ -103,7 +101,6 @@ func (s *KeyboardToMCPSuite) TestDesignWithOnlyOnePart_IsRetained() {
 	s.Equal("PC", *out.Design.Weight.Material)
 	s.Nil(out.Design.TopCase)
 	s.Nil(out.Design.BottomCase)
-	s.Empty(out.Design.Plates)
 }
 
 // A recorded zero must stay distinct from an unset field, or MCP would
@@ -113,13 +110,13 @@ func (s *KeyboardToMCPSuite) TestRecordedZero_SurvivesRoundTrip() {
 	thickness := 0.0
 
 	out := Keyboard{}.ToMCP(repository.Keyboard{
-		PCB:      repository.KeyboardPCB{Thickness: &thickness},
+		PCBs:     []repository.KeyboardPCB{{ID: "b1", Thickness: &thickness}},
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{})
 
-	s.Require().NotNil(out.PCB)
-	s.Require().NotNil(out.PCB.Thickness)
-	s.Zero(*out.PCB.Thickness)
+	s.Require().Len(out.PCBs, 1)
+	s.Require().NotNil(out.PCBs[0].Thickness)
+	s.Zero(*out.PCBs[0].Thickness)
 	s.Require().NotNil(out.Purchase)
 	s.Require().NotNil(out.Purchase.Price)
 	s.Zero(*out.Purchase.Price)
@@ -133,9 +130,15 @@ func (s *KeyboardToMCPSuite) TestNonOwnerShowPriceToOthersFalse_OmitsPriceKeepsR
 	out := Keyboard{}.ToMCP(repository.Keyboard{
 		ID:         "kb-1",
 		Purchase:   repository.KeyboardPurchase{Vendor: &vendor, OrderStatus: &status, Price: &price},
+		PCBs:       []repository.KeyboardPCB{{ID: "b1", Purchase: repository.KeyboardPurchase{Price: &price}}},
 		Visibility: repository.VisibilityPublic,
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
+	s.Nil(out.TotalCost)
+	s.Nil(out.Currency)
+	s.Require().Len(out.PCBs, 1)
+	s.Require().NotNil(out.PCBs[0].Purchase)
+	s.Nil(out.PCBs[0].Purchase.Price)
 	s.Require().NotNil(out.Purchase)
 	s.Nil(out.Purchase.Price)
 	s.Equal(&vendor, out.Purchase.Vendor)
@@ -209,7 +212,7 @@ func (s *KeyboardToMCPSummarySuite) TestNoPurchase_LeavesOrderStatusNil() {
 	s.Nil(out.OrderStatus)
 }
 
-func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
+func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesTotalCost() {
 	price := 199.99
 
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
@@ -217,13 +220,23 @@ func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeTrue_IncludesPrice() {
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{Currency: "EUR", ShowPriceToMe: true})
 
-	s.Require().NotNil(out.Price)
-	s.InDelta(price, *out.Price, 0.0001)
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(price, *out.TotalCost, 0.0001)
 	s.Require().NotNil(out.Currency)
 	s.Equal("EUR", *out.Currency)
 }
 
-func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
+func (s *KeyboardToMCPSummarySuite) TestTotalCost_IncludesPartPrices() {
+	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
+		ID:       "kb-1",
+		Purchase: repository.KeyboardPurchase{Price: new(300.0)},
+		Plates:   []repository.KeyboardPlate{{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: new(40.0)}}},
+	}, true, repository.ProfilePreferences{ShowPriceToMe: true})
+
+	s.Equal(new(340.0), out.TotalCost)
+}
+
+func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsTotalCost() {
 	price := 199.99
 
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
@@ -231,11 +244,11 @@ func (s *KeyboardToMCPSummarySuite) TestOwnerShowPriceToMeFalse_OmitsPrice() {
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, true, repository.ProfilePreferences{ShowPriceToMe: false})
 
-	s.Nil(out.Price)
+	s.Nil(out.TotalCost)
 	s.Nil(out.Currency)
 }
 
-func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPrice() {
+func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsTotalCost() {
 	price := 199.99
 
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
@@ -243,11 +256,11 @@ func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersFalse_OmitsPric
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, false, repository.ProfilePreferences{ShowPriceToOthers: false})
 
-	s.Nil(out.Price)
+	s.Nil(out.TotalCost)
 	s.Nil(out.Currency)
 }
 
-func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPrice() {
+func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesTotalCost() {
 	price := 199.99
 
 	out := Keyboard{}.ToMCPSummary(repository.Keyboard{
@@ -255,8 +268,8 @@ func (s *KeyboardToMCPSummarySuite) TestNonOwnerShowPriceToOthersTrue_IncludesPr
 		Purchase: repository.KeyboardPurchase{Price: &price},
 	}, false, repository.ProfilePreferences{Currency: "EUR", ShowPriceToOthers: true})
 
-	s.Require().NotNil(out.Price)
-	s.InDelta(price, *out.Price, 0.0001)
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(price, *out.TotalCost, 0.0001)
 	s.Require().NotNil(out.Currency)
 	s.Equal("EUR", *out.Currency)
 }
@@ -281,9 +294,11 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 		Size:  &size,
 		Design: &schema.KeyboardDesign{
 			TopCase: &schema.KeyboardMaterialColor{Material: &material},
-			Plates:  []string{"Brass"},
 		},
-		PCB:        &schema.KeyboardPCB{Firmware: &firmware},
+		Plates: []schema.KeyboardPlateInput{
+			{ID: "p1", Material: "Brass", Purchase: &schema.KeyboardPartPurchaseInput{Vendor: new("Divinikey"), OrderDate: new("2026-02-01")}},
+		},
+		PCBs:       []schema.KeyboardPCBInput{{Firmware: &firmware}},
 		Purchase:   &schema.KeyboardPurchaseInput{Price: &price},
 		Visibility: "public",
 	})
@@ -292,8 +307,11 @@ func (s *KeyboardFromMCPSuite) TestMapsAllFields() {
 	s.Equal(repository.VisibilityPublic, out.Visibility)
 	s.Equal("60%", *out.Size)
 	s.Equal("Aluminum", *out.Design.TopCase.Material)
-	s.Equal([]string{"Brass"}, out.Design.Plates)
-	s.Equal("QMK/VIA", *out.PCB.Firmware)
+	s.Equal([]repository.KeyboardPlate{{
+		ID: "p1", Material: "Brass",
+		Purchase: repository.KeyboardPurchase{Vendor: new("Divinikey"), OrderDate: new("2026-02-01")},
+	}}, out.Plates)
+	s.Equal([]repository.KeyboardPCB{{Firmware: &firmware}}, out.PCBs)
 	s.Zero(*out.Purchase.Price, "a recorded zero price must survive the inbound mapping too")
 }
 
@@ -310,9 +328,9 @@ func (s *KeyboardFromMCPSuite) TestNilGroups_MapToZeroValues() {
 	out := Keyboard{}.FromMCP(schema.KeyboardInput{Brand: "B", Name: "N", Visibility: "private"})
 
 	s.Nil(out.Design.TopCase.Material)
-	s.Nil(out.PCB.Firmware)
+	s.Nil(out.Plates)
+	s.Nil(out.PCBs)
 	s.Nil(out.Purchase.Vendor)
-	s.Empty(out.Design.Plates)
 }
 
 func (s *KeyboardToMCPSummarySuite) TestOwner_IncludesVisibility() {

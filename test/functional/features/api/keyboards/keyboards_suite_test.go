@@ -7,6 +7,26 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+// keyboardWithParts decodes the parts of a keyboard response.
+type keyboardWithParts struct {
+	Plates []struct {
+		ID        string   `json:"id"`
+		Material  string   `json:"material"`
+		Color     *string  `json:"color"`
+		Thickness *float64 `json:"thickness"`
+		Purchase  *struct {
+			Vendor      *string  `json:"vendor"`
+			Price       *float64 `json:"price"`
+			OrderStatus *string  `json:"order_status"`
+		} `json:"purchase"`
+	} `json:"plates"`
+	PCBs []struct {
+		ID       string  `json:"id"`
+		Firmware *string `json:"firmware"`
+	} `json:"pcbs"`
+	TotalCost *float64 `json:"total_cost"`
+}
+
 // approvedSize/approvedLayout/approvedCaseMaterial/approvedVendor are real
 // values from internal/lookup/data/. approvedLayout is only valid for
 // approvedSize, not approvedOtherSize - approvedOtherSize lets a spec send

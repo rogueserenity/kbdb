@@ -132,6 +132,38 @@ func compareScalars(dumpRaw, liveRaw []byte, dropKeys ...string) (bool, string) 
 	return false, "scalar fields differ from the dump"
 }
 
+// compareKeyboards compares a keyboard's supplied fields after upgrading a
+// legacy dump. Part ids are server-generated and total_cost is derived, so
+// neither is compared; parts are compared in order.
+func compareKeyboards(dumpRaw, liveRaw []byte) (bool, string) {
+	dumpRaw, err := upgradeKeyboardJSON(dumpRaw)
+	if err != nil {
+		return false, "upgrading dump: " + err.Error()
+	}
+	norm := func(raw []byte) ([]byte, error) {
+		var v map[string]any
+		if err := json.Unmarshal(raw, &v); err != nil {
+			return nil, err
+		}
+		for _, key := range []string{"plates", "pcbs"} {
+			parts, _ := v[key].([]any)
+			for _, p := range parts {
+				if part, ok := p.(map[string]any); ok {
+					delete(part, "id")
+				}
+			}
+		}
+		return json.Marshal(v)
+	}
+	if dumpRaw, err = norm(dumpRaw); err != nil {
+		return false, "parsing dump: " + err.Error()
+	}
+	if liveRaw, err = norm(liveRaw); err != nil {
+		return false, "parsing live keyboard: " + err.Error()
+	}
+	return compareScalars(dumpRaw, liveRaw, "images", "total_cost")
+}
+
 // ---- per-entity verify ----
 
 func verifyKeyboards(ctx context.Context, client *apiClient, dumpDir string, m *idMap) []verifyResult {
@@ -151,7 +183,7 @@ func verifyKeyboards(ctx context.Context, client *apiClient, dumpDir string, m *
 			out = append(out, r)
 			continue
 		}
-		if ok, detail := compareScalars(dumpBody, liveBody, "images"); !ok {
+		if ok, detail := compareKeyboards(dumpBody, liveBody); !ok {
 			r.status, r.detail = statusFieldMismatch, detail
 			out = append(out, r)
 			continue
@@ -241,7 +273,7 @@ func verifyBuilds(ctx context.Context, client *apiClient, dumpDir string, m *idM
 		r := verifyResult{entity: "build", oldID: oldID, newID: mapped.NewID}
 		itemDir := filepath.Join(dumpDir, "builds", oldID)
 		var dumpFull api.Build
-		if err := readJSONFile(filepath.Join(itemDir, "item.json"), &dumpFull); err != nil {
+		if err := readUpgradedJSON(filepath.Join(itemDir, "item.json"), upgradeBuildJSON, &dumpFull); err != nil {
 			r.status, r.detail = statusMissing, "dump item.json unreadable: "+err.Error()
 			out = append(out, r)
 			continue
@@ -277,12 +309,34 @@ func verifyBuilds(ctx context.Context, client *apiClient, dumpDir string, m *idM
 // compareBuildRefs checks that the live build's remapped references match what
 // the id map says they should be. Returns "" on match.
 func compareBuildRefs(dump, live api.Build, m *idMap) string {
-	wantKeyboard := ""
-	if kb, ok := m.Keyboards[dump.Keyboard.Id]; ok {
-		wantKeyboard = kb.NewID
+	kb, ok := m.Keyboards[dump.Keyboard.Id]
+	if !ok || live.Keyboard.Id != kb.NewID {
+		want := ""
+		if ok {
+			want = kb.NewID
+		}
+		return fmt.Sprintf("keyboard ref: want %s, live has %s", want, live.Keyboard.Id)
 	}
-	if wantKeyboard == "" || live.Keyboard.Id != wantKeyboard {
-		return fmt.Sprintf("keyboard ref: want %s, live has %s", wantKeyboard, live.Keyboard.Id)
+
+	var dumpPlate, livePlate *string
+	if dump.Plate != nil {
+		dumpPlate = &dump.Plate.Id
+	}
+	if live.Plate != nil {
+		livePlate = &live.Plate.Id
+	}
+	if detail := comparePartRef("plate", dumpPlate, livePlate, kb.Plates); detail != "" {
+		return detail
+	}
+	var dumpPCB, livePCB *string
+	if dump.Pcb != nil {
+		dumpPCB = &dump.Pcb.Id
+	}
+	if live.Pcb != nil {
+		livePCB = &live.Pcb.Id
+	}
+	if detail := comparePartRef("pcb", dumpPCB, livePCB, kb.PCBs); detail != "" {
+		return detail
 	}
 
 	dumpSwitches := derefSwitches(dump.Switches)
@@ -318,6 +372,22 @@ func compareBuildRefs(dump, live api.Build, m *idMap) string {
 		if wantSet == "" || liveKits[i].KeycapSet != wantSet || wantKit == "" || liveKits[i].Kit != wantKit {
 			return fmt.Sprintf("keycap kit %d ref: want set %s kit %s, live has set %s kit %s", i, wantSet, wantKit, liveKits[i].KeycapSet, liveKits[i].Kit)
 		}
+	}
+	return ""
+}
+
+// comparePartRef checks a build's plate or PCB ref against the keyboard's
+// part id map. Returns "" on match.
+func comparePartRef(field string, dump, live *string, ids map[string]string) string {
+	switch {
+	case dump == nil && live == nil:
+		return ""
+	case dump == nil:
+		return fmt.Sprintf("%s ref: dump has none, live has %s", field, *live)
+	case live == nil:
+		return fmt.Sprintf("%s ref: want %s, live has none", field, ids[*dump])
+	case ids[*dump] == "" || ids[*dump] != *live:
+		return fmt.Sprintf("%s ref: want %s, live has %s", field, ids[*dump], *live)
 	}
 	return ""
 }
