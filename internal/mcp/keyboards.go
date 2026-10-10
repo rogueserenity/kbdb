@@ -12,7 +12,6 @@ import (
 
 	"github.com/rogueserenity/kbdb/internal/authz"
 	"github.com/rogueserenity/kbdb/internal/cascadedelete"
-	"github.com/rogueserenity/kbdb/internal/keyboardparts"
 	"github.com/rogueserenity/kbdb/internal/log"
 	"github.com/rogueserenity/kbdb/internal/lookup"
 	"github.com/rogueserenity/kbdb/internal/mcp/schema"
@@ -36,12 +35,12 @@ var getKeyboardTool = &mcp.Tool{
 
 var createKeyboardTool = &mcp.Tool{
 	Name:        "create_keyboard",
-	Description: "Adds a keyboard to your own collection. List every plate and PCB the keyboard has, including extras; give a part its own purchase only if it was bought or priced separately, and the keyboard's purchase price is then the base price without it. Part ids are server-generated - omit them here. size, layout, the design materials, plate materials, pcb fields and every purchase vendor/status must be approved lookup values - call list_lookups and get_lookup to see them. layout must additionally be valid for the chosen size; get_lookup(\"keyboard_layout\") lists the sizes each layout allows.",
+	Description: "Adds a keyboard to your own collection. Add its plates and PCBs afterwards with create_keyboard_plate and create_keyboard_pcb. The purchase price is the base price, excluding any plate or PCB that gets its own purchase. size, layout, the design materials and the purchase vendor/status must be approved lookup values - call list_lookups and get_lookup to see them. layout must additionally be valid for the chosen size; get_lookup(\"keyboard_layout\") lists the sizes each layout allows.",
 }
 
 var updateKeyboardTool = &mcp.Tool{
 	Name:        "update_keyboard",
-	Description: "Replaces a keyboard in your own collection. Every field is replaced, so omitting an optional field clears it; send the full keyboard, not just the fields you want to change. Send each existing plate's and PCB's id back to keep it - builds reference parts by id - and omit the id only for a part you're adding.",
+	Description: "Replaces a keyboard in your own collection. Every field is replaced, so omitting an optional field clears it; send the full keyboard, not just the fields you want to change. Plates, PCBs and images are left untouched - manage them with their own tools.",
 }
 
 var deleteKeyboardTool = &mcp.Tool{
@@ -142,10 +141,6 @@ func handleCreateKeyboard(
 			return nil, schema.CreateKeyboardOutput{}, err
 		}
 
-		if err := assignKeyboardPartIDs(&kb, nil); err != nil {
-			return nil, schema.CreateKeyboardOutput{}, err
-		}
-
 		kb.ID = uuid.NewString()
 
 		ownerPrefs, err := callerPreferences(ctx, prefs)
@@ -179,20 +174,6 @@ func handleUpdateKeyboard(
 
 		kb, err := validatedKeyboard(ctx, in.KeyboardInput)
 		if err != nil {
-			return nil, schema.UpdateKeyboardOutput{}, err
-		}
-
-		ownerID, err := resolveOwnerID(ctx, "")
-		if err != nil {
-			return nil, schema.UpdateKeyboardOutput{}, err
-		}
-
-		existing, err := keyboardRepo.Get(ctx, ownerID, in.KeyboardID)
-		if mutErr := handleMutationError(ctx, err, log.KeyboardID, in.KeyboardID); mutErr != nil {
-			return nil, schema.UpdateKeyboardOutput{}, mutErr
-		}
-
-		if err := assignKeyboardPartIDs(&kb, existing); err != nil {
 			return nil, schema.UpdateKeyboardOutput{}, err
 		}
 
@@ -365,22 +346,8 @@ func validatedKeyboard(
 	}
 
 	if in.Purchase != nil {
-		if err := validatePurchaseDates("purchase", in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
+		if err := validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
 			return repository.Keyboard{}, err
-		}
-	}
-	for i, p := range in.Plates {
-		if p.Purchase != nil {
-			if err := validatePurchaseDates(fmt.Sprintf("plates[%d].purchase", i), p.Purchase.OrderDate, p.Purchase.DeliveryDate); err != nil {
-				return repository.Keyboard{}, err
-			}
-		}
-	}
-	for i, p := range in.PCBs {
-		if p.Purchase != nil {
-			if err := validatePurchaseDates(fmt.Sprintf("pcbs[%d].purchase", i), p.Purchase.OrderDate, p.Purchase.DeliveryDate); err != nil {
-				return repository.Keyboard{}, err
-			}
 		}
 	}
 
@@ -402,22 +369,6 @@ func validatedKeyboard(
 	}
 
 	return kb, nil
-}
-
-// assignKeyboardPartIDs reports every part id the call can't use. existing
-// is nil on create.
-func assignKeyboardPartIDs(kb *repository.Keyboard, existing *repository.Keyboard) error {
-	fieldErrs := keyboardparts.AssignIDs(kb, existing, uuid.NewString)
-	if len(fieldErrs) == 0 {
-		return nil
-	}
-
-	reasons := make([]string, len(fieldErrs))
-	for i, fe := range fieldErrs {
-		reasons[i] = fmt.Sprintf("%s: %q %s", fe.Field, fe.Value, fe.Reason)
-	}
-
-	return errors.New(strings.Join(reasons, "; "))
 }
 
 // ValidateKeyboard reports a layout that isn't valid for the chosen size as

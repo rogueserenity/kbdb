@@ -660,6 +660,54 @@ Resources:
             ApiId: !Ref HttpApi
             Path: /v1/users/{userId}/keyboards/{keyboardId}/images/{imageId}
             Method: delete
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        CreateKeyboardPlateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/plates
+            Method: post
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        UpdateKeyboardPlateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/plates/{plateId}
+            Method: put
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        DeleteKeyboardPlateEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/plates/{plateId}
+            Method: delete
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        CreateKeyboardPCBEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/pcbs
+            Method: post
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        UpdateKeyboardPCBEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/pcbs/{pcbId}
+            Method: put
+        # Default OidcAuthorizer applies - same rationale as
+        # CreateKeyboardEvent.
+        DeleteKeyboardPCBEvent:
+          Type: HttpApi
+          Properties:
+            ApiId: !Ref HttpApi
+            Path: /v1/users/{userId}/keyboards/{keyboardId}/pcbs/{pcbId}
+            Method: delete
         # Auth: NONE at the gateway - same rationale as ListKeyboardsEvent.
         ListKeycapSetsEvent:
           Type: HttpApi

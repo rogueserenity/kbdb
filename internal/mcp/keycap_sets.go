@@ -475,7 +475,7 @@ func validatedKeycapKit(
 	}
 
 	if in.Purchase != nil {
-		if err := validatePurchaseDates("purchase", in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
+		if err := validatePurchaseDates(in.Purchase.OrderDate, in.Purchase.DeliveryDate); err != nil {
 			return repository.KeycapKit{}, err
 		}
 	}

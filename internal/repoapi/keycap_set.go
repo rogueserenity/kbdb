@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 	"sync"
 	"time"
 
@@ -22,19 +21,20 @@ type KeycapSet struct {
 // always sees each kit's own Purchase.Price; a non-owner sees it only if
 // ownerPrefs.ShowPriceToOthers. Returns an error if a stored kit's Purchase
 // date doesn't match dateLayout, or if a kit has an ImagePath and
-// Images.PresignGet fails. Kits are mapped concurrently, sorted by kit_id
-// for a stable order - each only touches its own slot in mapped, and a set
+// Images.PresignGet fails. Kits are mapped concurrently, in
+// repository.SortedKits order (seq, the order they were added, then
+// kit_id) - each only touches its own slot in mapped, and a set
 // can have an unbounded number of kits, each potentially needing its own S3
 // presign.
 func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.KeycapSet, error) {
 	var kits *[]api.KeycapKit
 	if len(set.Kits) > 0 {
-		ids := sortedKitIDs(set.Kits)
-		mapped := make([]api.KeycapKit, len(ids))
-		errs := make([]error, len(ids))
+		sorted := repository.SortedKits(set.Kits)
+		mapped := make([]api.KeycapKit, len(sorted))
+		errs := make([]error, len(sorted))
 
 		var wg sync.WaitGroup
-		for i, id := range ids {
+		for i, kit := range sorted {
 			wg.Add(1)
 			go func(i int, k repository.KeycapKit) {
 				defer wg.Done()
@@ -45,7 +45,7 @@ func (ks KeycapSet) ToAPI(ctx context.Context, set repository.KeycapSet, isOwner
 					return
 				}
 				mapped[i] = apiKit
-			}(i, set.Kits[id])
+			}(i, kit)
 		}
 		wg.Wait()
 
@@ -226,14 +226,4 @@ func validPrimaryKitID(primaryKitID *string, kits map[string]repository.KeycapKi
 		return nil
 	}
 	return primaryKitID
-}
-
-// sortedKitIDs returns kits' keys sorted, for a deterministic output order.
-func sortedKitIDs(kits map[string]repository.KeycapKit) []string {
-	ids := make([]string, 0, len(kits))
-	for id := range kits {
-		ids = append(ids, id)
-	}
-	slices.Sort(ids)
-	return ids
 }

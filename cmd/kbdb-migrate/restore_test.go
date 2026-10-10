@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/suite"
@@ -30,7 +33,7 @@ func (s *RestoreSuite) fullMap() *idMap {
 			Plates: map[string]string{"plate-old": "plate-new"},
 			PCBs:   map[string]string{"pcb-old": "pcb-new"},
 		}},
-		Switches:  map[string]*mappedEntity{"sw-old": {NewID: "sw-new"}},
+		Switches: map[string]*mappedEntity{"sw-old": {NewID: "sw-new"}},
 		KeycapSets: map[string]*mappedKeycaps{
 			"set-old": {NewID: "set-new", Kits: map[string]string{"kit-old": "kit-new"}},
 		},
@@ -89,24 +92,6 @@ func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedPlateIsError() {
 	s.ErrorContains(err, "plate-unknown")
 }
 
-func (s *RestoreSuite) TestMapPartIDs_PairsByPosition() {
-	dumped := &[]api.KeyboardPlate{{Id: "AL", Material: "AL"}, {Id: "AL#2", Material: "AL"}}
-	created := &[]api.KeyboardPlate{{Id: "n1", Material: "AL"}, {Id: "n2", Material: "AL"}}
-
-	got, err := mapPartIDs(dumped, created, func(p api.KeyboardPlate) string { return p.Id })
-
-	s.Require().NoError(err)
-	s.Equal(map[string]string{"AL": "n1", "AL#2": "n2"}, got)
-}
-
-func (s *RestoreSuite) TestMapPartIDs_CountMismatchIsError() {
-	dumped := &[]api.KeyboardPCB{{Id: "pcb"}}
-
-	_, err := mapPartIDs(dumped, nil, func(p api.KeyboardPCB) string { return p.Id })
-
-	s.Require().Error(err)
-}
-
 func (s *RestoreSuite) TestBuildInputFromResolved_UnmappedSwitchIsError() {
 	full := api.Build{
 		Keyboard:   api.BuildKeyboardRef{Id: "kb-old"},
@@ -146,18 +131,32 @@ func (s *RestoreSuite) TestBuildInputFromResolved_MissingKeyboardIsError() {
 	s.ErrorContains(err, "no keyboard")
 }
 
-func (s *RestoreSuite) TestRestoreKeyboards_PartCountMismatchStillRecordsTheKeyboard() {
+func (s *RestoreSuite) TestRestoreKeyboards_AddsPartsInDumpedOrderAndMapsTheirIDs() {
 	dumpDir := s.T().TempDir()
 	itemDir := filepath.Join(dumpDir, "keyboards", "kb-old")
 	s.Require().NoError(os.MkdirAll(itemDir, 0o750))
 	s.Require().NoError(os.WriteFile(filepath.Join(itemDir, "item.json"), []byte(
-		`{"id":"kb-old","brand":"Acme","name":"One","visibility":"private","plates":[{"id":"plate-old","material":"FR4"}]}`,
+		`{"id":"kb-old","brand":"Acme","name":"One","visibility":"private",`+
+			`"plates":[{"id":"plate-a","material":"FR4"},{"id":"plate-b","material":"PC"}],`+
+			`"pcbs":[{"id":"pcb-a","assembly":"Hotswap"}]}`,
 	), 0o600))
 
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body map[string]any
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		calls = append(calls, fmt.Sprintf("%s %s %v", r.Method, r.URL.Path, body["material"]))
+
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte(`{"id":"kb-new","brand":"Acme","name":"One","visibility":"private"}`))
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/plates"):
+			_, _ = fmt.Fprintf(w, `{"id":"new-%v","material":%q}`, body["material"], body["material"])
+		case strings.HasSuffix(r.URL.Path, "/pcbs"):
+			_, _ = w.Write([]byte(`{"id":"new-pcb"}`))
+		default:
+			_, _ = w.Write([]byte(`{"id":"kb-new","brand":"Acme","name":"One","visibility":"private"}`))
+		}
 	}))
 	defer srv.Close()
 
@@ -166,10 +165,42 @@ func (s *RestoreSuite) TestRestoreKeyboards_PartCountMismatchStillRecordsTheKeyb
 
 	err := restoreKeyboards(context.Background(), client, dumpDir, m)
 
-	s.Require().ErrorContains(err, "plates")
-	s.Require().Contains(m.Keyboards, "kb-old")
-	s.Equal("kb-new", m.Keyboards["kb-old"].NewID)
-	saved, err := os.ReadFile(m.path)
 	s.Require().NoError(err)
-	s.Contains(string(saved), `"kb-new"`)
+	s.Equal([]string{
+		"POST /v1/users/u-1/keyboards <nil>",
+		"POST /v1/users/u-1/keyboards/kb-new/plates FR4",
+		"POST /v1/users/u-1/keyboards/kb-new/plates PC",
+		"POST /v1/users/u-1/keyboards/kb-new/pcbs <nil>",
+	}, calls)
+	s.Equal(map[string]string{"plate-a": "new-FR4", "plate-b": "new-PC"}, m.Keyboards["kb-old"].Plates)
+	s.Equal(map[string]string{"pcb-a": "new-pcb"}, m.Keyboards["kb-old"].PCBs)
+}
+
+func (s *RestoreSuite) TestRestoreKeyboards_ResumeSkipsPartsAlreadyMapped() {
+	dumpDir := s.T().TempDir()
+	itemDir := filepath.Join(dumpDir, "keyboards", "kb-old")
+	s.Require().NoError(os.MkdirAll(itemDir, 0o750))
+	s.Require().NoError(os.WriteFile(filepath.Join(itemDir, "item.json"), []byte(
+		`{"id":"kb-old","brand":"Acme","name":"One","visibility":"private",`+
+			`"plates":[{"id":"plate-a","material":"FR4"},{"id":"plate-b","material":"PC"}]}`,
+	), 0o600))
+
+	var calls []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		calls = append(calls, r.Method+" "+r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"new-b","material":"PC"}`))
+	}))
+	defer srv.Close()
+
+	client := &apiClient{baseURL: srv.URL, subject: "u-1", http: srv.Client()}
+	m := newIDMap(s.T().TempDir(), "u-1")
+	m.Keyboards["kb-old"] = &mappedEntity{NewID: "kb-new", Images: map[string]string{}, Plates: map[string]string{"plate-a": "new-a"}}
+
+	err := restoreKeyboards(context.Background(), client, dumpDir, m)
+
+	s.Require().NoError(err)
+	s.Equal([]string{"POST /v1/users/u-1/keyboards/kb-new/plates"}, calls)
+	s.Equal(map[string]string{"plate-a": "new-a", "plate-b": "new-b"}, m.Keyboards["kb-old"].Plates)
 }

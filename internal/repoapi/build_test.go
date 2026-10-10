@@ -128,8 +128,8 @@ func (d buildToAPIDeps) expectFullyResolvable() {
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1", Size: strPtr("75%"), Layout: strPtr("ANSI"),
-			Plates: []repository.KeyboardPlate{{ID: "p1", Material: "Brass", Color: strPtr("Raw"), Thickness: floatPtr(1.5)}},
-			PCBs:   []repository.KeyboardPCB{{ID: "b1", Firmware: strPtr("QMK/VIA"), Assembly: strPtr("Hot-swap")}},
+			Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{{ID: "p1", Material: "Brass", Color: strPtr("Raw"), Thickness: floatPtr(1.5)}}),
+			PCBs:   repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1", Firmware: strPtr("QMK/VIA"), Assembly: strPtr("Hot-swap")}}),
 		}, nil)
 	d.switchRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
@@ -612,14 +612,14 @@ func (s *BuildToAPISuite) TestTotalCost_AddsOnlySelectedPlateAndPCB() {
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
 			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
-			Plates: []repository.KeyboardPlate{
+			Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{
 				{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}},
 				{ID: "p2", Material: "PC", Purchase: repository.KeyboardPurchase{Price: floatPtr(30)}},
-			},
-			PCBs: []repository.KeyboardPCB{
+			}),
+			PCBs: repository.KeyboardPCBsMap([]repository.KeyboardPCB{
 				{ID: "b1", Purchase: repository.KeyboardPurchase{Price: floatPtr(45)}},
 				{ID: "b2", Purchase: repository.KeyboardPurchase{Price: floatPtr(60)}},
-			},
+			}),
 		}, nil)
 
 	out, err := d.call(context.Background(), b)
@@ -640,7 +640,7 @@ func (s *BuildToAPISuite) TestPartsNoLongerOnKeyboard_OmittedAndUnpriced() {
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
 			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
-			Plates:   []repository.KeyboardPlate{{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}}},
+			Plates:   repository.KeyboardPlatesMap([]repository.KeyboardPlate{{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}}}),
 		}, nil)
 
 	out, err := d.call(context.Background(), b)

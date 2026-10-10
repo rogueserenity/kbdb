@@ -580,12 +580,8 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesOpenVocabularyFields()
 		{"design.top_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"top_case":{"material":"NotApproved"}}}`},
 		{"design.bottom_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"bottom_case":{"material":"NotApproved"}}}`},
 		{"design.weight.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"weight":{"material":"NotApproved"}}}`},
-		{"pcbs[0].firmware", `{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"firmware":"NotApproved"}]}`},
-		{"pcbs[0].assembly", `{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"assembly":"NotApproved"}]}`},
-		{"pcbs[0].connectivity", `{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"connectivity":"NotApproved"}]}`},
 		{"purchase.vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
 		{"purchase.order_status", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
-		{"plates[0].purchase.vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"material":"AL","purchase":{"vendor":"NotApproved"}}]}`},
 	}
 
 	for _, tt := range tests {
@@ -600,48 +596,6 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesOpenVocabularyFields()
 			s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 		})
 	}
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_ValidatesPlateMaterials() {
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"material":"NotApproved"}]}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-
-	var got struct {
-		InvalidParams []problem.InvalidParam `json:"invalid_params"`
-	}
-	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Require().Len(got.InvalidParams, 1)
-	s.Equal("plates[0].material", got.InvalidParams[0].Name)
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_AssignsPartIDs() {
-	s.mockKeyboardRepo.EXPECT().
-		Create(mock.Anything, mock.MatchedBy(func(kb repository.Keyboard) bool {
-			return len(kb.Plates) == 1 && kb.Plates[0].ID != "" && len(kb.PCBs) == 1 && kb.PCBs[0].ID != ""
-		})).
-		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-			return &kb, nil
-		})
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"material":"AL"}],"pcbs":[{}]}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusCreated, rec.Code)
-}
-
-func (s *CreateKeyboardSuite) TestCreateKeyboard_SentPartID_Returns400() {
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"id":"made-up","material":"AL"}]}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutValidForSize_Succeeds() {
@@ -698,11 +652,12 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_LayoutWithoutSize_SkipsSizeChec
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_MultipleInvalidFields_NamesAll() {
-	// size and pcbs[0].firmware are both invalid here - the response must
-	// report both via invalid_params, not just the first one checked.
+	// size and design.top_case.material are both invalid here - the
+	// response must report both via invalid_params, not just the first one
+	// checked.
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved",`+
-			`"pcbs":[{"firmware":"AlsoNotApproved"}]}`)
+			`"design":{"top_case":{"material":"AlsoNotApproved"}}}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -717,7 +672,7 @@ func (s *CreateKeyboardSuite) TestCreateKeyboard_MultipleInvalidFields_NamesAll(
 		names[i] = p.Name
 	}
 	s.Contains(names, "size")
-	s.Contains(names, "pcbs[0].firmware")
+	s.Contains(names, "design.top_case.material")
 }
 
 func (s *CreateKeyboardSuite) TestCreateKeyboard_InvalidSize_DoesNotCascadeIntoLayoutError() {
@@ -831,11 +786,6 @@ func (s *UpdateKeyboardSuite) SetupTest() {
 	s.mockKeyboardRepo = mocks.NewMockKeyboardRepository(s.T())
 	s.mockImages = mocks.NewMockKeyboardImageStore(s.T())
 	s.handler = UpdateKeyboard(s.mockKeyboardRepo, repoapi.Keyboard{Images: s.mockImages, Repo: s.mockKeyboardRepo})
-	s.mockKeyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{
-			UserID: "alice", ID: "kb1",
-			Plates: []repository.KeyboardPlate{{ID: "plate-1", Material: "AL"}},
-		}, nil).Maybe()
 }
 
 func (s *UpdateKeyboardSuite) newRequest(ctx context.Context, body string) *http.Request {
@@ -892,12 +842,8 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesOpenVocabularyFields()
 		{"design.top_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"top_case":{"material":"NotApproved"}}}`},
 		{"design.bottom_case.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"bottom_case":{"material":"NotApproved"}}}`},
 		{"design.weight.material", `{"brand":"Keychron","name":"Q1","visibility":"private","design":{"weight":{"material":"NotApproved"}}}`},
-		{"pcbs[0].firmware", `{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"firmware":"NotApproved"}]}`},
-		{"pcbs[0].assembly", `{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"assembly":"NotApproved"}]}`},
-		{"pcbs[0].connectivity", `{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"connectivity":"NotApproved"}]}`},
 		{"purchase.vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"vendor":"NotApproved"}}`},
 		{"purchase.order_status", `{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"order_status":"NotApproved"}}`},
-		{"plates[0].purchase.vendor", `{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"material":"AL","purchase":{"vendor":"NotApproved"}}]}`},
 	}
 
 	for _, tt := range tests {
@@ -912,22 +858,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesOpenVocabularyFields()
 			s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
 		})
 	}
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_ValidatesPlateMaterials() {
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"material":"NotApproved"}]}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-
-	var got struct {
-		InvalidParams []problem.InvalidParam `json:"invalid_params"`
-	}
-	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Require().Len(got.InvalidParams, 1)
-	s.Equal("plates[0].material", got.InvalidParams[0].Name)
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutValidForSize_Succeeds() {
@@ -984,11 +914,12 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_LayoutWithoutSize_SkipsSizeChec
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MultipleInvalidFields_NamesAll() {
-	// size and pcbs[0].firmware are both invalid here - the response must
-	// report both via invalid_params, not just the first one checked.
+	// size and design.top_case.material are both invalid here - the
+	// response must report both via invalid_params, not just the first one
+	// checked.
 	req := s.newRequest(s.ownerCtx(),
 		`{"brand":"Keychron","name":"Q1","visibility":"private","size":"NotApproved",`+
-			`"pcbs":[{"firmware":"AlsoNotApproved"}]}`)
+			`"design":{"top_case":{"material":"AlsoNotApproved"}}}`)
 	rec := httptest.NewRecorder()
 	s.handler(rec, req)
 
@@ -1003,7 +934,7 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MultipleInvalidFields_NamesAll(
 		names[i] = p.Name
 	}
 	s.Contains(names, "size")
-	s.Contains(names, "pcbs[0].firmware")
+	s.Contains(names, "design.top_case.material")
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_InvalidSize_DoesNotCascadeIntoLayoutError() {
@@ -1066,51 +997,6 @@ func (s *UpdateKeyboardSuite) TestUpdateKeyboard_NotFound_Returns404() {
 
 	s.Equal(http.StatusNotFound, rec.Code)
 	s.Equal("application/problem+json", rec.Header().Get("Content-Type"))
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_MissingOnRead_Returns404WithoutWriting() {
-	s.mockKeyboardRepo.ExpectedCalls = nil
-	s.mockKeyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").Return(nil, repository.ErrNotFound)
-
-	req := s.newRequest(s.ownerCtx(), `{"brand":"Keychron","name":"Q1","visibility":"private"}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusNotFound, rec.Code)
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_KeepsSentPartIDsAndAssignsNewOnes() {
-	s.mockKeyboardRepo.EXPECT().
-		Update(mock.Anything, mock.MatchedBy(func(kb repository.Keyboard) bool {
-			return len(kb.Plates) == 2 && kb.Plates[0].ID == "plate-1" &&
-				kb.Plates[1].ID != "" && kb.Plates[1].ID != "plate-1"
-		})).
-		RunAndReturn(func(_ context.Context, kb repository.Keyboard) (*repository.Keyboard, error) {
-			return &kb, nil
-		})
-
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"id":"plate-1","material":"AL"},{"material":"PC"}]}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusOK, rec.Code)
-}
-
-func (s *UpdateKeyboardSuite) TestUpdateKeyboard_UnknownPartID_Returns400() {
-	req := s.newRequest(s.ownerCtx(),
-		`{"brand":"Keychron","name":"Q1","visibility":"private","pcbs":[{"id":"plate-1"}]}`)
-	rec := httptest.NewRecorder()
-	s.handler(rec, req)
-
-	s.Equal(http.StatusBadRequest, rec.Code)
-
-	var got struct {
-		InvalidParams []problem.InvalidParam `json:"invalid_params"`
-	}
-	s.Require().NoError(json.Unmarshal(rec.Body.Bytes(), &got))
-	s.Require().Len(got.InvalidParams, 1)
-	s.Equal("pcbs[0].id", got.InvalidParams[0].Name)
 }
 
 func (s *UpdateKeyboardSuite) TestUpdateKeyboard_RepositoryError_Returns500() {

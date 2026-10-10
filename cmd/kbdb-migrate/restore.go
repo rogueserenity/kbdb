@@ -110,63 +110,113 @@ func restoreKeyboards(ctx context.Context, client *apiClient, dumpDir string, m 
 		fmt.Printf("keyboards (%d)...\n", total)
 	}
 	for i, oldID := range oldIDs {
-		if _, done := m.Keyboards[oldID]; done {
-			skipResume("keyboards", i+1, total, oldID)
-			continue
-		}
 		itemDir := filepath.Join(dumpDir, "keyboards", oldID)
 
 		var full api.Keyboard
 		if err := readUpgradedJSON(filepath.Join(itemDir, "item.json"), upgradeKeyboardJSON, &full); err != nil {
 			return err
 		}
-		visibility, err := dumpedVisibility(full.Visibility)
-		if err != nil {
-			return fmt.Errorf("keyboard %s: %w", oldID, err)
+
+		// Resume-aware, like keycap sets: create the keyboard only if it
+		// isn't mapped yet, then (re)walk its parts and images, skipping any
+		// already mapped.
+		mapped := m.Keyboards[oldID]
+		if mapped == nil {
+			visibility, err := dumpedVisibility(full.Visibility)
+			if err != nil {
+				return fmt.Errorf("keyboard %s: %w", oldID, err)
+			}
+			input := api.KeyboardInput{
+				Brand:      full.Brand,
+				Design:     full.Design,
+				Layout:     full.Layout,
+				Name:       full.Name,
+				Notes:      full.Notes,
+				Purchase:   purchaseInput(full.Purchase),
+				Size:       full.Size,
+				Visibility: visibility,
+			}
+			var created api.Keyboard
+			if err := client.doJSON(ctx, http.MethodPost, client.userPath("keyboards"), input, &created); err != nil {
+				return fmt.Errorf("creating keyboard (was %s): %w", oldID, err)
+			}
+			mapped = &mappedEntity{NewID: created.Id, Images: map[string]string{}}
+			m.Keyboards[oldID] = mapped
+			if err := m.save(); err != nil {
+				return err
+			}
+			progress("keyboards", i+1, total, oldID, created.Id)
+		} else {
+			skipResume("keyboards", i+1, total, oldID)
 		}
-		input := api.KeyboardInput{
-			Brand:      full.Brand,
-			Design:     full.Design,
-			Layout:     full.Layout,
-			Name:       full.Name,
-			Notes:      full.Notes,
-			Plates:     plateInputs(full.Plates),
-			Pcbs:       pcbInputs(full.Pcbs),
-			Purchase:   purchaseInput(full.Purchase),
-			Size:       full.Size,
-			Visibility: visibility,
+		if mapped.Plates == nil {
+			mapped.Plates = map[string]string{}
 		}
-		var created api.Keyboard
-		if err := client.doJSON(ctx, http.MethodPost, client.userPath("keyboards"), input, &created); err != nil {
-			return fmt.Errorf("creating keyboard (was %s): %w", oldID, err)
+		if mapped.PCBs == nil {
+			mapped.PCBs = map[string]string{}
 		}
-		mapped := &mappedEntity{NewID: created.Id, Images: map[string]string{}}
-		var platesErr, pcbsErr error
-		if mapped.Plates, platesErr = mapPartIDs(full.Plates, created.Plates, func(p api.KeyboardPlate) string { return p.Id }); platesErr != nil {
-			platesErr = fmt.Errorf("keyboard %s plates: %w", created.Id, platesErr)
-		}
-		if mapped.PCBs, pcbsErr = mapPartIDs(full.Pcbs, created.Pcbs, func(p api.KeyboardPCB) string { return p.Id }); pcbsErr != nil {
-			pcbsErr = fmt.Errorf("keyboard %s pcbs: %w", created.Id, pcbsErr)
-		}
-		// The keyboard exists now, so it's recorded even when its parts didn't
-		// map; otherwise a rerun would create it again.
-		m.Keyboards[oldID] = mapped
-		if err := m.save(); err != nil {
+
+		if err := restoreKeyboardParts(ctx, client, m, mapped, full); err != nil {
 			return err
 		}
-		if err := errors.Join(platesErr, pcbsErr); err != nil {
-			return err
-		}
-		progress("keyboards", i+1, total, oldID, created.Id)
 
 		if err := restoreArrayImages(ctx, client, itemDir,
-			client.userPath("keyboards/"+created.Id+"/images"),
-			client.userPath("keyboards/"+created.Id),
+			client.userPath("keyboards/"+mapped.NewID+"/images"),
+			client.userPath("keyboards/"+mapped.NewID),
 			mapped); err != nil {
-			return fmt.Errorf("keyboard %s images: %w", created.Id, err)
+			return fmt.Errorf("keyboard %s images: %w", mapped.NewID, err)
 		}
 		if err := m.save(); err != nil {
 			return err
+		}
+	}
+	return nil
+}
+
+// restoreKeyboardParts adds full's plates and PCBs to the restored keyboard
+// in their dumped order, so they keep it, recording each new part id.
+func restoreKeyboardParts(ctx context.Context, client *apiClient, m *idMap, mapped *mappedEntity, full api.Keyboard) error {
+	if full.Plates != nil {
+		for _, p := range *full.Plates {
+			if _, done := mapped.Plates[p.Id]; done {
+				continue
+			}
+			in := api.KeyboardPlateInput{
+				Material:  p.Material,
+				Color:     p.Color,
+				Thickness: p.Thickness,
+				Purchase:  purchaseInput(p.Purchase),
+			}
+			var created api.KeyboardPlate
+			if err := client.doJSON(ctx, http.MethodPost, client.userPath("keyboards/"+mapped.NewID+"/plates"), in, &created); err != nil {
+				return fmt.Errorf("creating plate %q on keyboard %s: %w", p.Id, mapped.NewID, err)
+			}
+			mapped.Plates[p.Id] = created.Id
+			if err := m.save(); err != nil {
+				return err
+			}
+		}
+	}
+	if full.Pcbs != nil {
+		for _, p := range *full.Pcbs {
+			if _, done := mapped.PCBs[p.Id]; done {
+				continue
+			}
+			in := api.KeyboardPCBInput{
+				Thickness:    p.Thickness,
+				Firmware:     p.Firmware,
+				Assembly:     p.Assembly,
+				Connectivity: p.Connectivity,
+				Purchase:     purchaseInput(p.Purchase),
+			}
+			var created api.KeyboardPCB
+			if err := client.doJSON(ctx, http.MethodPost, client.userPath("keyboards/"+mapped.NewID+"/pcbs"), in, &created); err != nil {
+				return fmt.Errorf("creating PCB %q on keyboard %s: %w", p.Id, mapped.NewID, err)
+			}
+			mapped.PCBs[p.Id] = created.Id
+			if err := m.save(); err != nil {
+				return err
+			}
 		}
 	}
 	return nil
@@ -367,59 +417,6 @@ func restoreBuilds(ctx context.Context, client *apiClient, dumpDir string, m *id
 		}
 	}
 	return nil
-}
-
-func plateInputs(plates *[]api.KeyboardPlate) *[]api.KeyboardPlateInput {
-	if plates == nil {
-		return nil
-	}
-	out := make([]api.KeyboardPlateInput, len(*plates))
-	for i, p := range *plates {
-		out[i] = api.KeyboardPlateInput{
-			Material:  p.Material,
-			Color:     p.Color,
-			Thickness: p.Thickness,
-			Purchase:  purchaseInput(p.Purchase),
-		}
-	}
-	return &out
-}
-
-func pcbInputs(pcbs *[]api.KeyboardPCB) *[]api.KeyboardPCBInput {
-	if pcbs == nil {
-		return nil
-	}
-	out := make([]api.KeyboardPCBInput, len(*pcbs))
-	for i, p := range *pcbs {
-		out[i] = api.KeyboardPCBInput{
-			Thickness:    p.Thickness,
-			Firmware:     p.Firmware,
-			Assembly:     p.Assembly,
-			Connectivity: p.Connectivity,
-			Purchase:     purchaseInput(p.Purchase),
-		}
-	}
-	return &out
-}
-
-// mapPartIDs pairs each dumped part's id with the id the server gave the part
-// in the same position of the created keyboard.
-func mapPartIDs[T any](dumped, created *[]T, id func(T) string) (map[string]string, error) {
-	var d, c []T
-	if dumped != nil {
-		d = *dumped
-	}
-	if created != nil {
-		c = *created
-	}
-	if len(d) != len(c) {
-		return nil, fmt.Errorf("dump has %d, created keyboard has %d", len(d), len(c))
-	}
-	out := make(map[string]string, len(d))
-	for i := range d {
-		out[id(d[i])] = id(c[i])
-	}
-	return out, nil
 }
 
 func purchaseInput(p *api.Purchase) *api.PurchaseInput {

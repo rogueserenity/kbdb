@@ -23,8 +23,8 @@ func (k Keyboard) ToMCP(kb repository.Keyboard, isOwner bool, ownerPrefs reposit
 		Size:       kb.Size,
 		Layout:     kb.Layout,
 		Design:     k.designToMCP(kb.Design),
-		Plates:     k.platesToMCP(kb.Plates, isOwner, ownerPrefs),
-		PCBs:       k.pcbsToMCP(kb.PCBs, isOwner, ownerPrefs),
+		Plates:     k.platesToMCP(repository.SortedPlates(kb.Plates), isOwner, ownerPrefs),
+		PCBs:       k.pcbsToMCP(repository.SortedPCBs(kb.PCBs), isOwner, ownerPrefs),
 		Purchase:   k.purchaseToMCP(kb.Purchase, isOwner, ownerPrefs),
 		Notes:      kb.Notes,
 		Visibility: ownerVisibility(kb.Visibility, isOwner),
@@ -100,16 +100,21 @@ func (k Keyboard) platesToMCP(plates []repository.KeyboardPlate, isOwner bool, o
 
 	out := make([]schema.KeyboardPlate, len(plates))
 	for i, p := range plates {
-		out[i] = schema.KeyboardPlate{
-			ID:        p.ID,
-			Material:  p.Material,
-			Color:     p.Color,
-			Thickness: p.Thickness,
-			Purchase:  k.partPurchaseToMCP(p.Purchase, isOwner, ownerPrefs),
-		}
+		out[i] = k.PlateToMCP(p, isOwner, ownerPrefs)
 	}
 
 	return out
+}
+
+// PlateToMCP maps one plate, with the same price rules as [Keyboard.ToMCP].
+func (k Keyboard) PlateToMCP(p repository.KeyboardPlate, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeyboardPlate {
+	return schema.KeyboardPlate{
+		ID:        p.ID,
+		Material:  p.Material,
+		Color:     p.Color,
+		Thickness: p.Thickness,
+		Purchase:  k.partPurchaseToMCP(p.Purchase, isOwner, ownerPrefs),
+	}
 }
 
 func (k Keyboard) pcbsToMCP(pcbs []repository.KeyboardPCB, isOwner bool, ownerPrefs repository.ProfilePreferences) []schema.KeyboardPCB {
@@ -119,17 +124,22 @@ func (k Keyboard) pcbsToMCP(pcbs []repository.KeyboardPCB, isOwner bool, ownerPr
 
 	out := make([]schema.KeyboardPCB, len(pcbs))
 	for i, p := range pcbs {
-		out[i] = schema.KeyboardPCB{
-			ID:           p.ID,
-			Thickness:    p.Thickness,
-			Firmware:     p.Firmware,
-			Assembly:     p.Assembly,
-			Connectivity: p.Connectivity,
-			Purchase:     k.partPurchaseToMCP(p.Purchase, isOwner, ownerPrefs),
-		}
+		out[i] = k.PCBToMCP(p, isOwner, ownerPrefs)
 	}
 
 	return out
+}
+
+// PCBToMCP maps one PCB, with the same price rules as [Keyboard.ToMCP].
+func (k Keyboard) PCBToMCP(p repository.KeyboardPCB, isOwner bool, ownerPrefs repository.ProfilePreferences) schema.KeyboardPCB {
+	return schema.KeyboardPCB{
+		ID:           p.ID,
+		Thickness:    p.Thickness,
+		Firmware:     p.Firmware,
+		Assembly:     p.Assembly,
+		Connectivity: p.Connectivity,
+		Purchase:     k.partPurchaseToMCP(p.Purchase, isOwner, ownerPrefs),
+	}
 }
 
 func (k Keyboard) partPurchaseToMCP(p repository.KeyboardPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) *schema.KeyboardPartPurchase {
@@ -166,7 +176,8 @@ func (k Keyboard) purchaseToMCP(p repository.KeyboardPurchase, isOwner bool, own
 
 // FromMCP maps a create_keyboard/update_keyboard tool argument to its
 // repository shape. ID and UserID are left unset: the caller sets ID, and
-// UserID comes from ctx in the repository layer.
+// UserID comes from ctx in the repository layer. Plates and PCBs have
+// their own tools, so the input carries neither.
 func (k Keyboard) FromMCP(in schema.KeyboardInput) repository.Keyboard {
 	return repository.Keyboard{
 		Brand:      in.Brand,
@@ -174,8 +185,6 @@ func (k Keyboard) FromMCP(in schema.KeyboardInput) repository.Keyboard {
 		Size:       in.Size,
 		Layout:     in.Layout,
 		Design:     k.designFromMCP(in.Design),
-		Plates:     k.platesFromMCP(in.Plates),
-		PCBs:       k.pcbsFromMCP(in.PCBs),
 		Purchase:   k.purchaseFromMCP(in.Purchase),
 		Notes:      in.Notes,
 		Visibility: repository.Visibility(in.Visibility),
@@ -205,43 +214,25 @@ func (k Keyboard) materialColorFromMCP(mc *schema.KeyboardMaterialColor) reposit
 	}
 }
 
-func (k Keyboard) platesFromMCP(plates []schema.KeyboardPlateInput) []repository.KeyboardPlate {
-	if len(plates) == 0 {
-		return nil
+// PlateFromMCP maps a plate tool argument. ID is left for the caller to set.
+func (k Keyboard) PlateFromMCP(in schema.KeyboardPlateInput) repository.KeyboardPlate {
+	return repository.KeyboardPlate{
+		Material:  in.Material,
+		Color:     in.Color,
+		Thickness: in.Thickness,
+		Purchase:  k.partPurchaseFromMCP(in.Purchase),
 	}
-
-	out := make([]repository.KeyboardPlate, len(plates))
-	for i, p := range plates {
-		out[i] = repository.KeyboardPlate{
-			ID:        p.ID,
-			Material:  p.Material,
-			Color:     p.Color,
-			Thickness: p.Thickness,
-			Purchase:  k.partPurchaseFromMCP(p.Purchase),
-		}
-	}
-
-	return out
 }
 
-func (k Keyboard) pcbsFromMCP(pcbs []schema.KeyboardPCBInput) []repository.KeyboardPCB {
-	if len(pcbs) == 0 {
-		return nil
+// PCBFromMCP maps a PCB tool argument. ID is left for the caller to set.
+func (k Keyboard) PCBFromMCP(in schema.KeyboardPCBInput) repository.KeyboardPCB {
+	return repository.KeyboardPCB{
+		Thickness:    in.Thickness,
+		Firmware:     in.Firmware,
+		Assembly:     in.Assembly,
+		Connectivity: in.Connectivity,
+		Purchase:     k.partPurchaseFromMCP(in.Purchase),
 	}
-
-	out := make([]repository.KeyboardPCB, len(pcbs))
-	for i, p := range pcbs {
-		out[i] = repository.KeyboardPCB{
-			ID:           p.ID,
-			Thickness:    p.Thickness,
-			Firmware:     p.Firmware,
-			Assembly:     p.Assembly,
-			Connectivity: p.Connectivity,
-			Purchase:     k.partPurchaseFromMCP(p.Purchase),
-		}
-	}
-
-	return out
 }
 
 func (k Keyboard) partPurchaseFromMCP(p *schema.KeyboardPartPurchaseInput) repository.KeyboardPurchase {

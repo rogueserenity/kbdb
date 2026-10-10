@@ -75,45 +75,54 @@ func (s *ValidateKeyboardSuite) TestInvalidLayoutName_ReturnsFieldError() {
 	}, errs)
 }
 
-func (s *ValidateKeyboardSuite) TestInvalidPlateMaterial_ReturnsIndexedFieldError() {
-	kb := repository.Keyboard{
-		Plates: []repository.KeyboardPlate{{Material: "AL"}, {Material: "NotAMaterial"}},
+type ValidateKeyboardPartsSuite struct {
+	suite.Suite
+}
+
+func TestValidateKeyboardPartsSuite(t *testing.T) {
+	suite.Run(t, new(ValidateKeyboardPartsSuite))
+}
+
+func (s *ValidateKeyboardPartsSuite) TestValidPlate_ReturnsNoErrors() {
+	s.Empty(lookup.ValidateKeyboardPlate(s.T().Context(), repository.KeyboardPlate{Material: "AL"}))
+}
+
+func (s *ValidateKeyboardPartsSuite) TestInvalidPlate_ReturnsFieldErrors() {
+	bad := "NotAValue"
+	plate := repository.KeyboardPlate{
+		Material: "NotAMaterial",
+		Purchase: repository.KeyboardPurchase{Vendor: &bad, OrderStatus: &bad},
 	}
 
-	errs := lookup.ValidateKeyboard(s.T().Context(), kb)
-	s.Equal([]lookup.FieldError{
-		{Field: "plates[1].material", Value: "NotAMaterial", Category: lookup.CategoryKeyboardPlateMaterial},
+	errs := lookup.ValidateKeyboardPlate(s.T().Context(), plate)
+	s.ElementsMatch([]lookup.FieldError{
+		{Field: "material", Value: "NotAMaterial", Category: lookup.CategoryKeyboardPlateMaterial},
+		{Field: "purchase.vendor", Value: bad, Category: lookup.CategoryVendor},
+		{Field: "purchase.order_status", Value: bad, Category: lookup.CategoryOrderStatus},
 	}, errs)
 }
 
-func (s *ValidateKeyboardSuite) TestInvalidPCBFields_ReturnsIndexedFieldErrors() {
-	valid := "QMK/VIA"
+func (s *ValidateKeyboardPartsSuite) TestUnsetPCBFields_SkipsValidation() {
+	s.Empty(lookup.ValidateKeyboardPCB(s.T().Context(), repository.KeyboardPCB{}))
+}
+
+func (s *ValidateKeyboardPartsSuite) TestInvalidPCB_ReturnsFieldErrors() {
 	bad := "NotAValue"
-	kb := repository.Keyboard{
-		PCBs: []repository.KeyboardPCB{
-			{Firmware: &valid},
-			{Firmware: &bad, Assembly: &bad, Connectivity: &bad},
-		},
+	pcb := repository.KeyboardPCB{
+		Firmware: &bad, Assembly: &bad, Connectivity: &bad,
+		Purchase: repository.KeyboardPurchase{OrderStatus: &bad},
 	}
 
-	errs := lookup.ValidateKeyboard(s.T().Context(), kb)
+	errs := lookup.ValidateKeyboardPCB(s.T().Context(), pcb)
 	s.ElementsMatch([]lookup.FieldError{
-		{Field: "pcbs[1].firmware", Value: bad, Category: lookup.CategoryKeyboardPCBFirmware},
-		{Field: "pcbs[1].assembly", Value: bad, Category: lookup.CategoryKeyboardPCBAssemblyType},
-		{Field: "pcbs[1].connectivity", Value: bad, Category: lookup.CategoryKeyboardPCBConnectivityType},
+		{Field: "firmware", Value: bad, Category: lookup.CategoryKeyboardPCBFirmware},
+		{Field: "assembly", Value: bad, Category: lookup.CategoryKeyboardPCBAssemblyType},
+		{Field: "connectivity", Value: bad, Category: lookup.CategoryKeyboardPCBConnectivityType},
+		{Field: "purchase.order_status", Value: bad, Category: lookup.CategoryOrderStatus},
 	}, errs)
 }
 
-func (s *ValidateKeyboardSuite) TestInvalidPartPurchase_ReturnsIndexedFieldErrors() {
-	bad := "NotAValue"
-	kb := repository.Keyboard{
-		Plates: []repository.KeyboardPlate{{Material: "AL", Purchase: repository.KeyboardPurchase{Vendor: &bad}}},
-		PCBs:   []repository.KeyboardPCB{{Purchase: repository.KeyboardPurchase{OrderStatus: &bad}}},
-	}
-
-	errs := lookup.ValidateKeyboard(s.T().Context(), kb)
-	s.ElementsMatch([]lookup.FieldError{
-		{Field: "plates[0].purchase.vendor", Value: bad, Category: lookup.CategoryVendor},
-		{Field: "pcbs[0].purchase.order_status", Value: bad, Category: lookup.CategoryOrderStatus},
-	}, errs)
+func (s *ValidateKeyboardPartsSuite) TestValidPCB_ReturnsNoErrors() {
+	v, a, c := "QMK/VIA", "EC", "Tri-Mode"
+	s.Empty(lookup.ValidateKeyboardPCB(s.T().Context(), repository.KeyboardPCB{Firmware: &v, Assembly: &a, Connectivity: &c}))
 }

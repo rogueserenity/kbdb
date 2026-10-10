@@ -93,6 +93,23 @@ func (s *KeycapSetToAPISuite) TestKitsPopulated_MapsEachKit() {
 	s.Equal("Extension", (*out.Kits)[1].Name)
 }
 
+func (s *KeycapSetToAPISuite) TestKits_ListedInSeqOrder() {
+	ks := fullRepoKeycapSet()
+	ks.Kits = map[string]repository.KeycapKit{
+		"aaa": {KitID: "aaa", Name: "Added last", Seq: 20},
+		"zzz": {KitID: "zzz", Name: "Added first", Seq: 10},
+	}
+
+	kr := KeycapSet{Images: mocks.NewMockKeycapKitImageStore(s.T())}
+	out, err := kr.ToAPI(context.Background(), ks, true, repository.ProfilePreferences{})
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.Kits)
+	s.Require().Len(*out.Kits, 2)
+	s.Equal("zzz", (*out.Kits)[0].KitId)
+	s.Equal("aaa", (*out.Kits)[1].KitId)
+}
+
 func (s *KeycapSetToAPISuite) TestKitsWithDifferingOrderStatus_SetsAggregateOrderStatus() {
 	ks := fullRepoKeycapSet()
 	delivered, ordered := "Delivered", "Ordered"

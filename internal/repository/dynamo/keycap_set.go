@@ -242,13 +242,17 @@ func (r *KeycapSetRepository) AddKit(ctx context.Context, setID string, kit repo
 		return nil, fmt.Errorf("adding kit to keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	kitPath := "kits." + kit.KitID
-	update := expression.Set(expression.Name(kitPath), expression.Value(kit))
+	kit.Seq = int(time.Now().UnixNano())
+	kitPath, ok := mapKey("kits", kit.KitID)
+	if !ok {
+		return nil, fmt.Errorf("adding kit %q to keycap set %q: %w", kit.KitID, setID, errInvalidMapKey)
+	}
+	update := expression.Set(kitPath, expression.Value(kit))
 	if primary != nil && *primary {
 		update = update.Set(expression.Name("primary_kit_id"), expression.Value(kit.KitID))
 	}
 	cond := expression.AttributeExists(expression.Name("id")).
-		And(expression.AttributeNotExists(expression.Name(kitPath)))
+		And(expression.AttributeNotExists(kitPath))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
 	if err != nil {
@@ -296,18 +300,21 @@ func (r *KeycapSetRepository) UpdateKit(ctx context.Context, setID string, kit r
 		return nil, fmt.Errorf("updating kit in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	kitPath := "kits." + kit.KitID
+	kitPath, ok := mapKey("kits", kit.KitID)
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
 	// name/purchase only, so image_path is left untouched.
 	update := expression.
-		Set(expression.Name(kitPath+".name"), expression.Value(kit.Name)).
-		Set(expression.Name(kitPath+".purchase"), expression.Value(kit.Purchase))
+		Set(field(kitPath, "name"), expression.Value(kit.Name)).
+		Set(field(kitPath, "purchase"), expression.Value(kit.Purchase))
 	if primary != nil && *primary {
 		update = update.Set(expression.Name("primary_kit_id"), expression.Value(kit.KitID))
 	}
 
 	expr, err := expression.NewBuilder().
 		WithUpdate(update).
-		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
+		WithCondition(expression.AttributeExists(kitPath)).
 		Build()
 	if err != nil {
 		return nil, fmt.Errorf("building update-kit expression for keycap set %q: %w", setID, err)
@@ -373,10 +380,13 @@ func (r *KeycapSetRepository) DeleteKit(ctx context.Context, setID, kitID string
 		return fmt.Errorf("deleting kit from keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	kitPath := "kits." + kitID
+	kitPath, ok := mapKey("kits", kitID)
+	if !ok {
+		return nil
+	}
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Remove(expression.Name(kitPath))).
-		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
+		WithUpdate(expression.Remove(kitPath)).
+		WithCondition(expression.AttributeExists(kitPath)).
 		Build()
 	if err != nil {
 		return fmt.Errorf("building delete-kit expression for keycap set %q: %w", setID, err)
@@ -423,13 +433,16 @@ func (r *KeycapSetRepository) SetKitImagePath(ctx context.Context, setID, kitID 
 		return fmt.Errorf("setting kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	kitPath := "kits." + kitID
-	update := expression.Set(expression.Name(kitPath+".image_path"), expression.Value(key)).
-		Remove(expression.Name(kitPath + ".get_url")).
-		Remove(expression.Name(kitPath + ".get_url_expires_at"))
+	kitPath, ok := mapKey("kits", kitID)
+	if !ok {
+		return repository.ErrNotFound
+	}
+	update := expression.Set(field(kitPath, "image_path"), expression.Value(key)).
+		Remove(field(kitPath, "get_url")).
+		Remove(field(kitPath, "get_url_expires_at"))
 	expr, err := expression.NewBuilder().
 		WithUpdate(update).
-		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
+		WithCondition(expression.AttributeExists(kitPath)).
 		Build()
 	if err != nil {
 		return fmt.Errorf("building set-kit-image expression for keycap set %q: %w", setID, err)
@@ -462,13 +475,16 @@ func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitI
 		return nil, fmt.Errorf("clearing kit image path in keycap set %q: %w", setID, repository.ErrNoUserID)
 	}
 
-	kitPath := "kits." + kitID
-	update := expression.Remove(expression.Name(kitPath + ".image_path")).
-		Remove(expression.Name(kitPath + ".get_url")).
-		Remove(expression.Name(kitPath + ".get_url_expires_at"))
+	kitPath, ok := mapKey("kits", kitID)
+	if !ok {
+		return nil, repository.ErrNotFound
+	}
+	update := expression.Remove(field(kitPath, "image_path")).
+		Remove(field(kitPath, "get_url")).
+		Remove(field(kitPath, "get_url_expires_at"))
 	expr, err := expression.NewBuilder().
 		WithUpdate(update).
-		WithCondition(expression.AttributeExists(expression.Name(kitPath))).
+		WithCondition(expression.AttributeExists(kitPath)).
 		Build()
 	if err != nil {
 		return nil, fmt.Errorf("building clear-kit-image expression for keycap set %q: %w", setID, err)
@@ -506,11 +522,14 @@ func (r *KeycapSetRepository) ClearKitImagePath(ctx context.Context, setID, kitI
 
 // SetKitImageGetCache implements repository.KeycapSetRepository.
 func (r *KeycapSetRepository) SetKitImageGetCache(ctx context.Context, ownerID, setID, kitID string, forPath repository.KeycapKitImageKey, url string, expiresAt time.Time) (bool, error) {
-	kitPath := "kits." + kitID
-	update := expression.Set(expression.Name(kitPath+".get_url"), expression.Value(url)).
-		Set(expression.Name(kitPath+".get_url_expires_at"), expression.Value(expiresAt))
-	cond := expression.AttributeExists(expression.Name(kitPath)).
-		And(expression.Name(kitPath + ".image_path").Equal(expression.Value(forPath)))
+	kitPath, ok := mapKey("kits", kitID)
+	if !ok {
+		return false, nil
+	}
+	update := expression.Set(field(kitPath, "get_url"), expression.Value(url)).
+		Set(field(kitPath, "get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(kitPath).
+		And(field(kitPath, "image_path").Equal(expression.Value(forPath)))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
 	if err != nil {

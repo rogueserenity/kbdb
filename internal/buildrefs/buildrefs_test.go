@@ -83,8 +83,8 @@ func (s *ValidateReferencesSuite) TestPartsOnKeyboard_Succeed() {
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1",
-			Plates: []repository.KeyboardPlate{{ID: "p1", Material: "Brass"}, {ID: "p2", Material: "FR4"}},
-			PCBs:   []repository.KeyboardPCB{{ID: "b1"}},
+			Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{{ID: "p1", Material: "Brass"}, {ID: "p2", Material: "FR4"}}),
+			PCBs:   repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1"}}),
 		}, nil)
 
 	plate, pcb := "p2", "b1"
@@ -99,8 +99,8 @@ func (s *ValidateReferencesSuite) TestPartsNotOnKeyboard_ReturnFieldErrors() {
 		Get(mock.Anything, "alice", "kb1").
 		Return(&repository.Keyboard{
 			UserID: "alice", ID: "kb1",
-			Plates: []repository.KeyboardPlate{{ID: "p1", Material: "Brass"}},
-			PCBs:   []repository.KeyboardPCB{{ID: "b1"}},
+			Plates: repository.KeyboardPlatesMap([]repository.KeyboardPlate{{ID: "p1", Material: "Brass"}}),
+			PCBs:   repository.KeyboardPCBsMap([]repository.KeyboardPCB{{ID: "b1"}}),
 		}, nil)
 
 	plate, pcb := "Brass", "b2"

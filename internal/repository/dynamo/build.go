@@ -409,11 +409,14 @@ func (r *BuildRepository) AddImage(ctx context.Context, buildID string, image re
 		return fmt.Errorf("adding image to build %q: %w", buildID, repository.ErrNoUserID)
 	}
 
-	imagePath := "images." + image.ImageID
+	imagePath, ok := mapKey("images", image.ImageID)
+	if !ok {
+		return fmt.Errorf("adding image %q to build: %w", image.ImageID, errInvalidMapKey)
+	}
 	entry := repository.BuildImageEntry{Path: image.Path, Seq: int(time.Now().UnixNano())}
-	update := expression.Set(expression.Name(imagePath), expression.Value(entry))
+	update := expression.Set(imagePath, expression.Value(entry))
 	cond := expression.AttributeExists(expression.Name("id")).
-		And(expression.AttributeNotExists(expression.Name(imagePath))).
+		And(expression.AttributeNotExists(imagePath)).
 		And(expression.Size(expression.Name("images")).LessThan(expression.Value(repository.MaxImagesPerItem)))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
@@ -473,12 +476,15 @@ func (r *BuildRepository) DeleteImage(ctx context.Context, buildID, imageID stri
 		return nil, fmt.Errorf("deleting image from build %q: %w", buildID, repository.ErrNoUserID)
 	}
 
-	imagePath := "images." + imageID
+	imagePath, ok := mapKey("images", imageID)
+	if !ok {
+		return nil, nil //nolint:nilnil // no stored image can have this id, so it's already absent
+	}
 	expr, err := expression.NewBuilder().
-		WithUpdate(expression.Remove(expression.Name(imagePath))).
+		WithUpdate(expression.Remove(imagePath)).
 		WithCondition(
 			expression.AttributeExists(expression.Name("id")).
-				And(expression.AttributeExists(expression.Name(imagePath))),
+				And(expression.AttributeExists(imagePath)),
 		).
 		Build()
 	if err != nil {
@@ -521,11 +527,14 @@ func (r *BuildRepository) DeleteImage(ctx context.Context, buildID, imageID stri
 
 // SetImageGetCache implements repository.BuildRepository.
 func (r *BuildRepository) SetImageGetCache(ctx context.Context, ownerID, buildID, imageID string, forPath repository.BuildImageKey, url string, expiresAt time.Time) (bool, error) {
-	imagePath := "images." + imageID
-	update := expression.Set(expression.Name(imagePath+".get_url"), expression.Value(url)).
-		Set(expression.Name(imagePath+".get_url_expires_at"), expression.Value(expiresAt))
-	cond := expression.AttributeExists(expression.Name(imagePath)).
-		And(expression.Name(imagePath + ".path").Equal(expression.Value(forPath)))
+	imagePath, ok := mapKey("images", imageID)
+	if !ok {
+		return false, nil
+	}
+	update := expression.Set(field(imagePath, "get_url"), expression.Value(url)).
+		Set(field(imagePath, "get_url_expires_at"), expression.Value(expiresAt))
+	cond := expression.AttributeExists(imagePath).
+		And(field(imagePath, "path").Equal(expression.Value(forPath)))
 
 	expr, err := expression.NewBuilder().WithUpdate(update).WithCondition(cond).Build()
 	if err != nil {

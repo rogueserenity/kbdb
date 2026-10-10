@@ -11,6 +11,8 @@ import (
 const (
 	Error          = "error"
 	KeyboardID     = "keyboard_id"
+	KeyboardPlate  = "keyboard_plate_id"
+	KeyboardPCB    = "keyboard_pcb_id"
 	SwitchID       = "switch_id"
 	KeycapSetID    = "keycap_set_id"
 	KeycapKitID    = "keycap_kit_id"

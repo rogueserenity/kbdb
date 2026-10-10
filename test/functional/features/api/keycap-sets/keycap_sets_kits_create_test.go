@@ -98,7 +98,7 @@ var _ = Describe("Creating a keycap kit", func() {
 						Expect(err).NotTo(HaveOccurred())
 					})
 
-					It("accumulates kits rather than replacing the existing one", func(ctx SpecContext) {
+					It("accumulates kits in the order they were added", func(ctx SpecContext) {
 						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
 
 						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
@@ -116,7 +116,41 @@ var _ = Describe("Creating a keycap kit", func() {
 						for i, k := range set.Kits {
 							names[i] = k.Name
 						}
-						Expect(names).To(ConsistOf("Base", "Extension"))
+						Expect(names).To(Equal([]string{"Base", "Extension"}))
+					})
+				})
+			})
+
+			Context("given the set has a kit stored before kits had an order", func() {
+				BeforeEach(func(ctx SpecContext) {
+					// A kit id that sorts after any UUID, so ordering by id
+					// would list the new kit first.
+					Expect(db.SeedKeycapSetWithKit(ctx, ownerID, keycapSetID, "zzz-legacy-kit", "private")).To(Succeed())
+				})
+
+				When("creating a kit", func() {
+					BeforeEach(func(ctx SpecContext) {
+						var err error
+						resp, err = client.CreateKit(ctx, ownerID, keycapSetID, ownerToken, `{"name":"Extension"}`)
+						Expect(err).NotTo(HaveOccurred())
+					})
+
+					It("lists the new kit after the existing one", func(ctx SpecContext) {
+						Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+						getResp, err := client.Get(ctx, ownerID, keycapSetID, ownerToken)
+						Expect(err).NotTo(HaveOccurred())
+
+						var set struct {
+							Kits []struct {
+								KitID string `json:"kit_id"`
+								Name  string `json:"name"`
+							} `json:"kits"`
+						}
+						Expect(json.NewDecoder(getResp.Body).Decode(&set)).To(Succeed())
+						Expect(set.Kits).To(HaveLen(2))
+						Expect(set.Kits[0].KitID).To(Equal("zzz-legacy-kit"))
+						Expect(set.Kits[1].Name).To(Equal("Extension"))
 					})
 				})
 			})
