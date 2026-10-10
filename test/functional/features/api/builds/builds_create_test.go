@@ -210,6 +210,45 @@ var _ = Describe("Creating a build", func() {
 			})
 		})
 
+		Context("given the plate and PCB are ones the keyboard has", func() {
+			When("creating a build", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"keyboard":"`+keyboardID+`","visibility":"private",`+
+							`"plate":"`+db.SeededPlateID+`","pcb":"`+db.SeededPCBID+`"}`)
+					Expect(err).NotTo(HaveOccurred())
+				})
+
+				It("returns 201 with the plate and PCB resolved and the plate's price in total_cost", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					var got struct {
+						ID    string `json:"id"`
+						Plate *struct {
+							ID       string `json:"id"`
+							Material string `json:"material"`
+						} `json:"plate"`
+						PCB *struct {
+							ID       string  `json:"id"`
+							Firmware *string `json:"firmware"`
+						} `json:"pcb"`
+						TotalCost *float64 `json:"total_cost"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					createdID = got.ID
+					Expect(got.Plate).NotTo(BeNil())
+					Expect(got.Plate.ID).To(Equal(db.SeededPlateID))
+					Expect(got.Plate.Material).To(Equal("FR4"))
+					Expect(got.PCB).NotTo(BeNil())
+					Expect(got.PCB.ID).To(Equal(db.SeededPCBID))
+					Expect(*got.PCB.Firmware).To(Equal("QMK/VIA"))
+					Expect(got.TotalCost).NotTo(BeNil())
+					Expect(*got.TotalCost).To(Equal(369.99))
+				})
+			})
+		})
+
 		Context("given the plate isn't one the keyboard offers", func() {
 			When("creating a build", func() {
 				BeforeEach(func(ctx SpecContext) {

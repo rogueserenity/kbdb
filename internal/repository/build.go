@@ -99,11 +99,14 @@ func BuildImagesMap(images []BuildImage) map[string]BuildImageEntry {
 }
 
 // Build has UserID as the DynamoDB partition key and ID as the sort key.
+// Plate and PCB are ids of Keyboard's plates and PCBs; reads treat one the
+// keyboard no longer has as absent.
 type Build struct {
 	UserID        string                `dynamodbav:"user_id" json:"-"`
 	ID            string                `dynamodbav:"id" json:"id"`
 	Keyboard      string                `dynamodbav:"keyboard" json:"keyboard"`
 	Plate         *string               `dynamodbav:"plate,omitempty" json:"plate,omitempty"`
+	PCB           *string               `dynamodbav:"pcb,omitempty" json:"pcb,omitempty"`
 	CaseMountType *BuildCaseMountType   `dynamodbav:"case_mount_type,omitempty" json:"case_mount_type,omitempty"`
 	Stabs         *BuildStabs           `dynamodbav:"stabs,omitempty" json:"stabs,omitempty"`
 	Foam          *bool                 `dynamodbav:"foam,omitempty" json:"foam,omitempty"`

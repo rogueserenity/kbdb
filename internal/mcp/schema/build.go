@@ -37,7 +37,8 @@ type BuildCaseMountType struct {
 // through their own tools, never carried in a build write.
 type BuildInput struct {
 	Keyboard      string                `json:"keyboard" jsonschema:"the id of a Keyboard resource in the caller's collection"`
-	Plate         *string               `json:"plate,omitempty" jsonschema:"which of the keyboard's design.plates options is installed; must be one of them"`
+	Plate         *string               `json:"plate,omitempty" jsonschema:"the id of the keyboard's plate that's installed; must be one of the keyboard's plates"`
+	PCB           *string               `json:"pcb,omitempty" jsonschema:"the id of the keyboard's PCB that's installed; must be one of the keyboard's pcbs"`
 	CaseMountType *BuildCaseMountType   `json:"case_mount_type,omitempty" jsonschema:"the case's mounting style"`
 	Stabs         *BuildStabsInput      `json:"stabs,omitempty" jsonschema:"the stabilizers used"`
 	Foam          *bool                 `json:"foam,omitempty" jsonschema:"whether the build has case foam"`
@@ -53,7 +54,8 @@ type BuildInput struct {
 type Build struct {
 	ID            string                `json:"id" jsonschema:"the build's unique id"`
 	Keyboard      string                `json:"keyboard" jsonschema:"the id of the Keyboard resource this build is based on"`
-	Plate         *string               `json:"plate,omitempty" jsonschema:"which of the keyboard's design.plates options is installed"`
+	Plate         *string               `json:"plate,omitempty" jsonschema:"the id of the keyboard's plate that's installed"`
+	PCB           *string               `json:"pcb,omitempty" jsonschema:"the id of the keyboard's PCB that's installed"`
 	CaseMountType *BuildCaseMountType   `json:"case_mount_type,omitempty" jsonschema:"the case's mounting style"`
 	Stabs         *BuildStabs           `json:"stabs,omitempty" jsonschema:"the stabilizers used"`
 	Foam          *bool                 `json:"foam,omitempty" jsonschema:"whether the build has case foam"`

@@ -60,9 +60,9 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					Expect(seeded.OrderStatus).NotTo(BeNil())
 					Expect(*seeded.OrderStatus).To(Equal("Delivered"))
 
-					By("including the price, since the caller owns this keyboard")
-					Expect(seeded.Price).NotTo(BeNil())
-					Expect(*seeded.Price).To(BeNumerically("==", 329.99))
+					By("including the total cost, since the caller owns this keyboard")
+					Expect(seeded.TotalCost).NotTo(BeNil())
+					Expect(*seeded.TotalCost).To(BeNumerically("==", 369.99))
 
 					By("including the visibility, since the caller owns this keyboard")
 					Expect(seeded.Visibility).NotTo(BeNil())
@@ -112,14 +112,14 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					result, err = client.CallTool(ctx, "list_keyboards", map[string]any{})
 				})
 
-				It("omits the price", func() {
+				It("omits the total cost", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
 					out := decodeListOutput(result)
 					seeded := seededBy(out, keyboardID)
 					Expect(seeded).NotTo(BeNil())
-					Expect(seeded.Price).To(BeNil())
+					Expect(seeded.TotalCost).To(BeNil())
 				})
 			})
 		})
@@ -176,17 +176,17 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					result, err = client.CallTool(ctx, "list_keyboards", map[string]any{"user_id": otherID})
 				})
 
-				It("includes the other user's public keyboard, without its price or visibility", func() {
+				It("includes the other user's public keyboard, without its total cost or visibility", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
 					out := decodeListOutput(result)
 					Expect(idsOf(out)).To(ContainElement(otherKeyboardID))
 
-					By("omitting the price, since the caller doesn't own this keyboard")
+					By("omitting the total cost, since the caller doesn't own this keyboard")
 					seeded := seededBy(out, otherKeyboardID)
 					Expect(seeded).NotTo(BeNil())
-					Expect(seeded.Price).To(BeNil())
+					Expect(seeded.TotalCost).To(BeNil())
 
 					By("omitting the visibility, since the caller doesn't own this keyboard")
 					Expect(seeded.Visibility).To(BeNil())
@@ -225,15 +225,15 @@ var _ = Describe("Listing keyboards over MCP", func() {
 					result, err = client.CallTool(ctx, "list_keyboards", map[string]any{"user_id": otherID})
 				})
 
-				It("includes the other user's public keyboard with its price", func() {
+				It("includes the other user's public keyboard with its total cost", func() {
 					Expect(err).NotTo(HaveOccurred())
 					Expect(result.IsError).To(BeFalse())
 
 					out := decodeListOutput(result)
 					seeded := seededBy(out, otherKeyboardID)
 					Expect(seeded).NotTo(BeNil())
-					Expect(seeded.Price).NotTo(BeNil())
-					Expect(*seeded.Price).To(BeNumerically("==", 329.99))
+					Expect(seeded.TotalCost).NotTo(BeNil())
+					Expect(*seeded.TotalCost).To(BeNumerically("==", 369.99))
 				})
 			})
 		})

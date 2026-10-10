@@ -18,6 +18,7 @@ var _ = Describe("Deleting a switch that is still referenced by a build, over MC
 		ownerID    string
 		switchID   string
 		buildID    string
+		keyboardID string
 		switchGone bool
 		buildGone  bool
 	)
@@ -27,20 +28,23 @@ var _ = Describe("Deleting a switch that is still referenced by a build, over MC
 		buildGone = false
 		switchID = "mcp-cascade-switch-" + uuid.NewString()
 		buildID = "mcp-cascade-build-" + uuid.NewString()
+		keyboardID = "mcp-cascade-keyboard-" + uuid.NewString()
 
 		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 		Expect(db.SeedSwitch(ctx, ownerID, switchID, "private")).To(Succeed())
-		Expect(db.SeedBuildWithSwitch(ctx, ownerID, buildID, switchID, "private")).To(Succeed())
+		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
+		Expect(db.SeedBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID, "private")).To(Succeed())
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		if !buildGone {
-			Expect(db.DeleteBuildWithSwitch(ctx, ownerID, buildID, switchID)).To(Succeed())
+			Expect(db.DeleteBuildWithSwitchAndKeyboard(ctx, ownerID, buildID, keyboardID, switchID)).To(Succeed())
 		}
 		if !switchGone {
 			Expect(db.DeleteSwitch(ctx, ownerID, switchID)).To(Succeed())
 		}
+		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})
 
 	Context("given on_delete is omitted (defaults to block)", func() {

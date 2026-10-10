@@ -94,6 +94,85 @@ var _ = Describe("Creating a keyboard", func() {
 			})
 		})
 
+		Context("given plates and PCBs, one plate with its own purchase", func() {
+			When("creating a keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"Keychron","name":"Q1","visibility":"private","purchase":{"price":300},`+
+							`"plates":[{"material":"AL","color":"Black","thickness":1.5},`+
+							`{"material":"PC","purchase":{"vendor":"`+approvedVendor+`","price":35,"order_status":"Shipped"}}],`+
+							`"pcbs":[{"firmware":"QMK/VIA","thickness":1.6}]}`)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusCreated {
+						captureCreatedID(resp)
+					}
+				})
+
+				It("stores every part with a server-generated id and prices the extra plate", func(ctx SpecContext) {
+					Expect(resp.StatusCode).To(Equal(http.StatusCreated))
+
+					By("reading the keyboard back")
+					getResp, err := client.Get(ctx, ownerID, createdID, ownerToken)
+					Expect(err).NotTo(HaveOccurred())
+					Expect(getResp.StatusCode).To(Equal(http.StatusOK))
+
+					var got keyboardWithParts
+					Expect(json.NewDecoder(getResp.Body).Decode(&got)).To(Succeed())
+
+					By("giving each part its own id")
+					Expect(got.Plates).To(HaveLen(2))
+					Expect(got.PCBs).To(HaveLen(1))
+					ids := []string{got.Plates[0].ID, got.Plates[1].ID, got.PCBs[0].ID}
+					for _, id := range ids {
+						Expect(id).NotTo(BeEmpty())
+					}
+					Expect(ids[0]).NotTo(Equal(ids[1]))
+
+					By("keeping each part's fields, in order")
+					Expect(got.Plates[0].Material).To(Equal("AL"))
+					Expect(*got.Plates[0].Color).To(Equal("Black"))
+					Expect(*got.Plates[0].Thickness).To(Equal(1.5))
+					Expect(got.Plates[0].Purchase).To(BeNil())
+					Expect(got.Plates[1].Material).To(Equal("PC"))
+					Expect(got.Plates[1].Purchase).NotTo(BeNil())
+					Expect(*got.Plates[1].Purchase.Vendor).To(Equal(approvedVendor))
+					Expect(*got.Plates[1].Purchase.OrderStatus).To(Equal("Shipped"))
+					Expect(*got.PCBs[0].Firmware).To(Equal("QMK/VIA"))
+
+					By("adding the plate's price to the base price in total_cost")
+					Expect(got.TotalCost).NotTo(BeNil())
+					Expect(*got.TotalCost).To(Equal(335.0))
+				})
+			})
+		})
+
+		Context("given a part with an id", func() {
+			When("creating a keyboard", func() {
+				BeforeEach(func(ctx SpecContext) {
+					var err error
+					resp, err = client.Create(ctx, ownerID, ownerToken,
+						`{"brand":"Keychron","name":"Q1","visibility":"private","plates":[{"id":"made-up","material":"AL"}]}`)
+					Expect(err).NotTo(HaveOccurred())
+					if resp.StatusCode == http.StatusCreated {
+						captureCreatedID(resp)
+					}
+				})
+
+				It("returns 400 naming the part's id", func() {
+					Expect(resp.StatusCode).To(Equal(http.StatusBadRequest))
+
+					var got struct {
+						InvalidParams []struct {
+							Name string `json:"name"`
+						} `json:"invalid_params"`
+					}
+					Expect(json.NewDecoder(resp.Body).Decode(&got)).To(Succeed())
+					Expect(got.InvalidParams).To(ConsistOf(HaveField("Name", "plates[0].id")))
+				})
+			})
+		})
+
 		Context("given an open-vocabulary field has an unapproved value", func() {
 			When("creating a keyboard", func() {
 				BeforeEach(func(ctx SpecContext) {

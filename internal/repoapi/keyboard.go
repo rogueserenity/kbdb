@@ -18,12 +18,22 @@ type Keyboard struct {
 }
 
 // ToAPI maps a repository.Keyboard to its wire representation. The owner
-// always sees their own purchase.price; a non-owner sees it only if
-// ownerPrefs.ShowPriceToOthers. The rest of purchase is unaffected. Returns
-// an error if a stored Purchase date doesn't match dateLayout, or an image
-// fails to presign.
+// always sees their own prices (purchase.price, each part's purchase.price,
+// total_cost); a non-owner sees them only if ownerPrefs.ShowPriceToOthers.
+// The rest of each purchase is unaffected. Returns an error if a stored
+// purchase date doesn't match dateLayout, or an image fails to presign.
 func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner bool, ownerPrefs repository.ProfilePreferences) (api.Keyboard, error) {
 	purchase, err := k.purchaseToAPI(kb.Purchase, isOwner, ownerPrefs)
+	if err != nil {
+		return api.Keyboard{}, err
+	}
+
+	plates, err := k.platesToAPI(kb.Plates, isOwner, ownerPrefs)
+	if err != nil {
+		return api.Keyboard{}, err
+	}
+
+	pcbs, err := k.pcbsToAPI(kb.PCBs, isOwner, ownerPrefs)
 	if err != nil {
 		return api.Keyboard{}, err
 	}
@@ -33,19 +43,26 @@ func (k Keyboard) ToAPI(ctx context.Context, kb repository.Keyboard, isOwner boo
 		return api.Keyboard{}, err
 	}
 
-	return api.Keyboard{
+	out := api.Keyboard{
 		Id:         kb.ID,
 		Brand:      kb.Brand,
 		Name:       kb.Name,
 		Size:       kb.Size,
 		Layout:     kb.Layout,
 		Design:     k.designToAPI(kb.Design),
-		Pcb:        k.pcbToAPI(kb.PCB),
+		Plates:     plates,
+		Pcbs:       pcbs,
 		Purchase:   purchase,
 		Notes:      kb.Notes,
 		Visibility: ownerVisibility(kb.Visibility, isOwner),
 		Images:     imgs,
-	}, nil
+	}
+	if ownerPrefs.ShowPriceSingle(isOwner) {
+		out.TotalCost = kb.TotalCost()
+	}
+	out.Currency = ownerPrefs.CurrencyFor(out.TotalCost)
+
+	return out, nil
 }
 
 // imagesToAPI resolves a presigned GET URL per image, reusing each image's
@@ -93,7 +110,8 @@ func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 		Size:       in.Size,
 		Layout:     in.Layout,
 		Design:     k.designToRepo(in.Design),
-		PCB:        k.pcbToRepo(in.Pcb),
+		Plates:     k.platesToRepo(in.Plates),
+		PCBs:       k.pcbsToRepo(in.Pcbs),
 		Purchase:   k.purchaseToRepo(in.Purchase),
 		Notes:      in.Notes,
 		Visibility: repository.Visibility(in.Visibility),
@@ -102,14 +120,33 @@ func (k Keyboard) ToRepo(in api.KeyboardInput) repository.Keyboard {
 
 // StripPrices clears the prices [Keyboard.ToAPI] sets on out.
 func (k Keyboard) StripPrices(out *api.Keyboard) {
-	if out.Purchase == nil {
-		return
+	out.TotalCost = nil
+	out.Currency = nil
+	out.Purchase = k.stripPurchasePrice(out.Purchase)
+	if out.Plates != nil {
+		for i := range *out.Plates {
+			(*out.Plates)[i].Purchase = k.stripPurchasePrice((*out.Plates)[i].Purchase)
+		}
 	}
-	out.Purchase.Price = nil
-	out.Purchase.Currency = nil
-	if *out.Purchase == (api.Purchase{}) {
-		out.Purchase = nil
+	if out.Pcbs != nil {
+		for i := range *out.Pcbs {
+			(*out.Pcbs)[i].Purchase = k.stripPurchasePrice((*out.Pcbs)[i].Purchase)
+		}
 	}
+}
+
+// stripPurchasePrice returns p without its price, or nil if nothing else
+// is left.
+func (k Keyboard) stripPurchasePrice(p *api.Purchase) *api.Purchase {
+	if p == nil {
+		return nil
+	}
+	p.Price = nil
+	p.Currency = nil
+	if *p == (api.Purchase{}) {
+		return nil
+	}
+	return p
 }
 
 // resolveKeyboardImageURL presigns img.Path, reusing its cached GET URL if
@@ -150,20 +187,14 @@ func (k Keyboard) designToAPI(d repository.KeyboardDesign) *api.KeyboardDesign {
 	topCase := k.materialColorToAPI(d.TopCase)
 	bottomCase := k.materialColorToAPI(d.BottomCase)
 	weight := k.materialColorToAPI(d.Weight)
-	if topCase == nil && bottomCase == nil && weight == nil && d.Plates == nil {
+	if topCase == nil && bottomCase == nil && weight == nil {
 		return nil
-	}
-
-	var plates *[]string
-	if d.Plates != nil {
-		plates = &d.Plates
 	}
 
 	return &api.KeyboardDesign{
 		TopCase:    topCase,
 		BottomCase: bottomCase,
 		Weight:     weight,
-		Plates:     plates,
 	}
 }
 
@@ -172,42 +203,101 @@ func (k Keyboard) designToRepo(d *api.KeyboardDesign) repository.KeyboardDesign 
 		return repository.KeyboardDesign{}
 	}
 
-	out := repository.KeyboardDesign{
+	return repository.KeyboardDesign{
 		TopCase:    k.materialColorToRepo(d.TopCase),
 		BottomCase: k.materialColorToRepo(d.BottomCase),
 		Weight:     k.materialColorToRepo(d.Weight),
 	}
-	if d.Plates != nil {
-		out.Plates = *d.Plates
+}
+
+func (k Keyboard) platesToAPI(plates []repository.KeyboardPlate, isOwner bool, ownerPrefs repository.ProfilePreferences) (*[]api.KeyboardPlate, error) {
+	if len(plates) == 0 {
+		return nil, nil //nolint:nilnil // no plates is a valid, expected result
+	}
+
+	out := make([]api.KeyboardPlate, len(plates))
+	for i, p := range plates {
+		purchase, err := k.purchaseToAPI(p.Purchase, isOwner, ownerPrefs)
+		if err != nil {
+			return nil, fmt.Errorf("plate %q: %w", p.ID, err)
+		}
+		out[i] = api.KeyboardPlate{
+			Id:        p.ID,
+			Material:  p.Material,
+			Color:     p.Color,
+			Thickness: p.Thickness,
+			Purchase:  purchase,
+		}
+	}
+
+	return &out, nil
+}
+
+func (k Keyboard) platesToRepo(plates *[]api.KeyboardPlateInput) []repository.KeyboardPlate {
+	if plates == nil || len(*plates) == 0 {
+		return nil
+	}
+
+	out := make([]repository.KeyboardPlate, len(*plates))
+	for i, p := range *plates {
+		out[i] = repository.KeyboardPlate{
+			Material:  p.Material,
+			Color:     p.Color,
+			Thickness: p.Thickness,
+			Purchase:  k.purchaseToRepo(p.Purchase),
+		}
+		if p.Id != nil {
+			out[i].ID = *p.Id
+		}
 	}
 
 	return out
 }
 
-func (k Keyboard) pcbToAPI(p repository.KeyboardPCB) *api.KeyboardPCB {
-	if p.Thickness == nil && p.Firmware == nil && p.Assembly == nil && p.Connectivity == nil {
+func (k Keyboard) pcbsToAPI(pcbs []repository.KeyboardPCB, isOwner bool, ownerPrefs repository.ProfilePreferences) (*[]api.KeyboardPCB, error) {
+	if len(pcbs) == 0 {
+		return nil, nil //nolint:nilnil // no PCBs is a valid, expected result
+	}
+
+	out := make([]api.KeyboardPCB, len(pcbs))
+	for i, p := range pcbs {
+		purchase, err := k.purchaseToAPI(p.Purchase, isOwner, ownerPrefs)
+		if err != nil {
+			return nil, fmt.Errorf("PCB %q: %w", p.ID, err)
+		}
+		out[i] = api.KeyboardPCB{
+			Id:           p.ID,
+			Thickness:    p.Thickness,
+			Firmware:     p.Firmware,
+			Assembly:     p.Assembly,
+			Connectivity: p.Connectivity,
+			Purchase:     purchase,
+		}
+	}
+
+	return &out, nil
+}
+
+func (k Keyboard) pcbsToRepo(pcbs *[]api.KeyboardPCBInput) []repository.KeyboardPCB {
+	if pcbs == nil || len(*pcbs) == 0 {
 		return nil
 	}
 
-	return &api.KeyboardPCB{
-		Thickness:    p.Thickness,
-		Firmware:     p.Firmware,
-		Assembly:     p.Assembly,
-		Connectivity: p.Connectivity,
+	out := make([]repository.KeyboardPCB, len(*pcbs))
+	for i, p := range *pcbs {
+		out[i] = repository.KeyboardPCB{
+			Thickness:    p.Thickness,
+			Firmware:     p.Firmware,
+			Assembly:     p.Assembly,
+			Connectivity: p.Connectivity,
+			Purchase:     k.purchaseToRepo(p.Purchase),
+		}
+		if p.Id != nil {
+			out[i].ID = *p.Id
+		}
 	}
-}
 
-func (k Keyboard) pcbToRepo(p *api.KeyboardPCB) repository.KeyboardPCB {
-	if p == nil {
-		return repository.KeyboardPCB{}
-	}
-
-	return repository.KeyboardPCB{
-		Thickness:    p.Thickness,
-		Firmware:     p.Firmware,
-		Assembly:     p.Assembly,
-		Connectivity: p.Connectivity,
-	}
+	return out
 }
 
 func (k Keyboard) purchaseToAPI(p repository.KeyboardPurchase, isOwner bool, ownerPrefs repository.ProfilePreferences) (*api.Purchase, error) {

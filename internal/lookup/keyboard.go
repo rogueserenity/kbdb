@@ -29,18 +29,23 @@ func ValidateKeyboard(ctx context.Context, kb repository.Keyboard) []FieldError 
 	add("design.top_case.material", kb.Design.TopCase.Material, CategoryKeyboardCaseMaterial)
 	add("design.bottom_case.material", kb.Design.BottomCase.Material, CategoryKeyboardCaseMaterial)
 	add("design.weight.material", kb.Design.Weight.Material, CategoryKeyboardWeightMaterial)
-	add("pcb.firmware", kb.PCB.Firmware, CategoryKeyboardPCBFirmware)
-	add("pcb.assembly", kb.PCB.Assembly, CategoryKeyboardPCBAssemblyType)
-	add("pcb.connectivity", kb.PCB.Connectivity, CategoryKeyboardPCBConnectivityType)
-	add("purchase.vendor", kb.Purchase.Vendor, CategoryVendor)
-	add("purchase.order_status", kb.Purchase.OrderStatus, CategoryOrderStatus)
+	addPurchase := func(prefix string, p repository.KeyboardPurchase) {
+		add(prefix+"purchase.vendor", p.Vendor, CategoryVendor)
+		add(prefix+"purchase.order_status", p.OrderStatus, CategoryOrderStatus)
+	}
+	addPurchase("", kb.Purchase)
 
-	for i, material := range kb.Design.Plates {
-		checks = append(checks, fieldCheck{
-			Field:    fmt.Sprintf("design.plates[%d]", i),
-			Value:    material,
-			Category: CategoryKeyboardPlateMaterial,
-		})
+	for i, p := range kb.Plates {
+		prefix := fmt.Sprintf("plates[%d].", i)
+		add(prefix+"material", &p.Material, CategoryKeyboardPlateMaterial)
+		addPurchase(prefix, p.Purchase)
+	}
+	for i, p := range kb.PCBs {
+		prefix := fmt.Sprintf("pcbs[%d].", i)
+		add(prefix+"firmware", p.Firmware, CategoryKeyboardPCBFirmware)
+		add(prefix+"assembly", p.Assembly, CategoryKeyboardPCBAssemblyType)
+		add(prefix+"connectivity", p.Connectivity, CategoryKeyboardPCBConnectivityType)
+		addPurchase(prefix, p.Purchase)
 	}
 
 	fieldErrs := validateFields(ctx, checks)

@@ -25,6 +25,7 @@ func (b Build) ToMCP(build repository.Build, isOwner bool, ownerPrefs repository
 		ID:            build.ID,
 		Keyboard:      build.Keyboard,
 		Plate:         build.Plate,
+		PCB:           build.PCB,
 		CaseMountType: b.caseMountTypeToMCP(build.CaseMountType),
 		Stabs:         b.stabsToMCP(build.Stabs, isOwner, ownerPrefs),
 		Foam:          build.Foam,
@@ -37,6 +38,27 @@ func (b Build) ToMCP(build repository.Build, isOwner bool, ownerPrefs repository
 	}
 }
 
+// ToMCPResolved is [Build.ToMCP] for a build read back from storage: a plate
+// or PCB its keyboard no longer has is left out, as
+// [github.com/rogueserenity/kbdb/internal/repoapi.Build.ToAPI] does, so the
+// result can be sent back to update_build as is.
+func (b Build) ToMCPResolved(
+	ctx context.Context, build repository.Build, isOwner bool, ownerPrefs repository.ProfilePreferences,
+) (schema.Build, error) {
+	kb, err := b.KeyboardRepo.Get(ctx, build.UserID, build.Keyboard)
+	if err != nil {
+		return schema.Build{}, fmt.Errorf("getting keyboard %q for build %q: %w", build.Keyboard, build.ID, err)
+	}
+	if kb.Plate(build.Plate) == nil {
+		build.Plate = nil
+	}
+	if kb.PCB(build.PCB) == nil {
+		build.PCB = nil
+	}
+
+	return b.ToMCP(build, isOwner, ownerPrefs), nil
+}
+
 // FromMCP leaves ID and UserID unset: the caller sets ID, and UserID comes
 // from ctx in the repository layer. Images are left unset too - never
 // carried in a build write, managed one at a time via their own tools.
@@ -44,6 +66,7 @@ func (b Build) FromMCP(in schema.BuildInput) repository.Build {
 	return repository.Build{
 		Keyboard:      in.Keyboard,
 		Plate:         in.Plate,
+		PCB:           in.PCB,
 		CaseMountType: b.caseMountTypeFromMCP(in.CaseMountType),
 		Stabs:         b.stabsFromMCP(in.Stabs),
 		Foam:          in.Foam,
@@ -95,7 +118,9 @@ func (b Build) ToMCPSummary(
 		if build.Stabs != nil {
 			stabsPrice = build.Stabs.Price
 		}
-		summary.TotalCost = roundCents(sumKnownCosts(kb.Purchase.Price, switchesCost, keycapKitsCost, stabsPrice))
+		summary.TotalCost = roundCents(sumKnownCosts(
+			kb.Purchase.Price, kb.Plate(build.Plate).Price(), kb.PCB(build.PCB).Price(),
+			switchesCost, keycapKitsCost, stabsPrice))
 	}
 	summary.Currency = ownerPrefs.CurrencyFor(summary.TotalCost)
 

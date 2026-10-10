@@ -33,7 +33,7 @@ var errNoCaller = errors.New("no caller identity on context")
 
 var createBuildTool = &mcp.Tool{
 	Name:        "create_build",
-	Description: "Adds a build to your own collection, recording an actual keyboard you've assembled from a keyboard, switches, keycap kit(s), and stabilizer/mount/foam details. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images aren't set here - a future tool adds them afterward.",
+	Description: "Adds a build to your own collection, recording an actual keyboard you've assembled from a keyboard, switches, keycap kit(s), and stabilizer/mount/foam details. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits, and plate and pcb, if set, must be the id of one of that keyboard's plates and pcbs (call get_keyboard to see them) - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images aren't set here - a future tool adds them afterward.",
 }
 
 var getBuildTool = &mcp.Tool{
@@ -48,7 +48,7 @@ var listBuildsTool = &mcp.Tool{
 
 var updateBuildTool = &mcp.Tool{
 	Name:        "update_build",
-	Description: "Replaces every field of one of your own builds - fields omitted from the call are cleared, not left unchanged. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images are managed separately and are unaffected by this call.",
+	Description: "Replaces every field of one of your own builds - fields omitted from the call are cleared, not left unchanged. keyboard must be the id of a Keyboard resource you own, switches[].switch must each be the id of a Switch resource you own, and keycap_kits[].keycap_set/kit must each name a KeycapSet you own and one of its kits, and plate and pcb, if set, must be the id of one of that keyboard's plates and pcbs (call get_keyboard to see them) - all are verified to exist and belong to you. stabs.name, stabs.mount_type, case_mount_type.type, and case_mount_type.durometer must be approved lookup values - call list_lookups and get_lookup to see them. Images are managed separately and are unaffected by this call.",
 }
 
 var deleteBuildTool = &mcp.Tool{
@@ -138,6 +138,7 @@ func handleListBuilds(
 
 func handleGetBuild(
 	repo repository.BuildRepository,
+	keyboardRepo repository.KeyboardRepository,
 	prefs repository.PreferencesReader,
 ) mcp.ToolHandlerFor[schema.GetBuildInput, schema.GetBuildOutput] {
 	return func(ctx context.Context, _ *mcp.CallToolRequest, in schema.GetBuildInput) (*mcp.CallToolResult, schema.GetBuildOutput, error) {
@@ -163,7 +164,13 @@ func handleGetBuild(
 			return nil, schema.GetBuildOutput{}, errors.New("failed to get build")
 		}
 
-		return nil, schema.GetBuildOutput{Build: repomcp.Build{}.ToMCP(*b, isOwner, ownerPrefs)}, nil
+		out, err := repomcp.Build{KeyboardRepo: keyboardRepo}.ToMCPResolved(ctx, *b, isOwner, ownerPrefs)
+		if err != nil {
+			log.FromContext(ctx).Error("mapping build to MCP", log.Error, err, log.BuildID, in.BuildID)
+			return nil, schema.GetBuildOutput{}, errors.New("failed to get build")
+		}
+
+		return nil, schema.GetBuildOutput{Build: out}, nil
 	}
 }
 

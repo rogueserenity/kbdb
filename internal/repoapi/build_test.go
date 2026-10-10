@@ -19,7 +19,8 @@ func fullRepoBuild() repository.Build {
 		UserID:   "alice",
 		ID:       "build1",
 		Keyboard: "kb1",
-		Plate:    strPtr("Brass"),
+		Plate:    strPtr("p1"),
+		PCB:      strPtr("b1"),
 		CaseMountType: &repository.BuildCaseMountType{
 			Type:      strPtr("Top Mount"),
 			Durometer: strPtr("70A"),
@@ -125,7 +126,11 @@ func (d buildToAPIDeps) callWithPrefs(ctx context.Context, b repository.Build, i
 func (d buildToAPIDeps) expectFullyResolvable() {
 	d.keyboardRepo.EXPECT().
 		Get(mock.Anything, "alice", "kb1").
-		Return(&repository.Keyboard{UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1", Size: strPtr("75%"), Layout: strPtr("ANSI")}, nil)
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1", Size: strPtr("75%"), Layout: strPtr("ANSI"),
+			Plates: []repository.KeyboardPlate{{ID: "p1", Material: "Brass", Color: strPtr("Raw"), Thickness: floatPtr(1.5)}},
+			PCBs:   []repository.KeyboardPCB{{ID: "b1", Firmware: strPtr("QMK/VIA"), Assembly: strPtr("Hot-swap")}},
+		}, nil)
 	d.switchRepo.EXPECT().
 		Get(mock.Anything, "alice", "sw1").
 		Return(&repository.Switch{UserID: "alice", ID: "sw1", Brand: "Gateron", Name: "Oil King", Type: "Linear"}, nil)
@@ -149,7 +154,8 @@ func (s *BuildToAPISuite) TestFullRoundTrip_PreservesEveryField() {
 	s.Equal("kb1", out.Keyboard.Id)
 	s.Equal("Keychron", out.Keyboard.Brand)
 	s.Equal("Q1", out.Keyboard.Name)
-	s.Equal(b.Plate, out.Plate)
+	s.Equal(&api.BuildPlateRef{Id: "p1", Material: "Brass", Color: strPtr("Raw"), Thickness: floatPtr(1.5)}, out.Plate)
+	s.Equal(&api.BuildPCBRef{Id: "b1", Firmware: strPtr("QMK/VIA"), Assembly: strPtr("Hot-swap")}, out.Pcb)
 	s.Require().NotNil(out.CaseMountType)
 	s.Equal(b.CaseMountType.Type, out.CaseMountType.Type)
 	s.Equal(b.CaseMountType.Durometer, out.CaseMountType.Durometer)
@@ -204,6 +210,7 @@ func (s *BuildToAPISuite) TestAllOptionalFieldsNil_OmittedNotZeroValue() {
 	s.Require().NoError(err)
 
 	s.Nil(out.Plate)
+	s.Nil(out.Pcb)
 	s.Nil(out.CaseMountType)
 	s.Nil(out.Stabs)
 	s.Nil(out.Foam)
@@ -594,6 +601,57 @@ func (s *BuildToAPISuite) TestTotalCost_SumsKeyboardSwitchesKitsAndStabs() {
 	s.InDelta(200+35+150+12.5, *out.TotalCost, 0.0001)
 }
 
+func (s *BuildToAPISuite) TestTotalCost_AddsOnlySelectedPlateAndPCB() {
+	b := repository.Build{
+		UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate,
+		Plate: strPtr("p2"), PCB: strPtr("b1"),
+	}
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+			Plates: []repository.KeyboardPlate{
+				{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}},
+				{ID: "p2", Material: "PC", Purchase: repository.KeyboardPurchase{Price: floatPtr(30)}},
+			},
+			PCBs: []repository.KeyboardPCB{
+				{ID: "b1", Purchase: repository.KeyboardPurchase{Price: floatPtr(45)}},
+				{ID: "b2", Purchase: repository.KeyboardPurchase{Price: floatPtr(60)}},
+			},
+		}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(200+30+45, *out.TotalCost, 0.0001)
+}
+
+func (s *BuildToAPISuite) TestPartsNoLongerOnKeyboard_OmittedAndUnpriced() {
+	b := repository.Build{
+		UserID: "alice", ID: "build1", Keyboard: "kb1", Visibility: repository.VisibilityPrivate,
+		Plate: strPtr("gone"), PCB: strPtr("gone"),
+	}
+
+	d := newBuildToAPIDeps(s.T())
+	d.keyboardRepo.EXPECT().Get(mock.Anything, "alice", "kb1").
+		Return(&repository.Keyboard{
+			UserID: "alice", ID: "kb1", Brand: "Keychron", Name: "Q1",
+			Purchase: repository.KeyboardPurchase{Price: floatPtr(200)},
+			Plates:   []repository.KeyboardPlate{{ID: "p1", Material: "AL", Purchase: repository.KeyboardPurchase{Price: floatPtr(40)}}},
+		}, nil)
+
+	out, err := d.call(context.Background(), b)
+	s.Require().NoError(err)
+
+	s.Nil(out.Plate)
+	s.Nil(out.Pcb)
+	s.Require().NotNil(out.TotalCost)
+	s.InDelta(200, *out.TotalCost, 0.0001)
+}
+
 // TestTotalCost_SwitchPriceWithoutQuantity_ExcludedFromSum guards against
 // treating SwitchPurchase.Price as a per-unit price - it's the price paid
 // for the whole bulk order (see SwitchPurchase.Quantity), so without a
@@ -799,7 +857,8 @@ func (s *BuildToAPISuite) TestOwner_AlwaysIncludesStabsPriceAndTotalCostRegardle
 func fullAPIBuildInput() api.BuildInput {
 	return api.BuildInput{
 		Keyboard: "kb1",
-		Plate:    strPtr("Brass"),
+		Plate:    strPtr("p1"),
+		Pcb:      strPtr("b1"),
 		CaseMountType: &api.BuildCaseMountType{
 			Type:      strPtr("Top Mount"),
 			Durometer: strPtr("70A"),
@@ -835,6 +894,7 @@ func (s *BuildToRepoSuite) TestFullRoundTrip_PreservesEveryField() {
 
 	s.Equal(in.Keyboard, out.Keyboard)
 	s.Equal(in.Plate, out.Plate)
+	s.Equal(in.Pcb, out.PCB)
 	s.Require().NotNil(out.CaseMountType)
 	s.Equal(in.CaseMountType.Type, out.CaseMountType.Type)
 	s.Equal(in.CaseMountType.Durometer, out.CaseMountType.Durometer)
@@ -862,6 +922,7 @@ func (s *BuildToRepoSuite) TestAllOptionalFieldsNil_MapsToNil() {
 	out := Build{}.ToRepo(in)
 
 	s.Nil(out.Plate)
+	s.Nil(out.PCB)
 	s.Nil(out.CaseMountType)
 	s.Nil(out.Stabs)
 	s.Nil(out.Foam)

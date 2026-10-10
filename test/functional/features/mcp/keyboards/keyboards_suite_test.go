@@ -43,12 +43,20 @@ type getOutput struct {
 				Color    *string `json:"color"`
 			} `json:"top_case"`
 			BottomCase *struct{} `json:"bottom_case"`
-			Plates     []string  `json:"plates"`
 		} `json:"design"`
-		PCB *struct {
+		Plates []struct {
+			ID       string `json:"id"`
+			Material string `json:"material"`
+			Purchase *struct {
+				Price *float64 `json:"price"`
+			} `json:"purchase"`
+		} `json:"plates"`
+		PCBs []struct {
+			ID       string  `json:"id"`
 			Firmware *string `json:"firmware"`
-		} `json:"pcb"`
-		Purchase *struct {
+		} `json:"pcbs"`
+		TotalCost *float64 `json:"total_cost"`
+		Purchase  *struct {
 			Vendor      *string  `json:"vendor"`
 			Price       *float64 `json:"price"`
 			Currency    *string  `json:"currency"`
@@ -74,7 +82,7 @@ type listKeyboard struct {
 	Brand       string   `json:"brand"`
 	Name        string   `json:"name"`
 	OrderStatus *string  `json:"order_status"`
-	Price       *float64 `json:"price"`
+	TotalCost   *float64 `json:"total_cost"`
 	Visibility  *string  `json:"visibility"`
 }
 

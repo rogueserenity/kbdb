@@ -13,13 +13,14 @@ const dateLayout = "2006-01-02"
 // rejected at the door via `format: date`. Without this an MCP write can
 // store an unparseable date, and every later REST read of that row fails in
 // repoapi's date parse - a 500 with no way to repair the row through the API.
-func validatePurchaseDates(orderDate, deliveryDate *string) error {
+// prefix names the purchase in the error, e.g. "purchase".
+func validatePurchaseDates(prefix string, orderDate, deliveryDate *string) error {
 	for _, d := range []struct {
 		field string
 		value *string
 	}{
-		{"purchase.order_date", orderDate},
-		{"purchase.delivery_date", deliveryDate},
+		{prefix + ".order_date", orderDate},
+		{prefix + ".delivery_date", deliveryDate},
 	} {
 		if d.value == nil {
 			continue

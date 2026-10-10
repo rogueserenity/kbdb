@@ -252,6 +252,7 @@ func (r *BuildRepository) Update(ctx context.Context, b repository.Build) (*repo
 		Set(expression.Name("keycap_kits"), expression.Value(b.KeycapKits)).
 		Set(expression.Name("visibility"), expression.Value(b.Visibility))
 	update = setOrRemovePtr(update, "plate", b.Plate)
+	update = setOrRemovePtr(update, "pcb", b.PCB)
 	update = setOrRemovePtr(update, "case_mount_type", b.CaseMountType)
 	update = setOrRemovePtr(update, "stabs", b.Stabs)
 	update = setOrRemovePtr(update, "foam", b.Foam)

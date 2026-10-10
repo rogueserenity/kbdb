@@ -1513,19 +1513,67 @@ components:
           $ref: "#/components/schemas/MaterialColor"
         weight:
           $ref: "#/components/schemas/MaterialColor"
-        plates:
-          type: array
-          items:
-            type: string
-            description: Open vocabulary — validated against the "keyboard_plate_material" lookup at request time.
 
-    KeyboardPCB:
+    KeyboardPartId:
+      type: string
+      description: >
+        Server-generated, unique within the keyboard. Omit it to add a new
+        part; send a part's existing id to keep it, so builds that
+        reference the part still do. Any other id fails the request with
+        400.
+
+    KeyboardPlateInput:
       type: object
+      required: [material]
       additionalProperties: false
       properties:
+        id:
+          $ref: "#/components/schemas/KeyboardPartId"
+        material:
+          type: string
+          description: Open vocabulary — validated against the "keyboard_plate_material" lookup at request time.
+        color:
+          type: string
+          description: Free text.
         thickness:
           type: number
           format: double
+          description: Thickness in mm.
+          example: 1.5
+        purchase:
+          $ref: "#/components/schemas/PurchaseInput"
+          description: >
+            Omit for a plate that came with the keyboard at no extra cost.
+            Its price counts toward the keyboard's total_cost, and toward
+            a build's total_cost when the build uses this plate.
+
+    KeyboardPlate:
+      type: object
+      required: [id, material]
+      properties:
+        id:
+          type: string
+        material:
+          type: string
+        color:
+          type: string
+        thickness:
+          type: number
+          format: double
+          description: Thickness in mm.
+        purchase:
+          $ref: "#/components/schemas/Purchase"
+
+    KeyboardPCBInput:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          $ref: "#/components/schemas/KeyboardPartId"
+        thickness:
+          type: number
+          format: double
+          description: Thickness in mm.
           example: 1.6
         firmware:
           type: string
@@ -1536,6 +1584,31 @@ components:
         connectivity:
           type: string
           description: Open vocabulary — validated against the "keyboard_pcb_connectivity_type" lookup at request time.
+        purchase:
+          $ref: "#/components/schemas/PurchaseInput"
+          description: >
+            Omit for a PCB that came with the keyboard at no extra cost.
+            Its price counts toward the keyboard's total_cost, and toward
+            a build's total_cost when the build uses this PCB.
+
+    KeyboardPCB:
+      type: object
+      required: [id]
+      properties:
+        id:
+          type: string
+        thickness:
+          type: number
+          format: double
+          description: Thickness in mm.
+        firmware:
+          type: string
+        assembly:
+          type: string
+        connectivity:
+          type: string
+        purchase:
+          $ref: "#/components/schemas/Purchase"
 
     KeyboardInput:
       type: object
@@ -1561,10 +1634,19 @@ components:
             the keyboard's size.
         design:
           $ref: "#/components/schemas/KeyboardDesign"
-        pcb:
-          $ref: "#/components/schemas/KeyboardPCB"
+        plates:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyboardPlateInput"
+        pcbs:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyboardPCBInput"
         purchase:
           $ref: "#/components/schemas/PurchaseInput"
+          description: >
+            The keyboard's own purchase. Its price is the base price,
+            excluding any plate or PCB that carries its own purchase.
         notes:
           type: string
         visibility:
@@ -1641,10 +1723,19 @@ components:
           type: string
         design:
           $ref: "#/components/schemas/KeyboardDesign"
-        pcb:
-          $ref: "#/components/schemas/KeyboardPCB"
+        plates:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyboardPlate"
+        pcbs:
+          type: array
+          items:
+            $ref: "#/components/schemas/KeyboardPCB"
         purchase:
           $ref: "#/components/schemas/Purchase"
+          description: >
+            The keyboard's own purchase. Its price is the base price,
+            excluding any plate or PCB that carries its own purchase.
         notes:
           type: string
         visibility:
@@ -1661,6 +1752,17 @@ components:
             Managed via the dedicated image endpoints below, not via
             PUT on the keyboard itself — see POST/DELETE
             .../keyboards/{keyboardId}/images[/{imageId}].
+        total_cost:
+          $ref: "#/components/schemas/Money"
+          description: >
+            The base price plus the price of every plate and PCB. Parts
+            with no known price are excluded rather than treated as zero,
+            so this may undercount.
+        currency:
+          $ref: "#/components/schemas/Currency"
+          description: >
+            The owner's display currency, for labelling total_cost.
+            Present exactly when total_cost is.
 
     KeyboardListPage:
       type: object
@@ -2274,6 +2376,44 @@ components:
             on every fetch of the build — do not cache or persist this
             value, it expires.
 
+    BuildPlateRef:
+      type: object
+      description: >
+        A build's denormalized plate, one of its keyboard's plates. Omitted
+        if the keyboard no longer has the plate.
+      required: [id, material]
+      properties:
+        id:
+          type: string
+        material:
+          type: string
+        color:
+          type: string
+        thickness:
+          type: number
+          format: double
+          description: Thickness in mm.
+
+    BuildPCBRef:
+      type: object
+      description: >
+        A build's denormalized PCB, one of its keyboard's pcbs. Omitted if
+        the keyboard no longer has the PCB.
+      required: [id]
+      properties:
+        id:
+          type: string
+        thickness:
+          type: number
+          format: double
+          description: Thickness in mm.
+        firmware:
+          type: string
+        assembly:
+          type: string
+        connectivity:
+          type: string
+
     BuildSwitchRef:
       type: object
       description: A build's denormalized Switch reference.
@@ -2406,8 +2546,13 @@ components:
         plate:
           type: string
           description: >
-            Which of the keyboard's design.plates options is installed. Must
-            be one of them, or the request fails with 400.
+            The id of the keyboard's plate that's installed. Must be one of
+            the keyboard's plates, or the request fails with 400.
+        pcb:
+          type: string
+          description: >
+            The id of the keyboard's PCB that's installed. Must be one of
+            the keyboard's pcbs, or the request fails with 400.
         case_mount_type:
           $ref: "#/components/schemas/BuildCaseMountType"
         stabs:
@@ -2476,8 +2621,9 @@ components:
         keyboard:
           $ref: "#/components/schemas/BuildKeyboardRef"
         plate:
-          type: string
-          description: Which of the keyboard's design.plates options is installed.
+          $ref: "#/components/schemas/BuildPlateRef"
+        pcb:
+          $ref: "#/components/schemas/BuildPCBRef"
         case_mount_type:
           $ref: "#/components/schemas/BuildCaseMountType"
         stabs:
@@ -2516,10 +2662,10 @@ components:
         total_cost:
           $ref: "#/components/schemas/Money"
           description: >
-            Total cost of the build's priced components (keyboard,
-            switches, keycap kits, stabs). Components with no known price
-            are excluded rather than treated as zero, so this may
-            undercount.
+            Total cost of the build's priced components (the keyboard's
+            base price, its plate and PCB, switches, keycap kits, stabs).
+            Components with no known price are excluded rather than
+            treated as zero, so this may undercount.
         currency:
           $ref: "#/components/schemas/Currency"
           description: >

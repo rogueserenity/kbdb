@@ -14,13 +14,14 @@ import (
 
 var _ = Describe("Deleting a keycap set with a kit that is still referenced by a build, over MCP", func() {
 	var (
-		client    *api.MCPClient
-		ownerID   string
-		setID     string
-		kitID     string
-		buildID   string
-		setGone   bool
-		buildGone bool
+		client     *api.MCPClient
+		ownerID    string
+		setID      string
+		kitID      string
+		buildID    string
+		keyboardID string
+		setGone    bool
+		buildGone  bool
 	)
 
 	BeforeEach(func(ctx SpecContext) {
@@ -29,20 +30,23 @@ var _ = Describe("Deleting a keycap set with a kit that is still referenced by a
 		setID = "mcp-cascade-keycap-set-" + uuid.NewString()
 		kitID = "mcp-cascade-kit-" + uuid.NewString()
 		buildID = "mcp-cascade-build-" + uuid.NewString()
+		keyboardID = "mcp-cascade-keyboard-" + uuid.NewString()
 
 		client, ownerID = api.NewAuthenticatedMCPClient(ctx)
 
 		Expect(db.SeedKeycapSetWithKit(ctx, ownerID, setID, kitID, "private")).To(Succeed())
-		Expect(db.SeedBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID, "private")).To(Succeed())
+		Expect(db.SeedKeyboard(ctx, ownerID, keyboardID, "private")).To(Succeed())
+		Expect(db.SeedBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, setID, kitID, "private")).To(Succeed())
 	})
 
 	AfterEach(func(ctx SpecContext) {
 		if !buildGone {
-			Expect(db.DeleteBuildWithKeycapKit(ctx, ownerID, buildID, setID, kitID)).To(Succeed())
+			Expect(db.DeleteBuildWithKeycapKitAndKeyboard(ctx, ownerID, buildID, keyboardID, setID, kitID)).To(Succeed())
 		}
 		if !setGone {
 			Expect(db.DeleteKeycapSet(ctx, ownerID, setID)).To(Succeed())
 		}
+		Expect(db.DeleteKeyboard(ctx, ownerID, keyboardID)).To(Succeed())
 	})
 
 	Context("given on_delete is omitted (defaults to block)", func() {

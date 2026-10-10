@@ -181,7 +181,8 @@ func (r *KeyboardRepository) Update(ctx context.Context, kb repository.Keyboard)
 		Set(expression.Name("brand"), expression.Value(kb.Brand)).
 		Set(expression.Name("name"), expression.Value(kb.Name)).
 		Set(expression.Name("design"), expression.Value(kb.Design)).
-		Set(expression.Name("pcb"), expression.Value(kb.PCB)).
+		Set(expression.Name("plates"), expression.Value(kb.Plates)).
+		Set(expression.Name("pcbs"), expression.Value(kb.PCBs)).
 		Set(expression.Name("purchase"), expression.Value(kb.Purchase)).
 		Set(expression.Name("visibility"), expression.Value(kb.Visibility))
 	update = setOrRemovePtr(update, "size", kb.Size)
