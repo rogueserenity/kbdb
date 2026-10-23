@@ -20,7 +20,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/service/sns v1.47.5
 	github.com/aws/aws-sdk-go-v2/service/sqs v1.52.5
 	github.com/aws/aws-sdk-go-v2/service/sts v1.51.4
-	github.com/aws/smithy-go v1.28.5
+	github.com/aws/smithy-go v1.28.6
 	github.com/coreos/go-oidc/v3 v3.21.0
 	github.com/getkin/kin-openapi v0.151.0
 	github.com/google/uuid v1.6.0
